@@ -169,12 +169,13 @@ def run(x, par, want_alloc=False):
 def fit(x):
     """Staged ML.  Nothing here is a tuning choice.
 
-    Stage 0 -- a 1-D scan over Q with sigma^2 pinned by the variogram identity
+    Stage 0   -- a 1-D scan over Q with sigma^2 pinned by the variogram identity
         gamma_0 = Q + 2 sigma^2,  gamma_0 = E[d^2]
     so the pair is always admissible and the scan range is set by the data's own
-    scale.  Stage 1 -- full 6-D ML from that start, run twice (from a quiet and
-    from a volatile log-scale) and the better likelihood kept.  Multi-start is
-    numerical robustness: the answer is the ML estimate either way.
+    scale.  Stage 0.5 -- a coarse 5x5 scan over (phi_P, phi_M).  Stage 1 -- full
+    6-D ML from that start, run twice (from a quiet and from a volatile
+    log-scale) and the better likelihood kept.  All of this is numerical
+    robustness: the answer is the ML estimate either way.
     """
     d = np.diff(x)
     g0 = float(np.mean(d ** 2))
@@ -185,9 +186,23 @@ def fit(x):
                       np.log(1e-3), np.log(1e-3)])
         lls.append(run(x, p))
     Q0 = grid[int(np.argmax(lls))]
+    # Stage 0.5 -- a coarse 5x5 scan over the two persistences.  THEORY-010
+    # showed the profile in phi_M carries tens of nats of curvature on impulsive
+    # data, and that 6-D Nelder-Mead from a single start was simply failing to
+    # find it: the fit sat at its logit-0 start of phi = 0.5.  Twenty-five extra
+    # likelihood evaluations against ~1300 for the search, so this is free.
+    PH = np.array([0.02, 0.25, 0.5, 0.75, 0.95])
+    lg = lambda z: float(np.log(z / (1 - z)))
+    bph, bv = (0.0, 0.0), -np.inf
+    for pp in PH:
+        for pm in PH:
+            v = run(x, np.array([np.log(Q0), np.log((g0 - Q0) / 2),
+                                 lg(pp), lg(pm), np.log(0.6), np.log(0.6)]))
+            if v > bv:
+                bph, bv = (lg(pp), lg(pm)), v
     best, bestf = None, np.inf
     for s0 in (0.03, 0.6):
-        p0 = np.array([np.log(Q0), np.log((g0 - Q0) / 2), 0.0, 0.0,
+        p0 = np.array([np.log(Q0), np.log((g0 - Q0) / 2), bph[0], bph[1],
                        np.log(s0), np.log(s0)])
         r = minimize(lambda p: -run(x, p) / len(x), p0, method="Nelder-Mead",
                      options=dict(maxiter=500, xatol=2e-3, fatol=1e-5))

@@ -170,14 +170,38 @@ anomaly/regime axis being learned. Across seeds, the hetero side holds — 0.92,
 which is exactly the optimiser's starting value.** That is the fit not moving,
 not the fit concluding "impulsive".
 
-The asymmetry is itself predicted, which is why it is worth stating rather than
-patching. [03](03-four-deviation-modes.md) established that anomaly evidence is a
-bounded budget while regime evidence accrues linearly forever. So a persistent
-channel offers unboundedly much to estimate a persistence *from*, and an
-impulsive one offers almost nothing. **"Not persistent" and "no information about
-persistence" leave the same flat likelihood**, and no estimator can separate them.
-THEORY-010 profiles $\varphi_M$ directly to confirm that reading rather than
-infer it.
+I first read that asymmetry as information-theoretic, arguing from
+[03](03-four-deviation-modes.md) that anomaly evidence is a bounded budget so
+there is nothing to estimate a persistence *from*, and that "not persistent" and
+"no information about persistence" must leave the same flat likelihood.
+
+**That was wrong, and profiling $\varphi_M$ directly refutes it** (fig24,
+THEORY-010 — re-optimising all five other parameters at each $\varphi_M$):
+
+| probe | argmax $\varphi_M$ per seed | profile range |
+|---|---|---|
+| outlier contaminated | 0.04, 0.24, 0.28, 0.93 | **89.6 / 25.5 / 67.8 / 53.8 nats** |
+| heteroscedastic | 0.93, 0.93, 0.93, 0.93 | 189 / 188 / 213 / 190 nats |
+| diffusion q=.05 (control) | scattered | **0.00 / 0.00 / 1.63 / 2.65 nats** |
+
+The impulsive probe carries **tens of nats** of curvature and peaks at *low*
+$\varphi_M$ in three of four seeds. The information was there; the six-dimensional
+Nelder-Mead search was not finding it and sat at its logit-0 start. The control
+shows what a genuinely flat profile looks like — 0–2.65 nats on a series with no
+measurement-scale structure at all — and it looks nothing like the outlier probe.
+
+The error in the reasoning is locatable: [03](03-four-deviation-modes.md)'s
+bounded budget is a statement about **one** event. The outlier probe contains ~12
+outliers over 1,200 points, i.e. a stationary *impulsive process*, whose
+persistence is estimated from the whole series and therefore accrues information
+linearly — exactly as a regime change does. There was never a reason to expect a
+flat likelihood.
+
+This leaves the framework in a stronger position than the failure suggested: **the
+anomaly/regime axis is learnable from data in both directions**, and the defect
+was in the fitting procedure. The fix is a stage-0.5 coarse $5\times5$ scan over
+$(\varphi_P,\varphi_M)$ before the 6-D search — 25 evaluations against ~1,300, so
+free — and the battery is re-run with it below.
 
 fig20 shows the four coordinates over time. PA spikes at exactly $t$=300, 600,
 900 on the pure-step probe and is flat elsewhere; MA alone fires on the outlier
