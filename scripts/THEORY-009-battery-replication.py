@@ -13,6 +13,7 @@ the optimal filter, only this specific oracle.
 """
 import json
 import numpy as np
+from scipy.optimize import minimize          # used by fit(), exec'd in from THEORY-007
 from theory_style import plt, tidy, save, SERIES
 
 OUT = "figures"

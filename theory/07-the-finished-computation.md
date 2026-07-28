@@ -156,12 +156,26 @@ on a series with no heteroscedasticity at all:
 |---|---|---|
 | 5 | 4.00 | 0.581 nats |
 | 9 | 4.00 | 1.520 nats |
+| 15 | 4.00 | 1.826 nats |
+| 25 | 4.00 | **1.964 nats** |
 
-The preference **grows** with quadrature order, so it is not a discretisation
-artifact — it is a genuinely flat ridge, which is what maximum likelihood always
-produces for an unpenalised flexibility parameter. The size settles it: 1.5 nats
-against the boundary-LRT null of **1.353 nats** derived in section A. The fitted
-process volatility on a Gaussian series is worth nothing.
+The preference **grows and then converges**, so it is not a discretisation
+artifact — coarse quadrature was *understating* it. It is a genuinely flat ridge,
+which is what maximum likelihood always produces for an unpenalised flexibility
+parameter.
+
+The converged size is the thing to read carefully, and it is marginal rather than
+zero. 1.96 nats for one added variance component, against the boundary-LRT 95th
+percentile of **1.353 nats** derived in section A, is nominally significant at
+about the 2% level *on this one series* — so "worth nothing" would be too strong.
+What is decisive is everything around it: the gain is 0.0017 nats **per point**,
+the point estimate is wildly unstable across probes (6.70, then 0.00, then 0.00),
+and tracking MSE is untouched wherever it lands. That is the signature of weak
+identification — a large estimate carrying marginal evidence — not of a real
+effect.
+
+So: **read $s_M,\varphi_M$ as estimates and $s_P,\varphi_P$ as not
+identified.**
 
 So: **read $s_M,\varphi_M$ as estimates and $s_P,\varphi_P$ as barely
 identified.** That is consistent with everything else in this project — the
