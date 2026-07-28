@@ -122,19 +122,62 @@ statement about this baseline, not a claim of beating the optimal filter. The
 three stationary-diffusion probes, where the constant gain *is* optimal, are the
 honest test, and there the ratios are 1.017 / 1.006 / 1.005: essentially free.
 
-### The modes are read off the data, with no threshold (fig20)
+### Replication across seeds (fig23, THEORY-009)
 
-The measurement channel is the clean demonstration. Same filter, same six
-parameters, two probes:
+Four independent draws per probe. MSE ratios:
 
-| probe | $\varphi_M$ | $s_M$ | what the filter concluded |
-|---|---|---|---|
-| outlier contaminated | **0.000** | 0.667 | impulsive scale spikes — an *anomaly* channel |
-| heteroscedastic | **0.931** | 0.707 | a persistent scale shift — a *regime* channel |
+| probe | s1 | s2 | s3 | s4 | median |
+|---|---|---|---|---|---|
+| diffusion q=.005 | 1.031 | 0.929 | 0.981 | 1.034 | 1.006 |
+| diffusion q=.05 | 1.002 | 0.998 | 0.999 | 1.026 | 1.000 |
+| diffusion q=.5 | 1.003 | 0.986 | 1.004 | 0.999 | 1.001 |
+| drift-rate regime | 0.984 | 0.989 | 0.982 | 0.989 | 0.987 |
+| pure step | 0.077 | 0.086 | 0.094 | 0.150 | **0.090** |
+| jump+drift | 0.713 | 0.679 | 0.807 | 0.672 | 0.696 |
+| outlier contam. | 0.840 | 0.602 | 0.679 | 0.960 | 0.760 |
+| hetero noise | 1.100 | 1.300 | 0.821 | 0.877 | 0.988 |
+| heavy-tail noise | 0.883 | 0.780 | 0.777 | 0.800 | 0.790 |
+| **geometric mean** | 0.710 | 0.683 | 0.682 | 0.746 | |
+| **worst case** | 1.100 | 1.300 | 1.004 | 1.034 | |
 
-The anomaly/regime distinction that [06](06-gradient-allocation.md) argued had to
-be a continuous persistence coordinate is here **learned as one**, from data, with
-nothing selecting between the two cases.
+**The geometric mean is stable: 0.705, range 0.682–0.746.** The headline holds.
+
+**The worst case is not what the single run said.** It is 1.11 on average with a
+range of 1.004–1.300, not 1.017 — the single-seed number was the lucky end.
+Heteroscedastic noise is the unstable probe (0.821 to 1.300); everything else is
+tight. The three stationary diffusions sit at 1.006 / 1.000 / 1.001, so adaptivity
+is genuinely free where it is not needed.
+
+### The modes are read off the data — but only half of that claim replicates
+
+Fitted measurement-channel parameters across the four seeds:
+
+| probe | $\varphi_M$ | $s_M$ |
+|---|---|---|
+| clean diffusions | 0.00–0.92 (no pattern) | **0.00–0.30** |
+| outlier contaminated | 0.50, 0.50, 0.50, 0.00 | **0.83, 1.19, 1.08, 0.62** |
+| heteroscedastic | **0.92, 0.50, 0.94, 0.93** | 1.79, 1.17, 1.62, 0.81 |
+| heavy-tail noise | 0.22, 0.02, 0.50, 0.36 | 1.14, 1.10, 1.18, 1.16 |
+
+**$s_M$ replicates and is the real discriminator.** It is 0.00–0.30 when the
+measurement noise is homoscedastic and 0.6–1.8 whenever it is not, across every
+seed. "Is there measurement-scale structure at all" is answered reliably.
+
+**$\varphi_M$ replicates only in one direction, and the earlier claim was
+overstated.** I reported 0.000 (outlier) vs 0.931 (hetero) from one seed as the
+anomaly/regime axis being learned. Across seeds, the hetero side holds — 0.92,
+0.94, 0.93 in three of four — but the outlier side returns **0.50 three times,
+which is exactly the optimiser's starting value.** That is the fit not moving,
+not the fit concluding "impulsive".
+
+The asymmetry is itself predicted, which is why it is worth stating rather than
+patching. [03](03-four-deviation-modes.md) established that anomaly evidence is a
+bounded budget while regime evidence accrues linearly forever. So a persistent
+channel offers unboundedly much to estimate a persistence *from*, and an
+impulsive one offers almost nothing. **"Not persistent" and "no information about
+persistence" leave the same flat likelihood**, and no estimator can separate them.
+THEORY-010 profiles $\varphi_M$ directly to confirm that reading rather than
+infer it.
 
 fig20 shows the four coordinates over time. PA spikes at exactly $t$=300, 600,
 900 on the pure-step probe and is flat elsewhere; MA alone fires on the outlier
