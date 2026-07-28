@@ -12,17 +12,17 @@ A. THE SCAN COST, which 05 flagged as the largest open gap.
 
 B. THE COMPLETE ALLOCATOR.  Every "mode" is a property of the noise itself:
 
-     theta_t = theta_{t-1} + w_t,   w_t ~ N(0, Q  exp(lamP_t - sP^2/2))
-     x_t     = theta_t     + v_t,   v_t ~ N(0, s2 exp(lamM_t - sM^2/2))
+     theta_t = theta_{t-1} + w_t,   w_t ~ N(0, Q  exp(lamP_t))
+     x_t     = theta_t     + v_t,   v_t ~ N(0, s2 exp(lamM_t))
      lam^c_t = phi_c lam^c_{t-1} + sqrt(nu_c) z_t,   c in {P, M}
 
    The four modes are not hypotheses, they are the two channels x the two ends
    of each channel's own autocorrelation.  Everything the filter needs is in
    six numbers -- Q, s2, phi_P, phi_M, s_P, s_M -- and all six are LEARNED by
    maximising the exact marginal likelihood.  There is no threshold anywhere,
-   no gate, no event time, and no constant chosen by hand.  The centring
-   -s^2/2 is a normalisation (it keeps E[multiplier]=1 so Q means what it
-   says), not a parameter.
+   no gate, no event time, and no constant chosen by hand.  Q and s2 are the
+   MEDIAN variances: (log-mean, log-SD) are the orthogonal coordinates of a
+   log-normal, whereas (arithmetic mean, log-SD) confounds them completely.
 
    Two exact conservation laws come out per step, with no rule imposing them:
 
@@ -118,8 +118,14 @@ def run(x, par, want_alloc=False):
     T = np.kron(TP, TM)
     pi = np.kron(wP, wM)
 
-    Qg = Q * np.exp(LP - sP * sP / 2)
-    Rg = S2 * np.exp(LM - sM * sM / 2)
+    # Parameterise each log-variance by its MEAN (log Q) and SD (s): those are
+    # the orthogonal coordinates of a log-normal.  Centring by -s^2/2 instead --
+    # so that E[multiplier]=1 and Q is the arithmetic-mean variance -- makes
+    # log Q and s^2/2 perfectly confounded, and the fit runs away along that
+    # ridge: on the pure-step probe it reached Q ~ 1e105 with s_P = 24.6 while
+    # still fitting well.  Q and s2 are therefore MEDIAN variances here.
+    Qg = Q * np.exp(np.clip(LP, -60.0, 60.0))
+    Rg = S2 * np.exp(np.clip(LM, -60.0, 60.0))
 
     m, P = x[0], float(np.var(x))                 # diffuse start, taken from the data
     ll = 0.0
