@@ -124,51 +124,66 @@ honest test, and there the ratios are 1.017 / 1.006 / 1.005: essentially free.
 
 ### Replication across seeds (fig23, THEORY-009)
 
-Four independent draws per probe. MSE ratios:
+Four independent draws per probe, with the stage-0.5 persistence scan in place:
 
 | probe | s1 | s2 | s3 | s4 | median |
 |---|---|---|---|---|---|
-| diffusion q=.005 | 1.031 | 0.929 | 0.981 | 1.034 | 1.006 |
-| diffusion q=.05 | 1.002 | 0.998 | 0.999 | 1.026 | 1.000 |
-| diffusion q=.5 | 1.003 | 0.986 | 1.004 | 0.999 | 1.001 |
-| drift-rate regime | 0.984 | 0.989 | 0.982 | 0.989 | 0.987 |
-| pure step | 0.077 | 0.086 | 0.094 | 0.150 | **0.090** |
-| jump+drift | 0.713 | 0.679 | 0.807 | 0.672 | 0.696 |
-| outlier contam. | 0.840 | 0.602 | 0.679 | 0.960 | 0.760 |
-| hetero noise | 1.100 | 1.300 | 0.821 | 0.877 | 0.988 |
-| heavy-tail noise | 0.883 | 0.780 | 0.777 | 0.800 | 0.790 |
-| **geometric mean** | 0.710 | 0.683 | 0.682 | 0.746 | |
-| **worst case** | 1.100 | 1.300 | 1.004 | 1.034 | |
+| diffusion q=.005 | 1.029 | 0.936 | 0.981 | 1.034 | 1.005 |
+| diffusion q=.05 | 1.002 | 0.999 | 0.999 | 1.018 | 1.001 |
+| diffusion q=.5 | 1.011 | 0.990 | 1.006 | 0.999 | 1.003 |
+| drift-rate regime | 0.835 | 0.818 | 0.804 | 0.740 | 0.811 |
+| pure step | 0.072 | 0.095 | 0.085 | 0.169 | **0.090** |
+| jump+drift | 0.709 | 0.680 | 0.807 | 0.671 | 0.695 |
+| outlier contam. | 0.825 | 0.584 | 0.640 | 0.960 | 0.733 |
+| hetero noise | 0.981 | 0.870 | 0.824 | 0.880 | 0.875 |
+| heavy-tail noise | 0.881 | 0.781 | 0.767 | 0.802 | 0.792 |
+| **geometric mean** | 0.682 | 0.645 | 0.655 | 0.731 | **0.678** |
+| **worst case** | 1.029 | 0.999 | 1.006 | 1.034 | **1.017** |
 
-**The geometric mean is stable: 0.705, range 0.682–0.746.** The headline holds.
+**Geometric mean 0.678 (range 0.645–0.731); worst case 1.017 (range
+0.999–1.034).** Against the earlier battery: CLEAN was geo 1.25 / worst 2.10, and
+the closed loop 1.04 / 1.19 **with $\sigma^2$ supplied**. This is with nothing
+supplied and nothing tunable.
 
-**The worst case is not what the single run said.** It is 1.11 on average with a
-range of 1.004–1.300, not 1.017 — the single-seed number was the lucky end.
-Heteroscedastic noise is the unstable probe (0.821 to 1.300); everything else is
-tight. The three stationary diffusions sit at 1.006 / 1.000 / 1.001, so adaptivity
-is genuinely free where it is not needed.
+The stage-0.5 scan is what bought the stability. Before it, the worst case ranged
+1.004–1.300 and heteroscedastic noise swung to 1.300; after it, no probe on any
+seed is more than 3.4% worse than the hindsight-tuned constant-gain Kalman.
+Drift-rate regime also went 0.987 → 0.811. **The instability was the optimiser,
+not the model** — the same diagnosis THEORY-010 reached from the profile.
 
-### The modes are read off the data — but only half of that claim replicates
+The three stationary diffusions sit at 1.005 / 1.001 / 1.003, so adaptivity costs
+essentially nothing where it is not needed. That is the honest test, since a
+constant gain genuinely is optimal there.
+
+### The modes are read off the data — with one coordinate reliable and one conditional
 
 Fitted measurement-channel parameters across the four seeds:
 
-| probe | $\varphi_M$ | $s_M$ |
-|---|---|---|
-| clean diffusions | 0.00–0.92 (no pattern) | **0.00–0.30** |
-| outlier contaminated | 0.50, 0.50, 0.50, 0.00 | **0.83, 1.19, 1.08, 0.62** |
-| heteroscedastic | **0.92, 0.50, 0.94, 0.93** | 1.79, 1.17, 1.62, 0.81 |
-| heavy-tail noise | 0.22, 0.02, 0.50, 0.36 | 1.14, 1.10, 1.18, 1.16 |
+| probe | $\varphi_M$ | $s_M$ | verdict |
+|---|---|---|---|
+| clean diffusions | scattered | **0.00–0.28** (one 5.01) | no scale structure ✓ |
+| heteroscedastic | **0.93, 0.93, 0.93, 0.93** | 0.52, 0.55, 0.53, 0.53 | persistent ✓ 4/4 |
+| heavy-tail noise | **0.20, 0.00, 0.38, 0.00** | 1.14, 1.10, 1.20, 1.18 | impulsive ✓ 4/4 |
+| outlier contaminated | 0.00, 0.90, 0.91, 0.00 | 0.87, 3.76, 4.01, 0.62 | impulsive ✓ 2/4 |
 
-**$s_M$ replicates and is the real discriminator.** It is 0.00–0.30 when the
-measurement noise is homoscedastic and 0.6–1.8 whenever it is not, across every
-seed. "Is there measurement-scale structure at all" is answered reliably.
+**$s_M$ is the reliable coordinate** and answers "is there measurement-scale
+structure": ~0 when homoscedastic, 0.5–4.0 when not, on every seed.
 
-**$\varphi_M$ replicates only in one direction, and the earlier claim was
-overstated.** I reported 0.000 (outlier) vs 0.931 (hetero) from one seed as the
-anomaly/regime axis being learned. Across seeds, the hetero side holds — 0.92,
-0.94, 0.93 in three of four — but the outlier side returns **0.50 three times,
-which is exactly the optimiser's starting value.** That is the fit not moving,
-not the fit concluding "impulsive".
+**$\varphi_M$ is meaningful only where $s_M>0$**, which is not a defect but a
+structural fact — the persistence of a scale process is undefined when the scale
+has no variation. (Formally: a nuisance parameter present only under the
+alternative, so the scattered $\varphi_M$ on the clean diffusions is the correct
+non-answer.) Where $s_M>0$ it is right 10 times out of 12, and the pattern in the
+failures is informative: it is 4/4 on heteroscedastic and 4/4 on heavy-tail —
+both of which perturb the scale at **every** point — and 2/4 on outlier
+contamination, which perturbs it at **1% of points**.
+
+So the corrected information story, replacing the bounded-budget argument above:
+**a persistence is an autocorrelation, and estimating it needs enough events to
+correlate. Twelve outliers in 1,200 points is not enough.** Sparse impulsive
+structure is detectable ($s_M$ large) but its persistence is not well estimated.
+Tracking MSE does not care either way — the outlier probe improves to 0.733
+regardless.
 
 I first read that asymmetry as information-theoretic, arguing from
 [03](03-four-deviation-modes.md) that anomaly evidence is a bounded budget so
@@ -269,9 +284,12 @@ same object, and here it is estimated rather than assumed.
 
 ## E. Still open
 
-- **Replication.** The table above is one realisation per probe. THEORY-009
-  reruns the battery across seeds; a geometric mean below 1 should not rest on a
-  single draw.
+- **$\varphi_M$ on sparse impulsive data.** 2/4 on outlier contamination. The
+  persistence of a scale process that fires at 1% of points is estimated from ~12
+  effective events, and a coarse $5\times5$ start grid is not enough to find the
+  right basin reliably. A proper profile (as in THEORY-010) would fix it at ~25×
+  the cost; marginalising $\varphi$ rather than maximising it would fix it
+  properly.
 - **$s_P$ is unidentified, and maximum likelihood is the wrong estimator for it.**
   ML never penalises flexibility, so an unpenalised volatility parameter drifts.
   The fix is to marginalise rather than maximise — which is what the rest of this

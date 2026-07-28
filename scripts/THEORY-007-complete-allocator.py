@@ -93,8 +93,9 @@ def chain(phi, s, n):
     z, w = gh(n)
     lam = s * z
     nu = max(s * s * (1 - phi * phi), 1e-12)
-    T = w[None, :] * np.exp(-0.5 * (lam[None, :] - phi * lam[:, None]) ** 2 / nu
-                            + 0.5 * lam[None, :] ** 2 / max(s * s, 1e-12))
+    T = w[None, :] * np.exp(np.clip(
+        -0.5 * (lam[None, :] - phi * lam[:, None]) ** 2 / nu
+        + 0.5 * lam[None, :] ** 2 / max(s * s, 1e-12), -700.0, 700.0))
     T /= T.sum(1, keepdims=True)
     return lam, w, T
 
