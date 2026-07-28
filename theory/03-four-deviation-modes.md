@@ -2,6 +2,17 @@
 
 Script: `scripts/THEORY-003-four-modes.py` · Figures: fig07, fig08, fig09, fig10
 
+> **Superseded in part by [06](06-gradient-allocation.md).** This file treats the
+> two anomalies as *mean* parameters — an oracle who knows the event size $\delta$.
+> That choice, not the process, is what makes the location and scale blocks
+> exactly orthogonal. Marginalise $\delta$ (which any non-oracle must) and an
+> anomaly becomes a covariance bump like everything else; all four modes then
+> live in one family and the Gram matrix is not block diagonal. The results below
+> remain correct **under their stated parameterisation** — the $m=1$ singularity,
+> the budget-vs-rate distinction, and the LLR magnitudes all survive — but the
+> "exactly orthogonal, never confusable" headline is a property of the oracle
+> framing and should not be carried forward. See 06 for the replacement Gram.
+
 An event occurs between $x_{-1}$ and $x_0$. Observe $m$ post-event increments
 $d_0,\dots,d_{m-1}$. Each mode is a one-parameter family through $H_0$:
 

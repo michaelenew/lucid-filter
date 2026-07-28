@@ -18,6 +18,7 @@ $\gamma_0 = Q+2\sigma^2$, $\gamma_1 = -\sigma^2$, $\gamma_{k\ge2}=0$.
 | [03-four-deviation-modes.md](03-four-deviation-modes.md) | the 4-mode geometry; what separates the modes and how fast |
 | [04-nats-trust-influence.md](04-nats-trust-influence.md) | nats → trust → influence; a definition of *trustworthy* information |
 | [05-open-questions.md](05-open-questions.md) | what this does not settle |
+| [06-gradient-allocation.md](06-gradient-allocation.md) | **the reframe**: the modes as one smooth square, allocation without detection |
 
 Scripts: `scripts/THEORY-00{1,2,3,4}-*.py`. Figures: `figures/fig*.png`.
 
@@ -62,18 +63,26 @@ $L^*=20$ needs $\omega\approx0.18$ — parameters changing 18% per step, at whic
 point they aren't estimable at all. **The tail length is a statement about
 regime volatility, not about estimation efficiency.** (fig06)
 
-**7. The four modes form two orthogonal planes, and each plane is exactly
-singular at $m=1$.** Location events (jump, outlier) and scale events ($Q$-change,
-$\sigma^2$-change) have **exactly** orthogonal scores — verified to 0.0 — so they
-are never confusable with each other. Within each plane the two modes are
-**perfectly collinear** after one post-event point ($\rho=1$, Fisher block
-singular) and separate at the second ($\rho$: 1 → 0.506 location, 1 → 0.698
-scale). One point after an event discriminates *nothing*; the second point
-manufactures the entire distinction. (fig07)
+**7. The four modes are the corners of one smooth square, and the confusable
+axis is persistence, not channel.** Two continuous coordinates: $a\in[0,1]$
+(which noise channel) and $\varphi\in[0,1]$ (impulse → step). The named modes are
+the four corners; everything between them is a real deviation with a real
+posterior. The Fisher correlations at $m$=2 are **0.79 within the process channel
+across persistence** (PA↔PR) and **0.26 across channels** (PA↔MA) — so what is
+hard is telling a spike from a shift, not telling process from measurement. (fig14)
+
+> This revises the previous headline. Parameterising the anomalies as *mean*
+> shifts made the location and scale blocks exactly orthogonal; that was a
+> property of the oracle framing, not of the process. See [06](06-gradient-allocation.md).
 
 ---
 
 ## The confirmation ledger
+
+> **Superseded as an operational object by [06](06-gradient-allocation.md).**
+> These are oracle numbers (event size and event time known). Non-oracle, the
+> same 4-SD jump earns 0.79 nats of worst-case *attribution* evidence at $m$=2,
+> not 10.5, and reaches 99:1 at $m\approx9$. The table stands as an upper bound.
 
 Points needed for **99:1 worst-case** evidence — evidence that survives the most
 favourable competing explanation, including "nothing happened" ($q$=0.05):
