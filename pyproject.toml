@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "statfilter"
+version = "1.0.0"
+description = "Adaptive local-level filter with learned noise structure and no tuning parameters"
+readme = "statfilter/README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = ["numpy>=1.22"]
+
+[project.optional-dependencies]
+fit = ["scipy>=1.8"]          # only needed to learn parameters, not to filter
+test = ["pytest>=7", "scipy>=1.8"]
+
+[tool.setuptools]
+packages = ["statfilter"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
