@@ -20,3 +20,4 @@ packages = ["statfilter"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: calls fit(); ~1 min per series"]

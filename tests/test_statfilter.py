@@ -1,6 +1,9 @@
 """Tests for statfilter.
 
-Run with:  python -m pytest tests -q      (or: python tests/test_statfilter.py)
+    python -m pytest tests -q                  # everything, ~13 min
+    python -m pytest tests -q -m "not slow"    # structural checks only, seconds
+
+The slow ones all call fit(), which is ~1 min per 1200-point series.
 """
 import math
 import os
@@ -148,6 +151,7 @@ def test_predict_grows_with_horizon():
 
 
 # --------------------------------------------------------------------- fitting
+@pytest.mark.slow
 def test_fit_recovers_parameters():
     x, _ = local_level(1500, 0.05, 1.0, seed=7)
     f = AdaptiveFilter.fit(x)
@@ -155,6 +159,7 @@ def test_fit_recovers_parameters():
     assert 0.8 < f.params.s2 < 1.25                     # true 1.0
 
 
+@pytest.mark.slow
 def test_fit_finds_no_scale_structure_in_clean_data():
     """A homoscedastic series must not produce a large measurement volatility."""
     x, _ = local_level(1500, 0.05, 1.0, seed=8)
@@ -162,6 +167,7 @@ def test_fit_finds_no_scale_structure_in_clean_data():
     assert f.params.s_M < 0.5
 
 
+@pytest.mark.slow
 def test_fit_detects_measurement_scale_structure():
     """Outliers and a variance regime change must both raise s_M well above zero."""
     xo, _ = local_level(1200, 0.05, 1.0, seed=9, outlier_rate=0.01)
@@ -170,6 +176,7 @@ def test_fit_detects_measurement_scale_structure():
     assert AdaptiveFilter.fit(xh).params.s_M > 0.4
 
 
+@pytest.mark.slow
 def test_persistent_noise_change_reads_as_persistent():
     """A sigma^2 regime change should give a high phi_M, not a spiky one."""
     x, _ = local_level(1200, 0.05, 1.0, seed=11, hetero=9.0)
@@ -177,6 +184,7 @@ def test_persistent_noise_change_reads_as_persistent():
     assert p.s_M > 0.3 and p.phi_M > 0.6
 
 
+@pytest.mark.slow
 def test_mode_coordinate_locates_a_jump():
     """The process-anomaly coordinate should peak at the step, not elsewhere."""
     n, jump = 900, 450
@@ -187,6 +195,7 @@ def test_mode_coordinate_locates_a_jump():
 
 
 # ------------------------------------------------------------------ behaviour
+@pytest.mark.slow
 @pytest.mark.parametrize("seed", [21, 22])
 def test_competitive_with_hindsight_tuned_kalman(seed):
     """Never much worse than a constant gain chosen with hindsight, often better."""
@@ -208,6 +217,7 @@ def test_unfitted_filter_refuses_to_run():
         AdaptiveFilter().filter(np.arange(10.0))
 
 
+@pytest.mark.slow
 def test_fit_rejects_degenerate_input():
     with pytest.raises(ValueError):
         AdaptiveFilter.fit(np.ones(50))

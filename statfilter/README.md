@@ -118,6 +118,18 @@ Known weaknesses, all measured rather than guessed:
   1200-point series takes about a minute. The recursion is sequential in `t` so
   it does not vectorise; a compiled implementation would be roughly 40× faster.
 
+## Tests
+
+```
+python -m pytest tests -q                  # all 19, ~13 min (fitting dominates)
+python -m pytest tests -q -m "not slow"    # 11 structural checks, 0.3 s
+```
+
+The fast subset covers what breaks silently: exact reduction to a plain Kalman
+filter when `s_P = s_M = 0`, both conservation laws to machine precision,
+streaming matching batch exactly, `filter()` leaving streaming state untouched,
+and missing-data handling. The slow ones all call `fit()`.
+
 ## Where this comes from
 
 `theory/` in this repository derives it: `01`–`02` the information accounting and
