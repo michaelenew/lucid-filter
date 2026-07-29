@@ -61,6 +61,23 @@ represent.
 
 That ordering is kurtosis: 1, 1.8, 3, 9.
 
+**With the parameters fitted rather than supplied, the leak gets slightly
+smaller, not larger** ($s_M=0.55$ row, 6 seeds):
+
+| shape | $\kappa$ | params supplied | `fit()` per series |
+|---|---|---|---|
+| gaussian | 3 | 1.0396 | 1.0351 |
+| two-point | 1 | 1.0747 (×1.034) | 1.0558 (×1.020) |
+| uniform | 1.8 | 1.0615 (×1.021) | 1.0641 (×1.028) |
+| Student-$t_5$ | 9 | 0.9861 (×0.949) | 0.9507 (×0.918) |
+
+Fitting *absorbs* part of the shape adversary rather than compounding it — the
+$t_5$ advantage grows and the two-point penalty shrinks. That is the first hint
+of §4's conclusion: the adversary is moving the process to a different point of
+the same class, and a filter that fits its parameters follows it there.
+[`0007`](0007_relocation_confirmed_but_ML_undershoots.md) tests that directly and
+confirms it, with a caveat on the magnitude.
+
 ---
 
 ## 3. Kurtosis is the whole lever
@@ -142,6 +159,15 @@ Two consequences, both sharp:
   $s=0.55$ that threshold is $\kappa<3e^{-0.3025}=2.22$, which two-point (1.0)
   and uniform (1.8) are both below. The filter cannot express them, and the
   measured penalty is what that costs.
+
+> **Corrected by [`0007`](0007_relocation_confirmed_but_ML_undershoots.md).** The
+> relocation is confirmed and is large, but `fit()` lands 25–30% short of the
+> moment-matched point, because ML projects onto the representable family rather
+> than matching moments. And the second bullet's inference that fitted $s_M$
+> should *collapse to zero* below the threshold is wrong: the formula uses only
+> $\gamma_0$ and ignores that $\gamma_1$ is separately observable, so a
+> light-tailed shape makes the filter **under-read** the scale rather than miss
+> it. Measured 0.224 and 0.389 against a true 0.55, not 0.
 
 The sufficiency is exact for *placing a shape inside the class*. It is not a
 proof that the filter's **risk** depends on the shape only through $\kappa$,
