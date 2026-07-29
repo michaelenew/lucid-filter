@@ -228,7 +228,10 @@ def _chain(phi: float, s: float, n: int):
     """
     z, w = _gauss_hermite(n)
     lam = s * z
-    if s <= 0.0:
+    # s * s underflows to 0.0 for s below about 1e-162, and the unconstrained
+    # search in fit_ does reach there, so guard on the square rather than on s
+    # itself -- otherwise the 1/(s*s) below produces nan and poisons the fit.
+    if not s > 0.0 or s * s <= 0.0:
         return np.zeros(n), w, np.tile(w, (n, 1))
     nu = max(s * s * (1.0 - phi * phi), 1e-12)
     ex = (-0.5 * (lam[None, :] - phi * lam[:, None]) ** 2 / nu
@@ -455,7 +458,25 @@ class AdaptiveFilter:
     @classmethod
     def fit(cls, x, order: int = 5, max_iter: int = 500,
             criterion: str = "loglik") -> "AdaptiveFilter":
-        """Learn all six parameters from a series and return a fitted filter."""
+        """Learn all six parameters from a series and return a fitted filter.
+
+        ``criterion`` selects what is optimised.  ``"loglik"`` (the default)
+        maximises the predictive log-likelihood.  ``"pem"`` minimises the mean
+        squared one-step innovation; both cost one filter pass, so neither is
+        cheaper.
+
+        **``"pem"`` is not recommended for the full six-parameter fit.**  The
+        squared innovation depends on the parameters only through the predicted
+        mean, so it is nearly blind to any direction that moves the predictive
+        variance without moving the gain, and the search drifts along it.
+        Measured over four regimes with a true ``s2`` of 1.0, ``"pem"`` recovered
+        1.10, 2.02, 9.21 and 6.58 against ``"loglik"``'s 0.96, 1.03, 1.04 and
+        1.02, and inflated ``s_M`` everywhere -- to 1.54 on data with no scale
+        variation at all.  Tracking MSE was only about 1% worse, so the damage is
+        to the parameters rather than to the estimate, but the parameters are
+        what callers read.  It is exposed for comparison work; see
+        ``filter-optimality-proof/exploration/0027``.
+        """
         f = cls(order=order)
         f.fit_(x, max_iter=max_iter, criterion=criterion)
         return f

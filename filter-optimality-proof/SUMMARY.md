@@ -239,6 +239,16 @@ the AR(1) family, which makes the theorem nearly tautological.
 0.2% and 5%. What fails is an exact minimax characterisation over a two-moment
 class, not the filter.
 
+**Committing to MSE in practice does not work via prediction error**
+(`exploration/0027`). PEM looked uniformly at-least-as-good on the
+$(s_M,\varphi_M)$ slice, but with all six parameters free it recovers $\sigma^2$
+wrong by up to a factor of nine and inflates $s_M$ to 1.54 on data with no scale
+variation at all. The squared innovation depends on the parameters only through
+the predicted mean, so any direction moving the predictive variance without
+moving the gain is nearly free under it — and $\sigma^2$ and $s_M$ inflating
+together is exactly such a direction. `fit()`'s default stays on
+log-likelihood; PEM is exposed as an option with the caveat documented.
+
 ## Next, in order
 
 1. **Bound the loss discrepancy at layer 2.** Theorem C is exact under log-loss;
