@@ -114,19 +114,28 @@ class geometry.
 `fit()` maximises over them. Minimaxity of a Bayes rule for a fixed prior says
 nothing about a rule that first estimates the prior from the same data.
 
-Sharpened by measurement (`exploration/0009`, `0012`): **`fit()` does not
-estimate the process's $(s,\varphi)$ at all.** When the truth is outside the
-family — e.g. $t_5$ noise, whose log-scale is skewed rather than Gaussian — ML
-returns the parameters of the KL-nearest *representable* model. That is ordinary
-quasi-MLE under misspecification, so White's sandwich theory is the right tool
-rather than standard ML asymptotics.
+**`fit()` estimates the *relocated* class parameters, and estimates them well.**
+Under a shape adversary the process moves to $(\tilde s,\tilde\varphi)$ by
+Theorem B, and `fit()` lands there: for $t_5$ the prediction is $(0.890,0.355)$
+and the measurement $(0.907\pm0.065,\ 0.488\pm0.089)$, with the predicted point
+the best of every point tested and `fit()` $+0.07\%\pm0.04$ from it
+(`exploration/0013`). **An earlier claim here — that `fit()` returns a
+KL-projection 25–30% away from the class parameters — was an arithmetic error and
+is withdrawn** (`exploration/0015` §1).
 
-It is also the right thing to do. Running the filter at the **true**
-$(s_M,\varphi_M)$ costs $+5.98\%\pm0.94$ MSE against the point `fit()` finds
-($t=6.4$): the truth describes a model the filter cannot run, the KL-projection
-describes the best one it can. And even on **well-specified** data the true
-parameters are not MSE-optimal ($+0.65\%$, $t=4.2$) — a measured signature of the
-GPB1 collapse. "Recover the true parameters" is the wrong way to judge `fit()`.
+What survives is narrower and still true. The relocated log-scale is an
+ARMA(1,1) while the filter's family is AR(1), so ML genuinely is a quasi-MLE
+projecting onto a family that does not contain the truth, and White's sandwich
+theory is the right asymptotic tool. The projection simply costs nothing
+measurable. Its signature is visible in `exploration/0022`: fitted $s_M$
+overshoots Theorem B exactly on the rows whose induced log-scale marginal is
+bimodal, and fits cleanest on the lognormal row where it is Gaussian.
+
+Two measured facts constrain how `fit()` should be judged. Running at the
+**true, un-relocated** $(s_M,\varphi_M)$ costs $+5.98\%\pm0.94$ ($t=6.4$). And
+even on **well-specified** data the true parameters are not MSE-optimal
+($+0.65\%$, $t=4.2$) — a signature of the GPB1 collapse. "Recover the true
+parameters" is the wrong success criterion in both directions.
 
 ## What the measurements settled
 
@@ -136,14 +145,13 @@ closing it makes the class and the model coincide.
 
 - Adversary leverage is zero at $s_M=0$ (where Theorem A is exact) and grows
   like $s_M^2$: spread across shapes 0.0016 → 1.23 as $s_M$ goes 0 → 2.
-- Leverage is monotone in **kurtosis alone**, over $\kappa\in[1,15]$. Two
-  structurally unrelated shapes matched at $\kappa=5$ agree to 0.5 se.
-  **In tension with Theorem B**, which says the sufficient statistic is
-  $\operatorname{Var}(\log u)$, and two laws can match in $\kappa$ while
-  differing in it. Most likely the shapes tested happened to be close in both
-  (the functionals correlate across the usual families), but that is a guess.
-  Read this bullet as "monotone in a shape functional that kurtosis tracks in
-  the cases tested" until the discriminating test below is run.
+- Leverage is monotone in a shape functional, and **that functional is
+  $\operatorname{Var}(\log u)$, not kurtosis** (`exploration/0022`). Holding
+  $\kappa=9$ exactly while sweeping $\operatorname{Var}(\log u)$ over a 36x
+  range moves fitted $s_M$ from 0.693 to 1.267, more than ten se, where the
+  kurtosis account predicts a single value 1.184 throughout. `0004`'s "monotone
+  in kurtosis alone" held only because the two functionals correlate across the
+  shapes it tested — they are equal by construction for lognormal mixing.
 - A Gaussian scale mixture has $\kappa\ge3$ with equality iff degenerate, so
   **the Gaussian is the least favourable shape within the family the filter's
   own model generates.**
@@ -234,9 +242,32 @@ shows it is not a small discrepancy that a sharper argument will absorb.
    choosing between them.
 5. **The $\alpha$-stable family** under $L^r$ loss.
 
-## A note for the parent workstream
+## Notes for the parent workstream
 
-Not applied there, since it is that workstream's deliverable. On *well-specified*
+Not applied there, since it is that workstream's deliverable.
+
+**A crash bug in `fit()`, worth fixing regardless of anything here.**
+`_expit(z) = 1/(1+math.exp(-z))` in `statfilter/core.py` raises `OverflowError`
+once $z<-709$, and `fit()`'s inner `ll()` catches only `ValueError`, so the
+exception escapes and kills the fit. `_logit` clamps to $|{\rm logit}|\le20.7$ so
+starts are safe, but stage 1 is an unconstrained Nelder–Mead search and on
+sufficiently impulsive data it walks out there — reproduced in
+`exploration/0018`, diagnosed and worked around in `0021`. The fix is two lines
+and algebraically identical:
+
+```python
+def _expit(z: float) -> float:
+    if z >= 0.0:
+        return 1.0 / (1.0 + math.exp(-z))
+    e = math.exp(z)
+    return e / (1.0 + e)
+```
+
+plus widening `ll()`'s `except ValueError` to `except (ValueError, OverflowError)`.
+The failure mode is a hard crash rather than a degraded estimate, so any user
+fitting impulsive data can hit it.
+
+**Quadrature order.** On *well-specified*
 data, `fit()`'s $\varphi_M$ is biased low at the default quadrature order and
 converges as the grid refines — 0.847, 0.873, 0.889, 0.904 at orders 5, 7, 9, 13
 against a true 0.930 — while $s_M$ is flat and correct throughout
