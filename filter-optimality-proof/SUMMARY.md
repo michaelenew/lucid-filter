@@ -14,9 +14,12 @@ Four things have to be named before "optimal" means anything: a class of
 processes, a class of procedures, a loss, and an optimality notion. Three are
 forced. Procedures: all causal measurable estimators. Notion: minimax, since the
 premise is that no prior over the class is available. Class: forced by a
-degeneracy argument (below). **The loss is not forced, and that is the seam** —
-the layer-1 argument is a squared-error argument and the layer-2 argument is a
-log-loss argument, and they are not yet one theorem.
+degeneracy argument (below). The loss is not forced — the layer-1 argument is a
+squared-error argument and the layer-2 argument is a log-loss argument, and they
+are not yet one theorem. **Measured, that seam is smaller than it looks: where
+`fit()` lands is $+0.23\%\pm0.21$ from the MSE-optimal parameters, $t=1.1$**
+(`exploration/0012`). Real in principle, below a quarter of a percent in
+practice.
 
 ## The class
 
@@ -68,10 +71,24 @@ equalizer property that makes max-entropy laws minimax does not obviously
 survive the marginalisation (`exploration/0005` §6). Under cumulative log-loss —
 which is exactly what `fit()` maximises — the argument is otherwise sound.
 
-## Layer 3 — the six numbers. Open.
+## Layer 3 — the six numbers. Open, but the sign is favourable.
 
 `fit()` maximises over them. Minimaxity of a Bayes rule for a fixed prior says
 nothing about a rule that first estimates the prior from the same data.
+
+Sharpened by measurement (`exploration/0009`, `0012`): **`fit()` does not
+estimate the process's $(s,\varphi)$ at all.** When the truth is outside the
+family — e.g. $t_5$ noise, whose log-scale is skewed rather than Gaussian — ML
+returns the parameters of the KL-nearest *representable* model. That is ordinary
+quasi-MLE under misspecification, so White's sandwich theory is the right tool
+rather than standard ML asymptotics.
+
+It is also the right thing to do. Running the filter at the **true**
+$(s_M,\varphi_M)$ costs $+5.98\%\pm0.94$ MSE against the point `fit()` finds
+($t=6.4$): the truth describes a model the filter cannot run, the KL-projection
+describes the best one it can. And even on **well-specified** data the true
+parameters are not MSE-optimal ($+0.65\%$, $t=4.2$) — a measured signature of the
+GPB1 collapse. "Recover the true parameters" is the wrong way to judge `fit()`.
 
 ## What the measurements settled
 
@@ -102,10 +119,12 @@ closing it makes the class and the model coincide.
 - **But ML lands 25–30% short** of the moment-matched prediction (0.907 vs
   1.184; $\varphi_M$ 0.488 vs 0.201), because maximum likelihood projects onto
   the representable Gaussian-AR(1) log-scale family rather than matching
-  moments. So Leak 1 *largely* collapses into Leak 3 rather than entirely.
-  Tracking is unaffected — the fitted $t_5$ row scores 0.951 against the path
-  oracle, better than the fitted Gaussian row at 1.035. The parameters are off;
-  the estimate is not.
+  moments. Not a quadrature artifact — flat across orders 5, 7, 9, 13.
+  **And the projection is the better place to be**: the moment-matched point
+  costs $+1.73\%\pm0.50$ MSE and the truth $+5.98\%\pm0.94$, while the
+  KL-projection is within noise of optimal. The moment formula was intuitive and
+  wrong. So Leak 1 largely collapses into Leak 3, and Leak 3's practical sign is
+  favourable.
 - **Limitation, sharp:** $\kappa<3$ is outside the representable cone. At
   $s_M=1.5$ the filter loses 24% against its Gaussian row on two-point noise.
   Bounded sensors, quantised readings and saturating instruments are all
@@ -131,23 +150,43 @@ deformations of the filter, with it at the boundary of both:
 For $\alpha<2$ the variance is infinite, so squared error is the wrong loss and
 layer 1 would need redoing under $\mathbb E\lvert\cdot\rvert^r$, $r<\alpha$.
 
+## The gap ledger
+
+| gap | status |
+|---|---|
+| Leak 1 — shape adversary | reduced to a relocation *within* the class; residual is Leak 3 |
+| Leak 2 — two losses | **empirically benign**, $+0.23\%\pm0.21$; theoretical transfer unproved |
+| Leak 3 — parameters estimated | reframed as quasi-MLE under misspecification; sign favourable |
+| Leak 4 — GPB1 collapse | measured signature: $+0.65\%$ even when correctly specified |
+| $\kappa<3$ (light tails) | genuine, outside the model, unchanged |
+
+Everything that remains is a matter of proving things the measurements already
+indicate — except the last row, which is a real limitation.
+
 ## Next, in order
 
-1. **Resolve the ML shortfall** (`exploration/0008`, running): rerun the
-   relocation test at quadrature order 7/9/13. If the $t_5$ fit trends toward
-   the predicted 1.184 the shortfall is numerical and the identification
-   argument is exactly right; if it is flat in order, the shortfall is the
-   KL-projection and the moment formula needs replacing by a projection
-   calculation. Either outcome turns `0005` §3 into a stateable proposition.
-2. **A minimum-kurtosis analogue of Theorem A.** Conjecture: filter risk is
+1. **A minimum-kurtosis analogue of Theorem A.** Conjecture: filter risk is
    monotone in the increment kurtosis, so the Gaussian is least favourable over
-   $\{\kappa\ge3\}$. Would promote the central claim from measured to proved.
-3. **Push the layer-2 argument through the marginalisation** to the observable.
-4. **The I-MMSE weld** (Guo–Shamai–Verdú): mutual information is the integral of
+   $\{\kappa\ge3\}$. Would promote the central claim from measured to proved,
+   and is the most tractable of these.
+2. **Push the layer-2 argument through the marginalisation** to the observable
+   (`exploration/0005` §6) — the one piece the whole layer-2 story rests on.
+3. **The I-MMSE weld** (Guo–Shamai–Verdú): mutual information is the integral of
    MMSE over SNR, so a minimax statement in information is one in
-   SNR-integrated MSE. If it works, the two losses become one theorem and the
-   seam closes.
-5. **The $\alpha$-stable family** under $L^r$ loss.
+   SNR-integrated MSE. Would make the two losses one theorem rather than one
+   theorem and one measurement.
+4. **The $\alpha$-stable family** under $L^r$ loss.
+
+## A note for the parent workstream
+
+Not applied there, since it is that workstream's deliverable. On *well-specified*
+data, `fit()`'s $\varphi_M$ is biased low at the default quadrature order and
+converges as the grid refines — 0.847, 0.873, 0.889, 0.904 at orders 5, 7, 9, 13
+against a true 0.930 — while $s_M$ is flat and correct throughout
+(`exploration/0009`). `theory/07` §D verified order 5 against 9 and 15 for
+$s_P$; this is the same check for $\varphi_M$, and unlike $s_P$ it trends. If a
+fitted $\varphi_M$ is to be read as a number rather than a direction, fit at
+order 9 or 13. Tracking MSE is unaffected.
 
 ## Layout
 
