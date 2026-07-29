@@ -105,6 +105,50 @@ matters". The light-tailed rows do: two-point and uniform have kurtosis below 3
 and are therefore *provably not* Gaussian scale mixtures, and they sit on the
 same monotone curve as everything else. Taken together the reading is kurtosis.
 
+### Why kurtosis, and not something else
+
+This is not a numerical coincidence, and the reason is short enough to be worth
+stating exactly.
+
+$\mathcal C(s,\varphi)$ specifies the log-scale path through $\gamma_0$ and
+$\gamma_1$ **and nothing else** — that was forced in `0001` §2, since anything
+weaker is degenerate and anything stronger is unjustified. Now let
+$v_t=\sqrt{\sigma^2e^{\lambda_t}}\,u_t$ with $u_t$ i.i.d. of unit variance and
+kurtosis $\kappa$. The marginal kurtosis of $v$ is $\kappa e^{s^2}$; a Gaussian
+scale mixture with total log-scale variance $s_{\mathrm{tot}}^2$ has kurtosis
+$3e^{s_{\mathrm{tot}}^2}$. Equating,
+
+$$s_{\mathrm{tot}}^2=s^2+\log\frac\kappa3,\qquad
+\varphi_{\mathrm{eff}}=\varphi\,\frac{s^2}{s_{\mathrm{tot}}^2}$$
+
+the second because an i.i.d. $u$ contributes to $\gamma_0$ and nothing to
+$\gamma_1$. **So a shape enters the class through exactly one number,
+$\log(\kappa/3)$, added to $\gamma_0$.** Kurtosis is sufficient because
+$\gamma_0$ and $\gamma_1$ are all the class has, and kurtosis is the only thing
+a shape contributes to them.
+
+Two consequences, both sharp:
+
+- **The shape adversary is a reparameterisation, not an attack.** A $\kappa>3$
+  shape relocates the process to a different $(s,\varphi)$ *within* the class —
+  higher $s$, lower $\varphi$, by the formulas above. The filter is not being
+  hit from outside its model; it is being moved inside it. That is why $t_5$
+  noise makes it *beat* the linear oracle. If this is right, **Leak 1 collapses
+  into Leak 3** — it is not a new gap but the already-acknowledged one about
+  estimating the six parameters. `0006` tests the prediction directly.
+- **The light-tail limitation is one inequality.** $\kappa<3$ gives
+  $s_{\mathrm{tot}}^2 < s^2 + \log 1 = s^2$ and, once $\log(3/\kappa)>s^2$,
+  gives $s_{\mathrm{tot}}^2<0$: **no representation exists at all.** At
+  $s=0.55$ that threshold is $\kappa<3e^{-0.3025}=2.22$, which two-point (1.0)
+  and uniform (1.8) are both below. The filter cannot express them, and the
+  measured penalty is what that costs.
+
+The sufficiency is exact for *placing a shape inside the class*. It is not a
+proof that the filter's **risk** depends on the shape only through $\kappa$,
+since the filter's per-step likelihood is a nonlinear function of $e_t$ and
+therefore sees more than four moments. The matched pair above bounds that
+residual dependence at 0.5 se.
+
 ---
 
 ## 4. Why that closes rather than breaks the class
