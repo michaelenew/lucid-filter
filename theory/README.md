@@ -1,7 +1,9 @@
 # The information-domain foundation
 
-Exploration, not a filter. Everything here is exact (closed form or exact linear
-algebra on the model's own covariance) — no simulation, no fitted constants.
+Started as exploration rather than a filter; it produced one anyway, in
+[`statfilter/`](../statfilter/README.md). Files 01–06 are exact throughout
+(closed form or exact linear algebra on the model's own covariance) — no
+simulation, no fitted constants. 07 is where measurement begins.
 
 Model, unchanged from the whole thread:
 
@@ -19,12 +21,15 @@ $\gamma_0 = Q+2\sigma^2$, $\gamma_1 = -\sigma^2$, $\gamma_{k\ge2}=0$.
 | [04-nats-trust-influence.md](04-nats-trust-influence.md) | nats → trust → influence; a definition of *trustworthy* information |
 | [05-open-questions.md](05-open-questions.md) | what this does not settle |
 | [06-gradient-allocation.md](06-gradient-allocation.md) | **the reframe**: the modes as one smooth square, allocation without detection |
+| [07-the-finished-computation.md](07-the-finished-computation.md) | **the result**: the scan cost closed, the allocator built and measured |
 
-Scripts: `scripts/THEORY-00{1,2,3,4}-*.py`. Figures: `figures/fig*.png`.
+Scripts: `scripts/THEORY-0{01..10}-*.py`. Figures: `figures/fig*.png` (24) plus
+raw numbers in `figures/theory00*.json`. The filter that came out of it is
+[`statfilter/`](../statfilter/README.md).
 
 ---
 
-## The seven results
+## The nine results
 
 **1. Per-point information about the noise parameters decays as exactly $1/n$.**
 $\Delta_n = \tfrac12\log\det I_n - \tfrac12\log\det I_{n-1} \to d/2n = 1/n$ nats.
@@ -74,6 +79,21 @@ hard is telling a spike from a shift, not telling process from measurement. (fig
 > This revises the previous headline. Parameterising the anomalies as *mean*
 > shifts made the location and scale blocks exactly orthogonal; that was a
 > property of the oracle framing, not of the process. See [06](06-gradient-allocation.md).
+
+**8. Detection is strictly more expensive than not detecting, and the gap grows
+without bound.** Asking *where* a change occurred pays a null penalty that rises
+like $\log n$ (3.92 nats at $n$=10, 9.24 at $n$=3,000). Asking *how large the
+deviation is at each $t$* — one variance component over the whole series — pays
+the boundary-LRT constant **1.353 nats, with no $n$ in it**. The scan penalty is
+the price of a location estimate an allocator never uses. This is the
+information-theoretic argument for the whole reframe. (fig19)
+
+**9. The filter that falls out beats a hindsight-tuned constant gain, with
+nothing supplied.** Four seeds, nine probes: **geometric mean 0.678, worst case
+1.017.** On stationary diffusions — where a constant gain is genuinely optimal —
+the ratio is 1.001–1.005, so adaptivity is close to free when it isn't needed.
+Six parameters, all learned; no $\epsilon$, no window, no gate, no tail.
+(fig20–fig23, [07](07-the-finished-computation.md))
 
 ---
 
