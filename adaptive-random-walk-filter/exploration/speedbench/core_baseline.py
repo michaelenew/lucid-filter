@@ -232,209 +232,6 @@ def _chain(phi: float, s: float, n: int):
     return lam, w, T
 
 
-# ------------------------------------------------- the same grid, for a batch
-# The recursion is sequential in t and cannot be vectorised over time.  It can be
-# vectorised over PARAMETER VECTORS, and that turns out to be nearly free: the
-# per-step cost is dominated by numpy dispatch, not arithmetic, so widening every
-# array from (G,) to (B, G) costs far less than running it B times.  Measured on
-# a 1200-point series at order 5: B = 13 costs 1.4x one evaluation, B = 100 costs
-# 3.8x.  Everything fit() does -- start scans, finite-difference gradients -- is
-# therefore organised as batches rather than points.  See exploration/scripts/
-# SPEED-002-batch-scaling.py.
-#
-# The three caps below are the batch's equivalents of the -60/+60 and 1e-6 clips
-# in the scalar path: they keep exp() and the logit finite.  They sit far outside
-# any estimate the model can meaningfully produce (phi to within 1e-6 of 0 or 1,
-# a log-scale SD of 20 nats) and are checked against the probe battery for
-# bindingness in SPEED-006.
-_LOGIT_CAP = 14.0                       # |logit phi| <= 14  <=>  phi in [8e-7, 1-8e-7]
-_LOG_S_CAP = math.log(20.0)             # s <= 20
-_LOG_S_FLOOR = math.log(1e-6)           # s >= 1e-6
-
-
-def _chain_batch(phi: np.ndarray, s: np.ndarray, n: int):
-    """:func:`_chain` for a batch of (phi, s); returns (B, n) lam and (B, n, n) T."""
-    z, w = _gauss_hermite(n)
-    lam = s[:, None] * z
-    nu = np.maximum(s * s * (1.0 - phi * phi), 1e-12)[:, None, None]
-    ex = (-0.5 * (lam[:, None, :] - phi[:, None, None] * lam[:, :, None]) ** 2 / nu
-          + 0.5 * lam[:, None, :] ** 2 / (s * s)[:, None, None])
-    T = w * np.exp(np.clip(ex, -700.0, 700.0))
-    T /= T.sum(2, keepdims=True)
-    return lam, np.broadcast_to(w, lam.shape), T
-
-
-def _loglik_batch(x: np.ndarray, V: np.ndarray, order: int) -> np.ndarray:
-    """Marginal log-likelihood of ``x`` at every unconstrained vector in ``V``.
-
-    ``V`` is (B, 6) in the coordinates of :meth:`Params._vec`.  The recursion is
-    the one in :meth:`AdaptiveFilter.update`, carried out for all B vectors at
-    once; at B = 1 it agrees with :meth:`AdaptiveFilter.loglik` bit for bit.
-    Only the likelihood is produced -- no shares, no mode coordinates, no Step
-    objects -- because that is all a fit needs.
-    """
-    V = np.atleast_2d(V)
-    B, n = V.shape[0], order
-    Q = np.exp(V[:, 0])
-    S2 = np.exp(V[:, 1])
-    phP = 1.0 / (1.0 + np.exp(-np.clip(V[:, 2], -_LOGIT_CAP - 1.0, _LOGIT_CAP + 1.0)))
-    phM = 1.0 / (1.0 + np.exp(-np.clip(V[:, 3], -_LOGIT_CAP - 1.0, _LOGIT_CAP + 1.0)))
-    sP = np.exp(np.clip(V[:, 4], _LOG_S_FLOOR - 1.0, _LOG_S_CAP + 1.0))
-    sM = np.exp(np.clip(V[:, 5], _LOG_S_FLOOR - 1.0, _LOG_S_CAP + 1.0))
-
-    lamP, wP, TP = _chain_batch(phP, sP, n)
-    lamM, wM, TM = _chain_batch(phM, sM, n)
-    LP = np.repeat(lamP, n, axis=1)                     # joint grid: P varies slowly
-    LM = np.tile(lamM, (1, n))
-    T = (TP[:, :, None, :, None] * TM[:, None, :, None, :]).reshape(B, n * n, n * n)
-    pi = (wP[:, :, None] * wM[:, None, :]).reshape(B, n * n).copy()
-
-    Qg = Q[:, None] * np.exp(np.clip(LP, -60.0, 60.0))
-    Rg = S2[:, None] * np.exp(np.clip(LM, -60.0, 60.0))
-    QR = Qg + Rg
-
-    x0 = float(x[0])
-    m = np.full(B, x0 if np.isfinite(x0) else 0.0)
-    P = Rg.max(1) + Qg.max(1)                           # the diffuse start of update()
-    ll = np.zeros(B)
-    for v in x:
-        pi = np.einsum("bi,bij->bj", pi, T)
-        if not np.isfinite(v):                          # missing: propagate only
-            P = P + (pi * Qg).sum(1)
-            continue
-        Pp = P[:, None] + Qg
-        S = P[:, None] + QR
-        e = v - m
-        lg = -0.5 * (np.log(S) + (e * e)[:, None] / S)
-        mx = lg.max(1)
-        w = pi * np.exp(lg - mx[:, None])
-        Z = w.sum(1)
-        ll += np.log(Z) + mx - 0.5 * _LOG2PI
-        pi = w / Z[:, None]
-        K = Pp / S
-        Kbar = (pi * K).sum(1)
-        m = m + Kbar * e
-        P = ((pi * ((1.0 - K) * Pp)).sum(1)
-             + e * e * (pi * (K - Kbar[:, None]) ** 2).sum(1))
-    return ll
-
-
-# ----------------------------------------------- the s = 0 face, in closed form
-# Where s_P = s_M = 0 every quadrature node carries lam = 0, the grid collapses to
-# one state, and the model is the plain local-level model.  Two exact facts then
-# reduce that face from a two-parameter search to a one-parameter one:
-#
-#   * the scalar recursion is homogeneous of degree 1 in sigma^2, so with
-#     P_t = sigma^2 p_t and Q = sigma^2 q the gains -- and hence the innovations
-#     -- depend on the ratio q alone;
-#   * sigma^2 is therefore concentrated out in closed form, leaving a profile
-#     likelihood in log q that a scalar Python loop evaluates ~100x faster than
-#     one pass over the 25-state grid.
-#
-# Derivation and numerical check: exploration/scripts/SPEED-004.
-
-def _face_profile(x: np.ndarray, q: float):
-    """(sigma^2, profile loglik, standardised innovations) at ratio q = Q/sigma^2."""
-    p = 1.0 + q                                 # P_0 / sigma^2, matching update()
-    m = float(x[0]) if math.isfinite(x[0]) else 0.0          # ditto
-    acc = 0.0                                   # sum e^2 / Stil
-    lsum = 0.0                                  # sum log Stil
-    cnt = 0
-    u = np.empty(x.size)
-    for i in range(x.size):
-        v = x[i]
-        if not math.isfinite(v):
-            p += q                              # missing: propagate, do not correct
-            u[i] = math.nan
-            continue
-        S = p + q + 1.0
-        e = v - m
-        acc += e * e / S
-        lsum += math.log(S)
-        u[i] = e / math.sqrt(S)
-        K = (p + q) / S
-        m += K * e
-        p = (1.0 - K) * (p + q)
-        cnt += 1
-    s2 = acc / cnt
-    ll = -0.5 * (cnt * (_LOG2PI + math.log(s2) + 1.0) + lsum)
-    u /= math.sqrt(s2)
-    if math.isfinite(x[0]):
-        u[0] = math.nan     # m_0 = x_0, so this innovation is zero by construction
-    return s2, ll, u
-
-
-_Q_SCAN = np.logspace(-7.0, 3.0, 41)            # q is a ratio, so this needs no scaling
-
-
-def _face_optimum(x: np.ndarray):
-    """Maximise the concentrated profile over q.  Returns (Q, sigma^2, u)."""
-    lls = [_face_profile(x, q)[1] for q in _Q_SCAN]
-    i = int(np.argmax(lls))
-    lo = math.log(_Q_SCAN[max(i - 1, 0)])
-    hi = math.log(_Q_SCAN[min(i + 1, _Q_SCAN.size - 1)])
-    if hi > lo:
-        from scipy.optimize import minimize_scalar
-        r = minimize_scalar(lambda z: -_face_profile(x, math.exp(z))[1],
-                            bounds=(lo, hi), method="bounded",
-                            options=dict(xatol=1e-4))
-        q = math.exp(float(r.x))
-    else:
-        q = float(_Q_SCAN[i])
-    s2, _, u = _face_profile(x, q)
-    return q * s2, s2, u
-
-
-_VAR_LOG_CHI2 = math.pi ** 2 / 2.0              # Var(log z^2), z ~ N(0,1), exact
-
-
-def _moment_scale(u: np.ndarray):
-    """(s, phi) for the log-scale, read off the face's residuals in one pass.
-
-    If a log-scale channel is present it survives into the homoscedastic fit's
-    standardised innovations, where ``log u_t^2 = log z_t^2 + lam_t`` with the two
-    terms independent.  Var(log z^2) is exactly pi^2/2, so the lag-0 and lag-1
-    autocovariances of log u^2 give the log-scale's variance and its persistence
-    directly.  It cannot say which channel carries them -- both inflate an
-    innovation -- so it supplies a magnitude and a persistence, and the start
-    scan decides the split.
-    """
-    g = np.log(np.maximum(u[np.isfinite(u)] ** 2, 1e-12))
-    if g.size < 3:
-        return 0.0, 0.5
-    g = g - g.mean()
-    c0 = float(g @ g) / g.size
-    c1 = float(g[1:] @ g[:-1]) / g.size
-    var = c0 - _VAR_LOG_CHI2
-    if var <= 1e-3:
-        return 0.0, 0.5
-    return math.sqrt(var), float(min(max(c1 / var, 1e-3), 0.98))
-
-
-# ------------------------------------------------------------ the start screen
-# The same 5x5 persistence grid the previous fit() scanned, now crossed with four
-# ways of splitting the scale between the channels rather than fixing both at
-# 0.6.  A hundred starts in one batched evaluation cost about four, so the screen
-# is wider than before and still an order of magnitude cheaper.
-_PHI_GRID = (0.02, 0.25, 0.5, 0.75, 0.95)
-_S_SPLITS = ((0.03, 0.03), (0.6, 0.6), (0.03, 0.6), (0.6, 0.03))
-_QUIET = 0.1                            # divides "no scale structure" starts from the rest
-
-
-def _bounds(g0: float):
-    """Box for the search, in the unconstrained coordinates.
-
-    A numerical guard, not a prior: sigma^2 and Q cannot exceed the data's own
-    gamma_0 = E[(x_t - x_{t-1})^2] by more than a rounding margin, and the other
-    four are the caps of :func:`_loglik_batch`.  SPEED-006 checks that no
-    coordinate of any battery fit lands on a bound.
-    """
-    lg = math.log(g0)
-    return [(lg - 30.0, lg + 5.0), (lg - 30.0, lg + 5.0),
-            (-_LOGIT_CAP, _LOGIT_CAP), (-_LOGIT_CAP, _LOGIT_CAP),
-            (_LOG_S_FLOOR, _LOG_S_CAP), (_LOG_S_FLOOR, _LOG_S_CAP)]
-
-
 # ------------------------------------------------------------------ the filter
 class AdaptiveFilter:
     """Adaptive local-level filter with learned process and measurement noise.
@@ -650,81 +447,66 @@ class AdaptiveFilter:
     def fit_(self, x, max_iter: int = 500) -> "AdaptiveFilter":
         """Fit in place.  Returns self.
 
-        Staged, because a six-dimensional search from one start is not reliable.
-        Every stage is organised around the one measured fact about this
-        recursion: it is dispatch-bound, so B parameter vectors cost far less
-        than B evaluations (:func:`_loglik_batch`).  Nothing here is a tuning
-        choice -- the estimate is the maximum likelihood estimate however it is
-        reached, and ``max_iter`` is a compute budget.
+        Staged, because a six-dimensional search from one start is not reliable:
 
-        pass 1   the exact optimum on the s_P = s_M = 0 face.  That face is the
-                 plain local-level model, where sigma^2 concentrates out in
-                 closed form and only the ratio q = Q/sigma^2 is searched --
-                 a scalar recursion, ~100x cheaper than one pass over the grid,
-                 and an exact optimum rather than a scan's best point;
-        pass 2   the magnitude and persistence of whatever log-scale structure
-                 is left in that fit's residuals, read off their log-squares in
-                 one pass (:func:`_moment_scale`);
-        pass 3   ONE batched evaluation of ~100 starts -- a 5x5 grid over the two
-                 persistences crossed with four splits of the scale between the
-                 channels, plus what pass 2 proposed.  Costs about four
-                 evaluations, and replaces a 25-point scan that cost 25;
-        pass 4   full 6-D maximum likelihood by L-BFGS-B, its gradient taken by
-                 central differences batched into a single evaluation.  The
-                 surface is smooth in these coordinates, so a quasi-Newton method
-                 gets there in tens of gradients where Nelder-Mead needed ~500
-                 function values per start.  Run from the best quiet start and
-                 the best volatile one, better likelihood kept, as before.
+        stage 0    scan Q with s2 pinned by the variogram identity
+                   gamma_0 = Q + 2 s2, so every candidate is admissible and the
+                   range comes from the data's own scale;
+        stage 0.5  coarse 5x5 scan over (phi_P, phi_M).  Without it the search
+                   sits at its initialisation on impulsive data, which showed up
+                   as a factor-1.3 worst case rather than 1.017;
+        stage 1    full 6-D maximum likelihood from that start, run from a quiet
+                   and a volatile log-scale, better likelihood kept.
+
+        All of it is numerical scaffolding: the estimate is the maximum
+        likelihood estimate however it is reached.  ``max_iter`` is a compute
+        budget, not a tuning parameter.
         """
         from scipy.optimize import minimize          # only needed for fitting
 
         x = np.asarray(x, dtype=float)
-        finite = np.isfinite(x)
-        good = x[finite]
+        good = x[np.isfinite(x)]
         if good.size < 10:
             raise ValueError("need at least 10 finite observations to fit")
         d = np.diff(good)
         g0 = float(np.mean(d * d))
         if not g0 > 0:
             raise ValueError("series is constant; nothing to fit")
-        n = max(int(finite.sum()), 1)
 
-        # pass 1 -- the s = 0 face, exactly
-        Q0, s20, resid = _face_optimum(x)
-        lQ0, ls20 = math.log(Q0), math.log(s20)
+        def ll(vec) -> float:
+            try:
+                self.params = Params._from_vec(vec)
+            except ValueError:
+                return -np.inf
+            return self._run(x, want=False)
 
-        # pass 2 -- what the face left behind
-        s_hat, phi_hat = _moment_scale(resid)
+        # stage 0 -- Q, with s2 = (gamma_0 - Q)/2
+        cand = g0 * np.logspace(-5.0, -0.05, 25)
+        base = [np.array([math.log(Qc), math.log((g0 - Qc) / 2.0),
+                          0.0, 0.0, math.log(1e-3), math.log(1e-3)])
+                for Qc in cand]
+        Q0 = cand[int(np.argmax([ll(v) for v in base]))]
+        s20 = (g0 - Q0) / 2.0
 
-        # pass 3 -- one batched screen over the starts
-        starts = [[lQ0, ls20, _logit(pp), _logit(pm), math.log(sp), math.log(sm)]
-                  for pp in _PHI_GRID for pm in _PHI_GRID for sp, sm in _S_SPLITS]
-        if s_hat > 0.0:
-            lz, lp, tiny = math.log(s_hat), _logit(phi_hat), math.log(1e-3)
-            starts += [[lQ0, ls20, lp, lp, lz, lz],
-                       [lQ0, ls20, lp, lp, lz, tiny],
-                       [lQ0, ls20, lp, lp, tiny, lz]]
-        V = np.clip(np.array(starts), *zip(*_bounds(g0)))
-        val = _loglik_batch(x, V, self.order)
-        loud = V[:, 4:].max(1) > math.log(_QUIET)
-        chosen = [V[np.argmax(np.where(m, val, -np.inf))]
-                  for m in (~loud, loud) if m.any()]
+        # stage 0.5 -- the two persistences
+        grid = [0.02, 0.25, 0.5, 0.75, 0.95]
+        best_ph, best_v = (0.0, 0.0), -np.inf
+        for pp in grid:
+            for pm in grid:
+                v = np.array([math.log(Q0), math.log(s20), _logit(pp), _logit(pm),
+                              math.log(0.6), math.log(0.6)])
+                val = ll(v)
+                if val > best_v:
+                    best_ph, best_v = (_logit(pp), _logit(pm)), val
 
-        # pass 4 -- full ML, gradients batched
-        bounds = _bounds(g0)
-        h = 1e-4
-        stencil = np.zeros((13, 6))
-        stencil[1::2] = h * np.eye(6)
-        stencil[2::2] = -h * np.eye(6)
-
-        def fg(v):
-            ll = _loglik_batch(x, v + stencil, self.order)
-            return -ll[0] / n, -(ll[1::2] - ll[2::2]) / (2.0 * h * n)
-
+        # stage 1 -- full ML
+        n = max(x.size, 1)
         best_vec, best_f = None, np.inf
-        for start in chosen:
-            r = minimize(fg, start, jac=True, method="L-BFGS-B", bounds=bounds,
-                         options=dict(maxiter=int(max_iter), ftol=1e-12, gtol=1e-7))
+        for s0 in (0.03, 0.6):
+            start = np.array([math.log(Q0), math.log(s20), best_ph[0], best_ph[1],
+                              math.log(s0), math.log(s0)])
+            r = minimize(lambda v: -ll(v) / n, start, method="Nelder-Mead",
+                         options=dict(maxiter=int(max_iter), xatol=2e-3, fatol=1e-5))
             if r.fun < best_f:
                 best_vec, best_f = r.x, r.fun
 
