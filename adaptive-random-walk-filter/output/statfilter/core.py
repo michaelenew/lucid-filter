@@ -137,7 +137,13 @@ def _logit(p: float) -> float:
 
 
 def _expit(z: float) -> float:
-    return 1.0 / (1.0 + math.exp(-z))
+    # Branch to stay finite at large |z|.  The unconstrained Nelder-Mead search
+    # in fit_ can push the logit far past the +-20.7 that _logit ever produces,
+    # and 1/(1+exp(-z)) raises OverflowError below z = -709.
+    if z >= 0.0:
+        return 1.0 / (1.0 + math.exp(-z))
+    e = math.exp(z)
+    return e / (1.0 + e)
 
 
 # --------------------------------------------------------------------- results
@@ -406,7 +412,7 @@ class AdaptiveFilter:
         """Run over a whole series from a fresh state.  Does not touch state."""
         return self._run(np.asarray(x, dtype=float), want=True)
 
-    def _run(self, x: np.ndarray, want: bool):
+    def _run(self, x: np.ndarray, want: bool, criterion: str = "loglik"):
         if self.params is None:
             raise ValueError("filter is not fitted; call fit() or pass params")
         if x.ndim != 1 or x.size == 0:
@@ -416,6 +422,15 @@ class AdaptiveFilter:
         try:
             self.reset()
             if not want:
+                if criterion == "pem":
+                    # mean squared one-step innovation.  Negated so that, like
+                    # the log-likelihood, larger is better and fit_ can maximise
+                    # either without knowing which it has.
+                    total = 0.0
+                    for v in x:
+                        e = self.update(v).innovation
+                        total += e * e
+                    return -total / max(x.size, 1)
                 total = 0.0
                 for v in x:
                     total += self.update(v).loglik
@@ -438,13 +453,15 @@ class AdaptiveFilter:
 
     # ------------------------------------------------------------------- fit
     @classmethod
-    def fit(cls, x, order: int = 5, max_iter: int = 500) -> "AdaptiveFilter":
+    def fit(cls, x, order: int = 5, max_iter: int = 500,
+            criterion: str = "loglik") -> "AdaptiveFilter":
         """Learn all six parameters from a series and return a fitted filter."""
         f = cls(order=order)
-        f.fit_(x, max_iter=max_iter)
+        f.fit_(x, max_iter=max_iter, criterion=criterion)
         return f
 
-    def fit_(self, x, max_iter: int = 500) -> "AdaptiveFilter":
+    def fit_(self, x, max_iter: int = 500,
+             criterion: str = "loglik") -> "AdaptiveFilter":
         """Fit in place.  Returns self.
 
         Staged, because a six-dimensional search from one start is not reliable:
@@ -473,12 +490,15 @@ class AdaptiveFilter:
         if not g0 > 0:
             raise ValueError("series is constant; nothing to fit")
 
+        if criterion not in ("loglik", "pem"):
+            raise ValueError("criterion must be 'loglik' or 'pem'")
+
         def ll(vec) -> float:
             try:
                 self.params = Params._from_vec(vec)
-            except ValueError:
+            except (ValueError, OverflowError):
                 return -np.inf
-            return self._run(x, want=False)
+            return self._run(x, want=False, criterion=criterion)
 
         # stage 0 -- Q, with s2 = (gamma_0 - Q)/2
         cand = g0 * np.logspace(-5.0, -0.05, 25)
