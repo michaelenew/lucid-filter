@@ -1,7 +1,7 @@
 # The information-domain foundation
 
 Started as exploration rather than a filter; it produced one anyway, in
-[`statfilter/`](../statfilter/README.md). Files 01–06 are exact throughout
+[`statfilter/`](../../output/statfilter/README.md). Files 01–06 are exact throughout
 (closed form or exact linear algebra on the model's own covariance) — no
 simulation, no fitted constants. 07 is where measurement begins.
 
@@ -25,7 +25,7 @@ $\gamma_0 = Q+2\sigma^2$, $\gamma_1 = -\sigma^2$, $\gamma_{k\ge2}=0$.
 
 Scripts: `scripts/THEORY-0{01..10}-*.py`. Figures: `figures/fig*.png` (24) plus
 raw numbers in `figures/theory00*.json`. The filter that came out of it is
-[`statfilter/`](../statfilter/README.md).
+[`statfilter/`](../../output/statfilter/README.md).
 
 ---
 

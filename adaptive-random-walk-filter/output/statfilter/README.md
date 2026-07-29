@@ -120,6 +120,8 @@ Known weaknesses, all measured rather than guessed:
 
 ## Tests
 
+Run from this directory (`output/`, where `pyproject.toml` and `tests/` live):
+
 ```
 python -m pytest tests -q                  # all 19, ~13 min (fitting dominates)
 python -m pytest tests -q -m "not slow"    # 11 structural checks, 0.3 s
@@ -132,10 +134,11 @@ and missing-data handling. The slow ones all call `fit()`.
 
 ## Where this comes from
 
-`theory/` in this repository derives it: `01`–`02` the information accounting and
-why relevance decays the way it does, `03` the four deviation modes, `04` nats to
-trust to influence, `06` why detection is the wrong frame, `07` the finished
-computation and the measured results.
+[`../exploration/theory/`](../../exploration/theory/README.md) derives it:
+`01`–`02` the information accounting and why relevance decays the way it does,
+`03` the four deviation modes, `04` nats to trust to influence, `06` why
+detection is the wrong frame, `07` the finished computation and the measured
+results.
 
 One result worth stating here, because it is the reason there is no changepoint
 test: asking *where* a change occurred costs a null penalty that grows like
