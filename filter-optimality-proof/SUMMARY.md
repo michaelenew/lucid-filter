@@ -38,7 +38,17 @@ the definition of the class, not parameters within it.**
 The measured class (`exploration/0005` §5):
 
 $$\theta_t=\theta_{t-1}+w_t,\quad x_t=\theta_t+v_t,\quad w_t\sim N(0,Qe^{\lambda^P_t}),\ v_t\sim N(0,\sigma^2e^{\lambda^M_t})$$
-$$\lambda^c\ \text{stationary},\quad \gamma^c_0=s_c^2,\quad \gamma^c_1=\varphi_cs_c^2,\quad c\in\{P,M\}$$
+$$\lambda^c\ \text{stationary},\quad \gamma^c_0=s_c^2,\quad \gamma^c_1=\varphi_cs_c^2,\quad
+\mathbb E[e^{\lambda^c}]<\infty,\quad c\in\{P,M\}$$
+
+**That last constraint is new and was silently assumed throughout**
+(`exploration/0024` §3). Prescribing only $\gamma_0,\gamma_1$ admits a
+stationary $\lambda$ with finite variance and polynomial tails, for which
+$\mathbb E[e^\lambda]=\infty$ — the *actual* noise variance then has infinite
+mean while every stated constraint holds. Under squared error that is harmless
+(a huge $R_t$ just means ignore $x_t$), but under log-loss
+$\sup_{p}\mathbb E_p[-\log m^\ast]=\infty$ and the minimax problem is vacuous.
+The two losses do not even agree on whether the problem is well-posed.
 
 Equivalently: increments are Gaussian scale mixtures, with the mixing scale
 constrained in magnitude and persistence only. Every such mixture has
@@ -98,16 +108,17 @@ $\nu=s^2(1-\varphi^2)$ identity in `core.py`.
    risk is not affine in $(\gamma_0,\gamma_1)$, so no equalizer exists and
    Theorem A's argument cannot transfer. This must become a bound on the
    discrepancy, not an equality.
-2. **The path is latent.** Theorem C scores code length on $\lambda$; `fit()`
-   scores likelihood of $x$, with $\lambda$ integrated out, and the affineness
-   that gives the equalizer does not survive the marginalisation
-   (`exploration/0005` §6). Untouched.
+2. **The path is latent, and the equalizer does not survive it.** Theorem C
+   scores code length on $\lambda$; `fit()` scores likelihood of $x$. Measured
+   (`exploration/0023`): across an AR(2) family on which Theorem C guarantees the
+   *latent* code length is identical, the *observable* code length varies
+   monotonically by 1.3%, at $|t|=3$–4.5. So gap 2 **closes negatively** — it is
+   not "not established", it is false.
 
-The seam between the two losses, measured at $+0.23\%\pm0.21$ for *which
-parameters to use* (`exploration/0012`), is therefore **not uniformly small**:
-for *which member is worst* the two losses disagree outright. The honest
-statement is that they agree where measured on parameter choice and diverge on
-class geometry.
+**Neither reframing rescues layer 2.** Under MSE the max-entropy member is not
+least favourable (`0017`); under observable log-loss it is not either — members
+below it in $\gamma_2$ sit above it at $t=4.5$ (`0023`). Committing to one loss
+leaves the filter's model interior to the class under both.
 
 ## Layer 3 — the six numbers. Open, but the sign is favourable.
 
@@ -216,9 +227,17 @@ layer 1 would need redoing under $\mathbb E\lvert\cdot\rvert^r$, $r<\alpha$.
 | marginalisation ($\lambda\to x$) | untouched; blocks Theorem C from applying to `fit()` |
 | $\kappa<3$ (light tails) | genuine, outside the model, unchanged |
 
-The shape of the problem has changed. Leak 1 is gone and Leak 2 is no longer a
-formality — it is the reason layer 2 cannot be finished, and `exploration/0017`
-shows it is not a small discrepancy that a sharper argument will absorb.
+**The obstruction is not the choice of loss — it is that the class is too big**
+(`exploration/0024`). Fixing two moments of $\lambda$ leaves the risk varying
+across members under *either* loss, with the filter's model interior rather than
+at a maximum. An equalizer exists only when the loss is affine in what the class
+fixes: true for Theorem A, true for Theorem C on the latent path, false in every
+other combination tried. Reaching minimaxity would mean shrinking the class to
+the AR(1) family, which makes the theorem nearly tautological.
+
+**The filter is fine; the ambition was wrong.** Every measured gap is between
+0.2% and 5%. What fails is an exact minimax characterisation over a two-moment
+class, not the filter.
 
 ## Next, in order
 

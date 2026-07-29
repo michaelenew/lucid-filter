@@ -28,12 +28,12 @@ quadrature order 9.
 | Student-$t_5$ | 0.490 | 0.890 | 1.184 | **0.933 ± 0.053** |
 | two-pt $p{=}.15$ | 0.720 | 1.011 | 1.184 | **1.267 ± 0.052** |
 | lognormal | 1.099 | 1.184 | 1.184 | **1.119 ± 0.035** |
+| two-pt $p{=}.30$ | 2.956 | 1.805 | 1.184 | **2.231 ± 0.103** |
 
 **Kurtosis is refuted.** It is held at exactly 9 on every row, so it predicts a
-single value, 1.184, throughout. Fitted $s_M$ instead ranges over 0.69–1.27 with
-standard errors near 0.05 — a spread of more than ten standard errors across
-rows that are kurtosis-identical. Theorem B's $\operatorname{Var}(\log u)$
-tracks it.
+single value, 1.184, throughout. Fitted $s_M$ instead ranges over 0.69–2.23 —
+a factor of 3.2 — with standard errors near 0.05, across rows that are
+kurtosis-identical. Theorem B's $\operatorname{Var}(\log u)$ tracks it.
 
 **So `exploration/0004`'s "leverage is monotone in kurtosis alone" is wrong as a
 general statement** and should be read as: monotone in a shape functional that
@@ -58,7 +58,23 @@ KL-projection argument predicts, and it is a useful internal check:
 
 So Theorem B gives the moments exactly (that part is a proof), and the fitted
 value departs from them by an amount governed by how far the induced log-scale
-marginal is from Gaussian. Both effects are visible and neither is large.
+marginal is from Gaussian.
+
+**The overshoot is monotone in exactly the quantity that argument names.** The
+bimodality of a two-point $\eta$ is measured by $p(1-p)$, and across the four
+two-point rows:
+
+| $p$ | $p(1-p)$ | overshoot |
+|---|---|---|
+| 0.01 | 0.0099 | +0.073 |
+| 0.05 | 0.0475 | +0.133 |
+| 0.15 | 0.1275 | +0.256 |
+| 0.30 | 0.2100 | +0.426 |
+
+Monotone, and the ratio settles near 2 as the mixture becomes genuinely bimodal.
+That is a mechanism confirmed rather than a discrepancy tolerated: Theorem B
+fixes the moments, and ML inflates $s_M$ above them in proportion to how far the
+induced marginal is from the unimodal family the filter can represent.
 
 $\varphi_M$ shows the same pattern more weakly — predicted 0.733, 0.496, 0.355,
 0.275, 0.201 against fitted 0.810, 0.596, 0.434, 0.330, 0.470. Direction and
