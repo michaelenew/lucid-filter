@@ -113,10 +113,17 @@ implication.
 With Theorem B in place the architecture reads as one idea applied at two
 levels:
 
+> **Withdrawn in part — see [`0017`](0017_max_entropy_is_not_least_favourable_under_MSE.md).**
+> The conjecture below is **false under squared error** and **true under
+> log-loss** ([`output/02`](../output/02-logloss-least-favourable.md), Theorem C).
+> The section is kept because the diagnosis of *why* it splits is the useful
+> part: both layers are equalizer arguments, and an equalizer exists exactly
+> when the loss is affine in what the class fixes. Read §3 with that correction.
+
 | | constraint | max-entropy law | least favourable? |
 |---|---|---|---|
 | **Layer 1** (`output/01`) | variance $R$ | Gaussian | **yes — proved, exactly** |
-| **Layer 2** | $\gamma_0,\gamma_1$ of $\log$-scale | Gaussian AR(1) (Burg) | **conjectured** |
+| **Layer 2** | $\gamma_0,\gamma_1$ of $\log$-scale | Gaussian AR(1) (Burg) | **under log-loss yes; under MSE no** |
 
 The filter models the Gaussian at layer 1 and the Gaussian AR(1) at layer 2. If
 the right-hand column is "yes" both times, the design rule is a single sentence

@@ -40,9 +40,29 @@ The measured class (`exploration/0005` §5):
 $$\theta_t=\theta_{t-1}+w_t,\quad x_t=\theta_t+v_t,\quad w_t\sim N(0,Qe^{\lambda^P_t}),\ v_t\sim N(0,\sigma^2e^{\lambda^M_t})$$
 $$\lambda^c\ \text{stationary},\quad \gamma^c_0=s_c^2,\quad \gamma^c_1=\varphi_cs_c^2,\quad c\in\{P,M\}$$
 
-Equivalently: increments are Gaussian scale mixtures — every shape with
-kurtosis $\ge3$ — with the mixing scale constrained in magnitude and
-persistence only.
+Equivalently: increments are Gaussian scale mixtures, with the mixing scale
+constrained in magnitude and persistence only. Every such mixture has
+$\kappa\ge3$, but **the converse is false** — not every $\kappa\ge3$ law is a
+scale mixture, so the class is strictly smaller than "all shapes with
+$\kappa\ge3$." (An earlier version of this line stated the equivalence; it is
+one-way.)
+
+**Theorem B** (`exploration/0015` §2) makes the shape adversary exact and
+elementary. An i.i.d. mixture $\varepsilon=\sqrt u\,z$, $\mathbb Eu=1$, shifts
+the log-scale by $\log u$, so it adds $\operatorname{Var}(\log u)$ to $\gamma_0$
+and **leaves $\gamma_1$ untouched**:
+
+$$\tilde s^2=s^2+\operatorname{Var}(\log u),\qquad \tilde\varphi=\varphi s^2/\tilde s^2,
+\qquad \tilde s^2\tilde\varphi=\gamma_1\ \text{invariant.}$$
+
+The shape adversary moves along a level set of $\gamma_1$, with the Gaussian at
+the minimal-$\gamma_0$ endpoint. This is "shape and scale are the same
+coordinate, $\varphi$ is the dial" made exact. Two consequences worth carrying:
+**the sufficient statistic is $\operatorname{Var}(\log u)$, not kurtosis**
+($\log(\kappa/3)=\log\mathbb E[u^2]$ is a different functional, and they coincide
+only for lognormal mixing); and a heavy tail always lands on the
+$\rho_2>\rho_1^2$ side, relocating *within* the class but *off* the AR(1)
+submanifold the filter models.
 
 ## Layer 1 — shape. **Proved.**
 
@@ -57,19 +77,37 @@ This replaces the central-limit-theorem defence of conditional Gaussianity with
 something stronger — no limit is taken, no approximation is made, and it holds
 finite-sample for increment laws that look nothing like Gaussian.
 
-## Layer 2 — the log-scale dynamics. Exact match, incomplete argument.
+## Layer 2 — the log-scale dynamics. **Proved under log-loss. False under MSE.**
 
-Burg's maximum entropy theorem: among stationary processes with prescribed
-$\gamma_0,\gamma_1$, the maximum-entropy-rate one is the Gaussian AR(1). That is
-the filter's log-scale model exactly, including the $\nu=s^2(1-\varphi^2)$
-identity in `core.py` — the model carries no degree of freedom the constraint
-did not pay for, and leaves none of the constraint's unrepresented.
+[`output/02-logloss-least-favourable.md`](output/02-logloss-least-favourable.md),
+Theorem C (standard: max-entropy = minimax redundancy, specialised). Among *all*
+processes with prescribed $\gamma_0,\gamma_1$ — not necessarily Gaussian, Markov
+or mixing — the Gaussian AR(1) is an **exact equalizer** under code length,
+because $-\log p^\ast$ is affine in precisely the statistics the class fixes.
+Equalizer + Bayes-at-one-member + weak duality, the same three lines as
+Theorem A. That is the filter's log-scale model exactly, including the
+$\nu=s^2(1-\varphi^2)$ identity in `core.py`.
 
-**What is not established** is the transfer to the observable: Burg constrains
-the *latent* $\lambda$ path, while the loss is incurred on $x$, and the
-equalizer property that makes max-entropy laws minimax does not obviously
-survive the marginalisation (`exploration/0005` §6). Under cumulative log-loss —
-which is exactly what `fit()` maximises — the argument is otherwise sound.
+**Two gaps, and they are all that remains of layer 2.**
+
+1. **The loss is wrong, and this one is now known to be fatal as stated.**
+   Measured across the full admissible range of $\gamma_2$ (`exploration/0017`),
+   the max-entropy member is **not** least favourable under squared error: risk
+   is monotone in $\gamma_2$, in *opposite directions* in two regimes, with the
+   max-entropy member interior both times and a spread up to 4.6%. Squared-error
+   risk is not affine in $(\gamma_0,\gamma_1)$, so no equalizer exists and
+   Theorem A's argument cannot transfer. This must become a bound on the
+   discrepancy, not an equality.
+2. **The path is latent.** Theorem C scores code length on $\lambda$; `fit()`
+   scores likelihood of $x$, with $\lambda$ integrated out, and the affineness
+   that gives the equalizer does not survive the marginalisation
+   (`exploration/0005` §6). Untouched.
+
+The seam between the two losses, measured at $+0.23\%\pm0.21$ for *which
+parameters to use* (`exploration/0012`), is therefore **not uniformly small**:
+for *which member is worst* the two losses disagree outright. The honest
+statement is that they agree where measured on parameter choice and diverge on
+class geometry.
 
 ## Layer 3 — the six numbers. Open, but the sign is favourable.
 
@@ -100,12 +138,19 @@ closing it makes the class and the model coincide.
   like $s_M^2$: spread across shapes 0.0016 → 1.23 as $s_M$ goes 0 → 2.
 - Leverage is monotone in **kurtosis alone**, over $\kappa\in[1,15]$. Two
   structurally unrelated shapes matched at $\kappa=5$ agree to 0.5 se.
+  **In tension with Theorem B**, which says the sufficient statistic is
+  $\operatorname{Var}(\log u)$, and two laws can match in $\kappa$ while
+  differing in it. Most likely the shapes tested happened to be close in both
+  (the functionals correlate across the usual families), but that is a guess.
+  Read this bullet as "monotone in a shape functional that kurtosis tracks in
+  the cases tested" until the discriminating test below is run.
 - A Gaussian scale mixture has $\kappa\ge3$ with equality iff degenerate, so
   **the Gaussian is the least favourable shape within the family the filter's
   own model generates.**
-- Kurtosis is sufficient for a structural reason, not a numerical one: the class
-  specifies the log-scale only through $\gamma_0,\gamma_1$, and an i.i.d. shape
-  contributes exactly $\log(\kappa/3)$ to $\gamma_0$ and nothing to $\gamma_1$.
+- The reason is structural, not numerical: the class specifies the log-scale
+  only through $\gamma_0,\gamma_1$, and an i.i.d. shape contributes exactly
+  $\operatorname{Var}(\log u)$ to $\gamma_0$ and nothing to $\gamma_1$
+  (Theorem B).
 - The reason: i.i.d. scale variation *is* excess kurtosis, persistent scale
   variation *is* heteroscedasticity, and $\varphi$ is the dial between them. A
   heavy-tailed adversary is inside the model at $\varphi=0$ — which is why $t_5$
@@ -116,15 +161,17 @@ closing it makes the class and the model coincide.
   $\varphi_M$ from 0.93 to 0.488. The filter reads a heavy tail as *impulsive*
   scale variation, and follows the relocation. Fitted $s_M$ is monotone in
   kurtosis across all four shapes: 0.224, 0.389, 0.515, 0.907.
-- **But ML lands 25–30% short** of the moment-matched prediction (0.907 vs
-  1.184; $\varphi_M$ 0.488 vs 0.201), because maximum likelihood projects onto
-  the representable Gaussian-AR(1) log-scale family rather than matching
-  moments. Not a quadrature artifact — flat across orders 5, 7, 9, 13.
-  **And the projection is the better place to be**: the moment-matched point
-  costs $+1.73\%\pm0.50$ MSE and the truth $+5.98\%\pm0.94$, while the
-  KL-projection is within noise of optimal. The moment formula was intuitive and
-  wrong. So Leak 1 largely collapses into Leak 3, and Leak 3's practical sign is
-  favourable.
+- **And `fit()` lands on the predicted relocation.** With the correct statistic
+  $\operatorname{Var}(\log u)=\psi'(5/2)=0.4904$ for $t_5$, Theorem B predicts
+  $(0.890,0.355)$ and `fit()` measured $(0.907\pm0.065,\ 0.488\pm0.089)$ — 0.26
+  and 1.5 se. Paired over 40 seeds the corrected point is the best of every
+  point tested, with `fit()` $+0.07\%\pm0.04$ from it, against $+1.53\%$ for the
+  old miscalculated point and $+5.60\%$ for the un-relocated truth
+  (`exploration/0013`). **An earlier claim here that ML lands 25–30% short and
+  targets a KL-projection was an arithmetic error** ($\log(\kappa/3)$ for
+  $\operatorname{Var}(\log u)$), now withdrawn. The residual true statement: the
+  relocated log-scale is ARMA(1,1) while the filter's family is AR(1), so ML does
+  project — it just costs nothing measurable.
 - **Limitation, sharp:** $\kappa<3$ is outside the representable cone. At
   $s_M=1.5$ the filter loses 24% against its Gaussian row on two-point noise.
   Bounded sensors, quantised readings and saturating instruments are all
@@ -154,28 +201,38 @@ layer 1 would need redoing under $\mathbb E\lvert\cdot\rvert^r$, $r<\alpha$.
 
 | gap | status |
 |---|---|
-| Leak 1 — shape adversary | reduced to a relocation *within* the class; residual is Leak 3 |
-| Leak 2 — two losses | **empirically benign**, $+0.23\%\pm0.21$; theoretical transfer unproved |
-| Leak 3 — parameters estimated | reframed as quasi-MLE under misspecification; sign favourable |
+| Leak 1 — shape adversary | **closed as a separate leak.** Theorem B: an exact relocation along a $\gamma_1$ level set, and `fit()` finds it to $+0.07\%$ |
+| Leak 2 — two losses | **the live one.** Agree on parameter choice ($+0.23\%\pm0.21$); **disagree outright on class geometry** — max-entropy is least favourable under log-loss, not under MSE |
+| Leak 3 — parameters estimated | quasi-MLE under misspecification; measured sign favourable, no theory |
 | Leak 4 — GPB1 collapse | measured signature: $+0.65\%$ even when correctly specified |
+| marginalisation ($\lambda\to x$) | untouched; blocks Theorem C from applying to `fit()` |
 | $\kappa<3$ (light tails) | genuine, outside the model, unchanged |
 
-Everything that remains is a matter of proving things the measurements already
-indicate — except the last row, which is a real limitation.
+The shape of the problem has changed. Leak 1 is gone and Leak 2 is no longer a
+formality — it is the reason layer 2 cannot be finished, and `exploration/0017`
+shows it is not a small discrepancy that a sharper argument will absorb.
 
 ## Next, in order
 
-1. **A minimum-kurtosis analogue of Theorem A.** Conjecture: filter risk is
-   monotone in the increment kurtosis, so the Gaussian is least favourable over
-   $\{\kappa\ge3\}$. Would promote the central claim from measured to proved,
-   and is the most tractable of these.
-2. **Push the layer-2 argument through the marginalisation** to the observable
-   (`exploration/0005` §6) — the one piece the whole layer-2 story rests on.
-3. **The I-MMSE weld** (Guo–Shamai–Verdú): mutual information is the integral of
-   MMSE over SNR, so a minimax statement in information is one in
-   SNR-integrated MSE. Would make the two losses one theorem rather than one
-   theorem and one measurement.
-4. **The $\alpha$-stable family** under $L^r$ loss.
+1. **Bound the loss discrepancy at layer 2.** Theorem C is exact under log-loss;
+   `0017` measures up to 4.6% divergence under MSE across the admissible
+   $\gamma_2$ range. The equality is unavailable, so the target is an inequality:
+   how far from minimax can modelling the max-entropy member be? A bound in
+   terms of $\gamma_2$'s admissible width would finish layer 2 in the only form
+   still open to it.
+2. **The $\kappa$ vs $\operatorname{Var}(\log u)$ discriminating test.**
+   Construct two scale mixtures matched in kurtosis and deliberately split in
+   $\operatorname{Var}(\log u)$. Decides whether `exploration/0004`'s
+   kurtosis-sufficiency claim needs restating. Cheap, and it settles a live
+   inconsistency in this file.
+3. **Push Theorem C through the marginalisation** to the observable
+   (`exploration/0005` §6). Would give a genuine minimax statement for `fit()`
+   under log-loss — worth having even with gap 1 open.
+4. **The I-MMSE weld** (Guo–Shamai–Verdú): mutual information is the integral of
+   MMSE over SNR. This is now the most interesting item rather than a tidy-up,
+   because it is the only route that would relate the two losses rather than
+   choosing between them.
+5. **The $\alpha$-stable family** under $L^r$ loss.
 
 ## A note for the parent workstream
 
@@ -190,7 +247,10 @@ order 9 or 13. Tracking MSE is unaffected.
 
 ## Layout
 
-- `output/` — results that stand on their own. Currently one: Theorem A.
-- `exploration/` — numbered, later is more recent. `0001` sets up the problem
-  and is superseded in two places by `0005`; `0005` is the current state of the
-  argument and the place to start reading after this file.
+- `output/` — results that stand on their own. Theorem A (shape minimaxity,
+  squared error) and Theorem C (log-scale minimaxity, log-loss).
+- `exploration/` — numbered, later is more recent. Start at `0015` (Theorem B
+  and the correction to the moment formula) and `0017` (why max-entropy does not
+  transfer to squared error); those two carry the current argument. `0005` is
+  still the best statement of the class itself, with its §3 superseded by
+  `0015` §1. `0009`'s headline is withdrawn — see `0015` §1.
