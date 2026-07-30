@@ -223,7 +223,7 @@ layer 1 would need redoing under $\mathbb E\lvert\cdot\rvert^r$, $r<\alpha$.
 | Leak 1 — shape adversary | **closed as a separate leak.** Theorem B: an exact relocation along a $\gamma_1$ level set, and `fit()` finds it to $+0.07\%$ |
 | Leak 2 — two losses | **the live one.** Agree on parameter choice ($+0.23\%\pm0.21$); **disagree outright on class geometry** — max-entropy is least favourable under log-loss, not under MSE |
 | Leak 3 — parameters estimated | quasi-MLE under misspecification; measured sign favourable, no theory |
-| Leak 4 — GPB1 collapse | measured signature: $+0.65\%$ even when correctly specified |
+| Leak 4 — GPB1 collapse | **directly measured against exact PF** (`exploration/0034`): $0.006\%$ at $s{=}0.2$; $1.35\%$ at $s{=}0.55$ persistent; **$19.9\%$ at $s{=}1.2$ persistent**. No quadrature order closes it |
 | marginalisation ($\lambda\to x$) | untouched; blocks Theorem C from applying to `fit()` |
 | $\kappa<3$ (light tails) | genuine, outside the model, unchanged |
 
@@ -249,6 +249,41 @@ moving the gain is nearly free under it — and $\sigma^2$ and $s_M$ inflating
 together is exactly such a direction. `fit()`'s default stays on
 log-likelihood; PEM is exposed as an option with the caveat documented.
 
+## Rate of approach — how close is the filter to Bayes-for-its-own-model?
+
+The regret against the model's own Bayes rule decomposes:
+
+$$ R_{\text{filter}} = \underbrace{R_{\text{quad}}(n)}_{\text{Gauss-Hermite order}}
+   \;+\; \underbrace{R_{\text{collapse}}}_{\text{GPB1 collapse}} $$
+
+**The quadrature term is geometric in the order** (`exploration/0029`). Fixing
+parameters at truth and comparing GH orders 3–31 gives successive θ-MSE excess
+ratios of $3.5, 4.2, 5.1$ per +2 orders in the strong regime — the standard
+$O(\rho^{-2n})$ rate for analytic integrands. The default of order 5 loses
+$6.4\%$ θ-MSE and $4.3\times10^{-2}$ nat/pt against order 31 at $s{=}1.2$;
+essentially nothing at $s\le 0.55$.
+
+**The collapse term is nonlinear in $s$ and is structural** (`exploration/0034`).
+Measured directly against a Rao–Blackwellized particle filter (exact for the
+model at large $N$; validated against plain-Kalman to machine precision), the
+GH-31 filter loses **$19.9\%$ θ-MSE at $s{=}1.2$ persistent**, $1.35\%$ at
+$s{=}0.55$ persistent, and $0.006\%$ at $s{=}0.2$. Order 5, 9 and 31 all sit
+within a percent of each other in the strong regime while all sitting ~17%
+above the PF reference — no quadrature order closes the collapse gap.
+
+**Score bias translates to parameter bias, not to estimate bias**
+(`exploration/0033`). Fitting the strong regime at orders 5, 9, 13 shifts
+$\varphi_M$ from 0.845 to 0.890 to 0.906 (truth 0.930; t-statistics $-14.3, -6.8,
+-3.4$). But θ-MSE across orders is flat within noise (0.365, 0.354, 0.371), the
+same "parameters move, estimate does not" signature as PEM in `0027`. Bump the
+order to 9 when the fitted parameters themselves are what a caller reads;
+default order 5 is honest for tracking.
+
+**Implication for the regret target.** At $s\le 0.55$ the filter is within
+$\sim 1\%$ θ-MSE of Bayes at the default. At $s{=}1.2$ it is about 25% off,
+almost entirely from the collapse; the natural next filter class is GPB2 or a
+particle filter, not more quadrature.
+
 ## Next, in order
 
 1. **Bound the loss discrepancy at layer 2.** Theorem C is exact under log-loss;
@@ -257,19 +292,22 @@ log-likelihood; PEM is exposed as an option with the caveat documented.
    how far from minimax can modelling the max-entropy member be? A bound in
    terms of $\gamma_2$'s admissible width would finish layer 2 in the only form
    still open to it.
-2. **The $\kappa$ vs $\operatorname{Var}(\log u)$ discriminating test.**
-   Construct two scale mixtures matched in kurtosis and deliberately split in
-   $\operatorname{Var}(\log u)$. Decides whether `exploration/0004`'s
-   kurtosis-sufficiency claim needs restating. Cheap, and it settles a live
-   inconsistency in this file.
-3. **Push Theorem C through the marginalisation** to the observable
+2. **A GPB2 filter or a compute-budget curve for the PF.** `0034` shows the
+   collapse leaves ~20% θ-MSE unclosed at $s{=}1.2$, and no quadrature order
+   fixes it. GPB2 (one Gaussian per grid state, no collapse across states) or a
+   modest particle count would close most of that gap and give the "secondary
+   mode for exactness" the four-point message floated a concrete form.
+3. **Rate of approach in $s$.** `0034` has four points ($s{=}0, 0.2, 0.55,
+   1.2$) on the collapse cost, growing faster than $s^2$. A denser sweep and a
+   fit would say what functional of $s$ (and $\varphi$) actually governs it —
+   candidate ansatz: something like $\varphi \cdot (e^{s^2}-1)$.
+4. **Push Theorem C through the marginalisation** to the observable
    (`exploration/0005` §6). Would give a genuine minimax statement for `fit()`
    under log-loss — worth having even with gap 1 open.
-4. **The I-MMSE weld** (Guo–Shamai–Verdú): mutual information is the integral of
-   MMSE over SNR. This is now the most interesting item rather than a tidy-up,
-   because it is the only route that would relate the two losses rather than
+5. **The I-MMSE weld** (Guo–Shamai–Verdú): mutual information is the integral of
+   MMSE over SNR. The only route that would RELATE the two losses rather than
    choosing between them.
-5. **The $\alpha$-stable family** under $L^r$ loss.
+6. **The $\alpha$-stable family** under $L^r$ loss.
 
 ## Notes for the parent workstream
 
@@ -296,14 +334,21 @@ plus widening `ll()`'s `except ValueError` to `except (ValueError, OverflowError
 The failure mode is a hard crash rather than a degraded estimate, so any user
 fitting impulsive data can hit it.
 
-**Quadrature order.** On *well-specified*
-data, `fit()`'s $\varphi_M$ is biased low at the default quadrature order and
-converges as the grid refines — 0.847, 0.873, 0.889, 0.904 at orders 5, 7, 9, 13
-against a true 0.930 — while $s_M$ is flat and correct throughout
-(`exploration/0009`). `theory/07` §D verified order 5 against 9 and 15 for
-$s_P$; this is the same check for $\varphi_M$, and unlike $s_P$ it trends. If a
-fitted $\varphi_M$ is to be read as a number rather than a direction, fit at
-order 9 or 13. Tracking MSE is unaffected.
+**Quadrature order — now measured across three axes.**
+
+* *Filter accuracy at truth* (`exploration/0029`): geometric convergence in the
+  order. Default order 5 loses $6.4\%$ θ-MSE at $s{=}1.2$; negligible below.
+* *Fit accuracy* (`exploration/0033`): the order-5 SCORE is biased enough to
+  shift the argmax. Fitted $\varphi_M$ moves 0.845 → 0.890 → 0.906 as order
+  goes 5 → 9 → 13 (truth 0.930) with t $=-14.3, -6.8, -3.4$. Tracking θ-MSE
+  is flat across orders — the parameters move but the estimate does not.
+* *Loglik direction* (`exploration/0029`): low-order GH reports systematically
+  OPTIMISTIC log-likelihood in impulsive regimes (order 3 higher than order 31
+  by $2.6\times10^{-3}$ nat/pt at $s{=}0.55$ impulsive). The score can lie in
+  the direction that matters for fitting.
+
+Recommendation: bump to order 9 when the fitted volatility parameters are the
+deliverable; default order 5 is honest when tracking is.
 
 ## Layout
 
