@@ -112,10 +112,17 @@ to $t=+1.27$; $h=5$ is where it is clean.)
 **It is not uniformly better.** Geometric mean of the two paired ratios is
 $1.020$ — on average, a wash slightly favouring `iso`.
 
-**But the worst case is decisive, and worst case is this repository's stated
-notion.** `iso` closes 0% of the gap on the damping shift and 89% on the
-frequency shift; `fisher-shape` closes 70% and 83%. Worst case over scenarios:
-**70% against 0%.**
+**~~But the worst case is decisive, and worst case is this repository's stated
+notion.~~ WITHDRAWN — see [`0014`](0014_the_channel_and_the_withdrawal.md) §2.**
+`iso` closes 0% of the gap on the damping shift and 89% on the frequency shift;
+`fisher-shape` closes 70% and 83%, so the worst case over these three scenarios
+is 70% against 0%. But three scenarios I chose are not a worst case.
+[`0013`](0013_minimax_over_directions.py) sweeps 12 *directions* at two base
+points and finds `iso` ahead on the median at both (0.716 vs 0.398 interior,
+0.648 vs 0.107 near the boundary) and level or ahead on the worst case. The
+70%-against-0% figure came from one scenario that happened to be a direction
+where `iso` chose $\nu^\ast=0$. The paragraph below stands as written but its
+conclusion does not.
 [`filter-optimality-proof`](../../filter-optimality-proof/SUMMARY.md) already
 fixes the optimality notion as minimax, "since the premise is that no prior over
 the class is available" — and a scenario-averaged comparison is exactly a prior
@@ -164,15 +171,16 @@ artifact of writing the recurrence in lag-coefficient coordinates.
 | the volume warp helps | **no** — null at $p=1$, dilutive at $p=2$ |
 | the anisotropy matters | **yes** — $\pm10\%$, $\vert t\vert$ to 8.6 |
 | uniformly better than isotropic | **no** — sign flips with shift direction |
-| better in the worst case | **yes** — 70% vs 0% gap closed |
+| better in the worst case | ~~yes~~ **no** — withdrawn, [`0014`](0014_the_channel_and_the_withdrawal.md) §2 |
 | adaptivity free when unneeded | **yes** at $p=2$ as at $p=1$ (ratio 1.000) |
 
 The honest summary: **invariance does not by itself produce a dominant drift
 law, and no drift law can be dominant, because dominance would require knowing
 which direction the dynamics move — which is the one thing the class does not
-say.** What invariance buys is the worst case, which is the criterion already
-adopted. That is a weaker result than "the Fisher metric is right", and it is
-the result.
+say.** That much stands. The claim that invariance nevertheless buys the worst
+case did not survive a proper sweep over directions — see
+[`0014`](0014_the_channel_and_the_withdrawal.md) §2 for the measurement and §3
+for why the parent's invariance argument works where this one does not.
 
 ## Next, in order
 

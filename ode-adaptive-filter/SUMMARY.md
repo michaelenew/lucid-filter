@@ -6,7 +6,7 @@ offset**. Same rule as the parent: no theoretically relevant free parameters.
 Compute budgets are allowed, because a compute budget trades a real-world cost
 against theoretical accuracy and nothing else.
 
-**Nothing is built yet.** This is the frame plus nine probes. What they settle
+**Nothing is built yet.** This is the frame plus eleven probes. What they settle
 is below; `output/` is empty by design until there is something that survives a
 forecast comparison.
 
@@ -99,24 +99,32 @@ recovers $0.9797\pm0.0011$. Pinning costs nothing when right and doubles the
 coefficient error when wrong. The constant-offset commitment is a hypothesis,
 not an assumption.
 
-## The live proposal
+**9. The dynamics channel has the parent's structure, and its impulsive end is
+something the parent cannot express.** Writing $\alpha_t = \bar\alpha+\delta_t$,
+the deviation enters as $\delta_t^\top z_{t-1}$ — noise proportional to signal
+power. So $\varphi_A\to0$ is **multiplicative noise** and $\varphi_A\to1$ is **a
+change in the ODE coefficients**: one coordinate, two named ends, the parent's
+structure one level up. The channel carries the same centre / magnitude /
+persistence triple, $(\bar\alpha, s_A, \varphi_A)$, and $\varphi_A$ identifies —
+$0.972\pm0.010$ against a truth of $0.99$, cleanly separated from a fitted
+$0.19$ (median) at the impulsive end, with $\hat s_A = 0.119$ against $0.12$.
+
+**But the persistence dial is a predictive-*variance* parameter and provably
+cannot move the point forecast**: with $\delta$ white,
+$\mathbb E[x_t\mid z_{t-1}] = \bar\alpha^\top z_{t-1}$ exactly. Measured
+forecast-MSE ratios are $0.995$–$1.005$ everywhere, as the algebra requires.
+This completes a three-way split — the state shows up in tracking error,
+$\alpha$'s *level* in forecast-mean error, $\alpha$'s *persistence* in
+calibration — each nearly invisible in the other two.
+
+## The proposal, and its refutation
 
 The parent forced its drift law with scale equivariance. $\alpha$ has no scale,
-so:
-
-> A drift law must not depend on how the parameter is written down. The unique
-> reparameterisation-invariant metric on a statistical model is the Fisher
-> metric (Čencov), so the only coordinate-free statement available is that a
-> parameter diffuses isotropically in **its own Fisher metric** — one magnitude,
-> one persistence, two numbers as before.
-
-It reproduces the parent exactly where both apply: $I(\log\sigma^2)=\tfrac12$ is
-constant, so Fisher-isotropic diffusion in $\sigma^2$ *is* the parent's
-constant-variance random walk in $\log\sigma^2$. For AR dynamics it gives
-$\Sigma_{\text{drift}}\propto Q\,\Gamma^{-1}$, computable online.
-
-Tested at $p=2$, splitting the law into its shape and its volume so the two can
-be judged separately ([`exploration/0011`](exploration/0011_the_drift_shape.md)):
+so the proposal was to replace it with Čencov: a drift law must not depend on
+how the parameter is written down, the unique reparameterisation-invariant
+metric is Fisher, hence $\Sigma_{\text{drift}}\propto Q\,\Gamma^{-1}$ —
+computable online, and reducing to the parent's log-scale law exactly
+($I(\log\sigma^2)=\tfrac12$ is constant).
 
 | claim | status |
 |---|---|
@@ -124,36 +132,43 @@ be judged separately ([`exploration/0011`](exploration/0011_the_drift_shape.md))
 | the volume warp helps | **no** — null at $p=1$, dilutive at $p=2$ |
 | the anisotropy matters | **yes** — $\pm10\%$ forecast MSE, $\vert t\vert$ to 8.6 |
 | uniformly better than isotropic | **no** — the sign flips with shift direction |
-| better in the worst case | **yes** — 70% of the static-to-oracle gap closed against 0% |
-| free when unneeded | **yes**, ratio 1.000 |
+| better in the worst case | **no** — withdrawn on a proper direction sweep |
 
-The 0% is not a scan artifact: profiled over 17 drift magnitudes, the isotropic
-law has **no interior optimum at all** on a damping shift, while the invariant
-one has a clear one — and its likelihood-optimal magnitude coincides with its
-forecast-optimal magnitude.
+Swept over 12 shift *directions* at two base points, an isotropic drift wins on
+the median (0.716 vs 0.398 interior, 0.648 vs 0.107 near the stationarity
+boundary) and ties or wins on the worst case. **The Fisher shape concentrates
+the drift into a narrow cone** — inside it, the best result measured anywhere
+(0.929); outside, near-static. Concentrating without knowing the direction is
+exactly what minimax penalises.
 
-**The honest summary: invariance does not produce a dominant drift law, and no
-drift law can be dominant, because dominance would require knowing which
-direction the dynamics move — the one thing the class does not say.** What
-invariance buys is the worst case, which is the optimality notion
-[`filter-optimality-proof`](../filter-optimality-proof/SUMMARY.md) already
-adopted. Weaker than "the Fisher metric is right", and it is the result.
+**Why the parent's argument works and this one does not.** Scale equivariance is
+a symmetry *of the world* — nature is genuinely indifferent to metres versus
+feet, so a law respecting it is not merely well-formed but true.
+Reparameterisation invariance is a symmetry *of the notation*: nature is not
+indifferent to whether we write the dynamics in lag coefficients or in damping
+and frequency, and the Fisher metric does not know which is which. Being the
+unique well-formed answer is not the same as being the right answer, and the
+parent's success made that easy to conflate.
+
+**So the metric on the dynamics is an open modelling degree of freedom that no
+invariance principle closes, and the shape has to be learned** — two numbers at
+$p=2$, five at $p=3$, by the same marginal likelihood. Whether it is *estimable*
+is the open question, and the parent is the warning: it measured $s_P$ at
+$0.0017$ nats/point and had to tell callers not to read it.
 
 ## Next, in order
 
-1. **Persistence for the dynamics channel.** The biggest hole. Everything so far
-   is a pure random walk in $\alpha$; the parent's second number per channel —
-   impulsive versus persistent — has no analogue, and it is exactly the
-   trust/belief split the previous construction lacked.
-2. **A measured minimax to match the minimax claim.** The worst case above is
-   over three hand-chosen scenarios. The proper object is a sweep over the
-   *direction* of parameter movement, with the drift laws compared at each
-   angle — a small extension of `0008`.
-3. **$p=3$: the full target class.** The grid cost is the compute budget;
-   `0008`'s architecture extends directly.
+1. **Profile the drift shape.** How many nats per point does the data carry
+   about its anisotropy and orientation? If the answer looks like $s_P$'s, the
+   shape is not estimable and isotropic is the right default by default.
+   Answerable with the parent's own method.
+2. **Score the persistence dial on calibration, out of sample.** Point forecasts
+   provably cannot see $\varphi_A$; the case for it rests on 3–5 in-sample nats.
+3. **$p=3$: the full target class.** The architecture extends directly; the grid
+   is the compute budget.
 4. **Learn $Q$ and $\sigma^2$ jointly with $\alpha$.** Every probe so far holds
    them at truth; the parent's `fit()` shows six parameters is already the hard
-   part and this makes eight.
+   part and this makes eight or more.
 5. **Order selection**, making "is it second order?" answerable the way the
    offset root now is.
 
@@ -161,11 +176,13 @@ adopted. Weaker than "the Fisher metric is right", and it is the result.
 
 - `exploration/` — numbered, later is more recent.
   [`0001`](exploration/0001_the_frame.md) fixes coordinates, order and the
-  offset. `0002`–`0006` and `0008`–`0010` are the probes, each self-contained
-  and runnable. The two prose files carry the argument:
-  [`0007`](exploration/0007_what_the_probes_settle.md) then
-  [`0011`](exploration/0011_the_drift_shape.md) — **start at `0011`**, which
-  also withdraws one claim from `0007` §2.
+  offset. `0002`–`0006`, `0008`–`0010`, `0012`–`0013` are the probes, each
+  self-contained and runnable. Three prose files carry the argument in
+  sequence: [`0007`](exploration/0007_what_the_probes_settle.md),
+  [`0011`](exploration/0011_the_drift_shape.md),
+  [`0014`](exploration/0014_the_channel_and_the_withdrawal.md) — **start at
+  `0014`**. Each withdraws a claim from the one before (`0007` §2 and `0011`
+  §3); the withdrawals are marked in place rather than edited away.
   Figures and raw numbers in `exploration/figures/`.
 - `output/` — empty until something survives a forecast comparison.
 
