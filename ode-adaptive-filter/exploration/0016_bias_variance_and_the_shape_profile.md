@@ -91,7 +91,12 @@ parent's weakest one.
 
 **Three things it does not establish, and they matter.**
 
-1. **The orientation is not recovered.** The profile peaks at $\psi=\pi/2$
+> **Point 1 is WITHDRAWN — see [`0020`](0020_orientation_is_readable.md) §2.**
+> Profiling $\psi$ at $\tau=4$ rather than at the argmax $\hat\tau=8$ recovers
+> the generating orientation, including at this very $\psi_{\rm true}=0.9$. The
+> miss below is an artifact of profiling at $\tau=8$. Points 2 and 3 stand.
+
+1. **~~The orientation is not recovered.~~** The profile peaks at $\psi=\pi/2$
    against a generating $\psi=0.9$ — 0.67 rad away, and it prefers $\pi/2$ over
    the grid node nearest the truth by 3.5 mnats/pt. The $\psi$ profile does
    carry $4\times$ the control's spread, so there *is* orientation information;
@@ -118,11 +123,14 @@ parent's weakest one.
    estimating. In this regime, learning the shape buys $0.9939$ at $h=5$ against
    simply using an isotropic kernel — real, one-sided, and small.
 
-The honest position: **the magnitude of the drift anisotropy is a readable
+~~The honest position: the magnitude of the drift anisotropy is a readable
 parameter and should be learned; the orientation is not yet demonstrated
 readable, and until it is, learning $\tau$ with $\psi$ held isotropic-by-default
-is the defensible middle.** That is one extra learned number for the dynamics
-channel, not $\tfrac{p(p+1)}2$.
+is the defensible middle.~~
+
+**Superseded by [`0020`](0020_orientation_is_readable.md).** Both $\tau$ and
+$\psi$ are readable; what is *not* established for either is that learning them
+is worth anything operationally (forecast-MSE ratios 0.994–1.003).
 
 ## Next, in order
 

@@ -6,7 +6,7 @@ offset**. Same rule as the parent: no theoretically relevant free parameters.
 Compute budgets are allowed, because a compute budget trades a real-world cost
 against theoretical accuracy and nothing else.
 
-**Nothing is built yet.** This is the frame plus twelve probes. What they settle
+**Nothing is built yet.** This is the frame plus sixteen probes. What they settle
 is below; `output/` is empty by design until there is something that survives a
 forecast comparison.
 
@@ -154,31 +154,45 @@ parent's success made that easy to conflate.
 invariance principle closes, and the shape has to be learned** — by the same
 marginal likelihood as everything else.
 
-## Is the shape estimable? Its magnitude, yes
+## Is the shape estimable? Yes — both coordinates, and not obviously worth it
 
 Profiling the drift covariance $\Sigma(\nu,\tau,\psi)=\nu^2R(\psi)\mathrm{diag}(\tau,1/\tau)R(\psi)^\top$
-(determinant-fixed, so scale and shape are separate coordinates) against a
-determinant-matched isotropic control:
+(determinant fixed, so scale and shape are separate coordinates) against a
+determinant-matched isotropic control gives **6.69 millinats/point against a
+0.38 null floor** — a $17.6\times$ separation, and about **four times the
+parent's $s_P$**, which the parent measured at 0.0017 nats/point and told
+callers not to read. The magnitude $\tau$ is readable.
 
-| generated | evidence over isotropic | argmax $(\hat\tau,\hat\psi)$ | $h{=}5$ MSE |
-|---|---|---|---|
-| anisotropic ($\tau{=}4$, $\psi{=}0.9$) | **6.69** millinats/pt | $(8,\ 1.571)$ | 0.9939 |
-| isotropic control | **0.38** millinats/pt | $(2,\ 2.618)$ | 1.0000 |
+The orientation $\psi$ is readable too, over seven generating orientations
+every profile argmax lands on one of the two nearest kernel nodes. An earlier
+apparent failure was an artifact of profiling at $\hat\tau=8$ rather than at
+$\tau=4$; it is withdrawn.
 
-$17.6\times$ separation from the null floor, and about **four times the parent's
-$s_P$** — which the parent measured at 0.0017 nats/point and told callers not to
-read. So the anisotropy *magnitude* is a readable parameter.
+**What is not established is that any of it is worth learning.** Forecast-MSE
+ratios sit at 0.994–1.003 throughout — which is also exactly what a
+variance-side gain looks like under a loss that cannot see the variance (below).
 
-The *orientation* is not: the profile peaks at $\psi=\pi/2$ against a generating
-$0.9$. Two untested explanations, one of them attractive — the likelihood sees
-drift only through how it changes the predictive distribution, and that mapping
-is the information metric, which at this base point has an $8.6{:}1$ anisotropy
-of its own. If that is the reason, **the Fisher metric governs what can be
-*seen* even though it does not govern what *moves*.** The operational payoff is
-in any case small (0.6% at $h{=}5$).
+**A structural fact that constrains all of this.** For $p=2$ the information
+metric has condition number $(1+\rho_1)/(1-\rho_1)$: **its anisotropy *is* the
+process's lag-1 autocorrelation**, the same $\rho_1$ that sets the differencing
+cost. So an isotropic metric forces $\alpha_1=0$ — four samples per period —
+where the process carries $4.8\times$ less information about its own dynamics
+and allowing drift at all is *worse* than static ($-0.57$ millinats/pt against
+$+3.58$ at a smooth base point, same kernels). **A process must be smooth for
+its dynamics to be learnable, and smoothness is exactly what makes the metric
+anisotropic.** A control experiment at an isotropic metric is therefore
+impossible, not merely hard.
 
-Position: learn $\tau$; leave $\psi$ isotropic by default until the orientation
-is shown readable. One extra learned number, not $\tfrac{p(p+1)}2$.
+Direction matters enormously — headroom ranges over $14\times$ with a sign
+change across drift orientations — but is *not* a function of alignment with
+the metric's principal axis (two directions at equal angle differ $9.3\times$).
+That law is refuted. The probable confound is that the sweep held
+$\lVert\Delta\alpha\rVert$ fixed, and **Euclidean length is the wrong measure
+of how much the dynamics moved; the information distance
+$\Delta\alpha^\top\tilde\Gamma\Delta\alpha$ is.** So the Fisher metric returns
+in a third role: not a law for how $\alpha$ moves (refuted), not a law for what
+can be seen (refuted), but the right way to *measure* how far it has moved —
+which is the one thing a metric is for.
 
 ## The loss
 
@@ -198,14 +212,13 @@ parameter.)
 
 ## Next, in order
 
-1. **Resolve the drift orientation.** Repeat the profile at a base point where
-   the information metric is nearly isotropic. If $\hat\psi$ then lands on the
-   generating $\psi$, the metric explanation is right and orientation is
-   readable after a known correction; if not, halve the grid step to test the
-   staircasing explanation. This decides whether the shape is one learned number
-   or three.
-2. **Standardise on prequential log-loss** and re-check the $\varphi_A$ result
-   under it — that claim currently rests on 3–5 in-sample nats.
+1. **Redo the direction sweep at constant Fisher length**, with generating
+   orientations on the kernel nodes rather than between them — six of seven in
+   the current sweep sit at exact midpoints. Fixes the confound and the design
+   flaw at once; two lines changed.
+2. **Standardise on prequential log-loss** and re-score the shape and
+   $\varphi_A$ under it. Both currently rest on in-sample nats, and both are
+   variance-side effects that MSE provably cannot see.
 3. **$p=3$: the full target class.** The architecture extends directly; the grid
    is the compute budget.
 4. **Learn $Q$ and $\sigma^2$ jointly with $\alpha$.** Every probe so far holds
@@ -218,14 +231,15 @@ parameter.)
 
 - `exploration/` — numbered, later is more recent.
   [`0001`](exploration/0001_the_frame.md) fixes coordinates, order and the
-  offset. `0002`–`0006`, `0008`–`0010`, `0012`–`0013`, `0015` are the probes,
-  each self-contained and runnable. Four prose files carry the argument in
-  sequence: [`0007`](exploration/0007_what_the_probes_settle.md),
+  offset. `0002`–`0006`, `0008`–`0010`, `0012`–`0013`, `0015`, `0017`–`0019`
+  are the probes, each self-contained and runnable. Five prose files carry the
+  argument in sequence: [`0007`](exploration/0007_what_the_probes_settle.md),
   [`0011`](exploration/0011_the_drift_shape.md),
   [`0014`](exploration/0014_the_channel_and_the_withdrawal.md),
-  [`0016`](exploration/0016_bias_variance_and_the_shape_profile.md) — **start at
-  `0016`**. Two of them withdraw a claim from an earlier one (`0007` §2 and
-  `0011` §3); the withdrawals are marked in place rather than edited away.
+  [`0016`](exploration/0016_bias_variance_and_the_shape_profile.md),
+  [`0020`](exploration/0020_orientation_is_readable.md) — **start at `0020`**.
+  Three of them withdraw a claim from an earlier one (`0007` §2, `0011` §3,
+  `0016` §2); the withdrawals are marked in place rather than edited away.
   Figures and raw numbers in `exploration/figures/`.
 - `output/` — empty until something survives a forecast comparison.
 
