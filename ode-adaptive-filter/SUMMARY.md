@@ -6,7 +6,7 @@ offset**. Same rule as the parent: no theoretically relevant free parameters.
 Compute budgets are allowed, because a compute budget trades a real-world cost
 against theoretical accuracy and nothing else.
 
-**Nothing is built yet.** This is the frame plus seventeen probes. What they settle
+**Nothing is built yet.** This is the frame plus eighteen probes. What they settle
 is below; `output/` is empty by design until there is something that survives a
 forecast comparison.
 
@@ -160,9 +160,37 @@ Confusion ledger — exact linear algebra, no simulation; post-event points to
   definition. Tied to the unit root, and it gets *easier* at higher measurement
   noise.
 
-The extended object is a **prism**: direction in $\mathbb{RP}^{p-1}$ (plus the
-measurement channel) × persistence $[0,1]$. Persistence is not yet crossed in —
-every disturbance measured so far fires once.
+**Correction, from [`0023`](exploration/0023_the_difference_operator_is_the_ladder.py).**
+Differencing is exactly the map $(F-I)$ on the direction space, plus a leading-edge
+spike: $\Delta r(u) = u_1\delta + r((F-I)u)$, verified to $1.3\times10^{-14}$. It
+annihilates the offset direction (the unit-root eigenvector), so **a measurement
+outlier is exactly the first difference of an offset jump** — the parent's two
+channels are two rungs of one ladder. But it does **not** carry ACCEL to VELOCITY,
+and the alignment converges to $2/\sqrt{10}=0.632$ rather than to 1, so that is not
+a discretisation error: the step does not exist.
+
+**The channels are the roots of the characteristic polynomial, not the
+derivatives.** $F$ has distinct eigenvalues, so $(F-I)$ is diagonal in the modal
+basis and mixes every other. Decomposed over the roots by the amplitude each
+contributes to the observation, POSITION *is* the offset eigenvector exactly,
+VELOCITY is 94% the oscillator, and **ACCEL is a ~60/40 mixture at every pole
+location tested** — not a corner at all. That explains the ledger measured before
+the explanation: different modes separate in 2 points, ACCEL≡FORCING because both
+are mixtures of near-identical composition, and POSITION≈MEASURE is hardest
+everywhere.
+
+So the extended object is **(root) × (persistence)**: one channel per root, with a
+complex pair counting as one two-dimensional channel carrying an **amplitude and a
+phase**. The parent is the one-root case. Phase is a coordinate with no parent
+analogue and is unmeasured; persistence is still not crossed in.
+
+**Order selection and channel count are the same question** — each root is a
+channel, so "is it second order?" asks "how many channels are there?", and the
+offset-root test above was already an instance of it.
+
+An interactive version — drag the pole, watch the corners, signatures and
+separability recompute — is
+[`exploration/mode-structure.html`](exploration/mode-structure.html).
 
 ## The drift-law proposal, and its refutation
 
@@ -259,26 +287,26 @@ parameter.)
 
 ## Next, in order
 
-1. **Cross persistence into the direction ladder.** Every disturbance measured
-   so far fires once; the prism needs a recurring one. Same exact linear
-   algebra as `0021`, and it turns four corners into eight.
-2. **Free $u$ in the filter** and confirm the likelihood has $2p+1$ identifiable
+1. **Cross persistence into the channel structure.** Every disturbance measured
+   so far fires once. Same exact linear algebra as `0021`.
+2. **Is the oscillator phase readable?** The coordinate with no parent analogue:
+   excite at a grid of phases and measure pairwise separability.
+3. **Free $u$ in the filter** and confirm the likelihood has $2p+1$ identifiable
    directions and no more — turning the count into a measurement.
-3. **Redo the drift-direction sweep at constant Fisher length**, with generating
+4. **Redo the drift-direction sweep at constant Fisher length**, with generating
    orientations on the kernel nodes rather than between them — six of seven in
    the current sweep sit at exact midpoints.
-4. **Standardise on prequential log-loss** and re-score the shape and
+5. **Standardise on prequential log-loss** and re-score the shape and
    $\varphi_A$ under it. Both currently rest on in-sample nats, and both are
    variance-side effects that MSE provably cannot see.
-5. **$p=3$: the full target class.** The architecture extends directly; the grid
+6. **$p=3$: the full target class.** The architecture extends directly; the grid
    is the compute budget.
-6. **Learn $Q$ and $\sigma^2$ jointly with $\alpha$.** Every probe so far holds
+7. **Learn $Q$ and $\sigma^2$ jointly with $\alpha$.** Every probe so far holds
    them at truth; the parent's `fit()` shows six parameters is already the hard
    part and this makes eight or more.
-7. **Order selection**, making "is it second order?" answerable the way the
-   offset root now is.
+8. **Order selection** — which is now the same question as counting channels.
 
-Standing caution across 1–3: everything about the direction axis and the drift
+Standing caution across 1–4: everything about the direction axis and the drift
 shape so far is about what is *distinguishable*, not about what tracking gains.
 Estimable is not worth estimating until a forecast or a prequential score says
 so.
@@ -287,15 +315,16 @@ so.
 
 - `exploration/` — numbered, later is more recent.
   [`0001`](exploration/0001_the_frame.md) fixes coordinates, order and the
-  offset. `0002`–`0006`, `0008`–`0010`, `0012`–`0013`, `0015`, `0017`–`0019`, `0021`
+  offset. `0002`–`0006`, `0008`–`0010`, `0012`–`0013`, `0015`, `0017`–`0019`, `0021`, `0023`
   are the probes, each self-contained and runnable. Five prose files carry the
   argument in sequence: [`0007`](exploration/0007_what_the_probes_settle.md),
   [`0011`](exploration/0011_the_drift_shape.md),
   [`0014`](exploration/0014_the_channel_and_the_withdrawal.md),
   [`0016`](exploration/0016_bias_variance_and_the_shape_profile.md),
   [`0020`](exploration/0020_orientation_is_readable.md),
-  [`0022`](exploration/0022_the_integration_ladder.md) — **start at `0022` for
-  the mode structure, `0020` for the drift law**. Three of them withdraw a claim
+  [`0022`](exploration/0022_the_integration_ladder.md),
+  [`0024`](exploration/0024_the_modes_are_the_channels.md) — **start at `0024`
+  for the mode structure, `0020` for the drift law**. Three of them withdraw a claim
   from an earlier one (`0007` §2, `0011` §3, `0016` §2); the withdrawals are
   marked in place rather than edited away.
   Figures and raw numbers in `exploration/figures/`.

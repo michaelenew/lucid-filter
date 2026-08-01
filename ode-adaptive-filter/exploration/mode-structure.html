@@ -1,0 +1,518 @@
+<title>Disturbance modes of an ODE filter</title>
+<style>
+  :root{
+    --bg:#f5f8f8; --panel:#ffffff; --ink:#12181a; --ink2:#5a6669; --ink3:#8a9698;
+    --rule:#dce4e4; --rule2:#eef3f3;
+    --offset:#a86a00; --osc:#0d7a85; --meas:#9c3a58; --mix:#5c6b8a;
+    --grid:#e4ebeb; --shadow:0 1px 2px rgba(18,24,26,.05),0 8px 24px -18px rgba(18,24,26,.35);
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0d1214; --panel:#151d20; --ink:#e6ecec; --ink2:#94a3a5; --ink3:#6b7a7c;
+      --rule:#243033; --rule2:#1b2427;
+      --offset:#e0a63c; --osc:#4ec6d2; --meas:#e0788f; --mix:#94a6c8;
+      --grid:#212c2f; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -18px rgba(0,0,0,.8);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1214; --panel:#151d20; --ink:#e6ecec; --ink2:#94a3a5; --ink3:#6b7a7c;
+    --rule:#243033; --rule2:#1b2427;
+    --offset:#e0a63c; --osc:#4ec6d2; --meas:#e0788f; --mix:#94a6c8;
+    --grid:#212c2f; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px -18px rgba(0,0,0,.8);
+  }
+  :root[data-theme="light"]{
+    --bg:#f5f8f8; --panel:#ffffff; --ink:#12181a; --ink2:#5a6669; --ink3:#8a9698;
+    --rule:#dce4e4; --rule2:#eef3f3;
+    --offset:#a86a00; --osc:#0d7a85; --meas:#9c3a58; --mix:#5c6b8a;
+    --grid:#e4ebeb; --shadow:0 1px 2px rgba(18,24,26,.05),0 8px 24px -18px rgba(18,24,26,.35);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    font-size:15px; line-height:1.55; -webkit-font-smoothing:antialiased;
+  }
+  .serif{font-family:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-variant-numeric:tabular-nums}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 24px 72px}
+  header{border-bottom:1px solid var(--rule);padding-bottom:22px;margin-bottom:26px}
+  .eyebrow{
+    font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--ink3);margin:0 0 10px
+  }
+  h1{
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-weight:600;font-size:clamp(28px,4vw,40px);line-height:1.12;margin:0 0 12px;
+    text-wrap:balance;letter-spacing:-.01em
+  }
+  .lede{max-width:64ch;color:var(--ink2);margin:0;font-size:16px}
+  .lede b{color:var(--ink);font-weight:600}
+
+  h2{
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:19px;font-weight:600;margin:0 0 4px;letter-spacing:-.005em
+  }
+  .sub{color:var(--ink2);font-size:13.5px;margin:0 0 16px;max-width:62ch}
+
+  .grid{display:grid;gap:20px}
+  .cols{grid-template-columns:minmax(320px,400px) 1fr}
+  @media (max-width:900px){.cols{grid-template-columns:1fr}}
+
+  .panel{
+    background:var(--panel);border:1px solid var(--rule);border-radius:4px;
+    padding:20px;box-shadow:var(--shadow)
+  }
+
+  canvas{display:block;width:100%;height:auto;touch-action:none}
+
+  .ctl{display:grid;gap:14px;margin-top:18px}
+  .row{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
+  .row label{
+    font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11px;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);white-space:nowrap
+  }
+  .row output{
+    font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:13px;
+    font-variant-numeric:tabular-nums;color:var(--ink);min-width:5.5ch;text-align:right
+  }
+  input[type=range]{width:100%;accent-color:var(--osc);height:20px}
+  input[type=range]:focus-visible{outline:2px solid var(--osc);outline-offset:3px}
+
+  .readout{
+    margin-top:16px;padding-top:14px;border-top:1px solid var(--rule2);
+    font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:12px;
+    font-variant-numeric:tabular-nums;color:var(--ink2);line-height:1.9
+  }
+  .readout b{color:var(--ink);font-weight:600}
+
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:0 0 12px}
+  .key{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink2)}
+  .swatch{width:11px;height:11px;border-radius:2px;flex:none}
+  .key b{color:var(--ink);font-weight:600}
+
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  th,td{padding:8px 9px;text-align:center;border-bottom:1px solid var(--rule2)}
+  th{
+    font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10.5px;
+    letter-spacing:.07em;text-transform:uppercase;color:var(--ink3);font-weight:500
+  }
+  td.lab{
+    text-align:left;font-family:ui-monospace,"SF Mono",Menlo,monospace;
+    font-size:11px;letter-spacing:.06em;color:var(--ink2);white-space:nowrap
+  }
+  td.cell{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums;position:relative}
+  .scroller{overflow-x:auto}
+
+  .bars{display:grid;gap:11px;margin-top:4px}
+  .bar{display:grid;grid-template-columns:74px 1fr;gap:11px;align-items:center}
+  .bar span{
+    font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:10.5px;
+    letter-spacing:.06em;color:var(--ink2)
+  }
+  .track{height:15px;border-radius:2px;overflow:hidden;display:flex;background:var(--rule2)}
+  .track i{display:block;height:100%}
+
+  .note{
+    font-size:13px;color:var(--ink2);border-left:2px solid var(--rule);
+    padding-left:14px;margin:18px 0 0;max-width:64ch
+  }
+  .note b{color:var(--ink);font-weight:600}
+  .warn{border-left-color:var(--meas)}
+  footer{margin-top:34px;padding-top:18px;border-top:1px solid var(--rule);color:var(--ink3);font-size:12.5px}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <p class="eyebrow">ode-adaptive-filter · exploration 0021–0023</p>
+  <h1>What kind of thing just happened?</h1>
+  <p class="lede">A disturbance to a second-order system has a <b>direction</b>, and the direction is
+  what the filter has to name. Drag the pole. The four corners, their signatures, and how
+  separable they are all recompute — this is the mode structure of
+  <span class="mono">x<sub>t</sub> = α·z<sub>t−1</sub> + w<sub>t</sub></span>, live.</p>
+</header>
+
+<div class="grid cols">
+  <div>
+    <div class="panel">
+      <h2>The z-plane</h2>
+      <p class="sub">Three roots: one pinned at <span class="mono">z = 1</span> (the constant offset)
+      and a conjugate pair (the oscillator). Drag the pair.</p>
+      <canvas id="zplane" width="720" height="720" aria-label="Pole locations on the complex plane"></canvas>
+      <div class="ctl">
+        <div class="row">
+          <label for="rho">modulus ρ</label>
+          <input type="range" id="rho" min="0.30" max="0.995" step="0.005" value="0.949">
+          <output id="rhoOut">0.949</output>
+        </div>
+        <div class="row">
+          <label for="theta">angle θ</label>
+          <input type="range" id="theta" min="0.02" max="1.55" step="0.01" value="0.35">
+          <output id="thetaOut">0.35</output>
+        </div>
+        <div class="row">
+          <label for="kappa">noise κ</label>
+          <input type="range" id="kappa" min="0.05" max="2.00" step="0.05" value="0.25">
+          <output id="kappaOut">0.25</output>
+        </div>
+      </div>
+      <div class="readout">
+        α = <b id="alphaOut">—</b><br>
+        period <b id="periodOut">—</b> samples · memory 1/(1−|z|) = <b id="memOut">—</b> steps<br>
+        Kalman gain <b id="gainOut">—</b>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <h2>What each disturbance does to the observation</h2>
+      <p class="sub">One unit of disturbance at step 0, no noise. Each rung is the running sum of
+      the one below it — that is the whole content of the ladder.</p>
+      <div class="legend">
+        <div class="key"><i class="swatch" style="background:var(--meas)"></i><b>Measurement</b> outlier</div>
+        <div class="key"><i class="swatch" style="background:var(--offset)"></i><b>Offset</b> jump</div>
+        <div class="key"><i class="swatch" style="background:var(--osc)"></i><b>Oscillator</b> kick</div>
+        <div class="key"><i class="swatch" style="background:var(--mix)"></i><b>Forcing</b> noise</div>
+      </div>
+      <canvas id="resp" width="1300" height="420" aria-label="Observation response of each disturbance corner"></canvas>
+    </div>
+
+    <div class="panel">
+      <h2>What the filter actually sees</h2>
+      <p class="sub">The same four disturbances as whitened innovations — after the filter has
+      absorbed what it can. This, not the response above, is the evidence available.</p>
+      <canvas id="sig" width="1300" height="380" aria-label="Whitened innovation signature of each corner"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="grid cols" style="margin-top:20px">
+  <div class="panel">
+    <h2>Which mode was excited</h2>
+    <p class="sub">Every disturbance splits over the roots, weighted by the amplitude each mode
+    contributes to the observation. The roots are the real channels; derivative names are a
+    coordinate choice laid over them.</p>
+    <div class="bars" id="modal"></div>
+    <p class="note"><b>Forcing noise is a mixture</b>, not a corner. That is why it never separates
+    from a pure top-derivative kick, and why naming the corners by derivative rather than by
+    root eventually breaks.</p>
+  </div>
+
+  <div class="panel">
+    <h2>Can they be told apart?</h2>
+    <p class="sub">Attribution ÷ detection = 2(1 − cos t) between whitened signatures, exact, over
+    24 post-event points. 0 means indistinguishable; 4 is the maximum.</p>
+    <div class="scroller">
+      <table id="conf">
+        <thead><tr><th></th><th>Measurement</th><th>Offset</th><th>Oscillator</th><th>Forcing</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="note warn" id="hard">—</p>
+  </div>
+</div>
+
+<footer>
+  Second-order linear ODE with a constant offset, observed in noise. κ is the measurement SD in
+  units of SD(Δx). Every number here is exact linear algebra on the model's own covariance —
+  no simulation, no fitting.
+</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const CORNERS = ["MEASURE","OFFSET","OSCILLATOR","FORCING"];
+  const LABEL   = {MEASURE:"Measurement",OFFSET:"Offset",OSCILLATOR:"Oscillator",FORCING:"Forcing"};
+  const M = 24, MTRACE = 26;
+
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const colorOf = c => ({MEASURE:css("--meas"),OFFSET:css("--offset"),
+                         OSCILLATOR:css("--osc"),FORCING:css("--mix")})[c];
+
+  // ---- small dense linear algebra, 3x3 -------------------------------------
+  const mv = (A,v)=>A.map(r=>r[0]*v[0]+r[1]*v[1]+r[2]*v[2]);
+  const mm = (A,B)=>A.map(r=>[0,1,2].map(j=>r[0]*B[0][j]+r[1]*B[1][j]+r[2]*B[2][j]));
+  const T  = A=>[0,1,2].map(i=>[0,1,2].map(j=>A[j][i]));
+
+  const cmul=(a,b)=>[a[0]*b[0]-a[1]*b[1], a[0]*b[1]+a[1]*b[0]];
+  const csub=(a,b)=>[a[0]-b[0], a[1]-b[1]];
+  const cdiv=(a,b)=>{ const d=b[0]*b[0]+b[1]*b[1];
+    return [(a[0]*b[0]+a[1]*b[1])/d, (a[1]*b[0]-a[0]*b[1])/d]; };
+  function csolve3(A,b){
+    // Gaussian elimination with partial pivoting, complex entries as [re,im]
+    const M3=A.map((r,i)=>r.map(v=>v.slice()).concat([b[i].slice()]));
+    for(let c=0;c<3;c++){
+      let piv=c, best=Math.hypot(M3[c][c][0],M3[c][c][1]);
+      for(let r=c+1;r<3;r++){ const m=Math.hypot(M3[r][c][0],M3[r][c][1]);
+        if(m>best){best=m;piv=r;} }
+      if(best<1e-14) return [[0,0],[0,0],[0,0]];
+      [M3[c],M3[piv]]=[M3[piv],M3[c]];
+      for(let r=0;r<3;r++){
+        if(r===c) continue;
+        const f=cdiv(M3[r][c],M3[c][c]);
+        for(let k=c;k<4;k++) M3[r][k]=csub(M3[r][k], cmul(f,M3[c][k]));
+      }
+    }
+    return [0,1,2].map(i=>cdiv(M3[i][3],M3[i][i]));
+  }
+
+  function alphaOf(rho,theta){
+    const c = 2*rho*Math.cos(theta);
+    return [1+c, -(rho*rho+c), rho*rho];          // (z-1)(z^2-2rho cos t z + rho^2)
+  }
+  const companion = a => [[a[0],a[1],a[2]],[1,0,0],[0,1,0]];
+
+  // impulse response of the all-pole system, used for SD(dx)
+  function incrementSD(F,Q){
+    let z=[1,0,0], prev=0, s=0;
+    for(let k=0;k<4000;k++){ const h=z[0]; s+=(h-prev)*(h-prev); prev=h; z=mv(F,z); }
+    return Math.sqrt(Q*s);
+  }
+
+  function steadyState(F,Q,S2){
+    let P=[[1,0,0],[0,1,0],[0,0,1]], Pp=null, S=0, K=[0,0,0];
+    const Ft=T(F);
+    for(let it=0; it<4000; it++){
+      Pp = mm(mm(F,P),Ft); Pp[0][0]+=Q;
+      S = Pp[0][0]+S2;
+      K = [Pp[0][0]/S, Pp[1][0]/S, Pp[2][0]/S];
+      const Pn=[0,1,2].map(i=>[0,1,2].map(j=>Pp[i][j]-K[i]*Pp[0][j]));
+      let d=0; for(let i=0;i<3;i++) for(let j=0;j<3;j++) d=Math.max(d,Math.abs(Pn[i][j]-P[i][j]));
+      P=Pn; if(d<1e-14) break;
+    }
+    return {S:S, K:K};
+  }
+
+  const response = (F,u,m)=>{ let z=u.slice(), h=[]; for(let k=0;k<m;k++){h.push(z[0]); z=mv(F,z);} return h; };
+
+  function signature(F,K,S,dz,meas,m){
+    let z=dz.slice(), mh=[0,0,0], g=[];
+    for(let k=0;k<m;k++){
+      const mp = k>0 ? mv(F,mh) : mh;
+      const y = z[0] + (k===0?meas:0);
+      const e = y - mp[0];
+      g.push(e/Math.sqrt(S));
+      mh = [mp[0]+K[0]*e, mp[1]+K[1]*e, mp[2]+K[2]*e];
+      z = mv(F,z);
+    }
+    return g;
+  }
+
+  const dot=(a,b)=>a.reduce((s,x,i)=>s+x*b[i],0);
+  const nrm=a=>Math.sqrt(dot(a,a));
+
+  // ---- model ---------------------------------------------------------------
+  function build(rho,theta,kappa){
+    const a=alphaOf(rho,theta), F=companion(a), Q=1;
+    const sd=incrementSD(F,Q), S2=Math.pow(kappa*sd,2);
+    const {S,K}=steadyState(F,Q,S2);
+
+    // direction basis: columns of D, D[i][j]=(-1)^j C(i,j), D an involution
+    const D=[[1,0,0],[1,-1,0],[1,-2,1]];
+    const col=j=>[D[0][j],D[1][j],D[2][j]];
+    const dirs={OFFSET:col(0), OSCILLATOR:col(1), FORCING:[1,0,0]};
+
+    // exact modal split: eigenvector of the companion for root L is (L^2, L, 1),
+    // so solve V c = u over the roots {1, rho e^{+-i theta}} and read |c|.
+    const z=[rho*Math.cos(theta), rho*Math.sin(theta)];
+    const roots=[[1,0], z, [z[0],-z[1]]];
+    const V=roots.map(L=>[cmul(L,L), L, [1,0]]);   // V[i] = column for root i
+    const resp={}, sig={}, modal={};
+    for(const c of ["OFFSET","OSCILLATOR","FORCING"]){
+      resp[c]=response(F,dirs[c],MTRACE);
+      sig[c]=signature(F,K,S,dirs[c],0,M);
+      const A=[[V[0][0],V[1][0],V[2][0]],
+               [V[0][1],V[1][1],V[2][1]],
+               [V[0][2],V[1][2],V[2][2]]];
+      const cc=csolve3(A, dirs[c].map(v=>[v,0]));
+      // weight each mode by the amplitude it actually contributes to the
+      // observation, |c_i * L_i^2| -- the first component of its eigenvector.
+      // That is convention-free; raw |c_i| depends on eigenvector scaling.
+      const mag=cc.map((v,i)=>{ const q=cmul(v,cmul(roots[i],roots[i]));
+                                return Math.hypot(q[0],q[1]); });
+      const tot=mag[0]+Math.hypot(mag[1],mag[2])||1;
+      modal[c]={offset:mag[0]/tot, osc:Math.hypot(mag[1],mag[2])/tot};
+    }
+    resp.MEASURE=Array.from({length:MTRACE},(_,k)=>k===0?1:0);
+    sig.MEASURE=signature(F,K,S,[0,0,0],1,M);
+    modal.MEASURE={offset:0,osc:0};
+
+    const conf={};
+    for(const A of CORNERS) for(const B of CORNERS){
+      if(A===B){ conf[A+"|"+B]=0; continue; }
+      const x=sig[A], y=sig[B], nx=nrm(x), ny=nrm(y);
+      conf[A+"|"+B]= (nx<1e-12||ny<1e-12) ? NaN : 2*(1-dot(x,y)/(nx*ny));
+    }
+    return {a,F,S,K,resp,sig,modal,conf,rho,theta,kappa};
+  }
+
+  // ---- drawing helpers -----------------------------------------------------
+  function setup(cv){
+    const dpr=Math.min(window.devicePixelRatio||1,2);
+    const w=cv.clientWidth||cv.width, h=cv.height*(w/cv.width);
+    cv.style.height=h+"px";
+    cv.width=Math.round(w*dpr); cv.height=Math.round(h*dpr);
+    const g=cv.getContext("2d"); g.setTransform(dpr,0,0,dpr,0,0);
+    g.clearRect(0,0,w,h);
+    return {g,w,h};
+  }
+
+  function drawZ(model){
+    const cv=document.getElementById("zplane"), {g,w,h}=setup(cv);
+    const cx=w/2, cy=h/2, R=Math.min(w,h)*0.40;
+    g.strokeStyle=css("--grid"); g.lineWidth=1;
+    g.beginPath(); g.moveTo(cx-R*1.28,cy); g.lineTo(cx+R*1.28,cy); g.stroke();
+    g.beginPath(); g.moveTo(cx,cy-R*1.28); g.lineTo(cx,cy+R*1.28); g.stroke();
+    g.setLineDash([3,4]);
+    for(const r of [0.25,0.5,0.75]){ g.beginPath(); g.arc(cx,cy,R*r,0,7); g.stroke(); }
+    g.setLineDash([]);
+    g.strokeStyle=css("--ink3"); g.lineWidth=1.5;
+    g.beginPath(); g.arc(cx,cy,R,0,7); g.stroke();
+
+    const px=cx+R*model.rho*Math.cos(model.theta), py=cy-R*model.rho*Math.sin(model.theta);
+    const py2=cy+R*model.rho*Math.sin(model.theta);
+    g.strokeStyle=css("--osc"); g.lineWidth=1; g.setLineDash([2,3]);
+    g.beginPath(); g.moveTo(cx,cy); g.lineTo(px,py); g.stroke(); g.setLineDash([]);
+
+    const cross=(x,y,col)=>{
+      g.strokeStyle=col; g.lineWidth=2.5; const s=7;
+      g.beginPath(); g.moveTo(x-s,y-s); g.lineTo(x+s,y+s);
+      g.moveTo(x-s,y+s); g.lineTo(x+s,y-s); g.stroke();
+    };
+    cross(px,py,css("--osc")); cross(px,py2,css("--osc"));
+    g.fillStyle=css("--offset");
+    g.beginPath(); g.arc(cx+R,cy,6,0,7); g.fill();
+
+    g.font='500 12px ui-monospace,Menlo,monospace';
+    g.fillStyle=css("--offset"); g.textAlign="center";
+    g.fillText("z = 1", cx+R, cy+24);
+    g.fillStyle=css("--osc");
+    g.fillText("ρe^{iθ}", px, py-16);
+  }
+
+  function drawTraces(id,series,keys,opts){
+    const cv=document.getElementById(id), {g,w,h}=setup(cv);
+    const padL=42,padR=12,padT=14,padB=26;
+    const n=opts.n, W=w-padL-padR, H=h-padT-padB;
+    let mx=0; for(const k of keys){ for(const v of series[k].slice(0,n)) mx=Math.max(mx,Math.abs(v)); }
+    if(opts.normalise){ mx=1; }
+    mx=mx||1;
+    const X=i=>padL+W*(i/(n-1)), Y=v=>padT+H*(0.5-0.46*v/mx);
+
+    g.strokeStyle=css("--grid"); g.lineWidth=1;
+    g.beginPath(); g.moveTo(padL,Y(0)); g.lineTo(w-padR,Y(0)); g.stroke();
+    g.strokeStyle=css("--rule2");
+    for(let i=0;i<n;i+=4){ g.beginPath(); g.moveTo(X(i),padT); g.lineTo(X(i),h-padB); g.stroke(); }
+
+    g.font='500 10px ui-monospace,Menlo,monospace';
+    g.fillStyle=css("--ink3"); g.textAlign="center";
+    for(let i=0;i<n;i+=4) g.fillText(String(i),X(i),h-9);
+    g.textAlign="right"; g.fillText("0",padL-8,Y(0)+3.5);
+
+    for(const k of keys){
+      let v=series[k].slice(0,n);
+      if(opts.normalise){ const s=nrm(v)||1; v=v.map(x=>x/s*2.2); }
+      g.strokeStyle=colorOf(k); g.lineWidth=2; g.lineJoin="round";
+      g.beginPath();
+      v.forEach((y,i)=>{ i?g.lineTo(X(i),Y(y)):g.moveTo(X(i),Y(y)); });
+      g.stroke();
+      g.fillStyle=colorOf(k);
+      v.forEach((y,i)=>{ g.beginPath(); g.arc(X(i),Y(y),2.1,0,7); g.fill(); });
+    }
+  }
+
+  function ramp(t){
+    // 0 (confusable) -> 1 (separable), interpolating rule -> accent
+    const c=css("--osc").replace("#",""), r0=parseInt(c.substr(0,2),16),
+          g0=parseInt(c.substr(2,2),16), b0=parseInt(c.substr(4,2),16);
+    const a=Math.max(0,Math.min(1,t));
+    return `rgba(${r0},${g0},${b0},${0.07+0.62*a})`;
+  }
+
+  function render(model){
+    document.getElementById("alphaOut").textContent =
+      "(" + model.a.map(v=>v.toFixed(3)).join(", ") + ")";
+    document.getElementById("periodOut").textContent = (2*Math.PI/model.theta).toFixed(1);
+    document.getElementById("memOut").textContent = (1/(1-model.rho)).toFixed(1);
+    document.getElementById("gainOut").textContent =
+      "(" + model.K.map(v=>v.toFixed(3)).join(", ") + ")";
+
+    drawZ(model);
+    drawTraces("resp",model.resp,CORNERS,{n:MTRACE,normalise:true});
+    drawTraces("sig", model.sig, CORNERS,{n:M,normalise:false});
+
+    const mb=document.getElementById("modal"); mb.innerHTML="";
+    for(const c of ["OFFSET","OSCILLATOR","FORCING"]){
+      const m=model.modal[c], o=Math.round(m.offset*100), s=100-o;
+      const el=document.createElement("div"); el.className="bar";
+      el.innerHTML='<span>'+LABEL[c].toUpperCase()+'</span>'+
+        '<div class="track"><i style="width:'+o+'%;background:var(--offset)"></i>'+
+        '<i style="width:'+s+'%;background:var(--osc)"></i></div>';
+      el.title=LABEL[c]+": "+o+"% offset mode, "+s+"% oscillator mode";
+      mb.appendChild(el);
+    }
+
+    const tb=document.querySelector("#conf tbody"); tb.innerHTML="";
+    let worst=null, worstV=9;
+    for(const A of CORNERS){
+      const tr=document.createElement("tr");
+      tr.innerHTML='<td class="lab">'+LABEL[A]+'</td>';
+      for(const B of CORNERS){
+        const v=model.conf[A+"|"+B];
+        const td=document.createElement("td"); td.className="cell";
+        if(A===B){ td.textContent="—"; td.style.color="var(--ink3)"; }
+        else if(isNaN(v)){ td.textContent="n/a"; td.style.color="var(--ink3)"; }
+        else{
+          td.textContent=v.toFixed(2);
+          td.style.background=ramp(v/4);
+          if(v<worstV){ worstV=v; worst=[A,B]; }
+        }
+        tr.appendChild(td);
+      }
+      tb.appendChild(tr);
+    }
+    const hp=document.getElementById("hard");
+    hp.innerHTML="<b>Hardest pair: "+LABEL[worst[0]]+" vs "+LABEL[worst[1]]+
+      "</b> at "+worstV.toFixed(2)+" of a possible 4. "+
+      (worstV<0.8
+        ? "Below about 0.8 these two are, for practical purposes, the same event."
+        : "Everything separates here — no degenerate pair at this pole location.");
+  }
+
+  // ---- interaction ---------------------------------------------------------
+  const R=document.getElementById("rho"), TH=document.getElementById("theta"),
+        KA=document.getElementById("kappa");
+  function update(){
+    document.getElementById("rhoOut").textContent=(+R.value).toFixed(3);
+    document.getElementById("thetaOut").textContent=(+TH.value).toFixed(2);
+    document.getElementById("kappaOut").textContent=(+KA.value).toFixed(2);
+    render(build(+R.value,+TH.value,+KA.value));
+  }
+  [R,TH,KA].forEach(el=>el.addEventListener("input",update));
+
+  const cv=document.getElementById("zplane");
+  let dragging=false;
+  function grab(ev){
+    const r=cv.getBoundingClientRect();
+    const x=(ev.clientX-r.left)/r.width, y=(ev.clientY-r.top)/r.height;
+    const dx=(x-0.5)/0.40, dy=(0.5-y)/0.40;
+    const rr=Math.min(0.995,Math.max(0.30,Math.hypot(dx,dy)));
+    const th=Math.min(1.55,Math.max(0.02,Math.abs(Math.atan2(dy,dx))));
+    R.value=rr; TH.value=th; update();
+  }
+  cv.addEventListener("pointerdown",e=>{dragging=true;cv.setPointerCapture(e.pointerId);grab(e);});
+  cv.addEventListener("pointermove",e=>{if(dragging)grab(e);});
+  cv.addEventListener("pointerup",e=>{dragging=false;});
+  cv.addEventListener("pointercancel",()=>{dragging=false;});
+
+  window.addEventListener("resize",update);
+  const mq=window.matchMedia("(prefers-color-scheme: dark)");
+  mq.addEventListener&&mq.addEventListener("change",update);
+  new MutationObserver(update).observe(document.documentElement,{attributes:true,attributeFilter:["data-theme"]});
+  update();
+})();
+</script>
