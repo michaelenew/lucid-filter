@@ -123,9 +123,10 @@ they are the workstream's spine:
 - **How does $\alpha$'s uncertainty reach the estimate?** Answered exactly in
   [`0004`](0004_dynamics_uncertainty_is_process_noise.py): it is a process-noise
   term.
-- **How is $\alpha$ allowed to move?** Open. This is where the parent's
-  trust/belief split has to be rebuilt, and it is the subject of
-  [`0005`](0005_results_and_the_drift_question.md) §3.
+- **How is $\alpha$ allowed to move?** This is where the parent's trust/belief
+  split has to be rebuilt. Answered in two parts:
+  [`0014`](0014_the_channel_and_the_withdrawal.md) §1 for what the channel's two
+  ends mean, and §2–§3 for why no invariance principle fixes its shape.
 
 ## 5. Deliberately deferred
 
