@@ -6,9 +6,31 @@ offset**. Same rule as the parent: no theoretically relevant free parameters.
 Compute budgets are allowed, because a compute budget trades a real-world cost
 against theoretical accuracy and nothing else.
 
-**Nothing is built yet.** This is the frame plus eighteen probes. What they settle
-is below; `output/` is empty by design until there is something that survives a
-forecast comparison.
+**There is a candidate filter now**, in `output/odefilter/`. It reduces to the
+parent exactly (checked to 1e-8, not asserted), and on the target class it
+forecasts **1.5–3.7× better** at short horizons while costing within ±5% on a
+plain random walk. It does **not** yet adapt `alpha`; it reports when that has
+become necessary. Twenty probes stand behind it — see
+[`exploration/0027`](exploration/0027_the_candidate_filter.md) for what it
+costs and what is deliberately left out. The parent workstream is untouched.
+
+## The candidate
+
+Forecast MSE against the fitted parent, 3 seeds, n = 900 (lower is better):
+
+| data | $\kappa$ | $h{=}1$ | $h{=}5$ | $h{=}20$ |
+|---|---|---|---|---|
+| **ODE** (target class) | 0.25 | **0.273** | **0.457** | 0.885 |
+| **ODE** | 1.00 | **0.663** | **0.616** | 0.914 |
+| WALK (the parent's own model) | 0.25 | 0.996 | 0.983 | 0.954 |
+| WALK | 1.00 | 1.005 | 1.013 | 1.054 |
+
+**The gain decays with horizon exactly as the theory predicted before the filter
+existed**: the oscillator's memory $1/(1-|z|)$ is 19.6 steps, so by $h=20$ only
+the unit root remains — which the parent models too — and the advantage
+vanishes. Costs: ~120 s to fit 900 points, and $Q$ is badly conditioned from
+moments (0.66% of $\gamma_0$, amplification 151), so it is scanned by
+likelihood rather than believed.
 
 ## The model, and why it is the parent's
 
@@ -287,26 +309,31 @@ parameter.)
 
 ## Next, in order
 
-1. **Cross persistence into the channel structure.** Every disturbance measured
+1. **Act on `whiteness`.** The filter already reports when `alpha` has stopped
+   fitting and does nothing about it. Refitting or drifting on that signal is
+   the cheapest real use of the drift work and needs no grid.
+2. **Widen the battery** — more seeds, more pole locations, and a
+   hindsight-tuned constant-gain baseline alongside the parent.
+3. **Cross persistence into the channel structure.** Every disturbance measured
    so far fires once. Same exact linear algebra as `0021`.
-2. **Is the oscillator phase readable?** The coordinate with no parent analogue:
+4. **Is the oscillator phase readable?** The coordinate with no parent analogue:
    excite at a grid of phases and measure pairwise separability.
-3. **Free $u$ in the filter** and confirm the likelihood has $2p+1$ identifiable
+5. **Free $u$ in the filter** and confirm the likelihood has $2p+1$ identifiable
    directions and no more — turning the count into a measurement.
-4. **Redo the drift-direction sweep at constant Fisher length**, with generating
+6. **Redo the drift-direction sweep at constant Fisher length**, with generating
    orientations on the kernel nodes rather than between them — six of seven in
    the current sweep sit at exact midpoints.
-5. **Standardise on prequential log-loss** and re-score the shape and
+7. **Standardise on prequential log-loss** and re-score the shape and
    $\varphi_A$ under it. Both currently rest on in-sample nats, and both are
    variance-side effects that MSE provably cannot see.
-6. **$p=3$: the full target class.** The architecture extends directly; the grid
+8. **Speed.** ~120 s per fit is the binding practical limit. The architecture extends directly; the grid
    is the compute budget.
-7. **Learn $Q$ and $\sigma^2$ jointly with $\alpha$.** Every probe so far holds
+9. **Learn $Q$ and $\sigma^2$ jointly with $\alpha$.** Every probe so far holds
    them at truth; the parent's `fit()` shows six parameters is already the hard
    part and this makes eight or more.
-8. **Order selection** — which is now the same question as counting channels.
+10. **Order selection** — which is now the same question as counting channels.
 
-Standing caution across 1–4: everything about the direction axis and the drift
+Standing caution across 3–6: everything about the direction axis and the drift
 shape so far is about what is *distinguishable*, not about what tracking gains.
 Estimable is not worth estimating until a forecast or a prequential score says
 so.
@@ -323,11 +350,14 @@ so.
   [`0016`](exploration/0016_bias_variance_and_the_shape_profile.md),
   [`0020`](exploration/0020_orientation_is_readable.md),
   [`0022`](exploration/0022_the_integration_ladder.md),
-  [`0024`](exploration/0024_the_modes_are_the_channels.md) — **start at `0024`
-  for the mode structure, `0020` for the drift law**. Three of them withdraw a claim
+  [`0024`](exploration/0024_the_modes_are_the_channels.md),
+  [`0027`](exploration/0027_the_candidate_filter.md) — **start at `0027` for the
+  filter, `0024` for the mode structure, `0020` for the drift law**. Three of them withdraw a claim
   from an earlier one (`0007` §2, `0011` §3, `0016` §2); the withdrawals are
   marked in place rather than edited away.
   Figures and raw numbers in `exploration/figures/`.
-- `output/` — empty until something survives a forecast comparison.
+- `output/` — the candidate: the `odefilter` package, its tests, and
+  `pyproject.toml`. See [`output/odefilter/README.md`](output/odefilter/README.md).
+  `pytest -m "not slow"` runs the fast subset.
 
 Run a probe with `python exploration/000N_*.py` (numpy, scipy, matplotlib).
