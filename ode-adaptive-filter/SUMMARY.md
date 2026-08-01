@@ -6,7 +6,7 @@ offset**. Same rule as the parent: no theoretically relevant free parameters.
 Compute budgets are allowed, because a compute budget trades a real-world cost
 against theoretical accuracy and nothing else.
 
-**Nothing is built yet.** This is the frame plus eleven probes. What they settle
+**Nothing is built yet.** This is the frame plus twelve probes. What they settle
 is below; `output/` is empty by design until there is something that survives a
 forecast comparison.
 
@@ -151,19 +151,61 @@ unique well-formed answer is not the same as being the right answer, and the
 parent's success made that easy to conflate.
 
 **So the metric on the dynamics is an open modelling degree of freedom that no
-invariance principle closes, and the shape has to be learned** — two numbers at
-$p=2$, five at $p=3$, by the same marginal likelihood. Whether it is *estimable*
-is the open question, and the parent is the warning: it measured $s_P$ at
-$0.0017$ nats/point and had to tell callers not to read it.
+invariance principle closes, and the shape has to be learned** — by the same
+marginal likelihood as everything else.
+
+## Is the shape estimable? Its magnitude, yes
+
+Profiling the drift covariance $\Sigma(\nu,\tau,\psi)=\nu^2R(\psi)\mathrm{diag}(\tau,1/\tau)R(\psi)^\top$
+(determinant-fixed, so scale and shape are separate coordinates) against a
+determinant-matched isotropic control:
+
+| generated | evidence over isotropic | argmax $(\hat\tau,\hat\psi)$ | $h{=}5$ MSE |
+|---|---|---|---|
+| anisotropic ($\tau{=}4$, $\psi{=}0.9$) | **6.69** millinats/pt | $(8,\ 1.571)$ | 0.9939 |
+| isotropic control | **0.38** millinats/pt | $(2,\ 2.618)$ | 1.0000 |
+
+$17.6\times$ separation from the null floor, and about **four times the parent's
+$s_P$** — which the parent measured at 0.0017 nats/point and told callers not to
+read. So the anisotropy *magnitude* is a readable parameter.
+
+The *orientation* is not: the profile peaks at $\psi=\pi/2$ against a generating
+$0.9$. Two untested explanations, one of them attractive — the likelihood sees
+drift only through how it changes the predictive distribution, and that mapping
+is the information metric, which at this base point has an $8.6{:}1$ anisotropy
+of its own. If that is the reason, **the Fisher metric governs what can be
+*seen* even though it does not govern what *moves*.** The operational payoff is
+in any case small (0.6% at $h{=}5$).
+
+Position: learn $\tau$; leave $\psi$ isotropic by default until the orientation
+is shown readable. One extra learned number, not $\tfrac{p(p+1)}2$.
+
+## The loss
+
+Fitting $\alpha$ removes the **biased** portion of the process variance; $Q$ is
+the **unbiased** residue. The persistence dial splits the dynamics deviation the
+same way — persistent is predictable and moves the mean, impulsive is
+unpredictable and moves only the variance. The loss that scores both halves in
+the model's own proportion is the predictive log-likelihood,
+$-\log p = \tfrac12(e^2/S + \log S) + \text{const}$: squared error keeps the
+first term and drops the denominator, which is exactly why it cannot see a
+parameter living in $S$. It introduces **no free parameters** — it is what
+`fit()` already maximises — and the last protocol choice, out-of-sample scoring,
+is removable by accumulating the score prequentially, each point scored before
+it is seen. (This does not touch `filter-optimality-proof`'s open log-loss/MSE
+seam, which is about which loss defines optimality, not which can see a
+parameter.)
 
 ## Next, in order
 
-1. **Profile the drift shape.** How many nats per point does the data carry
-   about its anisotropy and orientation? If the answer looks like $s_P$'s, the
-   shape is not estimable and isotropic is the right default by default.
-   Answerable with the parent's own method.
-2. **Score the persistence dial on calibration, out of sample.** Point forecasts
-   provably cannot see $\varphi_A$; the case for it rests on 3–5 in-sample nats.
+1. **Resolve the drift orientation.** Repeat the profile at a base point where
+   the information metric is nearly isotropic. If $\hat\psi$ then lands on the
+   generating $\psi$, the metric explanation is right and orientation is
+   readable after a known correction; if not, halve the grid step to test the
+   staircasing explanation. This decides whether the shape is one learned number
+   or three.
+2. **Standardise on prequential log-loss** and re-check the $\varphi_A$ result
+   under it — that claim currently rests on 3–5 in-sample nats.
 3. **$p=3$: the full target class.** The architecture extends directly; the grid
    is the compute budget.
 4. **Learn $Q$ and $\sigma^2$ jointly with $\alpha$.** Every probe so far holds
@@ -176,13 +218,14 @@ $0.0017$ nats/point and had to tell callers not to read it.
 
 - `exploration/` — numbered, later is more recent.
   [`0001`](exploration/0001_the_frame.md) fixes coordinates, order and the
-  offset. `0002`–`0006`, `0008`–`0010`, `0012`–`0013` are the probes, each
-  self-contained and runnable. Three prose files carry the argument in
+  offset. `0002`–`0006`, `0008`–`0010`, `0012`–`0013`, `0015` are the probes,
+  each self-contained and runnable. Four prose files carry the argument in
   sequence: [`0007`](exploration/0007_what_the_probes_settle.md),
   [`0011`](exploration/0011_the_drift_shape.md),
-  [`0014`](exploration/0014_the_channel_and_the_withdrawal.md) — **start at
-  `0014`**. Each withdraws a claim from the one before (`0007` §2 and `0011`
-  §3); the withdrawals are marked in place rather than edited away.
+  [`0014`](exploration/0014_the_channel_and_the_withdrawal.md),
+  [`0016`](exploration/0016_bias_variance_and_the_shape_profile.md) — **start at
+  `0016`**. Two of them withdraw a claim from an earlier one (`0007` §2 and
+  `0011` §3); the withdrawals are marked in place rather than edited away.
   Figures and raw numbers in `exploration/figures/`.
 - `output/` — empty until something survives a forecast comparison.
 
