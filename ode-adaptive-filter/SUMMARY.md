@@ -6,7 +6,7 @@ offset**. Same rule as the parent: no theoretically relevant free parameters.
 Compute budgets are allowed, because a compute budget trades a real-world cost
 against theoretical accuracy and nothing else.
 
-**Nothing is built yet.** This is the frame plus sixteen probes. What they settle
+**Nothing is built yet.** This is the frame plus seventeen probes. What they settle
 is below; `output/` is empty by design until there is something that survives a
 forecast comparison.
 
@@ -117,7 +117,54 @@ This completes a three-way split — the state shows up in tracking error,
 $\alpha$'s *level* in forecast-mean error, $\alpha$'s *persistence* in
 calibration — each nearly invisible in the other two.
 
-## The proposal, and its refutation
+## The mode structure: the square becomes a prism
+
+The parent's square was (process / measurement) × (impulse / regime), and its
+process-anomaly corner never sat right — "the level jumped" and "a large
+process-noise draw" are the *same event* at $p=1$. Writing the disturbance with
+a direction, $z_t = Fz_{t-1} + u\,w_t$, explains it: $\alpha$ is the **poles**
+and $u$ is the **zeros**, and $p=1$ admits no zeros, so the two descriptions had
+no room to differ.
+
+**The direction axis saturates the model rather than inflating it.** $u$ up to
+scale is $p-1$ numbers, and $(p) + (p-1) + 1 + 1 = 2p+1$ — exactly the
+identifiable content of a scalar-observed linear system. The gap `0001` §3
+recorded as "a modelling commitment" *is* the injection direction.
+
+At $p=3$ there are $p+1=4$ corners, ordered by how many integrations separate
+the disturbance from the observation — and one scalar orders them, the lag-1
+autocorrelation of the disturbance's innovation signature. That is the parent's
+own differentiator ("does the next point agree with the crazy one?") turned into
+a continuum:
+
+| | MEASURE | POSITION | VELOCITY | ACCEL |
+|---|---|---|---|---|
+| integrations to $y$ | — | 0 | 1 | 2 |
+| lag-1 autocorr of signature | $-0.368$ | $-0.053$ | $+0.426$ | $+0.788$ |
+
+**The parent is the $p=1$ face**: MEASURE and POSITION, and nothing else.
+
+Confusion ledger — exact linear algebra, no simulation; post-event points to
+99:1 attribution for events carrying 8 nats of detection:
+
+- **VELOCITY vs ACCEL: 4 points** ($\kappa{=}0.25$), 5 at $\kappa{=}1$. A force
+  impulse against a force step — the new, affordable distinction the parent
+  could not express at all.
+- **ACCEL ≡ FORCING**: never separate, and share the autocorrelation statistic
+  to three figures. So the model's current pin $u=e_1$ *is* the top-derivative
+  corner, observationally. Four corners, not five.
+- **POSITION ≈ MEASURE is the hard pair** (0.549 out of a possible 4; never
+  reaching 99:1 within 24 points at low noise). This is
+  [`filter-optimality-proof`](../filter-optimality-proof/SUMMARY.md)'s
+  Proposition 1 reappearing — the same degeneracy that forced the class
+  definition. Tied to the unit root, and it gets *easier* at higher measurement
+  noise.
+
+The extended object is a **prism**: direction in $\mathbb{RP}^{p-1}$ (plus the
+measurement channel) × persistence $[0,1]$. Persistence is not yet crossed in —
+every disturbance measured so far fires once.
+
+## The drift-law proposal, and its refutation
 
 The parent forced its drift law with scale equivariance. $\alpha$ has no scale,
 so the proposal was to replace it with Čencov: a drift law must not depend on
@@ -212,34 +259,45 @@ parameter.)
 
 ## Next, in order
 
-1. **Redo the direction sweep at constant Fisher length**, with generating
+1. **Cross persistence into the direction ladder.** Every disturbance measured
+   so far fires once; the prism needs a recurring one. Same exact linear
+   algebra as `0021`, and it turns four corners into eight.
+2. **Free $u$ in the filter** and confirm the likelihood has $2p+1$ identifiable
+   directions and no more — turning the count into a measurement.
+3. **Redo the drift-direction sweep at constant Fisher length**, with generating
    orientations on the kernel nodes rather than between them — six of seven in
-   the current sweep sit at exact midpoints. Fixes the confound and the design
-   flaw at once; two lines changed.
-2. **Standardise on prequential log-loss** and re-score the shape and
+   the current sweep sit at exact midpoints.
+4. **Standardise on prequential log-loss** and re-score the shape and
    $\varphi_A$ under it. Both currently rest on in-sample nats, and both are
    variance-side effects that MSE provably cannot see.
-3. **$p=3$: the full target class.** The architecture extends directly; the grid
+5. **$p=3$: the full target class.** The architecture extends directly; the grid
    is the compute budget.
-4. **Learn $Q$ and $\sigma^2$ jointly with $\alpha$.** Every probe so far holds
+6. **Learn $Q$ and $\sigma^2$ jointly with $\alpha$.** Every probe so far holds
    them at truth; the parent's `fit()` shows six parameters is already the hard
    part and this makes eight or more.
-5. **Order selection**, making "is it second order?" answerable the way the
+7. **Order selection**, making "is it second order?" answerable the way the
    offset root now is.
+
+Standing caution across 1–3: everything about the direction axis and the drift
+shape so far is about what is *distinguishable*, not about what tracking gains.
+Estimable is not worth estimating until a forecast or a prequential score says
+so.
 
 ## Layout
 
 - `exploration/` — numbered, later is more recent.
   [`0001`](exploration/0001_the_frame.md) fixes coordinates, order and the
-  offset. `0002`–`0006`, `0008`–`0010`, `0012`–`0013`, `0015`, `0017`–`0019`
+  offset. `0002`–`0006`, `0008`–`0010`, `0012`–`0013`, `0015`, `0017`–`0019`, `0021`
   are the probes, each self-contained and runnable. Five prose files carry the
   argument in sequence: [`0007`](exploration/0007_what_the_probes_settle.md),
   [`0011`](exploration/0011_the_drift_shape.md),
   [`0014`](exploration/0014_the_channel_and_the_withdrawal.md),
   [`0016`](exploration/0016_bias_variance_and_the_shape_profile.md),
-  [`0020`](exploration/0020_orientation_is_readable.md) — **start at `0020`**.
-  Three of them withdraw a claim from an earlier one (`0007` §2, `0011` §3,
-  `0016` §2); the withdrawals are marked in place rather than edited away.
+  [`0020`](exploration/0020_orientation_is_readable.md),
+  [`0022`](exploration/0022_the_integration_ladder.md) — **start at `0022` for
+  the mode structure, `0020` for the drift law**. Three of them withdraw a claim
+  from an earlier one (`0007` §2, `0011` §3, `0016` §2); the withdrawals are
+  marked in place rather than edited away.
   Figures and raw numbers in `exploration/figures/`.
 - `output/` — empty until something survives a forecast comparison.
 
