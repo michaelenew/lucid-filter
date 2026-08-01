@@ -32,6 +32,81 @@ vanishes. Costs: ~120 s to fit 900 points, and $Q$ is badly conditioned from
 moments (0.66% of $\gamma_0$, amplification 151), so it is scanned by
 likelihood rather than believed.
 
+## The free-variable audit
+
+Full ledger in [`exploration/0030`](exploration/0030_the_free_variable_audit.md),
+probes in [`0028`](exploration/0028_the_free_variable_audit.py) and
+[`0029`](exploration/0029_the_phi_start.py). Every constant in `core.py` sorted
+into four kinds — **4 commitments, 5 scaffolding, 3 budgets, 5 guards** — and
+the scaffolding then *measured* rather than argued about.
+
+**Three commitments bind at the defaults, and $p$ was only one of them.** The
+other two were never written down: the injection direction is pinned to
+$u=e_1$ ($p-1$ numbers, inside the $2p+1$ identifiable budget — this is the gap
+`0001` §3 recorded without naming), and $\alpha$ is static.
+
+**$p$ is learnable from below.** Prequential log-loss — fit on the first half,
+score the log predictive density of the second, no complexity penalty, because
+AIC's 2 or BIC's $\log n$ would each import a free parameter into the very
+question being asked:
+
+| data | $p{=}1$ | $p{=}2$ | $p{=}3$ | $p{=}4$ | $p{=}5$ | verdict |
+|---|---|---|---|---|---|---|
+| ODE | −3.525 | −3.253 | **−3.122** | **−3.121** | **−3.124** | $p\ge3$ |
+| WALK | **−2.679** | −2.681 | −2.683 | −2.682 | −2.681 | $p{=}1$ |
+
+The rule **recovers the parent on the parent's own data**, and climbs 0.40
+nats/point from $p{=}1$ to $p{=}3$ on ODE data before going flat within noise.
+So it pins a floor and is nearly blind above it. That is enough: $p$ is a
+categorical axis with a short useful range, and the worst case is to run
+several orders in parallel and let each one's tracked predictive likelihood
+say which fits — the same grid-the-nuisance architecture the filter already
+uses one level down. The continuous version (fractional order, learned as a
+coordinate) is recorded in the [repository README](../README.md#open-directions).
+
+**Two corrections fall out.** The $Q$ scan (stage 1b) is inert across a $10^6$
+window and *removable* — every variant that moves the start beats the default
+by the same 0.09 nats, so it reliably starts the search slightly worse than
+the closed form it was added to fix, at a cost of 13 filter passes. And
+`_iv_alpha` should **require** $m>p$ rather than default it: at the
+just-identified $m=p$ the fit diverges ($\hat Q = 409$ against a truth of 1),
+while $m=2p$ and $4p$ agree to 0.003. That is a precondition, not a dial.
+
+**One negative result worth keeping.** The $\varphi$ start is inert, but only
+because $\hat s_P\to0$ on every dataset tried — including data generated with
+$s_P=0.8$. At this class's SNR the **process-scale channel is fitted dead**:
+$Q$ is 0.66% of $\gamma_0$, so a log-scale wobble on it barely moves the
+predictive variance that $\sigma^2$ dominates. Same conditioning fact as the
+151× amplification in `_moment_noises`, third appearance. The parent's missing
+5×5 $\varphi$ grid is therefore still a real gap — it just cannot be exercised
+on smooth ODE data.
+
+## The gut check
+
+![what the two filters believe](exploration/figures/fig20-two-beliefs.png)
+
+[`0031`](exploration/0031_what_the_two_filters_believe.py) puts both filters on
+one series and draws what each believes, laid out so it cannot flatter the
+candidate.
+
+**A is the control.** Tracking error is nearly blind to the dynamics (`0006`),
+so two filters that disagree about the model should still agree about where the
+level is — and they do, almost everywhere. If the candidate looked much better
+here, something would be wrong.
+
+**B is the argument in one frame.** The parent's forecast is flat, because a
+random walk's optimal forecast *is* the last level. The candidate carries the
+oscillation forward and decays toward the same place over its 18-step memory
+($|z|=0.944$). At this origin — fixed in advance, not chosen — the series then
+runs away upward and both are wrong, which is what **C** is for: $h=20$ MSE
+1216 against 1319, ratio 0.92, with the two error traces strongly correlated
+because at that horizon most of what remains is the unit root, which both
+model. The advantage-decays-with-horizon law, one series at a time.
+
+**D has no parent analogue.** The velocity posterior tracks the true derivative
+closely, the acceleration posterior is mostly band — and no finite difference
+is ever formed, because this is the same state in a different basis.
+
 ## The model, and why it is the parent's
 
 The solution space of $\ddot x + p\dot x + qx = r$ is
@@ -309,6 +384,8 @@ parameter.)
 
 ## Next, in order
 
+0. **Two corrections the audit found, both small:** delete the $Q$ scan, and
+   make `_iv_alpha` require $m>p$. Both make the filter simpler *and* faster.
 1. **Act on `whiteness`.** The filter already reports when `alpha` has stopped
    fitting and does nothing about it. Refitting or drifting on that signal is
    the cheapest real use of the drift work and needs no grid.
@@ -331,7 +408,10 @@ parameter.)
 9. **Learn $Q$ and $\sigma^2$ jointly with $\alpha$.** Every probe so far holds
    them at truth; the parent's `fit()` shows six parameters is already the hard
    part and this makes eight or more.
-10. **Order selection** — which is now the same question as counting channels.
+10. ~~**Order selection**~~ — *floor* discharged in `0030`; the ceiling is not,
+    and the fractional-order generalisation in the
+    [repository README](../README.md#open-directions) is the principled way to
+    close it.
 
 Standing caution across 3–6: everything about the direction axis and the drift
 shape so far is about what is *distinguishable*, not about what tracking gains.
@@ -351,8 +431,11 @@ so.
   [`0020`](exploration/0020_orientation_is_readable.md),
   [`0022`](exploration/0022_the_integration_ladder.md),
   [`0024`](exploration/0024_the_modes_are_the_channels.md),
-  [`0027`](exploration/0027_the_candidate_filter.md) — **start at `0027` for the
-  filter, `0024` for the mode structure, `0020` for the drift law**. Three of them withdraw a claim
+  [`0027`](exploration/0027_the_candidate_filter.md),
+  [`0030`](exploration/0030_the_free_variable_audit.md) — **start at `0027` for
+  the filter, `0030` for the audit, `0024` for the mode structure, `0020` for
+  the drift law**. [`0031`](exploration/0031_what_the_two_filters_believe.py)
+  is the picture. Three of them withdraw a claim
   from an earlier one (`0007` §2, `0011` §3, `0016` §2); the withdrawals are
   marked in place rather than edited away.
   Figures and raw numbers in `exploration/figures/`.
