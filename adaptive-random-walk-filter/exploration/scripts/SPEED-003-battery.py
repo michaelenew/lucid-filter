@@ -118,26 +118,37 @@ def run(whichs):
 
 def summarise(rows, label):
     bad = [r for r in rows if r.get("failed")]
-    rows = [r for r in rows if not r.get("failed")]
-    by = {p: [r for r in rows if r["probe"] == p] for p in PROBES}
+    good = [r for r in rows if not r.get("failed")]
+    by_probe = {p: [r for r in good if r["probe"] == p] for p in PROBES}
+    by_seed = {sd: {r["probe"]: r for r in good if r["seed"] == sd} for sd in SEEDS}
     print(f"\n=== {label} ===")
     for r in bad:
         print(f"  FIT FAILED on {r['probe']} seed {r['seed']}: {r['failed']}")
-    if any(len(v) != len(SEEDS) for v in by.values()):
-        print("  (summary below is over the fits that completed)")
-        by = {p: v for p, v in by.items() if len(v) == len(SEEDS)}
     print(f"{'probe':>18} {'ratio (per seed)':>32} {'median':>8} {'sec/fit':>9}")
     for p in PROBES:
-        rs = [r["ratio"] for r in by[p]]
-        print(f"{p:>18} " + " ".join(f"{v:>7.3f}" for v in rs)
-              + f" {np.median(rs):>8.3f} {np.mean([r['secs'] for r in by[p]]):>9.1f}")
-    geos = [float(np.exp(np.mean([np.log(by[p][i]["ratio"]) for p in PROBES])))
-            for i in range(len(SEEDS))]
-    worsts = [float(max(by[p][i]["ratio"] for p in PROBES)) for i in range(len(SEEDS))]
+        rs = by_probe[p]
+        if not rs:
+            print(f"{p:>18}   (no successful fits)")
+            continue
+        vals = [r["ratio"] for r in rs]
+        print(f"{p:>18} " + " ".join(f"{v:>7.3f}" for v in vals)
+              + f" {np.median(vals):>8.3f} {np.mean([r['secs'] for r in rs]):>9.1f}")
+    # geo mean / worst case only over seeds where every probe succeeded, so one
+    # dropped fit doesn't silently exclude that whole probe from every seed
+    complete_seeds = [sd for sd in SEEDS if len(by_seed[sd]) == len(PROBES)]
+    geos = [float(np.exp(np.mean([np.log(by_seed[sd][p]["ratio"]) for p in PROBES])))
+            for sd in complete_seeds]
+    worsts = [float(max(by_seed[sd][p]["ratio"] for p in PROBES))
+              for sd in complete_seeds]
     secs = [r["secs"] for r in rows]
+    if len(complete_seeds) < len(SEEDS):
+        print(f"  ({len(SEEDS) - len(complete_seeds)}/{len(SEEDS)} seeds excluded "
+              f"from geo mean/worst case: incomplete due to a failed fit)")
     print(f"{'geometric mean':>18} " + " ".join(f"{g:>7.3f}" for g in geos))
     print(f"{'worst case':>18} " + " ".join(f"{w:>7.3f}" for w in worsts))
-    print(f"  across seeds: geo mean {np.mean(geos):.4f}, worst {np.mean(worsts):.4f}")
+    if geos:
+        print(f"  across seeds: geo mean {np.mean(geos):.4f}, "
+              f"worst {np.mean(worsts):.4f}")
     print(f"  total fit time {np.sum(secs):.1f} s over {len(rows)} fits "
           f"({np.mean(secs):.1f} s/fit, max {np.max(secs):.1f})")
     return dict(rows=rows, geos=geos, worsts=worsts)
@@ -146,13 +157,16 @@ def summarise(rows, label):
 def compare(a, b):
     """a = baseline rows, b = current rows, aligned by (probe, seed)."""
     key = lambda r: (r["probe"], r["seed"])
-    A = {key(r): r for r in a}
-    B = {key(r): r for r in b}
+    A = {key(r): r for r in a if not r.get("failed")}
+    B = {key(r): r for r in b if not r.get("failed")}
     print(f"\n=== baseline vs current, per fit ===")
+    missing = (set(A) ^ set(B))
+    if missing:
+        print(f"  ({len(missing)} fit(s) missing from one side, skipped: {sorted(missing)})")
     print(f"{'probe':>18} {'seed':>9} {'d loglik':>10} {'ratio old':>10} "
           f"{'ratio new':>10} {'speedup':>8}")
     dlls, ups = [], []
-    for k in sorted(A, key=lambda k: (PROBES.index(k[0]), k[1])):
+    for k in sorted(set(A) & set(B), key=lambda k: (PROBES.index(k[0]), k[1])):
         dll = B[k]["loglik"] - A[k]["loglik"]
         up = A[k]["secs"] / B[k]["secs"]
         dlls.append(dll)
