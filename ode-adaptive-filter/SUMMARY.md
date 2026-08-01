@@ -6,7 +6,7 @@ offset**. Same rule as the parent: no theoretically relevant free parameters.
 Compute budgets are allowed, because a compute budget trades a real-world cost
 against theoretical accuracy and nothing else.
 
-**Nothing is built yet.** This is the frame plus five probes. What they settle
+**Nothing is built yet.** This is the frame plus nine probes. What they settle
 is below; `output/` is empty by design until there is something that survives a
 forecast comparison.
 
@@ -78,7 +78,26 @@ construction, with a number attached.
 conditional Kalman recursion, collapse the level, choose the volatility by
 marginal likelihood. Measured at $p=1$: **68–83% of the static-to-oracle
 forecast gap closed** on regime shifts in $\alpha$, and **exactly free**
-(ratio 1.000 to four figures) when the dynamics do not change.
+(ratio 1.000 to four figures) when the dynamics do not change. Reproduced at
+$p=2$ on a 4356-node grid.
+
+**7. Differencing costs a factor $(1-\rho_1)$ in signal-to-noise, exactly.**
+$\mathrm{Var}(\Delta x)=2\gamma_0(1-\rho_1)$ against $\mathrm{Var}(\Delta v)=2\sigma^2$.
+So the parent's "work in increments" and this workstream's "work in levels" are
+the same principle at different smoothness: for a random walk $\gamma_0\to\infty$
+and $\rho_1\to1$ together and differencing is free; for a lightly damped
+oscillator the charge is $16.5\times$ and it is not. **Smoothness is where the
+two workstreams first part company.** An earlier proposal here — instrument the
+differenced series — is withdrawn on this basis; it is worse at every noise
+level.
+
+**8. "Is the offset constant?" is answerable, with no new machinery.** ML with
+the root free against pinned at $z=1$: at a true unit root the extra parameter
+buys $2\cdot\text{LLR} = 1.36\pm0.44$, exactly the $\chi^2_1$ null expectation,
+and $\hat z_0 = 0.9992\pm0.0005$. At a true $0.98$ it buys $19.56\pm1.13$ and
+recovers $0.9797\pm0.0011$. Pinning costs nothing when right and doubles the
+coefficient error when wrong. The constant-offset commitment is a hypothesis,
+not an assumption.
 
 ## The live proposal
 
@@ -96,36 +115,57 @@ constant, so Fisher-isotropic diffusion in $\sigma^2$ *is* the parent's
 constant-variance random walk in $\log\sigma^2$. For AR dynamics it gives
 $\Sigma_{\text{drift}}\propto Q\,\Gamma^{-1}$, computable online.
 
-**Status: the warp is refuted at $p=1$; the anisotropy — the load-bearing half —
-is untested, and $p=1$ cannot test it.** Paired $\arcsin(a)$-versus-$a$ forecast
-comparisons gave ratios $0.977$–$1.099$ with inconsistent sign across eight
-cells. A one-dimensional parameter has no anisotropy to test, and the anisotropy
-is exactly what the previous construction's full-independence assumption threw
-away.
+Tested at $p=2$, splitting the law into its shape and its volume so the two can
+be judged separately ([`exploration/0011`](exploration/0011_the_drift_shape.md)):
+
+| claim | status |
+|---|---|
+| reproduces the parent's log-scale law | **yes**, analytically |
+| the volume warp helps | **no** — null at $p=1$, dilutive at $p=2$ |
+| the anisotropy matters | **yes** — $\pm10\%$ forecast MSE, $\vert t\vert$ to 8.6 |
+| uniformly better than isotropic | **no** — the sign flips with shift direction |
+| better in the worst case | **yes** — 70% of the static-to-oracle gap closed against 0% |
+| free when unneeded | **yes**, ratio 1.000 |
+
+The 0% is not a scan artifact: profiled over 17 drift magnitudes, the isotropic
+law has **no interior optimum at all** on a damping shift, while the invariant
+one has a clear one — and its likelihood-optimal magnitude coincides with its
+forecast-optimal magnitude.
+
+**The honest summary: invariance does not produce a dominant drift law, and no
+drift law can be dominant, because dominance would require knowing which
+direction the dynamics move — the one thing the class does not say.** What
+invariance buys is the worst case, which is the optimality notion
+[`filter-optimality-proof`](../filter-optimality-proof/SUMMARY.md) already
+adopted. Weaker than "the Fisher metric is right", and it is the result.
 
 ## Next, in order
 
-1. **$p=3$ with the anisotropic drift** — the only test that discriminates the
-   proposal. Needs a $p=3$ nuisance grid: a compute budget, the licensed kind of
-   parameter.
-2. **Instrument the differenced series.** A unit root makes lagged levels weak
-   instruments for exactly the stationary coordinates that need them.
-3. **Persistence for the dynamics channel.** Everything so far used a pure
-   random walk in $\alpha$; the parent's second number per channel ($\varphi$,
-   impulse versus regime) has no analogue yet, and it is precisely the
+1. **Persistence for the dynamics channel.** The biggest hole. Everything so far
+   is a pure random walk in $\alpha$; the parent's second number per channel —
+   impulsive versus persistent — has no analogue, and it is exactly the
    trust/belief split the previous construction lacked.
-4. **Pinned versus free offset root**, by marginal likelihood — the testable
-   form of "is the offset constant or drifting".
-5. **Order selection**, making "is it second order?" answerable rather than
-   assumed.
+2. **A measured minimax to match the minimax claim.** The worst case above is
+   over three hand-chosen scenarios. The proper object is a sweep over the
+   *direction* of parameter movement, with the drift laws compared at each
+   angle — a small extension of `0008`.
+3. **$p=3$: the full target class.** The grid cost is the compute budget;
+   `0008`'s architecture extends directly.
+4. **Learn $Q$ and $\sigma^2$ jointly with $\alpha$.** Every probe so far holds
+   them at truth; the parent's `fit()` shows six parameters is already the hard
+   part and this makes eight.
+5. **Order selection**, making "is it second order?" answerable the way the
+   offset root now is.
 
 ## Layout
 
 - `exploration/` — numbered, later is more recent.
   [`0001`](exploration/0001_the_frame.md) fixes coordinates, order and the
-  offset. `0002`–`0006` are the probes, each self-contained and runnable.
-  [`0007`](exploration/0007_what_the_probes_settle.md) is what they settle and
-  carries the current argument — start there.
+  offset. `0002`–`0006` and `0008`–`0010` are the probes, each self-contained
+  and runnable. The two prose files carry the argument:
+  [`0007`](exploration/0007_what_the_probes_settle.md) then
+  [`0011`](exploration/0011_the_drift_shape.md) — **start at `0011`**, which
+  also withdraws one claim from `0007` §2.
   Figures and raw numbers in `exploration/figures/`.
 - `output/` — empty until something survives a forecast comparison.
 

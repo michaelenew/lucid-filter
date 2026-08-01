@@ -71,15 +71,20 @@ the $p=1$ unit root, so errors-in-variables was never a threat to it. Everything
 this workstream adds — every non-integrated mode — is in the unprotected
 direction. The new content and the new failure mode are the same object.
 
-**The unit root makes the instruments weak for exactly the directions that need
-them.** IV recovers the *stationary* oscillator essentially perfectly
-(0.9469–0.9488 against 0.9489 for all $\kappa\le1$), but in the mixed
-offset-plus-oscillator case it degrades much faster (0.880 at $\kappa=1$, and
-$|z|_{\max}=1.027\pm0.016$ at $\kappa=2$, i.e. spuriously explosive). Lagged
-levels of an integrated series are dominated by the common trend, so they are
-near-collinear instruments for the stationary coordinates. Differencing the
-instruments, or imposing the unit root and instrumenting the differenced series,
-is the obvious repair and is untested.
+**IV degrades once the unit root is present.** IV recovers the *stationary*
+oscillator essentially perfectly (0.9469–0.9488 against 0.9489 for all
+$\kappa\le1$), but in the mixed offset-plus-oscillator case it degrades much
+faster (0.880 at $\kappa=1$, and $|z|_{\max}=1.027\pm0.016$ at $\kappa=2$, i.e.
+spuriously explosive).
+
+> **Correction.** This section originally attributed that to weak instruments —
+> lagged levels of an integrated series being near-collinear — and proposed
+> imposing the unit root and instrumenting the differenced series as the repair.
+> [`0009`](0009_instrument_the_differences.py) tested it and it is **worse at
+> every noise level** ($\rho$ = 0.713 against 0.926 at $\kappa=0.5$). The
+> explanation and the proposed repair are both withdrawn; see
+> [`0011`](0011_the_drift_shape.md) §1 for what is true instead — differencing
+> costs a factor $(1-\rho_1)$ in SNR, which is $16.5\times$ here.
 
 ## 3. IV is the anchor, not the estimator
 
