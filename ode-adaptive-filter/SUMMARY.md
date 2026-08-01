@@ -7,9 +7,12 @@ Compute budgets are allowed, because a compute budget trades a real-world cost
 against theoretical accuracy and nothing else.
 
 **There is a candidate filter now**, in `output/odefilter/`. It reduces to the
-parent exactly (checked to 1e-8, not asserted), and on the target class it
-forecasts **1.5–3.7× better** at short horizons while costing within ±5% on a
-plain random walk. It does **not** yet adapt `alpha`; it reports when that has
+parent exactly (checked to 1e-8, not asserted), and on the *stationary* target
+class it forecasts **1.5–3.7× better** at short horizons while costing within
+±5% on a plain random walk. **On a series whose assumptions expire mid-run it is
+level at forecasting and 1.35× worse at tracking** — see
+[`0033`](exploration/0033_where_the_candidate_loses.md), which is the number to
+quote to anyone deploying it. It does **not** yet adapt `alpha`; it reports when that has
 become necessary. Twenty probes stand behind it — see
 [`exploration/0027`](exploration/0027_the_candidate_filter.md) for what it
 costs and what is deliberately left out. The parent workstream is untouched.
@@ -31,6 +34,41 @@ the unit root remains — which the parent models too — and the advantage
 vanishes. Costs: ~120 s to fit 900 points, and $Q$ is badly conditioned from
 moments (0.66% of $\gamma_0$, amplification 151), so it is scanned by
 likelihood rather than believed.
+
+## Symbols
+
+**In the filter** — every one of these is fitted by maximum marginal likelihood:
+
+| | meaning |
+|---|---|
+| $\alpha$ ($p$ of them) | the recurrence coefficients, $x_t=\sum_i\alpha_ix_{t-i}+w_t$. The roots of $z^p-\sum\alpha_iz^{p-i}$ are the ODE's modes |
+| $Q,\ \sigma^2$ | *median* (geometric-mean) variance of process and measurement noise |
+| $\lambda^P_t,\ \lambda^M_t$ | each channel's log-scale at $t$: $Q_t=Q e^{\lambda^P_t}$, $\sigma^2_t=\sigma^2e^{\lambda^M_t}$ |
+| $\varphi_P,\ \varphi_M$ | **persistence** of each log-scale, in $[0,1)$. Near 0 the channel spikes; near 1 it drifts. Undefined when the corresponding $s$ is 0 |
+| $s_P,\ s_M$ | **log-SD of each channel's scale** — the stationary SD of $\lambda^c$. $s_P=0$ means the process noise is homoscedastic; $s_P>0$ means its variance itself varies over time. This is the coordinate that says *whether there is any volatility structure at all*, and it is the more reliably estimated of the two |
+| $u$ | the injection direction, $z_t=Fz_{t-1}+u\,w_t$. **Currently pinned to $e_1$**, not fitted |
+
+**Not in the filter** — analysis coordinates from the drift-law thread
+(`0011`, `0015`–`0020`), which asked whether $\alpha$ should be allowed to
+*move* and was largely refuted:
+
+| | meaning |
+|---|---|
+| $\Sigma_{\text{drift}}=\nu^2R(\psi)\,\mathrm{diag}(\tau,1/\tau)\,R(\psi)^\top$ | the covariance of a hypothetical random walk on $\alpha$ itself |
+| $\nu$ | its overall scale |
+| $\tau$ | its **anisotropy** — how much more $\alpha$ is allowed to move along one axis than the other. Determinant held fixed, so $\tau$ is pure shape |
+| $\psi$ | its **orientation** — the angle of that ellipse in $\alpha$-space. *Which direction* the dynamics are allowed to drift in |
+
+**$s_P$ and $\psi$ are not siblings.** $s_P$ is a fitted parameter of the
+shipped filter and describes how much the *noise* varies. $\psi$ is a
+coordinate of a proposed law for how the *dynamics* wander, it is not in
+`core.py`, and the law it belongs to lost its minimax argument in `0013`. Both
+were measured estimable; only $s_P$ is used.
+
+Elsewhere: $\kappa=\sigma/\mathrm{SD}(\Delta x)$ is the noise level the probes
+sweep, $q=Q/\sigma^2$ the parent's signal-to-noise ratio, $\rho_1$ the process's
+lag-1 autocorrelation, $\Gamma$ the Fisher information on $\alpha$, and
+$\eta=(Q_{\text{eff}}-Q)/Q$ the relative noise floor from not knowing $\alpha$.
 
 ## The free-variable audit
 
@@ -80,6 +118,38 @@ predictive variance that $\sigma^2$ dominates. Same conditioning fact as the
 151× amplification in `_moment_noises`, third appearance. The parent's missing
 5×5 $\varphi$ grid is therefore still a real gap — it just cannot be exercised
 on smooth ODE data.
+
+## Where it loses — read this before quoting the battery
+
+[`0033`](exploration/0033_where_the_candidate_loses.md) runs both filters over
+one series carrying three impulsive kicks, a measurement-noise regime, a
+process-noise regime and **two jumps in $\alpha$**, fitted on clean history
+only. **odefilter is not better overall on it**: 1.35× *worse* tracking, level
+(0.999) forecasting.
+
+| phase | tracking | $h{=}10$ forecast |
+|---|---|---|
+| baseline | **0.673** | **0.662** |
+| three kicks | **0.709** | **0.794** |
+| measurement regime ×6 | **0.468** | **0.608** |
+| after $\alpha$ jump 1 | **0.597** | 1.365 |
+| process regime ×8 | **4.941** | 1.237 |
+| after $\alpha$ jump 2 | 1.944 | 1.042 |
+| **all** | **1.350** | 0.999 |
+
+Two losses, both diagnosed. **The process-scale channel is dead** — $s_P$ fits
+to 0, so when process noise goes up 8× there is no channel to say so and the
+*measurement* channel absorbs it instead. That is the 0.66%-of-$\gamma_0$
+conditioning fact turning into a 4.9× regression. And **after a jump in
+$\alpha$, forecasting flips to worse**: a confident wrong model loses to a vague
+one, which is the price of the "static $\alpha$" commitment. `whiteness`
+correctly ignores all five non-dynamics events and fires on both jumps — slowly,
+and without ever coming back down, which is what having no forgetting factor
+costs.
+
+`0026`'s 1.5–3.7× is not wrong, it is narrow: it measured a stationary target
+class, and nothing before `0033` asked what happens when the assumptions expire
+mid-series.
 
 ## The gut check
 
@@ -384,9 +454,15 @@ parameter.)
 
 ## Next, in order
 
-0. **Two corrections the audit found, both small:** delete the $Q$ scan, and
+0. **Fix the process-scale channel.** `0033` makes this the top item: $s_P$
+   fits to zero on smooth data, so a process-noise regime is mis-attributed to
+   the measurement channel and costs **4.9×**. The diagnosis points at the fix —
+   parameterise the scale on something the likelihood can see ($Q_{\text{eff}}$,
+   or the innovation) rather than on $Q$ alone.
+0b. **Two corrections the audit found, both small:** delete the $Q$ scan, and
    make `_iv_alpha` require $m>p$. Both make the filter simpler *and* faster.
-1. **Act on `whiteness`.** The filter already reports when `alpha` has stopped
+1. **Act on `whiteness`** — `0033` gives it a target: 1.365 and 1.042 after the
+   two jumps against a 0.662 ceiling. The filter already reports when `alpha` has stopped
    fitting and does nothing about it. Refitting or drifting on that signal is
    the cheapest real use of the drift work and needs no grid.
 2. **Widen the battery** — more seeds, more pole locations, and a
@@ -434,7 +510,7 @@ so.
   [`0027`](exploration/0027_the_candidate_filter.md),
   [`0030`](exploration/0030_the_free_variable_audit.md) — **start at `0027` for
   the filter, `0030` for the audit, `0024` for the mode structure, `0020` for
-  the drift law**. [`0031`](exploration/0031_what_the_two_filters_believe.py)
+  the drift law**, `0033` for where it loses. [`0031`](exploration/0031_what_the_two_filters_believe.py)
   is the picture. Three of them withdraw a claim
   from an earlier one (`0007` §2, `0011` §3, `0016` §2); the withdrawals are
   marked in place rather than edited away.

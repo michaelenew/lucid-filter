@@ -210,6 +210,23 @@ class FilterResult:
     state_cov: np.ndarray = field(default_factory=lambda: np.empty((0, 0, 0)))
     loglik: float = 0.0
 
+    @property
+    def process_scale(self) -> np.ndarray:
+        """E[lamP | data]; equals process_anomaly + process_regime."""
+        return self.process_anomaly + self.process_regime
+
+    @property
+    def measurement_scale(self) -> np.ndarray:
+        """E[lamM | data]; equals measurement_anomaly + measurement_regime."""
+        return self.measurement_anomaly + self.measurement_regime
+
+    @property
+    def modes(self) -> np.ndarray:
+        """(n, 4) array of the signed mode coordinates: PA, PR, MA, MR."""
+        return np.column_stack([self.process_anomaly, self.process_regime,
+                                self.measurement_anomaly,
+                                self.measurement_regime])
+
     def __len__(self) -> int:
         return len(self.mean)
 

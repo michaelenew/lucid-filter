@@ -102,6 +102,19 @@ def test_shares_sum_to_one():
     assert np.allclose(s, 1.0, atol=1e-10)
 
 
+def test_result_convenience_views_match_the_parents():
+    """FilterResult exposes the same derived views the parent's does."""
+    rng = np.random.default_rng(31)
+    x, y = ar(200, ALPHA3, 1.0, 9.0, rng)
+    r = OdeFilter(Params(alpha=ALPHA3, Q=1.0, s2=9.0, s_M=0.5, phi_M=0.7),
+                  order=5).filter(y)
+    assert np.allclose(r.process_scale, r.process_anomaly + r.process_regime)
+    assert np.allclose(r.measurement_scale,
+                       r.measurement_anomaly + r.measurement_regime)
+    assert r.modes.shape == (200, 4)
+    assert np.allclose(r.modes[:, 2] + r.modes[:, 3], r.measurement_scale)
+
+
 def test_missing_observations():
     rng = np.random.default_rng(4)
     x, y = ar(300, ALPHA3, 1.0, 9.0, rng)
