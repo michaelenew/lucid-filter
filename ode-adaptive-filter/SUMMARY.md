@@ -9,10 +9,12 @@ against theoretical accuracy and nothing else.
 **There is a candidate filter now**, in `output/odefilter/`. It reduces to the
 parent exactly (checked to 1e-8, not asserted), and on the *stationary* target
 class it forecasts **1.5–3.7× better** at short horizons while costing within
-±5% on a plain random walk. **On a series whose assumptions expire mid-run it is
-level at forecasting and 1.35× worse at tracking** — see
-[`0033`](exploration/0033_where_the_candidate_loses.md), which is the number to
-quote to anyone deploying it. It does **not** yet adapt `alpha`; it reports when that has
+±5% on a plain random walk. On a series whose assumptions expire
+mid-run its point forecasts are level with the parent's, but **its forecast
+*distribution* is better by 0.289 nats/point** and it is calibrated where the
+parent is 1.6–2.9× overconfident — see
+[`0033`](exploration/0033_where_the_candidate_loses.md) for where it loses and
+[`0036`](exploration/0036_three_corrections.md) for why MSE was the wrong lens. It does **not** yet adapt `alpha`; it reports when that has
 become necessary. Twenty probes stand behind it — see
 [`exploration/0027`](exploration/0027_the_candidate_filter.md) for what it
 costs and what is deliberately left out. The parent workstream is untouched.
@@ -118,6 +120,63 @@ predictive variance that $\sigma^2$ dominates. Same conditioning fact as the
 151× amplification in `_moment_noises`, third appearance. The parent's missing
 5×5 $\varphi$ grid is therefore still a real gap — it just cannot be exercised
 on smooth ODE data.
+
+## Three corrections — read these before anything else
+
+[`0036`](exploration/0036_three_corrections.md), from three objections that all
+stood up.
+
+**1. `whiteness` is the wrong instrument, and no forgetting factor is needed.**
+A flat regime is not the absence of an ODE: $\alpha=(1,0,0)$ has roots
+$\{1,0,0\}$ and *is* the parent, sitting inside the $p=3$ family. So "the
+dynamics stopped governing" is a hypothesis with a likelihood and the data
+affirms it. A cumulative residual autocorrelation cannot represent that; a
+posterior over $\alpha$ candidates can, and reverts on its own. The forgetting
+rate is then the kernel of that posterior — which is $\varphi$, already learned
+(`0012` recovered $\hat\varphi_A=0.972\pm0.010$). **The fix is to make
+$\alpha$ a gridded channel with FLAT as an explicit member**, which also
+subsumes the parallel-orders idea. `whiteness` stays as a cheap smoke alarm.
+
+**2. Scoring forecasts by MSE was wrong, and it reversed the headline.**
+Decomposing the log predictive density into calibration $E[e^2/S]$ (1 = honest)
+and sharpness:
+
+| phase | log-loss diff | calib. ode | calib. parent | MSE ratio |
+|---|---|---|---|---|
+| baseline | **−0.544** | **0.96** | 2.69 | 0.662 |
+| kicks | **−0.522** | **1.11** | 2.88 | 0.794 |
+| meas. regime | **−0.284** | **0.86** | 1.57 | 0.608 |
+| $\alpha$ jump 1 | +0.397 | 0.19 | 0.30 | 1.365 |
+| proc. regime | +0.026 | **0.88** | 1.18 | 1.237 |
+| $\alpha$ jump 2 | **−0.375** | 5.22 | 6.11 | 1.042 |
+| **all** | **−0.289** | 1.76 | 2.82 | 0.999 |
+
+By MSE odefilter was level overall; **by log-loss it is better by 0.289
+nats/point** and better in four phases of six. odefilter is calibrated where its
+model holds; **the parent is 1.6–2.9× overconfident nearly everywhere**. After
+the second jump the two disagree explicitly — worse point forecast, better
+distribution. Wrong-and-humble beats wrong-and-certain, and only the log score
+says so. On the *filtered state* the parent's $\hat\sigma^2$ collapses to
+$\approx0$, giving a calibration of $3\times10^6$: its point estimates are fine
+and its uncertainty is meaningless. **Everything scored by MSE in this
+workstream should be re-read, starting with `0026`.**
+
+**3. State estimation is at the information bound; the lag is elsewhere.**
+Exact KL between members of the family (with the prior stated on the
+derivatives, because a diffuse prior makes the answer diverge — correctly). At
+noise twice a velocity step: VELOCITY vs FLAT in 5/6/7 points for 1/3/5 nats,
+ACCEL vs VELOCITY in 5/6/7, **ODE vs FLAT in 4/5/5**. The filter's own posterior
+reaches 10% of steady state in **4 points**. So:
+
+| | latency |
+|---|---|
+| state estimation, $\alpha$ known | **~4 points — at the bound** |
+| $\alpha$ estimation | hundreds (the fit) |
+| noticing $\alpha$ changed | never resolves |
+
+Acceleration costs *no* extra points once the process is stochastic: its smaller
+amplitude (SD 2.34 vs velocity's 6.74, the 2–3× factor) is cancelled by its
+signature being integrated more times before reaching the observation.
 
 ## Where it loses — read this before quoting the battery
 
@@ -454,7 +513,10 @@ parameter.)
 
 ## Next, in order
 
-0. **Fix the process-scale channel.** `0033` makes this the top item: $s_P$
+0. **Make $\alpha$ a gridded channel with FLAT as an explicit member**,
+   evolved by a learned-persistence kernel (`0036` §1). Fixes reversion,
+   replaces `whiteness` as a controller, and subsumes parallel-order selection.
+0a. **Fix the process-scale channel.** `0033` makes this the top item: $s_P$
    fits to zero on smooth data, so a process-noise regime is mis-attributed to
    the measurement channel and costs **4.9×**. The diagnosis points at the fix —
    parameterise the scale on something the likelihood can see ($Q_{\text{eff}}$,
@@ -476,7 +538,8 @@ parameter.)
 6. **Redo the drift-direction sweep at constant Fisher length**, with generating
    orientations on the kernel nodes rather than between them — six of seven in
    the current sweep sit at exact midpoints.
-7. **Standardise on prequential log-loss** and re-score the shape and
+7. **Re-score everything on log-loss** — `0026` first (`0036` §2 shows the
+   headline can reverse). Then the shape and
    $\varphi_A$ under it. Both currently rest on in-sample nats, and both are
    variance-side effects that MSE provably cannot see.
 8. **Speed.** ~120 s per fit is the binding practical limit. The architecture extends directly; the grid
