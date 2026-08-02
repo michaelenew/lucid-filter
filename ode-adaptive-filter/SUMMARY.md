@@ -33,9 +33,11 @@ Forecast MSE against the fitted parent, 3 seeds, n = 900 (lower is better):
 **The gain decays with horizon exactly as the theory predicted before the filter
 existed**: the oscillator's memory $1/(1-|z|)$ is 19.6 steps, so by $h=20$ only
 the unit root remains — which the parent models too — and the advantage
-vanishes. Costs: ~120 s to fit 900 points, and $Q$ is badly conditioned from
-moments (0.66% of $\gamma_0$, amplification 151), so it is scanned by
-likelihood rather than believed.
+vanishes. $Q$ is badly conditioned from moments (0.66% of $\gamma_0$,
+amplification 151), so it is never believed from the moment identity.
+
+**`fit()` is now ~5.5× faster and no less accurate** — see
+[the speedup](#the-speedup) below.
 
 ## Symbols
 
@@ -104,10 +106,12 @@ say which fits — the same grid-the-nuisance architecture the filter already
 uses one level down. The continuous version (fractional order, learned as a
 coordinate) is recorded in the [repository README](../README.md#open-directions).
 
-**Two corrections fall out.** The $Q$ scan (stage 1b) is inert across a $10^6$
-window and *removable* — every variant that moves the start beats the default
-by the same 0.09 nats, so it reliably starts the search slightly worse than
-the closed form it was added to fix, at a cost of 13 filter passes. And
+**Two corrections fall out, and the first is now applied.** The $Q$ scan
+(stage 1b) is inert across a $10^6$ window and *removable* — every variant that
+moves the start beats the default by the same 0.09 nats, so it reliably starts
+the search slightly worse than the closed form it was added to fix, at a cost
+of 13 filter passes. It is gone: pass 1 of the new `fit_` computes the same
+quantity exactly. And
 `_iv_alpha` should **require** $m>p$ rather than default it: at the
 just-identified $m=p$ the fit diverges ($\hat Q = 409$ against a truth of 1),
 while $m=2p$ and $4p$ agree to 0.003. That is a precondition, not a dial.
@@ -120,6 +124,63 @@ predictive variance that $\sigma^2$ dominates. Same conditioning fact as the
 151× amplification in `_moment_noises`, third appearance. The parent's missing
 5×5 $\varphi$ grid is therefore still a real gap — it just cannot be exercised
 on smooth ODE data.
+
+## The speedup
+
+`fit()` is **5.5× faster** and **not worse on any case measured** — 5 series
+types × 2 seeds, $n=400$, $p=3$, both parameter vectors scored with the *old*
+implementation's likelihood so the new evaluator cannot flatter itself.
+
+| | old | new | Δ log-lik/point |
+|---|---|---|---|
+| ODE, $\kappa=0.25$ | 44–60 s | 6–8 s | 0.0000 |
+| ODE, $\kappa=1.0$ | 58–60 s | 8–9 s | 0.0000 |
+| ODE + 12% missing | 58–69 s | 6–7 s | +0.0001 |
+| WALK | 53–59 s | 19–34 s | +0.0005, +0.0015 |
+| ODE, $\alpha$ shifts mid-run | 69–326 s | 25–32 s | **+0.267, +0.106** |
+| **total** | **856 s** | **155 s** | worse on **0/10** |
+
+Everything rests on one measured fact: **the recursion is dispatch-bound, not
+arithmetic-bound**, so $B$ parameter vectors cost far less than $B$ evaluations.
+At $n=400$, $p=3$, order 5, one evaluation is 29 ms and a 19-row batch is 98 ms
+— 3.4× for 19× the work. Every start screen and every gradient is therefore a
+batch (`_loglik_batch`).
+
+Three things changed, in decreasing order of what they bought:
+
+1. **The $s=0$ face is solved directly.** With $s_P=s_M=s_A=0$ the grid
+   collapses to one state and the model is an ordinary linear-Gaussian state
+   space — a bare $p\times p$ Kalman filter. On it the recursion is homogeneous
+   of degree 1 in $\sigma^2$, so $\sigma^2$ **concentrates out in closed form**
+   and only $(\alpha,\log q)$ with $q=Q/\sigma^2$ is searched. That face is
+   3.1 ms per evaluation against 29 ms for the grid, and it is where the old
+   stages 0, 1b and 2 all lived — paying the full $\text{order}^2$ grid for a
+   face on which the grid is one point repeated.
+2. **The subspaces are split by conditioning, not by convenience.** $\alpha$'s
+   curvature is orders of magnitude from $\log Q$'s, and pass 1 has already put
+   $\alpha$ at its exact face optimum, so pass 4 optimises the six noise
+   coordinates *before* touching $\alpha$; likewise $(\varphi_A,s_A)$ before the
+   full nine. This was worth **2.2× → 5.5× on its own** — the single largest
+   factor, and the one that was not obvious in advance.
+3. **L-BFGS-B with a batched central-difference gradient** replaces Nelder-Mead,
+   which needed ~500 function values per start.
+
+**A quality result fell out of it.** On the $\alpha$-shifts probe the old staged
+Nelder-Mead wandered out of the unit disc and returned an **explosive**
+$\alpha$ (spectral radius 1.509); the bounded search started from the face
+optimum returns 1.012, and gains 0.267 nats/point doing it. The old fit was not
+merely slower there, it was wrong.
+
+**A negative result was recorded rather than hidden.** One or more streaming
+(recursive prediction-error) passes after the start screen — the obvious way to
+improve a start without paying for more likelihood evaluations — makes things
+strictly worse, at every step size over four orders of magnitude. The start was
+never the bottleneck; conditioning was. See
+[`0039`](exploration/0039_the_online_pass_does_not_pay.md).
+
+The **online filter is untouched by all of this**: `update`, `predict`,
+`filter`, `_run`, `derivatives` and the grid builder are byte-identical, and
+53k online observables agree bit for bit.
 
 ## The dynamics channel: `alpha` is tracked, not held
 
@@ -594,8 +655,9 @@ parameter.)
    headline can reverse). Then the shape and
    $\varphi_A$ under it. Both currently rest on in-sample nats, and both are
    variance-side effects that MSE provably cannot see.
-8. **Speed.** ~120 s per fit is the binding practical limit. The architecture extends directly; the grid
-   is the compute budget.
+8. ~~**Speed.**~~ — largely discharged; see [the speedup](#the-speedup). The
+   grid is still the compute budget, and the residual cost is now concentrated
+   in the one pass that has to carry the dynamics channel's grid.
 9. **Learn $Q$ and $\sigma^2$ jointly with $\alpha$.** Every probe so far holds
    them at truth; the parent's `fit()` shows six parameters is already the hard
    part and this makes eight or more.
