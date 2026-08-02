@@ -14,8 +14,8 @@ mid-run its point forecasts are level with the parent's, but **its forecast
 *distribution* is better by 0.289 nats/point** and it is calibrated where the
 parent is 1.6–2.9× overconfident — see
 [`0033`](exploration/0033_where_the_candidate_loses.md) for where it loses and
-[`0036`](exploration/0036_three_corrections.md) for why MSE was the wrong lens. It does **not** yet adapt `alpha`; it reports when that has
-become necessary. Twenty probes stand behind it — see
+[`0036`](exploration/0036_three_corrections.md) for why MSE was the wrong lens. **`alpha` is estimated once and then tracked**, by a dynamics channel with the
+parent's own model as an explicit member — see below. Twenty probes stand behind it — see
 [`exploration/0027`](exploration/0027_the_candidate_filter.md) for what it
 costs and what is deliberately left out. The parent workstream is untouched.
 
@@ -120,6 +120,57 @@ predictive variance that $\sigma^2$ dominates. Same conditioning fact as the
 151× amplification in `_moment_noises`, third appearance. The parent's missing
 5×5 $\varphi$ grid is therefore still a real gap — it just cannot be exercised
 on smooth ODE data.
+
+## The dynamics channel: `alpha` is tracked, not held
+
+Acting on `0036` §1. The filter now grids a scalar $g$ on
+
+$$\alpha(g)=(1-g)\,(1,0,\dots,0)+g\,\alpha,\qquad g\sim\mathrm{AR}(1)(\varphi_A,s_A)$$
+
+with $\varphi_A$ and $s_A$ **learned by the same marginal likelihood as
+everything else**. $g=1$ is the fitted dynamics; **$g=0$ is exactly the parent's
+local-level model**, so "the dynamics have stopped governing" is a member of the
+family with its own likelihood rather than an absence of evidence; $g>1$ is more
+persistent than fitted. `Step.dynamics` reports the posterior mean of $g$. With
+$s_A=0$ the channel collapses to one node and the recursion is bit-for-bit what
+it was before — the parent-reduction test is unchanged.
+
+**It reverts, with no forgetting factor anywhere.**
+[`0037`](exploration/0037_the_dynamics_channel.py) runs ODE → flat → ODE:
+
+| segment | $\hat g$ | log-loss change | calib. static | calib. adaptive |
+|---|---|---|---|---|
+| ODE | 1.113 | −0.074 | 1.56 | **0.99** |
+| **flat** | **0.329** | **−1.561** | 0.05 | **0.88** |
+| ODE again | 1.019 | +0.001 | 1.50 | 1.42 |
+
+![reversion](exploration/figures/fig24-dynamics-reversion.png)
+
+$g$ falls from 1.1 to 0.33 within about 30 steps of the dynamics stopping, sits
+there, and returns to 1.0 within a step of their resuming. **The honest caveat
+is in the bottom panel**: the return costs a transient log-loss spike, because
+the filter had genuinely committed to flat. That spike is why "ODE again" is a
+wash rather than a win — the gain is real only where the model was actually
+wrong.
+
+**And it fixes the too-flat forecast.** Given a deliberately over-damped
+$\alpha$ (oscillator 0.875 against a true 0.949):
+
+| filter | $\hat g$ | log-loss | calibration |
+|---|---|---|---|
+| static | 1.000 | 6.997 | 6.04 |
+| **adaptive** | **1.283** | **5.582** | **1.01** |
+| oracle (true $\alpha$) | 1.000 | 5.330 | 1.08 |
+
+![too damped](exploration/figures/fig25-too-damped.png)
+
+**85% of the static-to-oracle log-loss gap closed**, and calibration goes from
+6.04 — badly overconfident — to 1.01. The static filter's forecast flattens
+within a few steps; the adaptive one carries the oscillation.
+
+$g$ is one scalar along one direction: it says how much of the fitted departure
+from flat is in force and **cannot express a change of frequency**. That is the
+next axis.
 
 ## Three corrections — read these before anything else
 
@@ -513,9 +564,10 @@ parameter.)
 
 ## Next, in order
 
-0. **Make $\alpha$ a gridded channel with FLAT as an explicit member**,
-   evolved by a learned-persistence kernel (`0036` §1). Fixes reversion,
-   replaces `whiteness` as a controller, and subsumes parallel-order selection.
+0. ~~**Make $\alpha$ a gridded channel with FLAT as an explicit member**~~ —
+   **done**, see *The dynamics channel* above (`0037`). What is left of it: $g$
+   is one scalar along one direction and cannot express a change of
+   *frequency*, and the return from a reverted state costs a transient.
 0a. **Fix the process-scale channel.** `0033` makes this the top item: $s_P$
    fits to zero on smooth data, so a process-noise regime is mis-attributed to
    the measurement channel and costs **4.9×**. The diagnosis points at the fix —

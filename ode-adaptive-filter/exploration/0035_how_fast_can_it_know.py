@@ -45,10 +45,12 @@ Three calculations, none of them a fit:
      four transitions alike.
 
   C  WHAT THE FILTER ACHIEVES.  From a cold start with the true parameters,
-     how many steps until the posterior SD of velocity drops below the true
-     velocity's own SD -- i.e. until the estimate carries more signal than
-     uncertainty.  The gap between C and B is implementation lag; the gap
-     between B and zero is physics.
+     how many steps until each derivative's posterior SD reaches its own
+     steady-state value -- i.e. until the recursion has learned as much as it
+     ever will.  (Comparing against the truth's own SD, which an earlier
+     version did, is useless: the level has a unit root and wanders to an SD of
+     ~550, so the filter "beats" it on the first point.)  The gap between C and
+     B is implementation lag; the gap between B and zero is physics.
 
 That FLAT is a member of the family is the point of the whole exercise: "no ODE
 governance" is a hypothesis with a likelihood, not an absence of evidence.

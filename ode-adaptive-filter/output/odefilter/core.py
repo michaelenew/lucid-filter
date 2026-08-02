@@ -22,9 +22,27 @@ posterior on request.
 
 **The parent filter is this one's p = 1, alpha = 1 face**, exactly.
 
-Learned parameters: alpha (p of them), Q, S2, phi_P, phi_M, s_P, s_M.  All are
-learned by maximum marginal likelihood.  `order` is a quadrature resolution --
-a compute budget, not a tuning parameter.
+Learned parameters: alpha (p of them), Q, S2, phi_P, phi_M, s_P, s_M, and the
+dynamics channel phi_A, s_A.  All are learned by maximum marginal likelihood.
+`order` and `order_A` are quadrature resolutions -- compute budgets, not tuning
+parameters.
+
+**alpha is estimated once and then TRACKED, not held fixed.**  The dynamics
+channel grids a scalar g on
+
+    alpha(g) = (1 - g) * (1, 0, ..., 0) + g * alpha
+
+and evolves it as an AR(1) with learned persistence phi_A and learned spread
+s_A -- the same machinery as the two noise channels, one level up.  g = 1 is
+the fitted dynamics; **g = 0 is exactly the parent's local-level model**, so
+"the dynamics have stopped governing" is a member of the family with its own
+likelihood rather than an absence of evidence, and the filter reverts to it on
+affirmative evidence and comes back when the evidence does.  g > 1 is the other
+direction: more persistent than fitted, which is what a forecast that decays
+too fast needs.  `Step.dynamics` reports the posterior mean of g.
+
+With s_A = 0 the channel collapses to a single node and the recursion is
+bit-for-bit what it was before the channel existed.
 
 Two diagnostics come out for free, and they are orthogonal by construction
 (measured in exploration/0025):
@@ -36,9 +54,12 @@ Two diagnostics come out for free, and they are orthogonal by construction
                                 moved.  Leaves no mean signature at all and a
                                 permanent one in the lag-1 autocorrelation.
 
-`Step.whiteness` reports the second.  A correctly specified filter emits white
-innovations, so sustained departure from zero is the signal that `alpha` no
-longer fits -- the one thing this filter models but does not yet adapt.
+`Step.whiteness` reports the second, and is a cheap always-on residual check
+that needs no grid: a correctly specified filter emits white innovations, so
+sustained departure from zero means `alpha` no longer fits.  It is a smoke
+alarm rather than a controller -- being cumulative, it cannot come back down.
+Acting on the signal is the dynamics channel's job, and `Step.dynamics` is the
+quantity that both detects and reverts.
 """
 from __future__ import annotations
 
@@ -54,6 +75,22 @@ _LOG2PI = math.log(2.0 * math.pi)
 
 class _Numerical(ArithmeticError):
     """Raised when a parameter vector drives the recursion out of range."""
+
+
+def _companion(alpha) -> np.ndarray:
+    a = np.asarray(alpha, dtype=float)
+    p = a.size
+    F = np.zeros((p, p))
+    F[0] = a
+    if p > 1:
+        F[1:, :-1] = np.eye(p - 1)
+    return F
+
+
+def _radius(alpha) -> float:
+    """Spectral radius of the companion matrix of `alpha`."""
+    r = np.roots(np.concatenate([[1.0], -np.asarray(alpha, dtype=float)]))
+    return float(np.max(np.abs(r))) if r.size else 0.0
 
 
 # --------------------------------------------------------------------- params
@@ -78,6 +115,8 @@ class Params:
     phi_M: float = 0.0
     s_P: float = 0.0
     s_M: float = 0.0
+    phi_A: float = 0.0
+    s_A: float = 0.0
 
     def __post_init__(self):
         object.__setattr__(self, "alpha", tuple(float(a) for a in self.alpha))
@@ -85,12 +124,48 @@ class Params:
             raise ValueError("alpha must have at least one entry")
         if not (self.Q > 0 and self.s2 > 0):
             raise ValueError("Q and s2 must be positive")
-        for n in ("phi_P", "phi_M"):
+        for n in ("phi_P", "phi_M", "phi_A"):
             if not 0.0 <= getattr(self, n) < 1.0:
                 raise ValueError(f"{n} must lie in [0, 1)")
-        for n in ("s_P", "s_M"):
+        for n in ("s_P", "s_M", "s_A"):
             if getattr(self, n) < 0.0:
                 raise ValueError(f"{n} must be non-negative")
+
+    def alpha_at(self, g: float) -> np.ndarray:
+        """The dynamics with a fraction `g` of the fitted departure in force.
+
+        alpha(g) = (1-g) * alpha_FLAT + g * alpha, on the straight line through
+        the fitted dynamics and the degenerate member alpha_FLAT = (1,0,...,0).
+
+        **g = 0 is exactly the parent's local-level model**, so "the dynamics
+        have stopped governing" is a member of the family with a likelihood of
+        its own, not an absence of evidence.  g = 1 is the fitted dynamics and
+        g > 1 extrapolates away from flat -- which is the direction that matters
+        when a fitted alpha is too damped and its forecasts decay too fast.
+
+        The line is clipped where it would leave the unit disc, since an
+        explosive alpha is not a hypothesis about anything.
+        """
+        flat = np.zeros(self.p)
+        flat[0] = 1.0
+        a = np.asarray(self.alpha, dtype=float)
+        cand = (1.0 - g) * flat + g * a
+        if _radius(cand) <= 1.0 + 1e-9:
+            return cand
+        # An explosive BASE alpha must stay explosive: the likelihood's -inf
+        # guard is what stops an unconstrained search wandering outside the
+        # unit disc, and clipping here would flatten the surface it needs.
+        # Only the channel's own excursions are pulled back, toward g = 1.
+        if _radius(a) > 1.0 + 1e-9:
+            return cand
+        lo, hi = 1.0, g                               # lo is known stable
+        for _ in range(40):
+            mid = 0.5 * (lo + hi)
+            if _radius((1.0 - mid) * flat + mid * a) <= 1.0 + 1e-9:
+                lo = mid
+            else:
+                hi = mid
+        return (1.0 - lo) * flat + lo * a
 
     @property
     def p(self) -> int:
@@ -135,13 +210,15 @@ class Params:
             np.asarray(self.alpha, dtype=float),
             [math.log(self.Q), math.log(self.s2),
              _logit(self.phi_P), _logit(self.phi_M),
-             math.log(max(self.s_P, 1e-6)), math.log(max(self.s_M, 1e-6))]])
+             math.log(max(self.s_P, 1e-6)), math.log(max(self.s_M, 1e-6)),
+             _logit(self.phi_A), math.log(max(self.s_A, 1e-6))]])
 
     @classmethod
     def _from_vec(cls, v: np.ndarray, p: int) -> "Params":
         return cls(alpha=tuple(v[:p]), Q=math.exp(v[p]), s2=math.exp(v[p + 1]),
                    phi_P=_expit(v[p + 2]), phi_M=_expit(v[p + 3]),
-                   s_P=math.exp(v[p + 4]), s_M=math.exp(v[p + 5]))
+                   s_P=math.exp(v[p + 4]), s_M=math.exp(v[p + 5]),
+                   phi_A=_expit(v[p + 6]), s_A=math.exp(v[p + 7]))
 
 
 def _logit(x: float) -> float:
@@ -182,6 +259,11 @@ class Step:
     #: sustained departure means `alpha` no longer does.  See module docstring.
     whiteness: float
 
+    #: posterior mean of g, the fraction of the fitted dynamics currently in
+    #: force.  1 = the fitted ODE, 0 = flat (the parent's model exactly),
+    #: above 1 = more persistent than fitted.  Constant at 1 when s_A = 0.
+    dynamics: float = 1.0
+
     @property
     def process_scale(self) -> float:
         return self.process_anomaly + self.process_regime
@@ -206,6 +288,7 @@ class FilterResult:
     measurement_anomaly: np.ndarray
     measurement_regime: np.ndarray
     whiteness: np.ndarray
+    dynamics: np.ndarray
     state_mean: np.ndarray = field(default_factory=lambda: np.empty((0, 0)))
     state_cov: np.ndarray = field(default_factory=lambda: np.empty((0, 0, 0)))
     loglik: float = 0.0
@@ -275,13 +358,22 @@ class OdeFilter:
     order : int
         Quadrature nodes per noise channel; the joint grid has ``order**2``
         states.  A numerical resolution, not a model choice.
+    order_A : int
+        Quadrature nodes for the dynamics channel.  It multiplies the cost of
+        every step and of every likelihood evaluation, so the default is lower
+        than ``order``: g is one smooth scalar and does not need as fine a
+        grid.  Ignored entirely when ``s_A = 0``.
     """
 
-    def __init__(self, params: Params | None = None, order: int = 5):
+    def __init__(self, params: Params | None = None, order: int = 5,
+                 order_A: int = 3):
         if order < 3:
             raise ValueError("order must be at least 3")
+        if order_A < 3:
+            raise ValueError("order_A must be at least 3")
         self.params = params
         self.order = int(order)
+        self.order_A = int(order_A)
         self._built = None
         self.reset()
 
@@ -295,27 +387,46 @@ class OdeFilter:
     def to_dict(self) -> dict:
         if self.params is None:
             raise ValueError("filter is not fitted")
-        return {"params": self.params.to_dict(), "order": self.order}
+        return {"params": self.params.to_dict(), "order": self.order,
+                "order_A": self.order_A}
 
     @classmethod
     def from_dict(cls, d: dict) -> "OdeFilter":
-        return cls(Params.from_dict(d["params"]), order=int(d.get("order", 5)))
+        return cls(Params.from_dict(d["params"]), order=int(d.get("order", 5)),
+                   order_A=int(d.get("order_A", 3)))
 
     # ------------------------------------------------------------------ grid
     def _build(self):
-        key = (self.params, self.order)
+        key = (self.params, self.order, self.order_A)
         if self._built is not None and self._built[0] == key:
             return self._built[1]
         pr, n = self.params, self.order
         lamP, wP, TP = _chain(pr.phi_P, pr.s_P, n)
         lamM, wM, TM = _chain(pr.phi_M, pr.s_M, n)
-        g = {"LP": np.repeat(lamP, n), "LM": np.tile(lamM, n),
-             "T": np.kron(TP, TM), "pi0": np.kron(wP, wM),
-             "F": pr.companion}
-        g["Qg"] = pr.Q * np.exp(np.clip(g["LP"], -60.0, 60.0))
-        g["Rg"] = pr.s2 * np.exp(np.clip(g["LM"], -60.0, 60.0))
-        self._built = (key, g)
-        return g
+        # the dynamics channel: g = 1 + lamA, so g = 1 is the fitted alpha and
+        # g = 0 is FLAT.  With s_A = 0 it collapses to a single node and the
+        # recursion is bit-for-bit what it was before this channel existed.
+        if pr.s_A > 0.0:
+            nA = self.order_A
+            lamA, wA, TA = _chain(pr.phi_A, pr.s_A, nA)
+        else:
+            nA, lamA, wA, TA = 1, np.zeros(1), np.ones(1), np.ones((1, 1))
+        nN = n * n
+        gd = {"LP": np.tile(np.repeat(lamP, n), nA),
+              "LM": np.tile(np.tile(lamM, n), nA),
+              "LA": np.repeat(lamA, nN),
+              "T": np.kron(TA, np.kron(TP, TM)),
+              "pi0": np.kron(wA, np.kron(wP, wM)),
+              "Aidx": np.repeat(np.arange(nA), nN),
+              "starts": np.arange(nA) * nN,
+              "nA": nA,
+              "gs": 1.0 + lamA}
+        gd["Fs"] = np.stack([_companion(pr.alpha_at(float(v)))
+                             for v in gd["gs"]])
+        gd["Qg"] = pr.Q * np.exp(np.clip(gd["LP"], -60.0, 60.0))
+        gd["Rg"] = pr.s2 * np.exp(np.clip(gd["LM"], -60.0, 60.0))
+        self._built = (key, gd)
+        return gd
 
     # ------------------------------------------------------------- streaming
     def reset(self) -> "OdeFilter":
@@ -338,7 +449,6 @@ class OdeFilter:
             raise ValueError("filter is not fitted; call fit() or pass params")
         g = self._build()
         p = self.params.p
-        F = g["F"]
         if self._pi is None:
             self._pi = g["pi0"].copy()
             y0 = float(y) if np.isfinite(y) else 0.0
@@ -346,67 +456,80 @@ class OdeFilter:
             self._P = np.eye(p) * float(g["Rg"].max() + g["Qg"].max()) * p
 
         pi = self._pi @ g["T"]
-        m_pri = F @ self._m
-        A = F @ self._P @ F.T                     # shared across grid nodes
+        Fs, Aidx, starts = g["Fs"], g["Aidx"], g["starts"]
+        mj = Fs @ self._m                              # (nA, p) per dynamics node
+        Aj = Fs @ self._P @ Fs.transpose(0, 2, 1)      # (nA, p, p)
+        a00, a0 = Aj[:, 0, 0], Aj[:, :, 0]
 
         if not np.isfinite(y):                    # missing observation
             self._pi = pi
-            A[0, 0] += float(pi @ g["Qg"])
-            self._m, self._P = m_pri, A
+            piA = np.add.reduceat(pi, starts)
+            m_new = piA @ mj
+            Pbar = np.einsum("j,jab->ab", piA, Aj)
+            Pbar[0, 0] += float(pi @ g["Qg"])
+            dm = mj - m_new
+            Pbar += np.einsum("j,ja,jb->ab", piA, dm, dm)
+            self._m, self._P = m_new, Pbar
             lamP, lamM = float(pi @ g["LP"]), float(pi @ g["LM"])
-            st = Step(float(m_pri[0]), float(A[0, 0]), math.nan, 0.0,
+            st = Step(float(m_new[0]), float(Pbar[0, 0]), math.nan, 0.0,
                       1.0, 0.0, 0.0,
                       lamP - self.params.phi_P * self._prev_lamP,
                       self.params.phi_P * self._prev_lamP,
                       lamM - self.params.phi_M * self._prev_lamM,
                       self.params.phi_M * self._prev_lamM,
-                      self._whiteness())
+                      self._whiteness(), 1.0 + float(pi @ g["LA"]))
             self._prev_lamP, self._prev_lamM = lamP, lamM
             return st
 
-        a00, a0 = A[0, 0], A[:, 0]
-        S = a00 + g["Qg"] + g["Rg"]               # predictive variance per node
+        Qg, Rg = g["Qg"], g["Rg"]
+        S = a00[Aidx] + Qg + Rg                   # predictive variance per node
         # An unconstrained search reaches explosive alpha, where P overflows and
         # S goes non-finite or non-positive.  Signal it rather than emitting a
         # nan log-likelihood the optimiser would then chase.
         if not np.all(np.isfinite(S)) or np.any(S <= 0.0):
             raise _Numerical("non-positive predictive variance")
-        e = float(y) - m_pri[0]
-        lg = -0.5 * (np.log(S) + e * e / S)
+        eA = float(y) - mj[:, 0]                  # innovation per dynamics node
+        e_all = eA[Aidx]
+        # the reported innovation is against the PRIOR mixture mean, which is
+        # what a caller means by "how surprised were we"
+        e = float(y) - float(pi @ mj[Aidx, 0])
+        lg = -0.5 * (np.log(S) + e_all * e_all / S)
         mx = float(lg.max())
         w = pi * np.exp(lg - mx)
         Z = float(w.sum())
         ll = math.log(Z) + mx - 0.5 * _LOG2PI
+        S_pred = float(pi @ (S + (mj[Aidx, 0] - (pi @ mj[Aidx, 0])) ** 2))
         pi = w / Z
 
-        # K_g = (A[:,0] + Qg e1) / S_g  -- differs across nodes only in slot 0
-        K = np.outer(1.0 / S, a0).copy()          # (G, p)
-        K[:, 0] += g["Qg"] / S
-        Kbar = pi @ K                             # (p,)
-        m_new = m_pri + Kbar * e
+        e1 = np.zeros(p)
+        e1[0] = 1.0
+        row = a0[Aidx] + Qg[:, None] * e1         # (G, p): the prior's row 0
+        K = row / S[:, None]
+        mm = mj[Aidx] + K * e_all[:, None]        # (G, p): per-node posterior mean
+        m_new = pi @ mm
 
-        # collapse (GPB1): mean conditional covariance + spread of the means,
-        # and m_g - m_new = (K_g - Kbar) e
-        row = np.tile(a0, (len(S), 1))            # (G, p), row 0 of P_pri^g
-        row[:, 0] = a00 + g["Qg"]
-        Pbar = A + np.eye(p) * 0.0
-        Pbar = A.copy()
-        Pbar[0, 0] += float(pi @ g["Qg"])
-        Pbar -= np.einsum("g,gi,gj->ij", pi, K, row)
-        dK = K - Kbar
-        Pbar += (e * e) * np.einsum("g,gi,gj->ij", pi, dK, dK)
+        # collapse (GPB1): mean conditional covariance + spread of the means.
+        # The means now differ across dynamics nodes as well as noise nodes,
+        # so the spread term carries the dynamics disagreement too.
+        piA = np.add.reduceat(pi, starts)
+        Pbar = np.einsum("j,jab->ab", piA, Aj)
+        Pbar[0, 0] += float(pi @ Qg)
+        Pbar -= np.einsum("g,ga,gb->ab", pi, K, row)
+        dm = mm - m_new
+        Pbar += np.einsum("g,ga,gb->ab", pi, dm, dm)
 
         lamP, lamM = float(pi @ g["LP"]), float(pi @ g["LM"])
         st = Step(
             mean=float(m_new[0]), var=float(Pbar[0, 0]), innovation=e, loglik=ll,
-            share_prior=float(pi @ (a00 / S)),
-            share_process=float(pi @ (g["Qg"] / S)),
-            share_measurement=float(pi @ (g["Rg"] / S)),
+            share_prior=float(pi @ (a00[Aidx] / S)),
+            share_process=float(pi @ (Qg / S)),
+            share_measurement=float(pi @ (Rg / S)),
             process_anomaly=lamP - self.params.phi_P * self._prev_lamP,
             process_regime=self.params.phi_P * self._prev_lamP,
             measurement_anomaly=lamM - self.params.phi_M * self._prev_lamM,
             measurement_regime=self.params.phi_M * self._prev_lamM,
-            whiteness=self._accum_whiteness(e, float(pi @ S)),
+            whiteness=self._accum_whiteness(e, S_pred),
+            dynamics=1.0 + float(pi @ g["LA"]),
         )
         self._pi, self._m, self._P = pi, m_new, Pbar
         self._prev_lamP, self._prev_lamM = lamP, lamM
@@ -437,12 +560,17 @@ class OdeFilter:
         if self._pi is None:
             raise ValueError("nothing observed yet")
         g = self._build()
-        F = g["F"]
+        Fs, starts = g["Fs"], g["starts"]
         pi, m, P = self._pi, self._m.copy(), self._P.copy()
         for _ in range(int(horizon)):
             pi = pi @ g["T"]
-            m = F @ m
-            P = F @ P @ F.T
+            piA = np.add.reduceat(pi, starts)
+            mj = Fs @ m
+            Aj = Fs @ P @ Fs.transpose(0, 2, 1)
+            m = piA @ mj
+            P = np.einsum("j,jab->ab", piA, Aj)
+            dm = mj - m
+            P += np.einsum("j,ja,jb->ab", piA, dm, dm)
             P[0, 0] += float(pi @ g["Qg"])
         return float(m[0]), float(P[0, 0])
 
@@ -485,7 +613,8 @@ class OdeFilter:
             n, p = y.size, self.params.p
             cols = ("mean", "var", "innovation", "share_prior", "share_process",
                     "share_measurement", "process_anomaly", "process_regime",
-                    "measurement_anomaly", "measurement_regime", "whiteness")
+                    "measurement_anomaly", "measurement_regime", "whiteness",
+                    "dynamics")
             out = {c: np.empty(n) for c in cols}
             sm = np.empty((n, p))
             sc = np.empty((n, p, p))
@@ -504,7 +633,8 @@ class OdeFilter:
     # ------------------------------------------------------------------- fit
     @classmethod
     def fit(cls, y, p: int = 3, order: int = 5, max_iter: int = 400,
-            scales: bool = True) -> "OdeFilter":
+            scales: bool = True, dynamics: bool = True,
+            order_A: int = 3) -> "OdeFilter":
         """Learn every parameter from a series and return a fitted filter.
 
         ``p`` is the order of the recurrence: 3 is a second-order ODE plus a
@@ -515,13 +645,15 @@ class OdeFilter:
 
         ``scales=False`` pins the two log-scale channels off, giving an ordinary
         (non-adaptive) recurrence filter.  Useful as a baseline and much faster.
+        ``dynamics=False`` additionally pins the dynamics channel off, giving
+        a static ``alpha``.
         """
-        f = cls(order=order)
-        f.fit_(y, p=p, max_iter=max_iter, scales=scales)
+        f = cls(order=order, order_A=order_A)
+        f.fit_(y, p=p, max_iter=max_iter, scales=scales, dynamics=dynamics)
         return f
 
     def fit_(self, y, p: int = 3, max_iter: int = 400,
-             scales: bool = True) -> "OdeFilter":
+             scales: bool = True, dynamics: bool = True) -> "OdeFilter":
         """Fit in place.  Returns self.
 
         Staged, because a nine-dimensional search from one start is not
@@ -537,6 +669,9 @@ class OdeFilter:
                   the analogue of the parent's variogram identity.
         stage 2   alpha, Q, S2 by maximum likelihood with the scales off.
         stage 3   the two scale channels, then everything together.
+        stage 4   the dynamics channel (phi_A, s_A), then a final polish.
+                  This one is fitted last because it is the only channel whose
+                  grid multiplies the cost of every likelihood evaluation.
 
         All of it is scaffolding: the estimate is the maximum likelihood
         estimate however it is reached.  ``max_iter`` is a compute budget.
@@ -562,7 +697,8 @@ class OdeFilter:
         n = max(y.size, 1)
         off = math.log(1e-6)
         base = np.concatenate([a0, [math.log(Q0), math.log(s20),
-                                    _logit(0.5), _logit(0.5), off, off]])
+                                    _logit(0.5), _logit(0.5), off, off,
+                                    _logit(0.9), off]])
 
         # stage 1b -- Q is badly conditioned from moments (see _moment_noises),
         # so scan it by likelihood at the moment S2 rather than believing it
@@ -615,7 +751,37 @@ class OdeFilter:
         r4 = minimize(lambda v: nll(v, n), best, method="Nelder-Mead",
                       options=dict(maxiter=int(max_iter * 2), xatol=2e-3,
                                    fatol=1e-6))
-        self.params = Params._from_vec(r4.x if r4.fun < bestf else best, p)
+        full = r4.x if r4.fun < bestf else best
+        bestf = min(r4.fun, bestf)
+
+        if not dynamics:
+            self.params = Params._from_vec(full, p)
+            self._built = None
+            return self.reset()
+
+        # stage 4 -- the dynamics channel.  Started persistent, because a
+        # change in the dynamics is a regime by construction (0025): it has no
+        # first-moment signature at all, so the impulsive end of this channel
+        # is a different object from the impulsive end of the noise channels.
+        aidx = [p + 6, p + 7]
+        best_d, bestd = full, bestf
+        for sa in (0.15, 0.6):
+            v = full.copy()
+            v[p + 6], v[p + 7] = _logit(0.9), math.log(sa)
+
+            def sub3(vs, v=v):
+                w = v.copy()
+                w[aidx] = vs
+                return nll(w, n)
+
+            r5 = minimize(sub3, v[aidx], method="Nelder-Mead",
+                          options=dict(maxiter=int(max_iter), xatol=2e-3,
+                                       fatol=1e-5))
+            if r5.fun < bestd:
+                v[aidx] = r5.x
+                best_d, bestd = v, r5.fun
+
+        self.params = Params._from_vec(best_d, p)
         self._built = None
         return self.reset()
 

@@ -190,6 +190,67 @@ def test_moment_noises_get_s2_well_and_Q_badly():
     assert Q < 0.5 * (np.var(np.diff(y)))   # ...and not absurd
 
 
+# --------------------------------------------------------- the dynamics channel
+def test_alpha_at_endpoints_and_clipping():
+    """g = 0 must be the parent exactly; g = 1 the fitted alpha exactly."""
+    pr = Params(alpha=ALPHA3, Q=1.0, s2=9.0)
+    assert np.allclose(pr.alpha_at(0.0), [1.0, 0.0, 0.0])
+    assert np.allclose(pr.alpha_at(1.0), ALPHA3)
+    for g in (1.2, 1.5, 3.0, -0.5):
+        r = np.abs(np.roots(np.concatenate([[1.0], -pr.alpha_at(g)])))
+        assert np.max(r) <= 1.0 + 1e-6      # never leaves the unit disc
+    # an explosive BASE alpha is left explosive, so fit_'s -inf guard still bites
+    bad = Params(alpha=(3.0, -3.0, 2.0), Q=1.0, s2=1.0)
+    assert np.allclose(bad.alpha_at(1.0), (3.0, -3.0, 2.0))
+
+
+def test_dynamics_channel_off_is_inert():
+    """s_A = 0 collapses the channel: order_A must then change nothing."""
+    rng = np.random.default_rng(41)
+    x, y = ar(300, ALPHA3, 1.0, 9.0, rng)
+    pr = Params(alpha=ALPHA3, Q=1.0, s2=9.0, s_M=0.4, phi_M=0.8)
+    a = OdeFilter(pr, order=5, order_A=3).filter(y)
+    b = OdeFilter(pr, order=5, order_A=9).filter(y)
+    assert np.allclose(a.mean, b.mean, rtol=1e-12, atol=1e-12)
+    assert abs(a.loglik - b.loglik) < 1e-9
+    assert np.allclose(a.dynamics, 1.0)
+
+
+def test_dynamics_reverts_on_affirmative_evidence():
+    """A stretch with no ODE governance is a MEMBER of the family, not a gap.
+
+    The point of the channel: when the process goes flat, g must fall, and it
+    must do so because the flat member fits better -- not because a statistic
+    decayed.  It must also come back.
+    """
+    rng = np.random.default_rng(7)
+    n = 300
+    x1, _ = ar(n, ALPHA3, 1.0, 0.0, rng)
+    x2 = x1[-1] + np.cumsum(rng.standard_normal(n))          # FLAT: a walk
+    x3, _ = ar(n, ALPHA3, 1.0, 0.0, rng)
+    x = np.concatenate([x1, x2, x3 - x3[0] + x2[-1]])
+    y = x + 3.0 * rng.standard_normal(3 * n)
+
+    f = OdeFilter(Params(alpha=ALPHA3, Q=1.0, s2=9.0, phi_A=0.95, s_A=0.5),
+                  order=3, order_A=5)
+    d = f.filter(y).dynamics
+    ode1, flat, ode2 = d[150:n].mean(), d[n + 150:2 * n].mean(), d[2 * n + 150:].mean()
+    assert ode1 > 0.75                       # the ODE is in force
+    assert flat < 0.6                        # and demonstrably is not, here
+    assert flat < ode1 - 0.3
+    assert ode2 > flat + 0.3                 # and it comes back
+
+
+def test_dynamics_rises_when_alpha_is_too_damped():
+    """The other direction: g > 1 when the fitted dynamics decay too fast."""
+    rng = np.random.default_rng(8)
+    x, y = ar(600, ALPHA3, 1.0, 9.0, rng)
+    damped = tuple(Params(alpha=ALPHA3, Q=1.0, s2=9.0).alpha_at(0.85))
+    f = OdeFilter(Params(alpha=damped, Q=1.0, s2=9.0, phi_A=0.95, s_A=0.4),
+                  order=3, order_A=5)
+    assert f.filter(y).dynamics[100:].mean() > 1.05
+
+
 # ------------------------------------------------------------- the diagnostic
 def test_whiteness_flags_wrong_dynamics_and_not_right_ones():
     """The orthogonality result of exploration/0025, as a test."""
@@ -222,7 +283,7 @@ def test_fit_recovers_the_modes():
     pytest.importorskip("scipy")
     rng = np.random.default_rng(21)
     x, y = ar(1200, ALPHA3, 1.0, 9.0, rng)
-    f = OdeFilter.fit(y, p=3, order=5)
+    f = OdeFilter.fit(y, p=3, order=5, dynamics=False)
     r = np.abs(f.params.roots)
     assert abs(np.max(r) - 1.0) < 0.02                  # the offset root
     comp = f.params.roots[np.abs(f.params.roots.imag) > 1e-6]
@@ -237,5 +298,22 @@ def test_fit_finds_no_scale_variation_when_there_is_none():
     pytest.importorskip("scipy")
     rng = np.random.default_rng(22)
     x, y = ar(1000, ALPHA3, 1.0, 9.0, rng)
-    f = OdeFilter.fit(y, p=3, order=5)
+    f = OdeFilter.fit(y, p=3, order=5, dynamics=False)
     assert f.params.s_P < 0.35 and f.params.s_M < 0.35
+
+
+@pytest.mark.slow
+def test_fit_finds_the_dynamics_channel_when_the_dynamics_stop():
+    """The channel has to be findable by the likelihood, not just usable."""
+    pytest.importorskip("scipy")
+    rng = np.random.default_rng(23)
+    n = 400
+    x1, _ = ar(n, ALPHA3, 1.0, 0.0, rng)
+    x2 = x1[-1] + np.cumsum(rng.standard_normal(n))       # the dynamics stop
+    x = np.concatenate([x1, x2])
+    y = x + 3.0 * rng.standard_normal(2 * n)
+
+    f = OdeFilter.fit(y, p=3, order=3, order_A=3, max_iter=120)
+    assert f.params.s_A > 0.05                     # it finds a live channel
+    d = f.filter(y).dynamics
+    assert d[n + 100:].mean() < d[100:n].mean()    # and uses it where it should

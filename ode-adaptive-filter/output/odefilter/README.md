@@ -9,14 +9,16 @@ checks that they agree to 1e-8 on the same data.
 **Status: candidate.** It fits, it reduces to the parent, and it beats the
 parent's forecasts on ODE data (numbers in
 [`../../exploration/0027`](../../exploration/0027_the_candidate_filter.md)).
-It does not yet adapt `alpha` — see *Not in here yet*.
+`alpha` is estimated once **and then tracked** — see *The dynamics channel*.
 
 ## Model
 
 ```
-x_t = alpha . (x_{t-1}, ..., x_{t-p}) + w_t,   w_t ~ N(0, Q  * exp(lamP_t))
-y_t = x_t + v_t,                               v_t ~ N(0, S2 * exp(lamM_t))
-lam^c_t = phi_c lam^c_{t-1} + noise            (c = P process, M measurement)
+x_t = alpha(g_t) . (x_{t-1}, ..., x_{t-p}) + w_t,  w_t ~ N(0, Q  * exp(lamP_t))
+y_t = x_t + v_t,                                   v_t ~ N(0, S2 * exp(lamM_t))
+lam^c_t = phi_c lam^c_{t-1} + noise      (c = P process, M measurement)
+g_t     = 1 + lamA_t,  lamA an AR(1)(phi_A, s_A)
+alpha(g) = (1 - g) * (1, 0, ..., 0) + g * alpha
 ```
 
 A second-order linear ODE with a constant offset has solution space
@@ -25,8 +27,8 @@ A second-order linear ODE with a constant offset has solution space
 offset is a root at z = 1, not an extra state.** It costs one order like any
 other mode and carries uncertainty automatically.
 
-`p + 6` learned numbers, all by maximum marginal likelihood. `order` is a
-quadrature resolution — a compute budget, not a tuning parameter. `p` is a
+`p + 8` learned numbers, all by maximum marginal likelihood. `order` and
+`order_A` are quadrature resolutions — compute budgets, not tuning parameters. `p` is a
 modelling commitment, and because each root of the characteristic polynomial is
 a channel, choosing `p` is the same act as counting channels.
 
@@ -54,11 +56,17 @@ nothing is created or lost.
 
 - **`predict(h)`** is where `alpha` earns its keep. Tracking error is nearly
   blind to the dynamics; forecast error is not.
-- **`whiteness`** is the running lag-1 innovation autocorrelation. A correctly
-  specified filter emits white innovations. It is ~0 for a one-off event of any
-  size — such an event **is** process noise and the filter absorbs it — and
-  departs from 0 when `alpha` itself no longer fits. Those two are orthogonal by
-  construction, measured in `exploration/0025`.
+- **`dynamics`** is the posterior mean of `g`: how much of the fitted ODE is in
+  force right now. **`g = 0` is exactly the parent's local-level model**, so "the
+  dynamics have stopped governing" is a member of the family with its own
+  likelihood — the filter reverts to it on affirmative evidence and comes back
+  when the evidence does, with no forgetting factor anywhere. `g > 1` means more
+  persistent than fitted, which is what a forecast decaying too fast needs.
+- **`whiteness`** is the running lag-1 innovation autocorrelation — a cheap
+  always-on residual check needing no grid. It is ~0 for a one-off event of any
+  size (such an event **is** process noise) and departs from 0 when `alpha` no
+  longer fits. Being cumulative it cannot come back down, so it is a smoke
+  alarm; `dynamics` is the controller.
 - The four mode coordinates and the three amplitude shares are the parent's,
   unchanged.
 
@@ -70,14 +78,17 @@ nothing is created or lost.
 - **Q is badly conditioned from moments.** For a smooth process Q is under 1% of
   the residual variance, so the closed-form start is a scale hint only; `fit_`
   scans it by likelihood rather than believing it. S2 is estimated cleanly.
-- **`alpha` does not adapt.** It is fitted once. `whiteness` tells you when that
-  has stopped being true; the filter does not yet act on it.
+- **The dynamics channel costs `order_A`× per step**, and it is fitted last for
+  that reason. `dynamics=False` pins it off and restores the old cost exactly.
+- **`g` is one scalar, along one direction.** It says how much of the fitted
+  departure from flat is in force; it cannot express a change of *frequency*.
+  That is the obvious next axis.
 - **The offset root is not pinned.** `fit()` lets it float, which is the weaker
   and safer assumption. Whether to pin it is testable by likelihood ratio
   (`exploration/0011` §2) but is not automated here.
 
 ## Not in here yet
 
-Drifting `alpha` (`exploration/0012`, `0020`), the injection direction as a free
-parameter (`0022`, `0024`), and the oscillator phase channel (`0024`). All are
+The injection direction as a free parameter (`0022`, `0024`), the oscillator
+phase channel (`0024`), and a second dynamics axis for frequency. All are
 measured to be real; none is yet measured to be worth its cost.
