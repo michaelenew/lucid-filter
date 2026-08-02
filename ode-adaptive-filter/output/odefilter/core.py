@@ -347,6 +347,348 @@ def difference_matrix(p: int) -> np.ndarray:
     return D
 
 
+# ============================================================================
+#                       the same recursion, for a batch
+# ============================================================================
+# The recursion is sequential in t and cannot be vectorised over time.  It can
+# be vectorised over PARAMETER VECTORS, and here that pays even better than it
+# does in the parent: the parent's per-node state is a scalar, this one's is a
+# p-vector and a p x p covariance, so a step is a handful of einsums whose cost
+# is dominated by numpy dispatch rather than by arithmetic.  Widening every
+# array from (G, ...) to (B, G, ...) leaves the number of dispatches unchanged.
+#
+# Everything fit_ does -- start screens, finite-difference gradients -- is
+# therefore organised as batches rather than as points.
+#
+# The three caps are the batch's equivalents of the -60/+60 clip in _build and
+# the 1e-6 floors in Params._vec: they keep exp() and the logit finite.  They
+# sit far outside any estimate this model can meaningfully produce.
+_LOGIT_CAP = 14.0                       # |logit phi| <= 14 <=> phi in [8e-7, 1-8e-7]
+_LOG_S_CAP = math.log(20.0)             # s <= 20
+_LOG_S_FLOOR = math.log(1e-6)           # s >= 1e-6
+
+
+def _chain_batch(phi: np.ndarray, s: np.ndarray, n: int):
+    """:func:`_chain` for a batch of (phi, s); returns (B, n) lam, (B, n) w, (B, n, n) T."""
+    z, w = _gauss_hermite(n)
+    lam = s[:, None] * z
+    nu = np.maximum(s * s * (1.0 - phi * phi), 1e-12)[:, None, None]
+    ex = (-0.5 * (lam[:, None, :] - phi[:, None, None] * lam[:, :, None]) ** 2 / nu
+          + 0.5 * lam[:, None, :] ** 2 / (s * s)[:, None, None])
+    T = w * np.exp(np.clip(ex, -700.0, 700.0))
+    T /= T.sum(2, keepdims=True)
+    return lam, np.broadcast_to(w, lam.shape), T
+
+
+def _kron_batch(A: np.ndarray, B: np.ndarray) -> np.ndarray:
+    """Row-wise Kronecker product of two stacks of square matrices."""
+    b, i, j = A.shape
+    _, k, l = B.shape
+    return (A[:, :, None, :, None] * B[:, None, :, None, :]).reshape(b, i * k, j * l)
+
+
+def _unpack(V: np.ndarray, p: int):
+    """The nine coordinates of a batch of unconstrained vectors, clipped."""
+    def ph(col):
+        return 1.0 / (1.0 + np.exp(-np.clip(V[:, col], -_LOGIT_CAP - 1.0,
+                                            _LOGIT_CAP + 1.0)))
+
+    def sc(col):
+        return np.exp(np.clip(V[:, col], _LOG_S_FLOOR - 1.0, _LOG_S_CAP + 1.0))
+
+    return (V[:, :p], np.exp(np.clip(V[:, p], -700.0, 700.0)),
+            np.exp(np.clip(V[:, p + 1], -700.0, 700.0)),
+            ph(p + 2), ph(p + 3), sc(p + 4), sc(p + 5), ph(p + 6), sc(p + 7))
+
+
+def _alpha_at_batch(alpha: np.ndarray, gs: np.ndarray) -> np.ndarray:
+    """(B, nA, p) stack of :meth:`Params.alpha_at`, one row per parameter vector.
+
+    The bisection in the scalar version only runs when a node leaves the unit
+    disc, which is rare, so this loops over the (B, nA) pairs rather than
+    vectorising a branch that almost never fires.  It is called once per
+    likelihood evaluation, not once per step.
+    """
+    B, p = alpha.shape
+    nA = gs.shape[1]
+    out = np.empty((B, nA, p))
+    flat = np.zeros(p)
+    flat[0] = 1.0
+    for b in range(B):
+        a = alpha[b]
+        explosive = _radius(a) > 1.0 + 1e-9
+        for j in range(nA):
+            g = float(gs[b, j])
+            cand = (1.0 - g) * flat + g * a
+            if explosive or _radius(cand) <= 1.0 + 1e-9:
+                out[b, j] = cand
+                continue
+            lo, hi = 1.0, g                       # lo is known stable
+            for _ in range(40):
+                mid = 0.5 * (lo + hi)
+                if _radius((1.0 - mid) * flat + mid * a) <= 1.0 + 1e-9:
+                    lo = mid
+                else:
+                    hi = mid
+            out[b, j] = (1.0 - lo) * flat + lo * a
+    return out
+
+
+def _grid_batch(V: np.ndarray, p: int, order: int, order_A: int, with_A: bool):
+    """The batched equivalent of :meth:`OdeFilter._build`."""
+    alpha, Q, S2, phP, phM, sP, sM, phA, sA = _unpack(V, p)
+    B, n = V.shape[0], order
+    lamP, wP, TP = _chain_batch(phP, sP, n)
+    lamM, wM, TM = _chain_batch(phM, sM, n)
+    if with_A:
+        nA = order_A
+        lamA, wA, TA = _chain_batch(phA, sA, nA)
+    else:                                   # exactly the s_A = 0 collapse
+        nA = 1
+        lamA = np.zeros((B, 1))
+        wA = np.ones((B, 1))
+        TA = np.ones((B, 1, 1))
+    nN = n * n
+    LP = np.tile(np.repeat(lamP, n, axis=1), (1, nA))
+    LM = np.tile(lamM, (1, n * nA))
+    LA = np.repeat(lamA, nN, axis=1)
+    T = _kron_batch(TA, _kron_batch(TP, TM))
+    pi0 = (wA[:, :, None] * (wP[:, :, None] * wM[:, None, :]).reshape(B, nN)[:, None, :]
+           ).reshape(B, nA * nN)
+    Fs = np.stack([_companion(a) for row in _alpha_at_batch(alpha, 1.0 + lamA)
+                   for a in row]).reshape(B, nA, p, p)
+    return dict(
+        T=T, pi0=pi0, nA=nA, LA=LA,
+        Qg=Q[:, None] * np.exp(np.clip(LP, -60.0, 60.0)),
+        Rg=S2[:, None] * np.exp(np.clip(LM, -60.0, 60.0)),
+        Fs=Fs, Aidx=np.repeat(np.arange(nA), nN))
+
+
+def _loglik_batch(y: np.ndarray, V: np.ndarray, p: int, order: int,
+                  order_A: int = 3, with_A: bool = True) -> np.ndarray:
+    """Marginal log-likelihood of ``y`` at every unconstrained vector in ``V``.
+
+    ``V`` is (B, p + 8) in the coordinates of :meth:`Params._vec`.  The
+    recursion is the one in :meth:`OdeFilter.update`, GPB1 collapse and all,
+    carried out for all B vectors at once; at B = 1 it agrees with
+    :meth:`OdeFilter.loglik` to floating-point round-off.  No Step objects, no
+    shares, no whiteness -- that is all a fit needs.
+
+    ``with_A=False`` pins the dynamics channel off exactly (nA = 1), which is
+    what the earlier passes of a fit want and is `order_A` times cheaper.
+
+    A row whose parameters drive the recursion out of range gets -inf, the
+    batched equivalent of :class:`_Numerical` reaching ``_run``'s guard.  Rows
+    are independent -- every operation below contracts within its own ``b`` --
+    so one dead row cannot poison the others.
+    """
+    V = np.atleast_2d(V)
+    B = V.shape[0]
+    g = _grid_batch(V, p, order, order_A, with_A)
+    T, Qg, Rg, Fs, Aidx, nA = (g["T"], g["Qg"], g["Rg"], g["Fs"], g["Aidx"], g["nA"])
+    G = Qg.shape[1]
+    nN = G // nA
+
+    pi = g["pi0"].copy()
+    y0 = float(y[0]) if np.isfinite(y[0]) else 0.0
+    m = np.full((B, p), y0)
+    P = (np.eye(p) * (Rg.max(1) + Qg.max(1))[:, None, None] * p)
+    ll = np.zeros(B)
+    dead = np.zeros(B, dtype=bool)
+    e1 = np.zeros(p)
+    e1[0] = 1.0
+
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        for v in y:
+            pi = np.einsum("bi,bij->bj", pi, T)
+            mj = np.einsum("bjac,bc->bja", Fs, m)                 # (B, nA, p)
+            Aj = np.einsum("bjac,bcd,bjed->bjae", Fs, P, Fs)      # (B, nA, p, p)
+            a00 = Aj[:, :, 0, 0]
+            a0 = Aj[:, :, :, 0]
+
+            if not np.isfinite(v):                                # propagate only
+                piA = pi.reshape(B, nA, nN).sum(2)
+                m_new = np.einsum("bj,bja->ba", piA, mj)
+                Pbar = np.einsum("bj,bjxz->bxz", piA, Aj)
+                Pbar[:, 0, 0] += (pi * Qg).sum(1)
+                dm = mj - m_new[:, None, :]
+                Pbar += np.einsum("bj,bjx,bjz->bxz", piA, dm, dm)
+                m, P = m_new, Pbar
+            else:
+                S = a00[:, Aidx] + Qg + Rg                        # (B, G)
+                bad = ~np.isfinite(S).all(1) | (S <= 0.0).any(1)
+                dead |= bad
+                S = np.where(np.isfinite(S) & (S > 0.0), S, 1.0)
+
+                eA = v - mj[:, :, 0]                              # (B, nA)
+                e_all = eA[:, Aidx]
+                lg = -0.5 * (np.log(S) + e_all * e_all / S)
+                mx = lg.max(1)
+                w = pi * np.exp(lg - mx[:, None])
+                Z = w.sum(1)
+                ll += np.log(Z) + mx - 0.5 * _LOG2PI
+                pi = w / Z[:, None]
+
+                row = a0[:, Aidx, :] + Qg[:, :, None] * e1        # (B, G, p)
+                K = row / S[:, :, None]
+                mm = mj[:, Aidx, :] + K * e_all[:, :, None]
+                m_new = np.einsum("bg,bga->ba", pi, mm)
+                piA = pi.reshape(B, nA, nN).sum(2)
+                Pbar = np.einsum("bj,bjxz->bxz", piA, Aj)
+                Pbar[:, 0, 0] += (pi * Qg).sum(1)
+                Pbar -= np.einsum("bg,bgx,bgz->bxz", pi, K, row)
+                dm = mm - m_new[:, None, :]
+                Pbar += np.einsum("bg,bgx,bgz->bxz", pi, dm, dm)
+                m, P = m_new, Pbar
+
+            if dead.any():          # keep a dead row's garbage from costing time
+                m = np.where(dead[:, None], 0.0, m)
+                P = np.where(dead[:, None, None], np.eye(p), P)
+                pi = np.where(dead[:, None], g["pi0"], pi)
+
+    ll = np.where(dead | ~np.isfinite(ll), -np.inf, ll)
+    return ll
+
+
+# ============================================================================
+#                  the s = 0 face, with S2 concentrated out
+# ============================================================================
+# Where s_P = s_M = s_A = 0 every quadrature node carries lam = 0, the grid
+# collapses to one state, and the model is an ordinary linear-Gaussian state
+# space: a bare p x p Kalman filter with no mixture at all.  Two exact facts
+# then reduce that face further:
+#
+#   * the recursion is homogeneous of degree 1 in S2, so with P_t = S2 * Ptil_t
+#     and Q = S2 * q the gains -- and hence the innovations -- depend on the
+#     ratio q alone;
+#   * S2 is therefore concentrated out in closed form, leaving a profile
+#     likelihood in (alpha, log q) with one fewer coordinate and no grid.
+#
+# This is where the old stages 0, 1b and 2 lived, and they paid the full
+# order^2 grid for a face on which the grid is a single point repeated.
+
+def _face_profile(y: np.ndarray, alpha: np.ndarray, q: float):
+    """(S2, profile loglik, standardised innovations) at ratio q = Q/S2."""
+    p = len(alpha)
+    F = _companion(alpha)
+    Pt = np.eye(p) * (1.0 + q) * p              # Ptil_0, matching update()
+    y0 = float(y[0]) if math.isfinite(float(y[0])) else 0.0
+    m = np.full(p, y0)                          # ditto
+    acc = 0.0                                   # sum e^2 / Stil
+    lsum = 0.0                                  # sum log Stil
+    cnt = 0
+    u = np.full(y.size, np.nan)
+    for i in range(y.size):
+        mj = F @ m
+        Aj = F @ Pt @ F.T
+        Aj[0, 0] += q
+        S = Aj[0, 0] + 1.0
+        if not (math.isfinite(S) and S > 0.0):
+            return math.nan, -math.inf, u
+        v = y[i]
+        if not math.isfinite(v):                # missing: propagate, no correction
+            m, Pt = mj, Aj
+            continue
+        e = v - mj[0]
+        acc += e * e / S
+        lsum += math.log(S)
+        u[i] = e / math.sqrt(S)
+        K = Aj[:, 0] / S
+        m = mj + K * e
+        Pt = Aj - np.outer(K, Aj[0, :])
+        cnt += 1
+    if cnt < 2 or not acc > 0.0:
+        return math.nan, -math.inf, u
+    s2 = acc / cnt
+    ll = -0.5 * (cnt * (_LOG2PI + math.log(s2) + 1.0) + lsum)
+    u /= math.sqrt(s2)
+    # The diffuse start puts p * (1 + q) on the diagonal, so the first few
+    # innovations are dominated by not knowing where the state is rather than by
+    # the noise.  They are legitimate likelihood terms but useless as a scale
+    # statistic, so _moment_scale does not see them.
+    u[:p] = np.nan
+    return s2, ll, u
+
+
+_Q_SCAN = np.logspace(-7.0, 3.0, 41)            # q is a ratio, so it needs no scaling
+
+
+def _face_optimum(y: np.ndarray, a0: np.ndarray, max_iter: int = 400):
+    """Maximise the concentrated profile over (alpha, log q).  (alpha, Q, S2, u)."""
+    from scipy.optimize import minimize
+
+    lls = [_face_profile(y, a0, q)[1] for q in _Q_SCAN]
+    lq = math.log(float(_Q_SCAN[int(np.argmax(lls))]))
+
+    def nll(v):
+        s2, ll, _ = _face_profile(y, v[:-1], math.exp(min(v[-1], 700.0)))
+        return math.inf if not math.isfinite(ll) else -ll
+
+    r = minimize(nll, np.concatenate([a0, [lq]]), method="Nelder-Mead",
+                 options=dict(maxiter=int(max_iter), xatol=1e-4, fatol=1e-6))
+    v = r.x if math.isfinite(r.fun) else np.concatenate([a0, [lq]])
+    alpha, q = v[:-1], math.exp(min(v[-1], 700.0))
+    s2, ll, u = _face_profile(y, alpha, q)
+    if not math.isfinite(ll):                   # the scan point is known good
+        alpha, q = a0, math.exp(lq)
+        s2, ll, u = _face_profile(y, alpha, q)
+    return np.asarray(alpha, dtype=float), q * s2, s2, u
+
+
+_VAR_LOG_CHI2 = math.pi ** 2 / 2.0              # Var(log z^2), z ~ N(0,1), exact
+
+
+def _moment_scale(u: np.ndarray):
+    """(s, phi) for the log-scale, read off the face's residuals in one pass.
+
+    If a log-scale channel is present it survives into the homoscedastic fit's
+    standardised innovations, where ``log u_t^2 = log z_t^2 + lam_t`` with the
+    two terms independent.  Var(log z^2) is exactly pi^2/2, so the lag-0 and
+    lag-1 autocovariances of log u^2 give the log-scale's variance and its
+    persistence directly.  It cannot say WHICH channel carries them -- both
+    inflate an innovation -- so it supplies a magnitude and a persistence, and
+    the start screen decides the split.
+    """
+    g = np.log(np.maximum(u[np.isfinite(u)] ** 2, 1e-12))
+    if g.size < 3:
+        return 0.0, 0.5
+    g = g - g.mean()
+    c0 = float(g @ g) / g.size
+    c1 = float(g[1:] @ g[:-1]) / g.size
+    var = c0 - _VAR_LOG_CHI2
+    if var <= 1e-3:
+        return 0.0, 0.5
+    return math.sqrt(var), float(min(max(c1 / var, 1e-3), 0.98))
+
+
+# ------------------------------------------------------------- the start screen
+_PHI_GRID = (0.02, 0.25, 0.5, 0.75, 0.95)
+_S_SPLITS = ((0.03, 0.03), (0.5, 0.5), (0.03, 0.5), (0.5, 0.03))
+_QUIET = 0.1                        # divides "no scale structure" starts from the rest
+
+
+def _bounds(p: int, g0: float):
+    """Box for the search, in the unconstrained coordinates.
+
+    A numerical guard, not a prior.  Q and S2 cannot exceed the data's own
+    residual scale by more than a rounding margin; the six channel coordinates
+    are the caps of :func:`_loglik_batch`; and alpha is boxed only widely
+    enough to keep a diverging search from overflowing -- the unit-disc
+    question is left to the likelihood, which answers it with -inf.
+
+    The alpha box is set from the largest coefficient a stable alpha can carry:
+    the extreme case is a p-fold root at 1, whose coefficients are binomial, so
+    four times the central binomial coefficient is generous by construction.
+    """
+    lg = math.log(max(g0, 1e-300))
+    alpha_span = max(8.0, 4.0 * math.comb(p, p // 2))
+    return ([(-alpha_span, alpha_span)] * p
+            + [(lg - 30.0, lg + 5.0), (lg - 30.0, lg + 5.0),
+               (-_LOGIT_CAP, _LOGIT_CAP), (-_LOGIT_CAP, _LOGIT_CAP),
+               (_LOG_S_FLOOR, _LOG_S_CAP), (_LOG_S_FLOOR, _LOG_S_CAP),
+               (-_LOGIT_CAP, _LOGIT_CAP), (_LOG_S_FLOOR, _LOG_S_CAP)])
+
+
 # ----------------------------------------------------------------- the filter
 class OdeFilter:
     """Adaptive filter for a noisily observed linear recurrence.
@@ -657,133 +999,207 @@ class OdeFilter:
         """Fit in place.  Returns self.
 
         Staged, because a nine-dimensional search from one start is not
-        reliable:
+        reliable.  Every stage is organised around the one measured fact about
+        this recursion: it is dispatch-bound, so B parameter vectors cost far
+        less than B evaluations (:func:`_loglik_batch`).  Nothing here is a
+        tuning choice -- the estimate is the maximum likelihood estimate however
+        it is reached, and ``max_iter`` is a compute budget.
 
-        stage 0   alpha by instrumental variables, using lags p+1..3p as
-                  instruments.  Regressing on observed lags is errors-in-
-                  variables and does not merely attenuate the dynamics -- it
-                  deletes the oscillation outright (exploration/0002).  Lagging
-                  past the order annihilates the measurement noise exactly, for
-                  every (Q, S2), without needing either.
-        stage 1   Q and S2 in closed form from the residual autocovariances,
-                  the analogue of the parent's variogram identity.
-        stage 2   alpha, Q, S2 by maximum likelihood with the scales off.
-        stage 3   the two scale channels, then everything together.
-        stage 4   the dynamics channel (phi_A, s_A), then a final polish.
-                  This one is fitted last because it is the only channel whose
-                  grid multiplies the cost of every likelihood evaluation.
+        pass 0   alpha by instrumental variables, using lags p+1..3p as
+                 instruments.  Regressing on observed lags is errors-in-
+                 variables and does not merely attenuate the dynamics -- it
+                 deletes the oscillation outright (exploration/0002).  Lagging
+                 past the order annihilates the measurement noise exactly, for
+                 every (Q, S2), without needing either.  A start, not an
+                 estimate;
+        pass 1   the optimum on the s_P = s_M = s_A = 0 face.  That face is an
+                 ordinary linear-Gaussian state space -- a bare p x p Kalman
+                 filter, no mixture at all -- on which S2 concentrates out in
+                 closed form, so only (alpha, log q) is searched.  This replaces
+                 the old stages 0, 1b and 2, which paid the full order^2 grid
+                 for a face on which the grid is one point repeated;
+        pass 2   the magnitude and persistence of whatever log-scale structure
+                 is left in that fit's residuals, read off their log-squares in
+                 one pass (:func:`_moment_scale`);
+        pass 3   ONE batched evaluation of ~100 starts -- a 5x5 grid over the
+                 two persistences crossed with four splits of the scale between
+                 the channels, plus what pass 2 proposed;
+        pass 4   maximum likelihood by L-BFGS-B, its gradient taken by central
+                 differences batched into a single evaluation.  Run from the
+                 best quiet start and the best volatile one, better likelihood
+                 kept.  Done in the six noise coordinates first and only then
+                 jointly with alpha: pass 1 has already put alpha at its exact
+                 optimum on the face, and leaving it out makes the subspace both
+                 better conditioned and cheaper per gradient.  The dynamics
+                 channel is pinned off throughout, exactly, so every evaluation
+                 here is order_A times cheaper than one that carries it;
+        pass 5   the dynamics channel: a batched screen over (phi_A, s_A), a
+                 polish in those two coordinates alone, and a joint polish only
+                 if the channel has already earned its place.  It is fitted last
+                 because it is the only channel whose grid multiplies the cost
+                 of every likelihood evaluation, and it is accepted only if it
+                 beats the pass-4 optimum on the same likelihood.
 
-        All of it is scaffolding: the estimate is the maximum likelihood
-        estimate however it is reached.  ``max_iter`` is a compute budget.
+        The dynamics channel is started persistent, because a change in the
+        dynamics is a regime by construction (0025): it has no first-moment
+        signature at all, so the impulsive end of this channel is a different
+        object from the impulsive end of the noise channels.
         """
-        from scipy.optimize import minimize
-
         y = np.asarray(y, dtype=float)
-        good = y[np.isfinite(y)]
+        finite = np.isfinite(y)
+        good = y[finite]
         if good.size < 8 * p:
             raise ValueError(f"need at least {8 * p} finite observations")
-
-        a0 = _iv_alpha(good, p)
-        Q0, s20 = _moment_noises(good, a0)
-
-        def nll(v, n):
-            try:
-                self.params = Params._from_vec(v, p)
-            except (ValueError, OverflowError):
-                return np.inf
-            r = self._run(y, want=False)
-            return np.inf if not np.isfinite(r) else -r / n
-
-        n = max(y.size, 1)
+        n = max(int(finite.sum()), 1)
         off = math.log(1e-6)
-        base = np.concatenate([a0, [math.log(Q0), math.log(s20),
-                                    _logit(0.5), _logit(0.5), off, off,
-                                    _logit(0.9), off]])
 
-        # stage 1b -- Q is badly conditioned from moments (see _moment_noises),
-        # so scan it by likelihood at the moment S2 rather than believing it
-        best_q, best_v = Q0, -np.inf
-        for Qc in Q0 * np.logspace(-2.0, 1.0, 13):
-            v = base.copy()
-            v[p] = math.log(Qc)
-            val = -nll(v, n)
-            if val > best_v:
-                best_q, best_v = Qc, val
-        base[p] = math.log(best_q)
+        # pass 0 -- alpha by instrumental variables, and the residual scale that
+        # sets the search box
+        a0 = _iv_alpha(good, p)
+        idx = np.arange(p, good.size)
+        r0 = good[idx] - np.column_stack([good[idx - i]
+                                          for i in range(1, p + 1)]) @ a0
+        g0 = float(np.mean(r0 * r0))
+        if not g0 > 0:
+            raise ValueError("series has no residual variation; nothing to fit")
+        bounds = _bounds(p, g0)
+        lo, hi = np.array(bounds).T
 
-        # stage 2 -- alpha, Q, S2 with the scales pinned off
-        idx = list(range(p + 2))
-        full = base.copy()
-
-        def sub(vs):
-            v = full.copy()
-            v[idx] = vs
-            return nll(v, n)
-
-        r2 = minimize(sub, full[idx], method="Nelder-Mead",
-                      options=dict(maxiter=int(max_iter), xatol=1e-3, fatol=1e-5))
-        full[idx] = r2.x
+        # pass 1 -- the s = 0 face, with S2 concentrated out
+        alpha, Q0, s20, resid = _face_optimum(y, a0, max_iter)
+        base = np.concatenate([alpha, [math.log(Q0), math.log(s20),
+                                       _logit(0.5), _logit(0.5), off, off,
+                                       _logit(0.9), off]])
+        base = np.clip(base, lo, hi)
 
         if not scales:
-            self.params = Params._from_vec(full, p)
+            self.params = Params._from_vec(base, p)
             self._built = None
             return self.reset()
 
-        # stage 3 -- the scale channels, then a joint polish
-        best, bestf = None, np.inf
-        for s0 in (0.05, 0.5):
-            v = full.copy()
-            v[p + 4] = v[p + 5] = math.log(s0)
-            sidx = [p + 2, p + 3, p + 4, p + 5]
+        # pass 2 -- what the face left behind
+        s_hat, phi_hat = _moment_scale(resid)
 
-            def sub2(vs, v=v, sidx=sidx):
-                w = v.copy()
-                w[sidx] = vs
-                return nll(w, n)
+        # pass 3 -- one batched screen over the starts
+        starts = []
+        for pp in _PHI_GRID:
+            for pm in _PHI_GRID:
+                for sp, sm in _S_SPLITS:
+                    v = base.copy()
+                    v[p + 2], v[p + 3] = _logit(pp), _logit(pm)
+                    v[p + 4], v[p + 5] = math.log(sp), math.log(sm)
+                    starts.append(v)
+        if s_hat > 0.0:
+            lz, lp = math.log(s_hat), _logit(phi_hat)
+            for sp, sm in ((lz, lz), (lz, off), (off, lz)):
+                v = base.copy()
+                v[p + 2], v[p + 3] = lp, lp
+                v[p + 4], v[p + 5] = sp, sm
+                starts.append(v)
+        V = np.clip(np.array(starts), lo, hi)
+        val = _loglik_batch(y, V, p, self.order, self.order_A, with_A=False)
+        loud = V[:, p + 4:p + 6].max(1) > math.log(_QUIET)
+        chosen = [V[np.argmax(np.where(m, val, -np.inf))]
+                  for m in (~loud, loud) if m.any()]
 
-            r3 = minimize(sub2, v[sidx], method="Nelder-Mead",
-                          options=dict(maxiter=int(max_iter), xatol=2e-3,
-                                       fatol=1e-5))
-            v[sidx] = r3.x
-            if r3.fun < bestf:
-                best, bestf = v, r3.fun
-
-        r4 = minimize(lambda v: nll(v, n), best, method="Nelder-Mead",
-                      options=dict(maxiter=int(max_iter * 2), xatol=2e-3,
-                                   fatol=1e-6))
-        full = r4.x if r4.fun < bestf else best
-        bestf = min(r4.fun, bestf)
+        # pass 4 -- maximum likelihood, in the cheap subspace first.
+        # The six noise coordinates alone are both better conditioned than the
+        # full set (alpha's curvature is orders of magnitude away from log Q's,
+        # and pass 1 already put alpha at its exact optimum on the face) and
+        # cheaper per gradient, because the stencil is 2*6+1 rows rather than
+        # 2*(p+6)+1.  The joint step afterwards then starts from a point alpha
+        # barely has to move from.
+        noise = list(range(p, p + 6))            # Q, S2, phi_P, phi_M, s_P, s_M
+        full, _ = self._polish(y, chosen, noise, bounds, n, p,
+                              max_iter, with_A=False)
+        full, _ = self._polish(y, [full], list(range(p + 6)), bounds, n, p,
+                               max_iter, with_A=False)
 
         if not dynamics:
             self.params = Params._from_vec(full, p)
             self._built = None
             return self.reset()
 
-        # stage 4 -- the dynamics channel.  Started persistent, because a
-        # change in the dynamics is a regime by construction (0025): it has no
-        # first-moment signature at all, so the impulsive end of this channel
-        # is a different object from the impulsive end of the noise channels.
-        aidx = [p + 6, p + 7]
-        best_d, bestd = full, bestf
-        for sa in (0.15, 0.6):
-            v = full.copy()
-            v[p + 6], v[p + 7] = _logit(0.9), math.log(sa)
+        # pass 5 -- the dynamics channel.  Same shape as pass 4 and for the same
+        # reason, except that here the cheap subspace is also the only one the
+        # old fit ever moved: (phi_A, s_A) is 5 stencil rows against 2p + 17.
+        starts = []
+        for pa in (0.5, 0.9, 0.98):
+            for sa in (0.05, 0.15, 0.6):
+                v = full.copy()
+                v[p + 6], v[p + 7] = _logit(pa), math.log(sa)
+                starts.append(v)
+        W = np.clip(np.array(starts), lo, hi)
+        valA = _loglik_batch(y, W, p, self.order, self.order_A, with_A=True)
 
-            def sub3(vs, v=v):
-                w = v.copy()
-                w[aidx] = vs
-                return nll(w, n)
+        # the reference: the pass-4 optimum scored on the SAME likelihood, the
+        # one that carries the channel's grid.  The channel is accepted only if
+        # it beats this.
+        off_v = full.copy()
+        off_v[p + 7] = _LOG_S_FLOOR
+        ref = float(_loglik_batch(y, off_v[None, :], p, self.order,
+                                  self.order_A, with_A=True)[0]) / n
 
-            r5 = minimize(sub3, v[aidx], method="Nelder-Mead",
-                          options=dict(maxiter=int(max_iter), xatol=2e-3,
-                                       fatol=1e-5))
-            if r5.fun < bestd:
-                v[aidx] = r5.x
-                best_d, bestd = v, r5.fun
+        best_d, bestd = self._polish(y, [W[int(np.argmax(valA))]],
+                                     [p + 6, p + 7], bounds, n, p,
+                                     max_iter, with_A=True)
+        if -bestd > ref:
+            best_d, bestd = self._polish(y, [best_d], list(range(p + 8)),
+                                         bounds, n, p, max_iter, with_A=True)
+            if -bestd > ref:
+                full = best_d
 
-        self.params = Params._from_vec(best_d, p)
+        self.params = Params._from_vec(full, p)
         self._built = None
         return self.reset()
+
+    def _polish(self, y, starts, act, bounds, n, p, max_iter, with_A):
+        """L-BFGS-B over the coordinates in ``act``, gradient batched.
+
+        The gradient is a central difference over ``act`` only, and the whole
+        stencil -- centre plus 2 * len(act) offsets -- goes to
+        :func:`_loglik_batch` as one call.  A non-finite centre means the
+        parameters left the range the recursion can represent; the step is then
+        reported as a large finite value with no gradient, which stops L-BFGS-B
+        rather than sending it chasing a NaN, and the start it came from is
+        kept.  Returns (best vector, best objective).
+        """
+        from scipy.optimize import minimize
+
+        d = len(act)
+        h = 1e-4
+        stencil = np.zeros((2 * d + 1, len(bounds)))
+        eye = np.eye(len(bounds))[act]
+        stencil[1::2] = h * eye
+        stencil[2::2] = -h * eye
+        sub_bounds = [bounds[i] for i in act]
+
+        def fg(vs, v0):
+            v = v0.copy()
+            v[act] = vs
+            ll = _loglik_batch(y, v + stencil, p, self.order, self.order_A,
+                               with_A=with_A)
+            if not np.isfinite(ll[0]):
+                return 1e10, np.zeros(d)
+            up, dn = ll[1::2], ll[2::2]
+            ok = np.isfinite(up) & np.isfinite(dn)
+            gr = np.zeros(d)                    # a coordinate whose step leaves
+            np.subtract(up, dn, out=gr, where=ok)   # the range gets no gradient
+            return -ll[0] / n, -gr / (2.0 * h * n)
+
+        best_vec, best_f = None, np.inf
+        for start in starts:
+            f0 = fg(start[act], start)[0]
+            r = minimize(fg, start[act], args=(start,), jac=True,
+                         method="L-BFGS-B", bounds=sub_bounds,
+                         options=dict(maxiter=int(max_iter), ftol=1e-12,
+                                      gtol=1e-7))
+            cand, fval = (r.x, r.fun) if r.fun < f0 else (start[act], f0)
+            if fval < best_f:
+                best_vec = start.copy()
+                best_vec[act] = cand
+                best_f = fval
+        return best_vec, best_f
 
 
 # --------------------------------------------------------- closed-form starts
