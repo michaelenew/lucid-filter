@@ -843,6 +843,52 @@ class OdeFilter:
             P[0, 0] += float(pi @ g["Qg"])
         return float(m[0]), float(P[0, 0])
 
+    def predict_mixture(self, horizon: int = 1, observation: bool = True):
+        """The predictive distribution, as a mixture rather than as two numbers.
+
+        Returns ``(w, mean, var)``, each of length ``order**2 * nA``: the
+        forecast is ``sum_g w_g N(mean_g, var_g)``.  With ``observation=True``
+        the measurement noise of each node is included, so this is the
+        distribution of ``y_{t+h}``; otherwise it is the state's.
+
+        :meth:`predict` returns this mixture's mean and its total variance, and
+        **that reduction is lossy in a way that matters.**  Where the scale
+        channels are alive the mixture is strongly right-skewed in variance, so
+        its mean variance is far larger than its typical one, and any decision
+        rule that is a function of ``1/S`` -- which every position-sizing rule
+        is -- wants ``E[1/S]`` rather than ``1/E[S]``.  Jensen makes those
+        differ by ``exp(s_P^2)`` in the homoscedastic-state limit, which is a
+        factor of 4 at the ``s_P = 1.24`` a daily crypto price fits.  So this
+        returns the mixture and lets the caller take the functional it actually
+        needs, instead of taking one for it.
+        """
+        if self._pi is None:
+            raise ValueError("nothing observed yet")
+        h = int(horizon)
+        if h < 1:
+            raise ValueError("horizon must be at least 1")
+        g = self._build()
+        Fs, starts = g["Fs"], g["starts"]
+        pi, m, P = self._pi, self._m.copy(), self._P.copy()
+        for _ in range(h - 1):                 # collapse all but the last step
+            pi = pi @ g["T"]
+            piA = np.add.reduceat(pi, starts)
+            mj = Fs @ m
+            Aj = Fs @ P @ Fs.transpose(0, 2, 1)
+            m = piA @ mj
+            P = np.einsum("j,jab->ab", piA, Aj)
+            dm = mj - m
+            P += np.einsum("j,ja,jb->ab", piA, dm, dm)
+            P[0, 0] += float(pi @ g["Qg"])
+        pi = pi @ g["T"]
+        Aidx = g["Aidx"]
+        mj = Fs @ m
+        Aj = Fs @ P @ Fs.transpose(0, 2, 1)
+        var = Aj[:, 0, 0][Aidx] + g["Qg"]
+        if observation:
+            var = var + g["Rg"]
+        return pi.copy(), mj[Aidx, 0].copy(), var
+
     def derivatives(self) -> tuple[np.ndarray, np.ndarray]:
         """The current posterior in (x, Dx, D^2 x, ...) coordinates.
 

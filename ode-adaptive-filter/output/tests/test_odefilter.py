@@ -317,3 +317,42 @@ def test_fit_finds_the_dynamics_channel_when_the_dynamics_stop():
     assert f.params.s_A > 0.05                     # it finds a live channel
     d = f.filter(y).dynamics
     assert d[n + 100:].mean() < d[100:n].mean()    # and uses it where it should
+
+
+def test_predict_mixture_reproduces_predict():
+    """The two-number summary is exactly this mixture's mean and total variance.
+
+    Which is the point: `predict` is not wrong, it is lossy, and the loss only
+    shows up in functionals that are not linear in S.
+    """
+    rng = np.random.default_rng(11)
+    x, y = ar(200, ALPHA3, 1.0, 9.0, rng)
+    f = OdeFilter(Params(alpha=ALPHA3, Q=1.0, s2=9.0, phi_P=0.7, s_P=0.8,
+                         phi_M=0.5, s_M=0.4, phi_A=0.9, s_A=0.2), order=5)
+    for v in y:
+        f.update(v)
+    for h in (1, 3, 10):
+        w, mu, var = f.predict_mixture(h, observation=False)
+        m1, S1 = f.predict(h)
+        assert abs(w.sum() - 1.0) < 1e-12
+        mm = float(w @ mu)
+        vv = float(w @ var + w @ (mu - mm) ** 2)
+        assert abs(mm - m1) < 1e-10 * max(abs(m1), 1.0)
+        assert abs(vv - S1) < 1e-10 * S1
+        # including the measurement noise adds exactly its mixture mean
+        _, _, varo = f.predict_mixture(h, observation=True)
+        assert np.all(varo > var)
+
+
+def test_predict_mixture_is_skewed_when_the_scale_channel_is_alive():
+    """E[1/S] and 1/E[S] differ by the amount Jensen says they must."""
+    rng = np.random.default_rng(12)
+    x, y = ar(300, (1.0,), 1.0, 1e-8, rng)
+    s_P = 1.2
+    f = OdeFilter(Params(alpha=(1.0,), Q=1.0, s2=1e-8, phi_P=0.8, s_P=s_P),
+                  order=7)
+    for v in y:
+        f.update(v)
+    w, _, var = f.predict_mixture(1, observation=True)
+    ratio = float(w @ var) * float(w @ (1.0 / var))
+    assert ratio > 2.0, ratio          # far from the 1.0 a two-number summary assumes
