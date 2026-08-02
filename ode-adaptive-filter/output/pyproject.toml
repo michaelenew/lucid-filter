@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "odefilter"
+version = "0.1.0"
+description = "Adaptive filter for a process locally described by a linear ODE"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.22"]
+
+[project.optional-dependencies]
+fit = ["scipy>=1.8"]
+
+[tool.setuptools.packages.find]
+include = ["odefilter*"]
