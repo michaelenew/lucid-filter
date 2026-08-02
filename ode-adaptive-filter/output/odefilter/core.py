@@ -851,16 +851,26 @@ class OdeFilter:
         the measurement noise of each node is included, so this is the
         distribution of ``y_{t+h}``; otherwise it is the state's.
 
-        :meth:`predict` returns this mixture's mean and its total variance, and
-        **that reduction is lossy in a way that matters.**  Where the scale
-        channels are alive the mixture is strongly right-skewed in variance, so
-        its mean variance is far larger than its typical one, and any decision
-        rule that is a function of ``1/S`` -- which every position-sizing rule
-        is -- wants ``E[1/S]`` rather than ``1/E[S]``.  Jensen makes those
-        differ by ``exp(s_P^2)`` in the homoscedastic-state limit, which is a
-        factor of 4 at the ``s_P = 1.24`` a daily crypto price fits.  So this
-        returns the mixture and lets the caller take the functional it actually
-        needs, instead of taking one for it.
+        :meth:`predict` returns this mixture's mean and its total variance --
+        exactly, to 1e-10, which the test suite checks -- and **that reduction
+        is lossy in a way that matters.**  Two numbers are a Gaussian, and where
+        the scale channels are alive this mixture is not one: it is
+        right-skewed in ``S``, so its mean variance is far larger than its
+        typical one (a factor ``exp(s_P^2)`` between ``E[S]`` and
+        ``1/E[1/S]`` in the limit where the state is known, measured at 2-4.3
+        on daily crypto), and its tails are fat where a Gaussian's are not.
+
+        ``E[S]`` remains the right quantity for anything second-moment: a
+        mean-square risk target, or a Kelly fraction, which to leading order is
+        ``mu/E[S]`` and **not** ``mu*E[1/S]`` -- see
+        ``crypto-predictivity/0005``, where the tempting Jensen argument for the
+        latter is checked against the exact Kelly root and refused.  What the
+        reduction genuinely costs is the shape: on daily crypto the mixture
+        scores 0.07-0.16 nats/point above its own Gaussian summary, which is
+        more than any effect that workstream measured on the forecast mean.
+
+        So this returns the mixture, and the caller takes the functional its
+        decision needs -- a quantile, a tail probability, the density itself.
         """
         if self._pi is None:
             raise ValueError("nothing observed yet")
