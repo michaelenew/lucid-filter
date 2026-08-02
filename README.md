@@ -11,7 +11,7 @@ labelled as such.
 | [`adaptive-random-walk-filter/`](adaptive-random-walk-filter/SUMMARY.md) | delivered: a tuning-free filter for an unbiased random walk observed with noise |
 | [`filter-optimality-proof/`](filter-optimality-proof/SUMMARY.md) | one layer proved, one measured, one open — where "optimal" does and does not hold |
 | [`ode-adaptive-filter/`](ode-adaptive-filter/SUMMARY.md) | in progress: extending to processes locally described by a second-order linear ODE |
-| [`crypto-predictivity/`](crypto-predictivity/SUMMARY.md) | the filters pointed at a real series: what daily crypto excites, what is tradeable, and what `predict()` was throwing away |
+| [`crypto-predictivity/`](crypto-predictivity/SUMMARY.md) | the filters pointed at real series: no dynamics in a price at any frequency on any clock, half the volatility channel is the clock, and an oscillator in realised volatility |
 
 ## Open directions
 
