@@ -3,3 +3,5 @@ __pycache__/
 .venv/
 crypto-predictivity/data/minutes_cache.npz
 crypto-predictivity/exploration/figures/*_traces.npz
+
+crypto-predictivity/exploration/figures/*_quick.json
