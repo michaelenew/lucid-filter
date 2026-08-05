@@ -14,12 +14,19 @@ Four things have to be named before "optimal" means anything: a class of
 processes, a class of procedures, a loss, and an optimality notion. Three are
 forced. Procedures: all causal measurable estimators. Notion: minimax, since the
 premise is that no prior over the class is available. Class: forced by a
-degeneracy argument (below). The loss is not forced — the layer-1 argument is a
-squared-error argument and the layer-2 argument is a log-loss argument, and they
-are not yet one theorem. **Measured, that seam is smaller than it looks: where
-`fit()` lands is $+0.23\%\pm0.21$ from the MSE-optimal parameters, $t=1.1$**
-(`exploration/0012`). Real in principle, below a quarter of a percent in
-practice.
+degeneracy argument (below). The loss: **the seam is now removed — both layers
+read under code length.** Layer 1 transfers to log-loss verbatim
+(**Theorem A′**, [`output/03`](output/03-logloss-shape-minimaxity.md),
+verified in `exploration/0035`): the Kalman code's cross-entropy depends on
+the shape only through the same quadratic form as the MSE risk, so the same
+three lines give the same saddle under code length, and the loss the theorems
+use is the loss `fit()` optimises. The old measurements stand as the seam's
+epitaph: the two criteria agreed on parameter choice to $+0.23\%\pm0.21$
+(`exploration/0012`), and committing to MSE instead was never viable
+(`0027`: PEM leaves variance-only directions unidentified). What `0017`/
+`0023` showed about class geometry is unchanged but now single-loss: the
+open wounds are marginalisation and class size, not a loss mismatch
+(`exploration/0036`).
 
 ## The class
 
@@ -74,7 +81,12 @@ only for lognormal mixing); and a heavy tail always lands on the
 $\rho_2>\rho_1^2$ side, relocating *within* the class but *off* the AR(1)
 submanifold the filter models.
 
-## Layer 1 — shape. **Proved.**
+## Layer 1 — shape. **Proved, under both losses.**
+
+(Squared error below, from `output/01`; code length in
+[`output/03`](output/03-logloss-shape-minimaxity.md) by the same three lines
+— both equalizers exist because both losses reach the shape only through
+$\mathbb E_p[e_t^2]$.)
 
 [`output/01-shape-minimaxity.md`](output/01-shape-minimaxity.md). Given the
 variance path, the Kalman filter is *exactly* minimax over all mean-zero noise
@@ -221,7 +233,7 @@ layer 1 would need redoing under $\mathbb E\lvert\cdot\rvert^r$, $r<\alpha$.
 | gap | status |
 |---|---|
 | Leak 1 — shape adversary | **closed as a separate leak.** Theorem B: an exact relocation along a $\gamma_1$ level set, and `fit()` finds it to $+0.07\%$ |
-| Leak 2 — two losses | **the live one.** Agree on parameter choice ($+0.23\%\pm0.21$); **disagree outright on class geometry** — max-entropy is least favourable under log-loss, not under MSE |
+| Leak 2 — two losses | **closed as a loss seam** (Theorem A′, `output/03`): both layers now read under code length, verified `0035`. What its probes found about class geometry (`0017`/`0023`) survives single-loss, folded into the marginalisation row |
 | Leak 3 — parameters estimated | quasi-MLE under misspecification; measured sign favourable, no theory |
 | Leak 4 — GPB1 collapse | **directly measured against exact PF** (`exploration/0034`): $0.006\%$ at $s{=}0.2$; $1.35\%$ at $s{=}0.55$ persistent; **$19.9\%$ at $s{=}1.2$ persistent**. No quadrature order closes it |
 | marginalisation ($\lambda\to x$) | untouched; blocks Theorem C from applying to `fit()` |
@@ -353,9 +365,11 @@ deliverable; default order 5 is honest when tracking is.
 ## Layout
 
 - `output/` — results that stand on their own. Theorem A (shape minimaxity,
-  squared error) and Theorem C (log-scale minimaxity, log-loss).
+  squared error), Theorem C (log-scale minimaxity, log-loss), and Theorem A′
+  (shape minimaxity under code length — the seam's removal).
 - `exploration/` — numbered, later is more recent. Start at `0015` (Theorem B
-  and the correction to the moment formula) and `0017` (why max-entropy does not
-  transfer to squared error); those two carry the current argument. `0005` is
+  and the correction to the moment formula), `0017` (why max-entropy does not
+  transfer to squared error), and `0036` (the seam removed, and the bet it
+  settled); those carry the current argument. `0005` is
   still the best statement of the class itself, with its §3 superseded by
   `0015` §1. `0009`'s headline is withdrawn — see `0015` §1.

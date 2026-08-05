@@ -743,9 +743,10 @@ first term and drops the denominator, which is exactly why it cannot see a
 parameter living in $S$. It introduces **no free parameters** — it is what
 `fit()` already maximises — and the last protocol choice, out-of-sample scoring,
 is removable by accumulating the score prequentially, each point scored before
-it is seen. (This does not touch `filter-optimality-proof`'s open log-loss/MSE
-seam, which is about which loss defines optimality, not which can see a
-parameter.)
+it is seen. (The log-loss/MSE seam in `filter-optimality-proof` — which loss
+*defines* optimality — is now closed: Theorem A′ proves layer 1 under code
+length by the same three lines, so both layers read under the loss `fit()`
+already optimises. See `filter-optimality-proof/0036`.)
 
 ## Next, in order
 

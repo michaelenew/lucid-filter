@@ -55,6 +55,21 @@ the oracle gap than forced-80% — **89.5% forced, 96.3% ceiling**; break the
 self-confirmation — **done for the profile** (argmin at truth from both
 sides), replaced for the point fit by the marginalisation design above.
 
+## The seam, attempted and settled
+
+The follow-up bet — that removing `filter-optimality-proof`'s log-loss/MSE
+seam would take the residual gap to zero, the seam having been a happenstance
+stabilizer — is scored in
+[`filter-optimality-proof/0036`](../filter-optimality-proof/exploration/0036_the_seam_is_removed.md).
+The seam **is removed** (Theorem A′: layer 1 transfers to code length by the
+same three lines, verified), with zero behavioural change and no reversions —
+but it was not carrying the gap: the 6.8% channel-model and 3.7%
+detection-lag remainders were measured in code length already. The stabilizer
+half was real and inverted: the hybrid's *log-likelihood* side is what
+stabilises the directions MSE cannot see (`0027`), and it stays. What
+removal buys is commensurability — theorems and gap numbers in one currency —
+and a single located target for what remains (marginalisation).
+
 ## Next, in order
 
 0. ~~**The IMM patch.**~~ — **shipped**: `OdeFilter(collapse="imm")` and
