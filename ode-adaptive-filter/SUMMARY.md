@@ -391,13 +391,34 @@ $\varepsilon$, null member = uncoupled) tracks a jumping and ramping offset
 with RMS error 0.044 (grid step 0.05), central-90% coverage 0.957, and
 **relocation latency 3 points against the ledger arithmetic's 2.1** —
 the parent's confirmation-ledger arithmetic transfers to a time-valued,
-observation-geometry nuisance. Trust $\sigma(\Lambda)$ saturates by $t=20$
-when coupled and collapses to 0 on an uncoupled control (with the caveat that
-the control's rate is the mixture's overconfidence, not calibrated evidence).
-Deferred, recorded in `0045` §5: negative $\tau$ (leads = deferred updates),
-learning $(s_\tau,\varepsilon,c)$, the free-coupling Occam bracket, and the
-AR-vs-exact-discretisation class gap that folding this into `core.py` must
-face.
+observation-geometry nuisance.
+
+**And nothing is hand-set** ([`0046`](exploration/0046_online_learned_offset.py),
+[`0047`](exploration/0047_the_offset_learned_online.md)): the kernel
+$(s_\tau,\varepsilon)$ is a 12-member hyper-grid Bayes-mixed online — with
+"the offset does not move" an explicit FLAT member that takes 0.998 of the
+mass on static data — at a realized cost of 1.4 nats against the
+$\log 12=2.48$ regret bound and one point of relocation latency; the gain $c$
+is a log-spaced grid that resolves the truth to grid resolution; and the null
+is a **matched model** (independent same-class latent read by $y_2$ alone,
+mixed online), never a moment taken from the future. With the matched null,
+**trust is a directed-information measurement**: $\Lambda$'s slope is a
+prequential estimate of the information rate $y_1$'s history adds about $y_2$
+beyond $y_2$'s own — 0.565 nats/pt measured against 0.599 from the
+variance-ratio accounting identity (the strawman null had inflated it 4.5×).
+Two findings with names: a per-step Gaussian kernel below the node spacing
+rounds to the identity (use the **matrix exponential of the diffusion
+generator**), and the ramp segment exposes the $\tau$ kernel's **missing
+persistence axis** — impulse and diffusion cannot represent directed drift,
+so the tracker staircases and undercovers (0.61 on the ramp against ≥0.95
+elsewhere) while remaining prequentially near-optimal, because predictive
+likelihood under-polices coordinates it can barely see. The specifically
+missing techniques are ranked in `0047` §4: the saturated free-$b$ rung online
+(bilinear — the first nuisance where gridding is exponential), the
+$(\tau,\dot\tau)$ persistence grid, joint $(\alpha,\tau)$, a self-consistency
+score for the trusted distribution itself, and negative $\tau$ (leads =
+deferred updates). The AR-vs-exact-discretisation class gap of `0045` §5
+still stands for folding into `core.py`.
 
 ## Three corrections — read these before anything else
 
@@ -858,11 +879,13 @@ already optimises. See `filter-optimality-proof/0036`.)
    > oscillator channel, read through a second series (`0042`–`0045`). The
    > single-series version of the question is still open.
 4a. **Fold the $\tau$ channel into `output/odefilter`.** The construction is
-   probed and the numbers are in (`0044`); what remains is the lag-basis GLS
-   form of the bridge row on `core.py`'s state, the AR-vs-exact-discretisation
-   class gap (`0045` §5), negative $\tau$ via deferred updates, and learning
-   $(s_\tau, \varepsilon, c)$ by the same marginal likelihood as everything
-   else.
+   probed and the numbers are in (`0044`); ~~learning $(s_\tau,\varepsilon,c)$~~
+   — **done online in `0046`** with bounded regret and a matched null. What
+   remains is the lag-basis GLS form of the bridge row on `core.py`'s state,
+   the AR-vs-exact-discretisation class gap (`0045` §5), and the ranked list
+   in `0047` §4 — first among them the saturated free-$b$ rung (bilinear; the
+   first nuisance where gridding is exponential) and the $(\tau,\dot\tau)$
+   persistence grid the ramp segment demands.
 5. **Free $u$ in the filter** and confirm the likelihood has $2p+1$ identifiable
    directions and no more — turning the count into a measurement.
 6. **Redo the drift-direction sweep at constant Fisher length**, with generating
@@ -908,7 +931,7 @@ so.
   [`0045`](exploration/0045_what_the_offset_probes_settle.md) — **start at
   `0027` for the filter, `0030` for the audit, `0024` for the mode structure,
   `0020` for the drift law**, `0033` for where it loses, `0041` for the
-  pinned offset roots, `0042`/`0045` for the two-series offset extension. [`0031`](exploration/0031_what_the_two_filters_believe.py)
+  pinned offset roots, `0042`/`0045`/`0047` for the two-series offset extension. [`0031`](exploration/0031_what_the_two_filters_believe.py)
   is the picture. Three of them withdraw a claim
   from an earlier one (`0007` §2, `0011` §3, `0016` §2); the withdrawals are
   marked in place rather than edited away.

@@ -1,0 +1,32 @@
+{
+ "A_moving": {
+  "latency_points": 4,
+  "coverage90": 0.8688888888888889,
+  "rms_err_static_segs": 0.040382061041972055,
+  "c_posterior_mean": 0.7,
+  "c_mass_on_0.7": 1.0,
+  "hyper_mass_s0": 0.44722070259142876,
+  "hyper_mass_eps0": 1.4703713005164973e-11,
+  "regret_nats": 1.4371612560531162,
+  "regret_bound": 2.4849066497880004,
+  "Lam_slope": 0.5647598870174921,
+  "half_log_var_ratio": 0.5994444307112592
+ },
+ "B_static": {
+  "hyper_mass_s0": 0.9984187896960844,
+  "hyper_mass_eps0": 0.7027494547738722,
+  "best_hyper": [
+   0.0,
+   0.0
+  ],
+  "regret_nats": 2.1305848488556194
+ },
+ "C_control": {
+  "Lam_slope": -14.794237641882066,
+  "trust_final": 7.124576406741285e-218
+ },
+ "A_best_hyper": [
+  0.0,
+  0.01
+ ]
+}
