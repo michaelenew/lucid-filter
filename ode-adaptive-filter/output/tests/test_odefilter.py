@@ -115,6 +115,30 @@ def test_result_convenience_views_match_the_parents():
     assert np.allclose(r.modes[:, 2] + r.modes[:, 3], r.measurement_scale)
 
 
+def test_pred_var_is_the_variance_loglik_scores():
+    """With both scale channels off the grid is one node, so the predictive
+    law is exactly Gaussian and `loglik` must be its density at `innovation`.
+    That identity pins `pred_var` to the right quantity; on a mixture it is
+    the mixture's variance, spread included, so calibration stays near 1.
+    """
+    rng = np.random.default_rng(17)
+    x, y = ar(400, ALPHA3, 1.0, 9.0, rng)
+
+    f = OdeFilter(Params(alpha=ALPHA3, Q=1.0, s2=9.0), order=5).reset()
+    for v in y:
+        st = f.update(float(v))
+        exact = -0.5 * (st.innovation ** 2 / st.pred_var
+                        + math.log(st.pred_var) + math.log(2.0 * math.pi))
+        assert st.loglik == pytest.approx(exact, rel=1e-10, abs=1e-10)
+
+    r = OdeFilter(Params(alpha=ALPHA3, Q=1.0, s2=9.0, s_M=0.5, phi_M=0.7),
+                  order=5).filter(y)
+    assert r.pred_var.shape == (400,)
+    assert np.all(r.pred_var > 0.0)
+    calib = float(np.mean(r.innovation[50:] ** 2 / r.pred_var[50:]))
+    assert 0.7 < calib < 1.4
+
+
 def test_missing_observations():
     rng = np.random.default_rng(4)
     x, y = ar(300, ALPHA3, 1.0, 9.0, rng)

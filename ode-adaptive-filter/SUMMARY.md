@@ -47,7 +47,7 @@ likelihood rather than believed.
 | $Q,\ \sigma^2$ | *median* (geometric-mean) variance of process and measurement noise |
 | $\lambda^P_t,\ \lambda^M_t$ | each channel's log-scale at $t$: $Q_t=Q e^{\lambda^P_t}$, $\sigma^2_t=\sigma^2e^{\lambda^M_t}$ |
 | $\varphi_P,\ \varphi_M$ | **persistence** of each log-scale, in $[0,1)$. Near 0 the channel spikes; near 1 it drifts. Undefined when the corresponding $s$ is 0 |
-| $s_P,\ s_M$ | **log-SD of each channel's scale** — the stationary SD of $\lambda^c$. $s_P=0$ means the process noise is homoscedastic; $s_P>0$ means its variance itself varies over time. This is the coordinate that says *whether there is any volatility structure at all*, and it is the more reliably estimated of the two |
+| $s_P,\ s_M$ | **log-SD of each channel's scale** — the stationary SD of $\lambda^c$. $s_P=0$ means the process noise is homoscedastic; $s_P>0$ means its variance itself varies over time. This is the coordinate that says *whether there is any volatility structure at all*. $s_P$ is the least reliably estimated quantity in the filter: it lands on the $0$ boundary from local optima the likelihood does not endorse, and $0$ is an absolute claim rather than a small one ([`0039`](exploration/0039_two_zeros.md)) |
 | $u$ | the injection direction, $z_t=Fz_{t-1}+u\,w_t$. **Currently pinned to $e_1$**, not fitted |
 
 **Not in the filter** — analysis coordinates from the drift-law thread
@@ -114,12 +114,16 @@ while $m=2p$ and $4p$ agree to 0.003. That is a precondition, not a dial.
 
 **One negative result worth keeping.** The $\varphi$ start is inert, but only
 because $\hat s_P\to0$ on every dataset tried — including data generated with
-$s_P=0.8$. At this class's SNR the **process-scale channel is fitted dead**:
-$Q$ is 0.66% of $\gamma_0$, so a log-scale wobble on it barely moves the
-predictive variance that $\sigma^2$ dominates. Same conditioning fact as the
-151× amplification in `_moment_noises`, third appearance. The parent's missing
-5×5 $\varphi$ grid is therefore still a real gap — it just cannot be exercised
-on smooth ODE data.
+$s_P=0.8$. The parent's missing 5×5 $\varphi$ grid is therefore still a real
+gap; it cannot be exercised while $\hat s_P$ is pinned at zero.
+
+> **Superseded.** This section used to explain that zero as a conditioning
+> fact — "$Q$ is 0.66% of $\gamma_0$, so a log-scale wobble barely moves the
+> predictive variance that $\sigma^2$ dominates", the same fact as the 151×
+> amplification in `_moment_noises`. [`0039`](exploration/0039_two_zeros.md)
+> shows that is the wrong currency and the wrong mechanism. $\gamma_0$ is not
+> what the likelihood sees; $Q/S$ is, and forcing the channel on recovers 80%
+> of an oracle's advantage. See *The process channel was never dead* below.
 
 ## The dynamics channel: `alpha` is tracked, not held
 
@@ -171,6 +175,67 @@ within a few steps; the adaptive one carries the oscillation.
 $g$ is one scalar along one direction: it says how much of the fitted departure
 from flat is in force and **cannot express a change of frequency**. That is the
 next axis.
+
+## The process channel was never dead
+
+[`0039`](exploration/0039_two_zeros.md), from
+[`0038`](exploration/0038_why_the_process_channel_is_dead.py). This went looking
+for the fix the list below called item 0a and found that every load-bearing
+clause of the diagnosis was wrong.
+
+**The channel works.** Its leverage is $Q/S$ — `share_process`, which the
+filter already reports — not $Q/\gamma_0$. That is 0.033 on ODE data against
+**0.080 on the parent's own random-walk data**, where the same channel works
+fine: less, not none. Forced on against a ×8 process-noise regime, scored
+against a Kalman filter told $Q_t$ exactly:
+
+| filter | nll/pt | calibration | gap closed |
+|---|---|---|---|
+| oracle $Q_t$ | 3.1836 | 0.987 | 100% |
+| static $Q$ | 3.2864 | 1.317 | — |
+| best constant $Q$, in hindsight | 3.2274 | 0.972 | 57.4% |
+| $s_P=0$ (as fitted) | 3.2864 | 1.317 | **0.0%** |
+| $s_P=0.8$ forced | 3.2041 | 1.036 | **80.0%** |
+
+![the channel is not dead](exploration/figures/fig26-the-channel-is-not-dead.png)
+
+**The two zeros meant different things.** `0032`'s is *correct* — its fitting
+window contains no process-scale variation, and the likelihood there is
+monotone increasing in $s_P$ from 0. `0029`'s is *not* — its data was generated
+with $s_P=0.8$ and the likelihood's argmin lands on the truth.
+
+**Four candidate causes, all measured, none of them it.** The GPB1 collapse
+does delete 75% of the $Q$-vs-$8Q$ discrimination at this SNR (a real
+architectural tax, and the honest argument for per-node covariances) — but what
+survives is enough for the 80% above. The likelihood has an interior optimum
+whenever $Q$ is free to move with $s_P$. The search is not at fault: the
+profile taken *at the fitted parameters* has its argmin at 0, so the fit sits
+at a genuine local optimum, and three search repairs change nothing. Nor is the
+evidence short: doubling $n$ rescues nothing in three of four cases. The
+boundary is **self-confirming** — wherever the fit lands on zero, the profile
+taken from that point endorses zero; where it escapes, the profile follows it
+out. And the fix this
+document used to propose — parameterising on $Q_{\text{eff}} = Qe^{s_P^2/2}$ to
+decouple $s_P$ from the mean process variance — **moves the argmin the wrong
+way** on the impulsive case and flattens the penalty for being wrong sevenfold
+on `0032`'s window.
+
+**What is actually wrong** is decision-theoretic, not statistical. Carrying
+$s_P=0.8$ costs **+0.0025 nats/pt** when unnecessary and saves **+0.0872** when
+it is not — an asymmetry of **35×** — and the likelihood is nearly flat on the
+cheap side (+0.0004 at $s_P=0.35$ on `0032`'s own window). $s_P=0$ is not "a
+little scale variation"; it is the claim that the process variance is constant
+*and always will be*. Everywhere else this filter integrates a nuisance out
+over a grid — that is what $\lambda_P$, $\lambda_M$, $\lambda_A$ *are*. $s_P$
+is the one place a point estimate is plugged in, and it is exactly where the
+plug-in is least defensible.
+
+![two zeros](exploration/figures/fig28-two-zeros.png)
+
+No fix is shipped, because every candidate tested either did nothing or made it
+worse. But the target is now quantified, which it was not before: **any repair
+must beat 0.0025 nats/pt of premium against 0.0872 of exposure, and leave
+`0032`'s window no worse than +0.0004.**
 
 ## Three corrections — read these before anything else
 
@@ -247,10 +312,15 @@ only. **odefilter is not better overall on it**: 1.35× *worse* tracking, level
 | after $\alpha$ jump 2 | 1.944 | 1.042 |
 | **all** | **1.350** | 0.999 |
 
-Two losses, both diagnosed. **The process-scale channel is dead** — $s_P$ fits
-to 0, so when process noise goes up 8× there is no channel to say so and the
-*measurement* channel absorbs it instead. That is the 0.66%-of-$\gamma_0$
-conditioning fact turning into a 4.9× regression. And **after a jump in
+Two losses, both diagnosed. **$s_P$ fits to 0**, so when process noise goes up
+8× there is no channel to say so and the *measurement* channel absorbs it
+instead — a 4.9× regression. (This was written up as "the process-scale channel
+is dead", caused by the $\gamma_0$ conditioning fact.
+[`0039`](exploration/0039_two_zeros.md) refutes both halves: the channel works
+when switched on, and the zero here is **correct** — this filter was fitted on
+$t<620$ and the ×8 regime is at $t\in[720,850)$, outside the fitting window
+entirely. The 4.9× is an out-of-sample failure, not a channel failure.) And
+**after a jump in
 $\alpha$, forecasting flips to worse**: a confident wrong model loses to a vague
 one, which is the price of the "static $\alpha$" commitment. `whiteness`
 correctly ignores all five non-dynamics events and fires on both jumps — slowly,
@@ -568,11 +638,22 @@ parameter.)
    **done**, see *The dynamics channel* above (`0037`). What is left of it: $g$
    is one scalar along one direction and cannot express a change of
    *frequency*, and the return from a reverted state costs a transient.
-0a. **Fix the process-scale channel.** `0033` makes this the top item: $s_P$
-   fits to zero on smooth data, so a process-noise regime is mis-attributed to
-   the measurement channel and costs **4.9×**. The diagnosis points at the fix —
-   parameterise the scale on something the likelihood can see ($Q_{\text{eff}}$,
-   or the innovation) rather than on $Q$ alone.
+0a. ~~**Fix the process-scale channel** by parameterising on $Q_{\text{eff}}$~~
+   — **diagnosed and rewritten**, see *The process channel was never dead*
+   (`0038`/`0039`). The channel is fine; the proposed fix is measured and makes
+   things worse. What replaces it: **stop plugging $s_P$ in.** Marginalise it
+   the way every other nuisance in this filter is marginalised, rather than
+   letting a point estimate land on an attainable boundary where the likelihood
+   is flat to four decimals and the loss is 35× asymmetric. That is a real
+   design change with a real compute cost and needs its own probe. It now has a
+   scoreboard: beat 0.0025 nats/pt of premium against 0.0872 of exposure,
+   without costing more than +0.0004 on `0032`'s window.
+0a′. **Per-node covariances for the noise channels (IMM in place of GPB1).**
+   Independent of the above, and now quantified: the shared covariance deletes
+   **75%** of the $Q$-vs-$8Q$ discrimination at $\sigma^2=9$, and the loss grows
+   with measurement noise (11.7% kept at $\sigma^2=36$). Not the cause of any
+   current defect — what survives is enough for 80% of the oracle gap — so this
+   is an efficiency item, not a correctness one.
 0b. **Two corrections the audit found, both small:** delete the $Q$ scan, and
    make `_iv_alpha` require $m>p$. Both make the filter simpler *and* faster.
 1. **Act on `whiteness`** — `0033` gives it a target: 1.365 and 1.042 after the

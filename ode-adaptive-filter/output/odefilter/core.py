@@ -264,6 +264,11 @@ class Step:
     #: above 1 = more persistent than fitted.  Constant at 1 when s_A = 0.
     dynamics: float = 1.0
 
+    #: variance of the one-step predictive distribution for y_t, mixture spread
+    #: included.  `innovation` and this are the forecast that `loglik` scores,
+    #: so a caller scoring forecasts as distributions needs it (see 0034).
+    pred_var: float = math.nan
+
     @property
     def process_scale(self) -> float:
         return self.process_anomaly + self.process_regime
@@ -289,6 +294,7 @@ class FilterResult:
     measurement_regime: np.ndarray
     whiteness: np.ndarray
     dynamics: np.ndarray
+    pred_var: np.ndarray = field(default_factory=lambda: np.empty(0))
     state_mean: np.ndarray = field(default_factory=lambda: np.empty((0, 0)))
     state_cov: np.ndarray = field(default_factory=lambda: np.empty((0, 0, 0)))
     loglik: float = 0.0
@@ -530,6 +536,7 @@ class OdeFilter:
             measurement_regime=self.params.phi_M * self._prev_lamM,
             whiteness=self._accum_whiteness(e, S_pred),
             dynamics=1.0 + float(pi @ g["LA"]),
+            pred_var=S_pred,
         )
         self._pi, self._m, self._P = pi, m_new, Pbar
         self._prev_lamP, self._prev_lamM = lamP, lamM
@@ -614,7 +621,7 @@ class OdeFilter:
             cols = ("mean", "var", "innovation", "share_prior", "share_process",
                     "share_measurement", "process_anomaly", "process_regime",
                     "measurement_anomaly", "measurement_regime", "whiteness",
-                    "dynamics")
+                    "dynamics", "pred_var")
             out = {c: np.empty(n) for c in cols}
             sm = np.empty((n, p))
             sc = np.empty((n, p, p))
