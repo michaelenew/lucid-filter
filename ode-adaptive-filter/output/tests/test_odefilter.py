@@ -16,7 +16,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from odefilter import OdeFilter, Params, difference_matrix          # noqa: E402
-from odefilter.core import _iv_alpha, _moment_noises                # noqa: E402
+from odefilter.core import _iv_alpha, _moment_noises, _pin_maps     # noqa: E402
 
 PARENT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))), "..", "adaptive-random-walk-filter", "output")
@@ -176,6 +176,94 @@ def test_filter_does_not_disturb_streaming_state():
     before = f.predict(3)
     f.filter(y)
     assert f.predict(3) == before
+
+
+# ------------------------------------------------------------- pinned roots
+def test_pin_maps_are_exact():
+    """alpha = base + beta @ M must carry (z-1)^d exactly, coefficient-wise.
+
+    Checked by synthetic division, not by np.roots: root-finding splits a
+    multiple root by ~eps^(1/d), which is the ill-conditioning of the QUESTION,
+    not of the construction -- the coefficients are exact integers times beta.
+    """
+    rng = np.random.default_rng(0)
+    for p, d in [(1, 1), (2, 1), (2, 2), (3, 1), (3, 2), (4, 2), (3, 3)]:
+        base, M = _pin_maps(p, d)
+        beta = rng.normal(size=p - d)
+        alpha = base + beta @ M
+        c = np.concatenate([[1.0], -alpha])
+        for _ in range(d):                       # divide out (z - 1), d times
+            c = np.cumsum(c)
+            assert abs(c[-1]) < 1e-12            # remainder = poly at z = 1
+            c = c[:-1]
+        assert np.allclose(c, np.concatenate([[1.0], -beta]))
+
+
+def test_pinned_parent_face():
+    """p = 1, unit_roots = 1 leaves nothing free: alpha IS the parent's (1,)."""
+    base, M = _pin_maps(1, 1)
+    assert np.allclose(base, [1.0]) and M.shape == (0, 1)
+    pr = Params(alpha=(1.0,), Q=1.0, s2=4.0, unit_roots=1)
+    assert pr.alpha == (1.0,)
+
+
+def test_unit_roots_validation_and_roundtrips():
+    with pytest.raises(ValueError):              # alpha without the claimed root
+        Params(alpha=(0.5, 0.1, 0.0), Q=1.0, s2=1.0, unit_roots=1)
+    with pytest.raises(ValueError):
+        Params(alpha=(1.0,), Q=1.0, s2=1.0, unit_roots=2)
+    v = np.array([0.42, 0.0, 0.1, 0.3, -0.2, -13.8, -13.8, 2.0, -13.8])
+    pr = Params._from_vec(v, p=3, unit_roots=2)
+    assert pr.unit_roots == 2
+    pr2 = Params._from_vec(pr._vec(), 3, 2)      # _vec deconvolves, exactly
+    assert np.allclose(pr2.alpha, pr.alpha)
+    assert Params.from_dict(pr.to_dict()) == pr
+
+
+def test_pinned_and_free_agree_where_they_meet():
+    """The same alpha scored through the pinned coordinates and the free ones
+    must give the same likelihood: the constraint changes the SEARCH SPACE,
+    never the model."""
+    from odefilter.core import _loglik_batch
+    rng = np.random.default_rng(19)
+    x, y = ar(200, ALPHA3, 1.0, 9.0, rng)
+    pr = Params(alpha=ALPHA3, Q=1.0, s2=9.0, unit_roots=1)
+    off = math.log(1e-6)
+    noise = [0.0, math.log(9.0), 0.0, 0.0, off, off, 2.0, off]
+    v_free = np.concatenate([ALPHA3, noise])
+    v_pin = np.concatenate([pr._vec()[:2], noise])
+    a = float(_loglik_batch(y, v_free[None, :], 3, 5, with_A=False)[0])
+    b = float(_loglik_batch(y, v_pin[None, :], 3, 5, with_A=False,
+                            unit_roots=1)[0])
+    assert abs(a - b) < 1e-8 * abs(a)
+
+
+@pytest.mark.slow
+def test_fit_pinned_recovers_the_oscillator_behind_a_linear_offset():
+    """On the pinned class's own data -- a linear offset whose rate is a state,
+    over a damped oscillator -- the constrained fit must recover the quotient
+    dynamics cleanly.  This is where the free fit cannot go: its maximum-
+    likelihood unit roots land inside the circle (exploration/0040)."""
+    pytest.importorskip("scipy")
+    beta_true = np.array([1.7852187, -0.9003245])       # ALPHA3's oscillator
+    base, M = _pin_maps(4, 2)
+    A4 = tuple(base + beta_true @ M)
+
+    rng = np.random.default_rng(30)
+    x, y = ar(900, A4, 1.0, 9.0, rng)
+    f = OdeFilter.fit(y, p=4, unit_roots=2, dynamics=False, max_iter=200)
+
+    assert f.params.unit_roots == 2
+    c = np.concatenate([[1.0], -np.asarray(f.params.alpha)])
+    for _ in range(2):                            # (z-1)^2 divides, exactly
+        c = np.cumsum(c)
+        assert abs(c[-1]) < 1e-9
+        c = c[:-1]
+    rq = np.roots(c)                              # the quotient's roots
+    assert np.abs(rq.imag).max() > 1e-6           # the oscillator survives
+    assert abs(np.abs(rq[0]) - 0.9489) < 0.08
+    assert 0.5 < f.params.Q < 2.0
+    assert 6.0 < f.params.s2 < 13.0
 
 
 # ------------------------------------------------------- closed-form starters

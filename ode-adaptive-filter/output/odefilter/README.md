@@ -27,7 +27,8 @@ A second-order linear ODE with a constant offset has solution space
 offset is a root at z = 1, not an extra state.** It costs one order like any
 other mode and carries uncertainty automatically.
 
-`p + 8` learned numbers, all by maximum marginal likelihood. `order` and
+`p + 8` learned numbers, all by maximum marginal likelihood (`p - unit_roots + 8`
+when roots are pinned — see below). `order` and
 `order_A` are quadrature resolutions — compute budgets, not tuning parameters. `p` is a
 modelling commitment, and because each root of the characteristic polynomial is
 a channel, choosing `p` is the same act as counting channels.
@@ -44,6 +45,9 @@ f.reset()                      # then stream
 for v in stream:
     step = f.update(v)
 print(f.predict(20))           # mean and variance 20 steps out
+
+g = OdeFilter.fit(y, p=4, unit_roots=2)   # pin a LINEAR offset: a climbing
+                                          # or declining bias is a state
 ```
 
 `f.params.roots` are the ODE's modes. `f.params.memory()` is `1/(1-|z|max)`:
@@ -83,9 +87,19 @@ nothing is created or lost.
 - **`g` is one scalar, along one direction.** It says how much of the fitted
   departure from flat is in force; it cannot express a change of *frequency*.
   That is the obvious next axis.
-- **The offset root is not pinned.** `fit()` lets it float, which is the weaker
-  and safer assumption. Whether to pin it is testable by likelihood ratio
-  (`exploration/0011` §2) but is not automated here.
+- **The offset root floats by default, and now it can be pinned.**
+  `fit(unit_roots=d)` pins `d` roots at `z = 1` exactly and searches only the
+  quotient polynomial's `p - d` coefficients: `d = 1` asserts the constant
+  offset, `d = 2` a **linear** offset — a climbing or declining bias whose rate
+  is part of the state. A free fit cannot represent that bias: its maximum-
+  likelihood unit root lands at `1 ± eps`, which forecasts a drift that decays
+  or compounds geometrically instead of one that continues
+  (`../../exploration/0040`). Which `d` is right is a hypothesis, decided by
+  the same prequential density the filter uses everywhere else — it chose
+  correctly in every section of the probe. This is the internal form of "fit
+  the differenced series" (`crypto-predictivity/0016`) and beats it, because
+  differencing pushes iid measurement noise out of the model class (MA(1))
+  while pinning leaves it alone.
 
 ## Not in here yet
 
