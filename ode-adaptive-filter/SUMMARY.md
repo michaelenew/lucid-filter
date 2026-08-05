@@ -763,12 +763,30 @@ parameter.)
    design change with a real compute cost and needs its own probe. It now has a
    scoreboard: beat 0.0025 nats/pt of premium against 0.0872 of exposure,
    without costing more than +0.0004 on `0032`'s window.
+   > **Update:** [`filter-oracle-gap/0009`](../filter-oracle-gap/exploration/0009_what_the_fit_does_with_the_sharper_likelihood.md)
+   > reached the same conclusion from the opposite direction and priced it:
+   > Fisher information in $s_P$ vanishes at 0, so the *point estimate* is
+   > ill-posed under any likelihood — IMM-ML reads 0.3–0.9 into kick-free
+   > homoscedastic windows, GPB1-ML reports 0 next to three 6-SD kicks.
+   > Marginalising is meaningful only over the IMM likelihood (the GPB1 one
+   > is flat along the $Qe^{s_P^2/2}$ ridge and integrates to indifference),
+   > so 0a and 0a′ are one design, not two.
 0a′. **Per-node covariances for the noise channels (IMM in place of GPB1).**
    Independent of the above, and now quantified: the shared covariance deletes
    **75%** of the $Q$-vs-$8Q$ discrimination at $\sigma^2=9$, and the loss grows
-   with measurement noise (11.7% kept at $\sigma^2=36$). Not the cause of any
-   current defect — what survives is enough for 80% of the oracle gap — so this
-   is an efficiency item, not a correctness one.
+   with measurement noise (11.7% kept at $\sigma^2=36$).
+   > **Superseded — it is a correctness item after all.**
+   > [`filter-oracle-gap`](../filter-oracle-gap/SUMMARY.md) measured that the
+   > collapse leaves the likelihood **flat along the ridge
+   > $Q e^{s_P^2/2}=\text{const}$** (relief 0.0022 nats/pt against 0.0101 with
+   > per-node covariances, whose argmin sits on the generating $s_P$). The
+   > self-confirming boundary of `0039`, the fitted 0% of the oracle gap, and
+   > the fit's endpoint wandering between $\hat s_P=0$ and $\hat s_P=1.44$
+   > across pipeline versions are all that one degeneracy. Forced-channel
+   > extraction under IMM: 89.5% of the oracle gap against 80.0%, and nearly
+   > flat across the forced $s_P$. **Shipped**: `OdeFilter(collapse="imm")`
+   > and `fit(collapse="imm")`, default unchanged; the oracle-gap battery in
+   > `output/tests/` pins the repair.
 0b. **Two corrections the audit found, both small:** delete the $Q$ scan, and
    make `_iv_alpha` require $m>p$. Both make the filter simpler *and* faster.
 1. **Act on `whiteness`** — `0033` gives it a target: 1.365 and 1.042 after the
