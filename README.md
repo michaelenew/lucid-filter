@@ -65,3 +65,12 @@ truncated (a compute budget, which is allowed, but a new one), and the
 errors-in-variables result that instruments at lags $\ge p+1$ annihilate the
 measurement noise relies on the residual touching finitely many lags — it would
 need restating.
+
+This machinery now has a first consumer: the two-series offset extension
+([`ode-adaptive-filter/exploration/0042`](ode-adaptive-filter/exploration/0042_the_offset_frame.md))
+reads one series at a fractional time offset from another through
+$F^{-\tau}$ — a fractional power of the *shift* where $\Delta^\nu$ is a
+fractional power of the *difference* — and the joint family
+$\lambda^\mu e^{-\lambda\tau}$ (fractional derivative read at a fractional
+lag) is measured there, including the quarter-period-per-order exchange rate
+between the two.

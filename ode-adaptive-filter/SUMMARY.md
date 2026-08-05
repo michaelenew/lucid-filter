@@ -352,6 +352,53 @@ limit: process noise still enters through $u=e_1$ alone, so a pinned slope
 slope over in-class noise is inexpressible at any $d$, which is the $u=e_1$
 commitment (`0030`) with a concrete casualty.
 
+## The offset extension: two series, one clock
+
+[`0042`](exploration/0042_the_offset_frame.md) (frame),
+[`0043`](exploration/0043_the_delay_row.py)/[`0044`](exploration/0044_tracking_the_offset.py)
+(probes), [`0045`](exploration/0045_what_the_offset_probes_settle.md)
+(findings). Opens `0001` §5's "multi-variable" in its minimal form: two series
+reading **one latent process at a time offset $\tau$** — time-valued,
+fractional, drifting — with the lead/lag detected and tracked online as a
+posterior over a $\tau$-grid with the parent's trust semantics.
+
+**The whole extension is one observation row.** The delayed reading is
+$h(\tau)^\top = e_x^\top e^{-\tau G} = e_x^\top F^{-\tau}$ — a fractional
+matrix power of the transition, the same operator calculus as the
+fractional-derivative program in the [README](../README.md#open-directions)
+(in the lag basis it *is* the Grünwald–Letnikov binomial series). Exact on the
+solution space to $6\times10^{-14}$; with process noise the fractional read is
+priced by a closed-form **bridge variance** $R_b(\tau)$ (matches MC within
+0.97–1.02) that vanishes at integer $\tau$ with endpoint exponent $2m-1$ set by
+smoothness. Derivative coupling is the *tangent* of the delay family
+($x(t-\tau)=e^{-\tau D}x$), so "lag or derivative?" is one question: on a
+single oscillator they exchange along a ridge at **a quarter period per
+derivative order** — measured slope 0.7976 against $\arg\lambda/\omega_d =
+0.7979$ — and a second channel collapses the ridge to a point.
+
+**Where $\tau$ information lives, measured:** the oscillator channel reads
+$\tau$ as a **phase** — sharp but aliased mod $2\pi/\omega_d$ (this is `0024`'s
+phase coordinate finding its consumer) — and a rough (unit-root) channel reads
+it absolutely but coarsely, through the noise-correlation structure alone. The
+surprise: at working SNR the alias is separated by the *path-tracking* channel
+at a rate **linear in damping × falling with noise** (0.53 nats/pt at
+$\gamma=0.05,\sigma_2=0.3$; 0.0026 at $\sigma_2=3$, where the comb is truly
+visible), and freeing the gain changes none of it — aliasing is an SNR
+statement, not an absolute one.
+
+**Online**: a 61-node $\tau$-grid mixture (kernel: RW steps + restart mass
+$\varepsilon$, null member = uncoupled) tracks a jumping and ramping offset
+with RMS error 0.044 (grid step 0.05), central-90% coverage 0.957, and
+**relocation latency 3 points against the ledger arithmetic's 2.1** —
+the parent's confirmation-ledger arithmetic transfers to a time-valued,
+observation-geometry nuisance. Trust $\sigma(\Lambda)$ saturates by $t=20$
+when coupled and collapses to 0 on an uncoupled control (with the caveat that
+the control's rate is the mixture's overconfidence, not calibrated evidence).
+Deferred, recorded in `0045` §5: negative $\tau$ (leads = deferred updates),
+learning $(s_\tau,\varepsilon,c)$, the free-coupling Occam bracket, and the
+AR-vs-exact-discretisation class gap that folding this into `core.py` must
+face.
+
 ## Three corrections — read these before anything else
 
 [`0036`](exploration/0036_three_corrections.md), from three objections that all
@@ -806,6 +853,16 @@ already optimises. See `filter-optimality-proof/0036`.)
    so far fires once. Same exact linear algebra as `0021`.
 4. **Is the oscillator phase readable?** The coordinate with no parent analogue:
    excite at a grid of phases and measure pairwise separability.
+   > **Update:** the offset extension gives the phase its meaning and its
+   > instrument — a lead/lag measurement *is* a phase measurement of the
+   > oscillator channel, read through a second series (`0042`–`0045`). The
+   > single-series version of the question is still open.
+4a. **Fold the $\tau$ channel into `output/odefilter`.** The construction is
+   probed and the numbers are in (`0044`); what remains is the lag-basis GLS
+   form of the bridge row on `core.py`'s state, the AR-vs-exact-discretisation
+   class gap (`0045` §5), negative $\tau$ via deferred updates, and learning
+   $(s_\tau, \varepsilon, c)$ by the same marginal likelihood as everything
+   else.
 5. **Free $u$ in the filter** and confirm the likelihood has $2p+1$ identifiable
    directions and no more — turning the count into a measurement.
 6. **Redo the drift-direction sweep at constant Fisher length**, with generating
@@ -846,10 +903,12 @@ so.
   [`0024`](exploration/0024_the_modes_are_the_channels.md),
   [`0027`](exploration/0027_the_candidate_filter.md),
   [`0030`](exploration/0030_the_free_variable_audit.md),
-  [`0041`](exploration/0041_a_climbing_bias_is_a_pinned_root.md) — **start at
+  [`0041`](exploration/0041_a_climbing_bias_is_a_pinned_root.md),
+  [`0042`](exploration/0042_the_offset_frame.md),
+  [`0045`](exploration/0045_what_the_offset_probes_settle.md) — **start at
   `0027` for the filter, `0030` for the audit, `0024` for the mode structure,
   `0020` for the drift law**, `0033` for where it loses, `0041` for the
-  pinned offset roots. [`0031`](exploration/0031_what_the_two_filters_believe.py)
+  pinned offset roots, `0042`/`0045` for the two-series offset extension. [`0031`](exploration/0031_what_the_two_filters_believe.py)
   is the picture. Three of them withdraw a claim
   from an earlier one (`0007` §2, `0011` §3, `0016` §2); the withdrawals are
   marked in place rather than edited away.
