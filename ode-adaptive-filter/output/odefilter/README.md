@@ -49,8 +49,8 @@ print(f.predict(20))           # mean and variance 20 steps out
 g = OdeFilter.fit(y, p=4, unit_roots=2)   # pin a LINEAR offset: a climbing
                                           # or declining bias is a state
 
-h = OdeFilter.fit(y, collapse="imm")      # per-node covariances: the
-                                          # likelihood that can split Q from s_P
+# the recursion carries per-node covariances (the likelihood that can split
+# Q from s_P); it is the only recursion -- see "The recursion" below
 ```
 
 `f.params.roots` are the ODE's modes. `f.params.memory()` is `1/(1-|z|max)`:
@@ -77,36 +77,41 @@ nothing is created or lost.
 - The four mode coordinates and the three amplitude shares are the parent's,
   unchanged.
 
-## The collapse, and `collapse="imm"`
+## The recursion
 
-The filter is a mixture over a quadrature grid, and after every step the
-shipped recursion (GPB1) collapses that mixture to **one** covariance — so at
-the next step every node is handed the same `P`, and two nodes' predictive
-variances differ by one step of noise, never by the accumulated history of
-the regime they disagree about.
+The filter is a mixture over a quadrature grid, and the recursion keeps
+**one `(m, P)` per node**, mixed by the chain's own transition kernel before
+each time update (standard IMM). It originally shipped with a
+shared-covariance collapse (GPB1) — one `P` handed to every node after each
+step — and grew the per-node recursion as an option;
 [`filter-oracle-gap`](../../../filter-oracle-gap/SUMMARY.md) measured what
-that erases: the likelihood goes **flat along the ridge
-`Q·e^{s_P²/2} = const`** (it can measure the mean process variance but not
+the collapse erased: the likelihood went **flat along the ridge
+`Q·e^{s_P²/2} = const`** (it could measure the mean process variance but not
 split it between a constant level and a wandering scale), the `s_P = 0`
-boundary becomes self-confirming, and a forced process-scale channel stops at
-80% of an oracle's advantage.
+boundary became self-confirming, and a forced process-scale channel stopped
+at 80% of an oracle's advantage where per-node covariances reach 89.5%, with
+ridge relief 0.0022 → 0.0101 nats/pt and fitted endpoints that come home
+(`s_P` 0.87 against a truth of 0.8 where the old fit wandered between 0 and
+2.1 by optimiser path). The collapse was strictly dominated — same model,
+strictly more of the evidence, ~1.4× cost — so it was **removed** once
+`crypto`'s `mixture.py` migrated off the collapsed internals, and there is
+no `collapse` option anymore.
 
-`collapse="imm"` keeps one `(m, P)` per node, mixed by the chain's own
-kernel — same model, no new parameters, ~1.4× cost, bit-identical at
-`s_P = s_M = s_A = 0`. Measured: 89.5% of the oracle gap (nearly flat across
-the forced `s_P`, so a wrong guess barely costs), ridge relief 0.0022 →
-0.0101 nats/pt with the argmin on the generating value, and fitted endpoints
-that come home (`s_P` 0.87 against a truth of 0.8 where the shipped fit
-wanders between 0 and 2.1 by optimiser path). The default stays `"gpb1"`
-**only** so downstream readers of the filter's internals (`crypto`'s
-`mixture.py`) keep their contract until their next pass. **This mode is
-scheduled for removal**: `"imm"` is strictly superior — same model, strictly
-more of the evidence — so once crypto updates its internals, `collapse`
-collapses to the single most performant recursion and the option disappears.
-One caution from the same workstream: near `s_P = 0` the *point estimate* is
-ill-posed under either likelihood — Fisher information in a spread parameter
-vanishes at zero spread — so read small fitted `s_P` as cheap insurance, not
-as a finding, and expect the principled fix (marginalising `(φ_P, s_P)` like
+Two consequences of the removal worth knowing. **The parent reduction
+narrows to the `s = 0` face**: there the grid is one node, no collapse of
+any kind is in play, and this filter is the parent bit-for-bit; with a live
+scale channel the parent (GPB1 by construction) and this filter share the
+model and differ by the collapse, ~6e-3 nats/pt on typical data. **The unit
+disc is no longer walled off numerically**: a detectable explosive `alpha`
+has a genuinely finite likelihood under per-node correction (the old `-inf`
+was the shared-covariance recursion overflowing), so a free fit can land
+marginally outside the disc — the disc is a modelling commitment, and
+`unit_roots` is how to assert the boundary cases exactly.
+
+One caution carried over: near `s_P = 0` the *point estimate* is ill-posed
+under any likelihood — Fisher information in a spread parameter vanishes at
+zero spread — so read small fitted `s_P` as cheap insurance, not as a
+finding, and expect the principled fix (marginalising `(φ_P, s_P)` like
 every other nuisance here) as a follow-up design.
 
 ## Costs and limits, measured

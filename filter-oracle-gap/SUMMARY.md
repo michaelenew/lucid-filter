@@ -72,20 +72,23 @@ and a single located target for what remains (marginalisation).
 
 ## Next, in order
 
-0. ~~**The IMM patch.**~~ — **shipped**: `OdeFilter(collapse="imm")` and
-   `fit(collapse="imm")` run the per-node recursion end to end (streaming,
-   batched, predict, dynamics channel), bit-identical to the shipped one at
-   $s=0$, default unchanged so downstream internals contracts hold. The
-   battery that would have caught the holes is in
+0. ~~**The IMM patch.**~~ — **shipped**: the per-node recursion runs end to
+   end (streaming, batched, predict, dynamics channel), bit-identical to the
+   old one at $s=0$. The battery that would have caught the holes is in
    `ode-adaptive-filter/output/tests/`: the ridge must separate, the forced
    channel must clear 85% of the oracle gap, the fitted $s_P$ must stay off
    the boundary. Through the core path the fit lands $\hat s_P = 0.87$
    against a truth of 0.8 at $n=600$.
-0a. **Delete GPB1 once crypto migrates.** Decision recorded: `"imm"` is
-   strictly superior (same model, strictly more of the evidence), so the
-   `collapse` option exists only until `crypto-predictivity/output/mixture.py`
-   reads the per-node state — its SUMMARY item 0a. Then the two modes
-   collapse to the single most performant one and the flag disappears.
+0a. ~~**Delete GPB1 once crypto migrates.**~~ — **done**:
+   `crypto-predictivity/output/mixture.py` now reads the per-node state (the
+   mixture is richer — every node carries its own accumulated covariance
+   history), the `collapse` flag is gone, and the per-node recursion is the
+   only one. Two knock-ons recorded in the odefilter README: the parent
+   reduction narrows to exactness on the $s=0$ face (the parent is GPB1 by
+   construction, ~6e-3 nats/pt apart with a live channel), and the unit disc
+   is no longer walled off numerically — a detectable explosive $\alpha$ has
+   a finite likelihood under per-node correction, so the disc is a
+   commitment (`unit_roots`), not an emergent property.
 1. **The marginalised $(\varphi_P, s_P)$ grid** — the second half of the
    design; needs `Params`-level architecture (a hypothesis set is not a
    point) and its own premium/exposure/`0032` measurements.
