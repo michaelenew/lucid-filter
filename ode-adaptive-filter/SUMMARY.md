@@ -763,6 +763,14 @@ parameter.)
    design change with a real compute cost and needs its own probe. It now has a
    scoreboard: beat 0.0025 nats/pt of premium against 0.0872 of exposure,
    without costing more than +0.0004 on `0032`'s window.
+   > **Update:** [`filter-oracle-gap/0009`](../filter-oracle-gap/exploration/0009_what_the_fit_does_with_the_sharper_likelihood.md)
+   > reached the same conclusion from the opposite direction and priced it:
+   > Fisher information in $s_P$ vanishes at 0, so the *point estimate* is
+   > ill-posed under any likelihood — IMM-ML reads 0.3–0.9 into kick-free
+   > homoscedastic windows, GPB1-ML reports 0 next to three 6-SD kicks.
+   > Marginalising is meaningful only over the IMM likelihood (the GPB1 one
+   > is flat along the $Qe^{s_P^2/2}$ ridge and integrates to indifference),
+   > so 0a and 0a′ are one design, not two.
 0a′. **Per-node covariances for the noise channels (IMM in place of GPB1).**
    Independent of the above, and now quantified: the shared covariance deletes
    **75%** of the $Q$-vs-$8Q$ discrimination at $\sigma^2=9$, and the loss grows
