@@ -390,6 +390,158 @@ def test_a_pure_event_leaves_no_whiteness_trace():
 
 
 # -------------------------------------------------------------------- fitting
+# ------------------------------------------------- the oracle-gap battery
+# These four would have detected the holes filter-oracle-gap found: a
+# likelihood flat along the ridge Q e^{s_P^2/2} = const, a process-scale
+# channel that extracts a fraction of the available evidence, and fits whose
+# (Q, s_P) endpoint was chosen by the optimiser's path rather than the data.
+
+def ar_qseq(n, alpha, Qseq, S2, rng):
+    """AR(p) with a per-step process variance, plus white measurement noise."""
+    p = len(alpha)
+    z = np.zeros(p)
+    x = np.zeros(n)
+    for t in range(n):
+        xn = (float(np.dot(alpha, z))
+              + math.sqrt(Qseq[t]) * rng.standard_normal())
+        z = np.concatenate([[xn], z[:-1]])
+        x[t] = xn
+    return x, x + math.sqrt(S2) * rng.standard_normal(n)
+
+
+def oracle_nll(y, alpha, Qseq, S2, burn):
+    """Exact Kalman filter told Q_t: the evidence ceiling."""
+    a = np.asarray(alpha)
+    p = a.size
+    F = np.zeros((p, p))
+    F[0] = a
+    F[1:, :-1] = np.eye(p - 1)
+    m = np.zeros(p)
+    P = np.eye(p) * (S2 + float(np.max(Qseq))) * p
+    e1 = np.zeros(p)
+    e1[0] = 1.0
+    nll, k = 0.0, 0
+    for t, yt in enumerate(y):
+        m = F @ m
+        A = F @ P @ F.T
+        S = A[0, 0] + Qseq[t] + S2
+        e = float(yt) - m[0]
+        if t >= burn:
+            nll += 0.5 * (e * e / S + math.log(S) + math.log(2 * math.pi))
+            k += 1
+        row = A[:, 0] + Qseq[t] * e1
+        m = m + row / S * e
+        P = A
+        P[0, 0] += Qseq[t]
+        P -= np.outer(row / S, row)
+    return nll / k
+
+
+def test_imm_is_the_same_filter_when_the_scales_are_off():
+    """collapse="imm" must be the shipped recursion exactly at s = 0 -- the
+    per-node covariances are a change of inference, never of model."""
+    rng = np.random.default_rng(51)
+    x, y = ar(300, ALPHA3, 1.0, 9.0, rng)
+    pr = Params(alpha=ALPHA3, Q=1.0, s2=9.0)
+    a = OdeFilter(pr, order=5, collapse="gpb1").filter(y)
+    b = OdeFilter(pr, order=5, collapse="imm").filter(y)
+    assert abs(a.loglik - b.loglik) < 1e-9
+    assert np.allclose(a.mean, b.mean, rtol=1e-10, atol=1e-10)
+    assert np.allclose(a.var, b.var, rtol=1e-10, atol=1e-10)
+    assert np.allclose(a.pred_var, b.pred_var, rtol=1e-10, atol=1e-10)
+
+
+def test_streaming_and_batched_agree_under_imm():
+    from odefilter.core import _loglik_batch
+    rng = np.random.default_rng(52)
+    x, y = ar(300, ALPHA3, 1.0, 9.0, rng)
+    pr = Params(alpha=ALPHA3, Q=1.0, s2=9.0, phi_P=0.9, s_P=0.8,
+                phi_M=0.6, s_M=0.4)
+    lb = float(_loglik_batch(y, pr._vec()[None, :], 3, 5, with_A=False,
+                             collapse="imm")[0])
+    ls = OdeFilter(pr, order=5, collapse="imm").loglik(y)
+    assert abs(lb - ls) < 1e-6 * abs(ls)
+
+
+def test_the_ridge_is_not_flat():
+    """THE HOLE (filter-oracle-gap/0004).  Two hypotheses with the same mean
+    process variance Q e^{s_P^2/2} -- the truth (a live channel) and its
+    homoscedastic ridge-mate -- on data generated with the live channel.
+    The shipped likelihood cannot tell them apart; the per-node one must,
+    and in the right direction.  This is the test that would have caught
+    the fitted (Q, s_P) endpoint being the optimiser's choice."""
+    rng = np.random.default_rng(19)
+    n = 900
+    lam = np.zeros(n)
+    nu = math.sqrt(0.8 ** 2 * (1 - 0.9 ** 2))
+    lam[0] = 0.8 * rng.standard_normal()
+    for t in range(1, n):
+        lam[t] = 0.9 * lam[t - 1] + nu * rng.standard_normal()
+    x, y = ar_qseq(n, ALPHA3, np.exp(lam), 9.0, rng)
+
+    qeff = math.exp(0.8 ** 2 / 2.0)
+    truth = Params(alpha=ALPHA3, Q=1.0, s2=9.0, phi_P=0.9, s_P=0.8)
+    mate = Params(alpha=ALPHA3, Q=qeff, s2=9.0)          # same mean variance
+    sep = {}
+    for c in ("gpb1", "imm"):
+        nll_truth = -OdeFilter(truth, order=5, collapse=c).loglik(y) / n
+        nll_mate = -OdeFilter(mate, order=5, collapse=c).loglik(y) / n
+        sep[c] = nll_mate - nll_truth        # > 0 means the truth is preferred
+    assert sep["imm"] > 0.004                # the data can tell, and imm sees it
+    assert sep["imm"] > 2.0 * max(sep["gpb1"], 0.0)   # gpb1 is the flat one
+
+
+def test_forced_channel_extracts_most_of_the_oracle_gap():
+    """THE SYMPTOM (0038/filter-oracle-gap/0002).  A x8 process-noise regime,
+    scored against a Kalman filter told Q_t exactly.  The forced channel
+    under gpb1 stops near 80% of the static-to-oracle span; under imm it
+    must clear 85% and beat gpb1."""
+    rng = np.random.default_rng(4)
+    n, lo, hi = 900, 400, 560
+    Qseq = np.full(n, 1.0)
+    Qseq[lo:hi] = 8.0
+    x, y = ar_qseq(n, ALPHA3, Qseq, 9.0, rng)
+    burn = 60
+
+    nll_o = oracle_nll(y, ALPHA3, Qseq, 9.0, burn)
+    nll_s = oracle_nll(y, ALPHA3, np.full(n, 1.0), 9.0, burn)
+    span = nll_s - nll_o
+    pr = Params(alpha=ALPHA3, Q=1.0, s2=9.0, phi_P=0.9, s_P=0.8)
+    closed = {}
+    for c in ("gpb1", "imm"):
+        f = OdeFilter(pr, order=5, collapse=c).reset()
+        ll = [f.update(float(v)).loglik for v in y]
+        nll = -float(np.mean(ll[burn:]))
+        closed[c] = (nll_s - nll) / span
+    assert closed["imm"] > 0.85
+    assert closed["imm"] > closed["gpb1"] + 0.05
+
+
+@pytest.mark.slow
+def test_fit_on_the_imm_likelihood_stays_off_the_boundary():
+    """THE ENDPOINT (filter-oracle-gap/0006).  On data generated with a live
+    process-scale channel, the fitted s_P must be neither the boundary zero
+    (the old self-confirming endpoint, 0029/0039) nor a wild ridge slide,
+    and the fitted MEAN process variance must be near the truth."""
+    pytest.importorskip("scipy")
+    rng = np.random.default_rng(19)
+    n = 600
+    lam = np.zeros(n)
+    nu = math.sqrt(0.8 ** 2 * (1 - 0.9 ** 2))
+    lam[0] = 0.8 * rng.standard_normal()
+    for t in range(1, n):
+        lam[t] = 0.9 * lam[t - 1] + nu * rng.standard_normal()
+    x, y = ar_qseq(n, ALPHA3, np.exp(lam), 9.0, rng)
+
+    f = OdeFilter.fit(y, p=3, dynamics=False, max_iter=150, collapse="imm")
+    pr = f.params
+    qeff = pr.Q * math.exp(pr.s_P ** 2 / 2.0)
+    assert f.collapse == "imm"
+    assert 0.3 < pr.s_P < 1.6                # off the boundary, off the slide
+    assert 0.5 < qeff < 2.0                  # the mean variance is right
+    assert pr.phi_P > 0.4                    # and the channel is persistent
+
+
 @pytest.mark.slow
 def test_fit_recovers_the_modes():
     pytest.importorskip("scipy")

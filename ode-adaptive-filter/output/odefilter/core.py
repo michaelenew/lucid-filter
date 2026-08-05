@@ -549,8 +549,12 @@ def _grid_batch(V: np.ndarray, p: int, order: int, order_A: int, with_A: bool,
 
 def _loglik_batch(y: np.ndarray, V: np.ndarray, p: int, order: int,
                   order_A: int = 3, with_A: bool = True,
-                  unit_roots: int = 0) -> np.ndarray:
+                  unit_roots: int = 0, collapse: str = "gpb1") -> np.ndarray:
     """Marginal log-likelihood of ``y`` at every unconstrained vector in ``V``.
+
+    ``collapse`` selects the recursion, exactly as on :class:`OdeFilter`:
+    ``"gpb1"`` is the shipped shared-covariance collapse, ``"imm"`` carries
+    one covariance per node (:func:`_loglik_batch_imm`).
 
     ``V`` is (B, p - unit_roots + 8) in the coordinates of
     :meth:`Params._vec`: the free coefficients, then the noise block.  The
@@ -567,6 +571,8 @@ def _loglik_batch(y: np.ndarray, V: np.ndarray, p: int, order: int,
     are independent -- every operation below contracts within its own ``b`` --
     so one dead row cannot poison the others.
     """
+    if collapse == "imm":
+        return _loglik_batch_imm(y, V, p, order, order_A, with_A, unit_roots)
     V = np.atleast_2d(V)
     B = V.shape[0]
     g = _grid_batch(V, p, order, order_A, with_A, unit_roots)
@@ -633,6 +639,72 @@ def _loglik_batch(y: np.ndarray, V: np.ndarray, p: int, order: int,
 
     ll = np.where(dead | ~np.isfinite(ll), -np.inf, ll)
     return ll
+
+
+def _loglik_batch_imm(y: np.ndarray, V: np.ndarray, p: int, order: int,
+                      order_A: int = 3, with_A: bool = True,
+                      unit_roots: int = 0) -> np.ndarray:
+    """:func:`_loglik_batch` with per-node covariances (``collapse="imm"``).
+
+    Same grid, same coordinates, same dead-row semantics; each node carries
+    its own (m, P), mixed by the kernel before the time update, exactly as
+    :meth:`OdeFilter._update_imm` does one vector at a time.
+    """
+    V = np.atleast_2d(V)
+    B = V.shape[0]
+    g = _grid_batch(V, p, order, order_A, with_A, unit_roots)
+    T, Qg, Rg, Aidx = g["T"], g["Qg"], g["Rg"], g["Aidx"]
+    Fg = g["Fs"][:, Aidx]                                 # (B, G, p, p)
+    G = Qg.shape[1]
+
+    pi = g["pi0"].copy()
+    y0 = float(y[0]) if np.isfinite(y[0]) else 0.0
+    m = np.full((B, G, p), y0)
+    P = (np.eye(p)[None, None]
+         * ((Rg.max(1) + Qg.max(1)) * p)[:, None, None, None]
+         * np.ones((1, G, 1, 1)))
+    ll = np.zeros(B)
+    dead = np.zeros(B, dtype=bool)
+
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        for v in y:
+            pi_pred = np.maximum(np.einsum("bi,bij->bj", pi, T), 1e-300)
+            mu = pi[:, :, None] * T / pi_pred[:, None, :]
+
+            m0 = np.einsum("bij,bix->bjx", mu, m)
+            dmix = m[:, :, None, :] - m0[:, None, :, :]
+            P0 = (np.einsum("bij,bixz->bjxz", mu, P)
+                  + np.einsum("bij,bijx,bijz->bjxz", mu, dmix, dmix))
+
+            mp = np.einsum("bgxz,bgz->bgx", Fg, m0)
+            Ap = np.einsum("bgxw,bgwv,bgzv->bgxz", Fg, P0, Fg)
+            Ap[:, :, 0, 0] += Qg
+            S = Ap[:, :, 0, 0] + Rg
+
+            if not np.isfinite(v):                        # propagate only
+                pi, m, P = pi_pred, mp, Ap
+            else:
+                bad = ~np.isfinite(S).all(1) | (S <= 0.0).any(1)
+                dead |= bad
+                S = np.where(np.isfinite(S) & (S > 0.0), S, 1.0)
+                e = v - mp[:, :, 0]
+                lg = -0.5 * (np.log(S) + e * e / S)
+                mx = lg.max(1)
+                w = pi_pred * np.exp(lg - mx[:, None])
+                Z = w.sum(1)
+                ll += np.log(Z) + mx - 0.5 * _LOG2PI
+
+                K = Ap[:, :, :, 0] / S[:, :, None]
+                m = mp + K * e[:, :, None]
+                P = Ap - K[:, :, :, None] * Ap[:, :, None, 0, :]
+                pi = w / Z[:, None]
+
+            if dead.any():
+                m = np.where(dead[:, None, None], y0, m)
+                P = np.where(dead[:, None, None, None], np.eye(p), P)
+                pi = np.where(dead[:, None], 1.0 / G, pi)
+
+    return np.where(dead | ~np.isfinite(ll), -np.inf, ll)
 
 
 # ============================================================================
@@ -806,17 +878,35 @@ class OdeFilter:
         every step and of every likelihood evaluation, so the default is lower
         than ``order``: g is one smooth scalar and does not need as fine a
         grid.  Ignored entirely when ``s_A = 0``.
+    collapse : str
+        How the mixture's second moment is carried between steps.  ``"gpb1"``
+        (the default, and the only behaviour this filter ever had) collapses
+        to ONE covariance after every step, so at the next step every grid
+        node is handed the same P and two nodes' predictive variances differ
+        by one step of noise, never by the accumulated history of the regime
+        they disagree about.  ``"imm"`` keeps one (m, P) per node, mixed by
+        the chain's own transition kernel -- no new parameters, no change of
+        model, only the collapse removed.  `filter-oracle-gap` measured what
+        the collapse costs: the likelihood goes flat along the ridge
+        Q e^{s_P^2/2} = const (relief 0.0022 nats/pt against 0.0101), the
+        s_P = 0 boundary becomes self-confirming, and a forced process-scale
+        channel stops at 80% of an oracle's gap where "imm" reaches 89.5%.
+        The two are the same recursion to machine precision when
+        s_P = s_M = s_A = 0.  Cost: about 1.4x per step at order 5.
     """
 
     def __init__(self, params: Params | None = None, order: int = 5,
-                 order_A: int = 3):
+                 order_A: int = 3, collapse: str = "gpb1"):
         if order < 3:
             raise ValueError("order must be at least 3")
         if order_A < 3:
             raise ValueError("order_A must be at least 3")
+        if collapse not in ("gpb1", "imm"):
+            raise ValueError("collapse must be 'gpb1' or 'imm'")
         self.params = params
         self.order = int(order)
         self.order_A = int(order_A)
+        self.collapse = collapse
         self._built = None
         self.reset()
 
@@ -831,12 +921,13 @@ class OdeFilter:
         if self.params is None:
             raise ValueError("filter is not fitted")
         return {"params": self.params.to_dict(), "order": self.order,
-                "order_A": self.order_A}
+                "order_A": self.order_A, "collapse": self.collapse}
 
     @classmethod
     def from_dict(cls, d: dict) -> "OdeFilter":
         return cls(Params.from_dict(d["params"]), order=int(d.get("order", 5)),
-                   order_A=int(d.get("order_A", 3)))
+                   order_A=int(d.get("order_A", 3)),
+                   collapse=d.get("collapse", "gpb1"))
 
     # ------------------------------------------------------------------ grid
     def _build(self):
@@ -895,8 +986,17 @@ class OdeFilter:
         if self._pi is None:
             self._pi = g["pi0"].copy()
             y0 = float(y) if np.isfinite(y) else 0.0
-            self._m = np.full(p, y0)
-            self._P = np.eye(p) * float(g["Rg"].max() + g["Qg"].max()) * p
+            if self.collapse == "imm":
+                G = g["Qg"].size
+                self._m = np.full((G, p), y0)
+                self._P = np.tile(np.eye(p) * float(g["Rg"].max()
+                                                    + g["Qg"].max()) * p,
+                                  (G, 1, 1))
+            else:
+                self._m = np.full(p, y0)
+                self._P = np.eye(p) * float(g["Rg"].max() + g["Qg"].max()) * p
+        if self.collapse == "imm":
+            return self._update_imm(y, g, p)
 
         pi = self._pi @ g["T"]
         Fs, Aidx, starts = g["Fs"], g["Aidx"], g["starts"]
@@ -980,6 +1080,86 @@ class OdeFilter:
         self._loglik += ll
         return st
 
+    def _update_imm(self, y: float, g: dict, p: int) -> Step:
+        """One step with per-node covariances (``collapse="imm"``).
+
+        Same model, same grid, same kernel as the GPB1 branch; the only
+        difference is that each node keeps its own (m, P), mixed across nodes
+        by the kernel before the time update (standard IMM).  The accumulated
+        history that separates scale hypotheses -- what the shared-P collapse
+        erases -- therefore survives.  At s_P = s_M = s_A = 0 the grid is one
+        node and this is the GPB1 branch to machine precision.
+        """
+        T, Qg, Rg, Fs, Aidx = g["T"], g["Qg"], g["Rg"], g["Fs"], g["Aidx"]
+        pi = self._pi
+        pi_pred = np.maximum(pi @ T, 1e-300)
+        mu = pi[:, None] * T / pi_pred[None, :]        # P(came from i | now j)
+
+        m0 = np.einsum("ij,ix->jx", mu, self._m)       # mixed state per node
+        dmix = self._m[:, None, :] - m0[None, :, :]
+        P0 = (np.einsum("ij,ixz->jxz", mu, self._P)
+              + np.einsum("ij,ijx,ijz->jxz", mu, dmix, dmix))
+
+        Fg = Fs[Aidx]                                  # (G, p, p)
+        mp = np.einsum("gxz,gz->gx", Fg, m0)
+        Aj = np.einsum("gxw,gwv,gzv->gxz", Fg, P0, Fg)
+        a00 = Aj[:, 0, 0].copy()                       # prior part, pre-Q
+        Aj[:, 0, 0] += Qg
+        S = Aj[:, 0, 0] + Rg
+
+        if not np.isfinite(y):                    # missing: mix and propagate
+            self._pi, self._m, self._P = pi_pred, mp, Aj
+            lamP = float(pi_pred @ g["LP"])
+            lamM = float(pi_pred @ g["LM"])
+            mbar = float(pi_pred @ mp[:, 0])
+            vbar = float(pi_pred @ (Aj[:, 0, 0] + (mp[:, 0] - mbar) ** 2))
+            st = Step(mbar, vbar, math.nan, 0.0, 1.0, 0.0, 0.0,
+                      lamP - self.params.phi_P * self._prev_lamP,
+                      self.params.phi_P * self._prev_lamP,
+                      lamM - self.params.phi_M * self._prev_lamM,
+                      self.params.phi_M * self._prev_lamM,
+                      self._whiteness(), 1.0 + float(pi_pred @ g["LA"]))
+            self._prev_lamP, self._prev_lamM = lamP, lamM
+            return st
+
+        if not np.all(np.isfinite(S)) or np.any(S <= 0.0):
+            raise _Numerical("non-positive predictive variance")
+        e = float(y) - mp[:, 0]
+        ybar = float(pi_pred @ mp[:, 0])
+        e_rep = float(y) - ybar
+        lg = -0.5 * (np.log(S) + e * e / S)
+        mx = float(lg.max())
+        w = pi_pred * np.exp(lg - mx)
+        Z = float(w.sum())
+        ll = math.log(Z) + mx - 0.5 * _LOG2PI
+        S_pred = float(pi_pred @ (S + (mp[:, 0] - ybar) ** 2))
+        pi = w / Z
+
+        K = Aj[:, :, 0] / S[:, None]
+        m_new = mp + K * e[:, None]
+        P_new = Aj - K[:, :, None] * Aj[:, None, 0, :]
+
+        mbar = float(pi @ m_new[:, 0])
+        vbar = float(pi @ (P_new[:, 0, 0] + (m_new[:, 0] - mbar) ** 2))
+        lamP, lamM = float(pi @ g["LP"]), float(pi @ g["LM"])
+        st = Step(
+            mean=mbar, var=vbar, innovation=e_rep, loglik=ll,
+            share_prior=float(pi @ (a00 / S)),
+            share_process=float(pi @ (Qg / S)),
+            share_measurement=float(pi @ (Rg / S)),
+            process_anomaly=lamP - self.params.phi_P * self._prev_lamP,
+            process_regime=self.params.phi_P * self._prev_lamP,
+            measurement_anomaly=lamM - self.params.phi_M * self._prev_lamM,
+            measurement_regime=self.params.phi_M * self._prev_lamM,
+            whiteness=self._accum_whiteness(e_rep, S_pred),
+            dynamics=1.0 + float(pi @ g["LA"]),
+            pred_var=S_pred,
+        )
+        self._pi, self._m, self._P = pi, m_new, P_new
+        self._prev_lamP, self._prev_lamM = lamP, lamM
+        self._loglik += ll
+        return st
+
     # -------------------------------------------------------- the diagnostic
     def _accum_whiteness(self, e: float, S: float) -> float:
         r = e / math.sqrt(max(S, 1e-300))
@@ -1004,6 +1184,23 @@ class OdeFilter:
         if self._pi is None:
             raise ValueError("nothing observed yet")
         g = self._build()
+        if self.collapse == "imm":
+            Fg = g["Fs"][g["Aidx"]]
+            pi, m, P = self._pi, self._m.copy(), self._P.copy()
+            for _ in range(int(horizon)):
+                pi_pred = np.maximum(pi @ g["T"], 1e-300)
+                mu = pi[:, None] * g["T"] / pi_pred[None, :]
+                m0 = np.einsum("ij,ix->jx", mu, m)
+                dmix = m[:, None, :] - m0[None, :, :]
+                P0 = (np.einsum("ij,ixz->jxz", mu, P)
+                      + np.einsum("ij,ijx,ijz->jxz", mu, dmix, dmix))
+                m = np.einsum("gxz,gz->gx", Fg, m0)
+                P = np.einsum("gxw,gwv,gzv->gxz", Fg, P0, Fg)
+                P[:, 0, 0] += g["Qg"]
+                pi = pi_pred
+            mbar = float(pi @ m[:, 0])
+            vbar = float(pi @ (P[:, 0, 0] + (m[:, 0] - mbar) ** 2))
+            return mbar, vbar
         Fs, starts = g["Fs"], g["starts"]
         pi, m, P = self._pi, self._m.copy(), self._P.copy()
         for _ in range(int(horizon)):
@@ -1023,11 +1220,20 @@ class OdeFilter:
 
         A fixed invertible integer change of basis, so nothing is created or
         lost; the growth of the diagonal is the noise amplification of
-        differencing, reported rather than incurred.
+        differencing, reported rather than incurred.  Under ``collapse="imm"``
+        the mixture is collapsed here, for reporting only -- the recursion
+        itself never sees this collapse.
         """
         if self._m is None:
             raise ValueError("nothing observed yet")
         D = difference_matrix(self.params.p)
+        if self.collapse == "imm":
+            pi = self._pi
+            m = pi @ self._m
+            dm = self._m - m
+            P = (np.einsum("g,gxz->xz", pi, self._P)
+                 + np.einsum("g,gx,gz->xz", pi, dm, dm))
+            return D @ m, D @ P @ D.T
         return D @ self._m, D @ self._P @ D.T
 
     # ----------------------------------------------------------------- batch
@@ -1067,7 +1273,14 @@ class OdeFilter:
                 st = self.update(v)
                 for c in cols:
                     out[c][i] = getattr(st, c)
-                sm[i], sc[i] = self._m, self._P
+                if self.collapse == "imm":      # collapse for reporting only
+                    mbar = self._pi @ self._m
+                    dmix = self._m - mbar
+                    sm[i] = mbar
+                    sc[i] = (np.einsum("g,gxz->xz", self._pi, self._P)
+                             + np.einsum("g,gx,gz->xz", self._pi, dmix, dmix))
+                else:
+                    sm[i], sc[i] = self._m, self._P
                 total += st.loglik
             return FilterResult(loglik=total, state_mean=sm, state_cov=sc, **out)
         finally:
@@ -1078,7 +1291,8 @@ class OdeFilter:
     @classmethod
     def fit(cls, y, p: int = 3, order: int = 5, max_iter: int = 400,
             scales: bool = True, dynamics: bool = True,
-            order_A: int = 3, unit_roots: int = 0) -> "OdeFilter":
+            order_A: int = 3, unit_roots: int = 0,
+            collapse: str = "gpb1") -> "OdeFilter":
         """Learn every parameter from a series and return a fitted filter.
 
         ``p`` is the order of the recurrence: 3 is a second-order ODE plus a
@@ -1106,8 +1320,19 @@ class OdeFilter:
         (non-adaptive) recurrence filter.  Useful as a baseline and much faster.
         ``dynamics=False`` additionally pins the dynamics channel off, giving
         a static ``alpha``.
+
+        ``collapse="imm"`` runs both the search and the returned filter on the
+        per-node-covariance recursion (see :class:`OdeFilter`).  This is the
+        likelihood with curvature along the Q e^{s_P^2/2} ridge: under
+        ``"gpb1"`` the fitted (Q, s_P) split is decided by the optimiser's
+        path rather than by the data (filter-oracle-gap/0004, 0006), which is
+        how fitted process-scale channels ended up dead exactly when they were
+        needed.  Caution: near s_P = 0 the point estimate is ill-posed under
+        EITHER likelihood (the Fisher information in a spread parameter
+        vanishes at zero spread), so small fitted s_P values should be read as
+        "cheap insurance", not as findings (filter-oracle-gap/0009).
         """
-        f = cls(order=order, order_A=order_A)
+        f = cls(order=order, order_A=order_A, collapse=collapse)
         f.fit_(y, p=p, max_iter=max_iter, scales=scales, dynamics=dynamics,
                unit_roots=unit_roots)
         return f
@@ -1237,7 +1462,7 @@ class OdeFilter:
                 starts.append(v)
         V = np.clip(np.array(starts), lo, hi)
         val = _loglik_batch(y, V, p, self.order, self.order_A, with_A=False,
-                            unit_roots=d)
+                            unit_roots=d, collapse=self.collapse)
         loud = V[:, m + 4:m + 6].max(1) > math.log(_QUIET)
         chosen = [V[np.argmax(np.where(msk, val, -np.inf))]
                   for msk in (~loud, loud) if msk.any()]
@@ -1271,7 +1496,7 @@ class OdeFilter:
                 starts.append(v)
         W = np.clip(np.array(starts), lo, hi)
         valA = _loglik_batch(y, W, p, self.order, self.order_A, with_A=True,
-                             unit_roots=d)
+                             unit_roots=d, collapse=self.collapse)
 
         # the reference: the pass-4 optimum scored on the SAME likelihood, the
         # one that carries the channel's grid.  The channel is accepted only if
@@ -1279,8 +1504,8 @@ class OdeFilter:
         off_v = full.copy()
         off_v[m + 7] = _LOG_S_FLOOR
         ref = float(_loglik_batch(y, off_v[None, :], p, self.order,
-                                  self.order_A, with_A=True,
-                                  unit_roots=d)[0]) / n
+                                  self.order_A, with_A=True, unit_roots=d,
+                                  collapse=self.collapse)[0]) / n
 
         best_d, bestd = self._polish(y, [W[int(np.argmax(valA))]],
                                      [m + 6, m + 7], bounds, n, p,
@@ -1322,7 +1547,8 @@ class OdeFilter:
             v = v0.copy()
             v[act] = vs
             ll = _loglik_batch(y, v + stencil, p, self.order, self.order_A,
-                               with_A=with_A, unit_roots=unit_roots)
+                               with_A=with_A, unit_roots=unit_roots,
+                               collapse=self.collapse)
             if not np.isfinite(ll[0]):
                 return 1e10, np.zeros(d)
             up, dn = ll[1::2], ll[2::2]

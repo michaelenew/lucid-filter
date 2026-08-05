@@ -48,6 +48,9 @@ print(f.predict(20))           # mean and variance 20 steps out
 
 g = OdeFilter.fit(y, p=4, unit_roots=2)   # pin a LINEAR offset: a climbing
                                           # or declining bias is a state
+
+h = OdeFilter.fit(y, collapse="imm")      # per-node covariances: the
+                                          # likelihood that can split Q from s_P
 ```
 
 `f.params.roots` are the ODE's modes. `f.params.memory()` is `1/(1-|z|max)`:
@@ -73,6 +76,35 @@ nothing is created or lost.
   alarm; `dynamics` is the controller.
 - The four mode coordinates and the three amplitude shares are the parent's,
   unchanged.
+
+## The collapse, and `collapse="imm"`
+
+The filter is a mixture over a quadrature grid, and after every step the
+shipped recursion (GPB1) collapses that mixture to **one** covariance — so at
+the next step every node is handed the same `P`, and two nodes' predictive
+variances differ by one step of noise, never by the accumulated history of
+the regime they disagree about.
+[`filter-oracle-gap`](../../../filter-oracle-gap/SUMMARY.md) measured what
+that erases: the likelihood goes **flat along the ridge
+`Q·e^{s_P²/2} = const`** (it can measure the mean process variance but not
+split it between a constant level and a wandering scale), the `s_P = 0`
+boundary becomes self-confirming, and a forced process-scale channel stops at
+80% of an oracle's advantage.
+
+`collapse="imm"` keeps one `(m, P)` per node, mixed by the chain's own
+kernel — same model, no new parameters, ~1.4× cost, bit-identical at
+`s_P = s_M = s_A = 0`. Measured: 89.5% of the oracle gap (nearly flat across
+the forced `s_P`, so a wrong guess barely costs), ridge relief 0.0022 →
+0.0101 nats/pt with the argmin on the generating value, and fitted endpoints
+that come home (`s_P` 0.87 against a truth of 0.8 where the shipped fit
+wanders between 0 and 2.1 by optimiser path). The default stays `"gpb1"`
+for now so downstream readers of the filter's internals (`crypto`'s
+`mixture.py`) keep their contract; new work should prefer `"imm"`. One
+caution from the same workstream: near `s_P = 0` the *point estimate* is
+ill-posed under either likelihood — Fisher information in a spread parameter
+vanishes at zero spread — so read small fitted `s_P` as cheap insurance, not
+as a finding, and expect the principled fix (marginalising `(φ_P, s_P)` like
+every other nuisance here) as a follow-up design.
 
 ## Costs and limits, measured
 

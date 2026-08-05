@@ -57,14 +57,21 @@ sides), replaced for the point fit by the marginalisation design above.
 
 ## Next, in order
 
-1. **The patch**: batched IMM inside `_loglik_batch`'s interface plus a
-   marginalised $(\varphi_P, s_P)$ grid, behind a flag beside the shipped
-   recursion; gates re-run through it (`0032` full series, `0033`'s
-   battery, the parent-reduction test at $s=0$).
-2. **Fit-time cost.** Reference IMM fits ran ~4 min at $n=900$ against
-   ~15 s shipped — the polish loop, not the evaluator (1.4×), is where the
-   time went; the batched evaluator needs the same stencil treatment the
-   speedup gave GPB1.
+0. ~~**The IMM patch.**~~ — **shipped**: `OdeFilter(collapse="imm")` and
+   `fit(collapse="imm")` run the per-node recursion end to end (streaming,
+   batched, predict, dynamics channel), bit-identical to the shipped one at
+   $s=0$, default unchanged so downstream internals contracts hold. The
+   battery that would have caught the holes is in
+   `ode-adaptive-filter/output/tests/`: the ridge must separate, the forced
+   channel must clear 85% of the oracle gap, the fitted $s_P$ must stay off
+   the boundary. Through the core path the fit lands $\hat s_P = 0.87$
+   against a truth of 0.8 at $n=600$.
+1. **The marginalised $(\varphi_P, s_P)$ grid** — the second half of the
+   design; needs `Params`-level architecture (a hypothesis set is not a
+   point) and its own premium/exposure/`0032` measurements.
+2. **Fit-time cost.** An IMM fit runs ~107 s at $n=600$ against ~15 s
+   shipped — the polish loop, not the evaluator (1.4×), is where the time
+   goes; it needs the same stencil economics the speedup gave GPB1.
 3. **Crypto's real basins** under the IMM likelihood — does 0.003
    in-sample become a decision on the actual BTC series.
 4. The channel model's 6.8% (a regime-hazard or heavier-tailed chain in

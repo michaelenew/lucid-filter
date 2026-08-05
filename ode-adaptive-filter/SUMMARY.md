@@ -784,7 +784,9 @@ parameter.)
    > the fit's endpoint wandering between $\hat s_P=0$ and $\hat s_P=1.44$
    > across pipeline versions are all that one degeneracy. Forced-channel
    > extraction under IMM: 89.5% of the oracle gap against 80.0%, and nearly
-   > flat across the forced $s_P$.
+   > flat across the forced $s_P$. **Shipped**: `OdeFilter(collapse="imm")`
+   > and `fit(collapse="imm")`, default unchanged; the oracle-gap battery in
+   > `output/tests/` pins the repair.
 0b. **Two corrections the audit found, both small:** delete the $Q$ scan, and
    make `_iv_alpha` require $m>p$. Both make the filter simpler *and* faster.
 1. **Act on `whiteness`** — `0033` gives it a target: 1.365 and 1.042 after the
