@@ -98,9 +98,12 @@ the forced `s_P`, so a wrong guess barely costs), ridge relief 0.0022 →
 0.0101 nats/pt with the argmin on the generating value, and fitted endpoints
 that come home (`s_P` 0.87 against a truth of 0.8 where the shipped fit
 wanders between 0 and 2.1 by optimiser path). The default stays `"gpb1"`
-for now so downstream readers of the filter's internals (`crypto`'s
-`mixture.py`) keep their contract; new work should prefer `"imm"`. One
-caution from the same workstream: near `s_P = 0` the *point estimate* is
+**only** so downstream readers of the filter's internals (`crypto`'s
+`mixture.py`) keep their contract until their next pass. **This mode is
+scheduled for removal**: `"imm"` is strictly superior — same model, strictly
+more of the evidence — so once crypto updates its internals, `collapse`
+collapses to the single most performant recursion and the option disappears.
+One caution from the same workstream: near `s_P = 0` the *point estimate* is
 ill-posed under either likelihood — Fisher information in a spread parameter
 vanishes at zero spread — so read small fitted `s_P` as cheap insurance, not
 as a finding, and expect the principled fix (marginalising `(φ_P, s_P)` like

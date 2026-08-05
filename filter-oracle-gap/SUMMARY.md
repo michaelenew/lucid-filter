@@ -66,6 +66,11 @@ sides), replaced for the point fit by the marginalisation design above.
    channel must clear 85% of the oracle gap, the fitted $s_P$ must stay off
    the boundary. Through the core path the fit lands $\hat s_P = 0.87$
    against a truth of 0.8 at $n=600$.
+0a. **Delete GPB1 once crypto migrates.** Decision recorded: `"imm"` is
+   strictly superior (same model, strictly more of the evidence), so the
+   `collapse` option exists only until `crypto-predictivity/output/mixture.py`
+   reads the per-node state — its SUMMARY item 0a. Then the two modes
+   collapse to the single most performant one and the flag disappears.
 1. **The marginalised $(\varphi_P, s_P)$ grid** — the second half of the
    design; needs `Params`-level architecture (a hypothesis set is not a
    point) and its own premium/exposure/`0032` measurements.
