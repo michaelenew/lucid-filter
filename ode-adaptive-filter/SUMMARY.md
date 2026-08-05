@@ -785,9 +785,18 @@ already optimises. See `filter-optimality-proof/0036`.)
    > the fit's endpoint wandering between $\hat s_P=0$ and $\hat s_P=1.44$
    > across pipeline versions are all that one degeneracy. Forced-channel
    > extraction under IMM: 89.5% of the oracle gap against 80.0%, and nearly
-   > flat across the forced $s_P$. **Shipped**: `OdeFilter(collapse="imm")`
-   > and `fit(collapse="imm")`, default unchanged; the oracle-gap battery in
-   > `output/tests/` pins the repair.
+   > flat across the forced $s_P$. **Shipped, then made the only recursion**:
+   > crypto's `mixture.py` migrated to the per-node state and the GPB1
+   > collapse and its `collapse` flag were deleted; the oracle-gap battery in
+   > `output/tests/` pins the repair. Two knock-ons (odefilter README): the
+   > parent reduction is exact on the $s=0$ face and ~6e-3 nats/pt loose with
+   > a live channel (the parent is GPB1 by construction), and a detectable
+   > explosive $\alpha$ now carries a *finite* likelihood — the old `-inf`
+   > was GPB1 overflowing, so the unit disc is a commitment (`unit_roots`),
+   > not an emergent wall. Crypto's `0032` observed the consequence: one
+   > pinned-root fit landed a quotient root at $|z|=8.3$ under the dynamics
+   > channel (its density fine, its roots unreadable) — item 2a's
+   > `unit_roots` × dynamics interaction, now with a concrete casualty.
 0b. **Two corrections the audit found, both small:** delete the $Q$ scan, and
    make `_iv_alpha` require $m>p$. Both make the filter simpler *and* faster.
 1. **Act on `whiteness`** — `0033` gives it a target: 1.365 and 1.042 after the
