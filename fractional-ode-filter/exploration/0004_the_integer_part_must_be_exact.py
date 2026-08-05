@@ -37,6 +37,16 @@ Measurements:
      posterior over a nu-grid, not an argmax -- the repository's own
      grid-the-nuisance architecture, one level up.
 
+     ** WITHDRAWN (0005-D). **  The "two modes" were the two q-ridges seen
+     through this file's warm-started q-search, which cannot move between
+     them.  Under the path-independent wide-q profile no second mode exists
+     on any of six seeds, and the seed scatter matches the curvature SE.
+     Every table in this run is superseded by 0005's.  A's qualitative
+     conclusion stands -- the split kernel removes the explosive artifact
+     and gains 0.05-0.38 nats/point -- but its nu_hat values were also
+     ridge-contaminated where the two q-branches were close (truth 1.3:
+     1.44 here against 0005's path-independent 1.33-1.36).
+
 Run:  python 0004_the_integer_part_must_be_exact.py        (~15 min)
 """
 import sys

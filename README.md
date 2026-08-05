@@ -12,10 +12,15 @@ labelled as such.
 | [`filter-optimality-proof/`](filter-optimality-proof/SUMMARY.md) | one layer proved, one measured, one open — where "optimal" does and does not hold |
 | [`ode-adaptive-filter/`](ode-adaptive-filter/SUMMARY.md) | in progress: extending to processes locally described by a second-order linear ODE |
 | [`crypto-predictivity/`](crypto-predictivity/SUMMARY.md) | the filters pointed at real series: no dynamics in a price at any frequency on any clock, half the volatility channel is the clock, and an oscillator in realised volatility |
+| [`fractional-ode-filter/`](fractional-ode-filter/SUMMARY.md) | in progress: the order made continuous — $\nu$ is learnable from both sides with an error bar, recovers the parent at $\hat\nu\approx1$, and one coordinate beats $p$ free ones prequentially at fractional orders |
 
 ## Open directions
 
 ### Fractional derivatives and an integral transform for the dynamics
+
+> **Now being pursued in [`fractional-ode-filter/`](fractional-ode-filter/SUMMARY.md)**,
+> which has measured the claims below on the likelihood face. The text is
+> kept as the original motivation.
 
 The ODE workstream currently commits to an integer order $p$ — a recurrence
 $x_t=\sum_{i=1}^{p}\alpha_i x_{t-i}+w_t$, whose characteristic roots are the

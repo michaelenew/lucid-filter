@@ -177,6 +177,7 @@ def main():
     ax[1].set_xscale("log")
     ax[1].set_xticks([5, 10, 20, 40, 80])
     ax[1].set_xticklabels([5, 10, 20, 40, 80])
+    ax[1].xaxis.set_minor_formatter(matplotlib.ticker.NullFormatter())
     ax[1].set_xlabel("truncation $K$")
     ax[1].set_ylabel("max profile loglik / n")
     ax[1].set_title("the budget, path-independent")
