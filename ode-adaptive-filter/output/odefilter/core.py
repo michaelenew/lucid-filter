@@ -93,6 +93,33 @@ def _radius(alpha) -> float:
     return float(np.max(np.abs(r))) if r.size else 0.0
 
 
+def _pin_maps(p: int, d: int):
+    """The exact linear map from the free coefficients to the pinned alpha.
+
+    Pinning d roots at z = 1 writes the characteristic polynomial as
+
+        z^p - sum_i alpha_i z^{p-i}  =  (z - 1)^d (z^m - sum_j beta_j z^{m-j})
+
+    with m = p - d free coefficients beta.  Polynomial multiplication is linear
+    in the coefficients, so alpha = base + beta @ M with (base, M) fixed
+    integer arrays; this returns them.  The constraint therefore costs nothing
+    per evaluation and holds exactly, to the last bit the convolution keeps.
+
+    d = 1 is the constant offset; d = 2 is the linear offset -- a level whose
+    RATE of change is part of the state, which is what a climbing or declining
+    bias is.  m = 0 (all roots pinned) is legal: alpha is then the binomial
+    row of (z - 1)^d and nothing about the dynamics is searched.
+    """
+    if not 0 <= d <= p:
+        raise ValueError("unit_roots must lie in [0, p]")
+    u = np.array([math.comb(d, k) * (-1.0) ** k for k in range(d + 1)])
+    m = p - d
+    U = np.zeros((m + 1, p + 1))
+    for i in range(m + 1):
+        U[i, i:i + d + 1] = u
+    return -U[0, 1:], U[1:, 1:]
+
+
 # --------------------------------------------------------------------- params
 @dataclass(frozen=True)
 class Params:
@@ -106,6 +133,13 @@ class Params:
                that they stay separated from s_P and s_M.
     phi_P/M    persistence of each noise channel's log-scale, in [0, 1).
     s_P/M      log-SD of each channel's scale.  Zero means homoscedastic.
+    unit_roots how many of alpha's roots are PINNED at z = 1.  0 (the default)
+               means every root was free -- the current, weaker assumption.
+               1 pins the constant offset; 2 pins the linear offset, so a
+               climbing or declining bias is part of the state rather than
+               something a free root has to crawl toward.  alpha always stores
+               the full p coefficients, pinned factor multiplied in, so the
+               recursion never sees the constraint -- only the fit does.
     """
 
     alpha: tuple
@@ -117,9 +151,11 @@ class Params:
     s_M: float = 0.0
     phi_A: float = 0.0
     s_A: float = 0.0
+    unit_roots: int = 0
 
     def __post_init__(self):
         object.__setattr__(self, "alpha", tuple(float(a) for a in self.alpha))
+        object.__setattr__(self, "unit_roots", int(self.unit_roots))
         if len(self.alpha) < 1:
             raise ValueError("alpha must have at least one entry")
         if not (self.Q > 0 and self.s2 > 0):
@@ -130,6 +166,20 @@ class Params:
         for n in ("s_P", "s_M", "s_A"):
             if getattr(self, n) < 0.0:
                 raise ValueError(f"{n} must be non-negative")
+        if not 0 <= self.unit_roots <= len(self.alpha):
+            raise ValueError("unit_roots must lie in [0, p]")
+        if self.unit_roots:
+            # the claim is exact by construction (the fit multiplies the pinned
+            # factor in), so a violation means alpha and unit_roots came from
+            # different places; say so rather than filtering under a false label
+            c = np.concatenate([[1.0], -np.asarray(self.alpha)])
+            scale = float(np.abs(c).sum())
+            for _ in range(self.unit_roots):
+                c = np.cumsum(c)                # synthetic division by (z - 1)
+                if abs(c[-1]) > 1e-8 * scale:   # the remainder, = poly at z = 1
+                    raise ValueError(
+                        "alpha does not carry the claimed unit roots")
+                c = c[:-1]
 
     def alpha_at(self, g: float) -> np.ndarray:
         """The dynamics with a fraction `g` of the fitted departure in force.
@@ -206,19 +256,33 @@ class Params:
         return cls(**d)
 
     def _vec(self) -> np.ndarray:
+        """The unconstrained fit coordinates: the FREE coefficients, then the
+        eight noise coordinates.  With unit_roots = d the free coefficients are
+        the quotient polynomial's beta (p - d of them), recovered by synthetic
+        division; :meth:`_from_vec` inverts this exactly."""
+        c = np.concatenate([[1.0], -np.asarray(self.alpha)])
+        for _ in range(self.unit_roots):
+            c = np.cumsum(c)[:-1]               # divide out one (z - 1)
         return np.concatenate([
-            np.asarray(self.alpha, dtype=float),
+            -c[1:],
             [math.log(self.Q), math.log(self.s2),
              _logit(self.phi_P), _logit(self.phi_M),
              math.log(max(self.s_P, 1e-6)), math.log(max(self.s_M, 1e-6)),
              _logit(self.phi_A), math.log(max(self.s_A, 1e-6))]])
 
     @classmethod
-    def _from_vec(cls, v: np.ndarray, p: int) -> "Params":
-        return cls(alpha=tuple(v[:p]), Q=math.exp(v[p]), s2=math.exp(v[p + 1]),
-                   phi_P=_expit(v[p + 2]), phi_M=_expit(v[p + 3]),
-                   s_P=math.exp(v[p + 4]), s_M=math.exp(v[p + 5]),
-                   phi_A=_expit(v[p + 6]), s_A=math.exp(v[p + 7]))
+    def _from_vec(cls, v: np.ndarray, p: int, unit_roots: int = 0) -> "Params":
+        m = p - unit_roots
+        if unit_roots:
+            base, M = _pin_maps(p, unit_roots)
+            alpha = tuple(base + np.asarray(v[:m]) @ M)
+        else:
+            alpha = tuple(v[:p])
+        return cls(alpha=alpha, Q=math.exp(v[m]), s2=math.exp(v[m + 1]),
+                   phi_P=_expit(v[m + 2]), phi_M=_expit(v[m + 3]),
+                   s_P=math.exp(v[m + 4]), s_M=math.exp(v[m + 5]),
+                   phi_A=_expit(v[m + 6]), s_A=math.exp(v[m + 7]),
+                   unit_roots=unit_roots)
 
 
 def _logit(x: float) -> float:
@@ -393,8 +457,15 @@ def _kron_batch(A: np.ndarray, B: np.ndarray) -> np.ndarray:
     return (A[:, :, None, :, None] * B[:, None, :, None, :]).reshape(b, i * k, j * l)
 
 
-def _unpack(V: np.ndarray, p: int):
-    """The nine coordinates of a batch of unconstrained vectors, clipped."""
+def _unpack(V: np.ndarray, p: int, unit_roots: int = 0):
+    """The nine coordinates of a batch of unconstrained vectors, clipped.
+
+    With ``unit_roots = d`` each row carries the p - d free coefficients and the
+    pinned factor (z - 1)^d is multiplied in here -- one matrix product for the
+    whole batch, since the map is linear (:func:`_pin_maps`).
+    """
+    m = p - unit_roots
+
     def ph(col):
         return 1.0 / (1.0 + np.exp(-np.clip(V[:, col], -_LOGIT_CAP - 1.0,
                                             _LOGIT_CAP + 1.0)))
@@ -402,9 +473,14 @@ def _unpack(V: np.ndarray, p: int):
     def sc(col):
         return np.exp(np.clip(V[:, col], _LOG_S_FLOOR - 1.0, _LOG_S_CAP + 1.0))
 
-    return (V[:, :p], np.exp(np.clip(V[:, p], -700.0, 700.0)),
-            np.exp(np.clip(V[:, p + 1], -700.0, 700.0)),
-            ph(p + 2), ph(p + 3), sc(p + 4), sc(p + 5), ph(p + 6), sc(p + 7))
+    if unit_roots:
+        base, M = _pin_maps(p, unit_roots)
+        alpha = base + V[:, :m] @ M
+    else:
+        alpha = V[:, :p]
+    return (alpha, np.exp(np.clip(V[:, m], -700.0, 700.0)),
+            np.exp(np.clip(V[:, m + 1], -700.0, 700.0)),
+            ph(m + 2), ph(m + 3), sc(m + 4), sc(m + 5), ph(m + 6), sc(m + 7))
 
 
 def _alpha_at_batch(alpha: np.ndarray, gs: np.ndarray) -> np.ndarray:
@@ -440,9 +516,10 @@ def _alpha_at_batch(alpha: np.ndarray, gs: np.ndarray) -> np.ndarray:
     return out
 
 
-def _grid_batch(V: np.ndarray, p: int, order: int, order_A: int, with_A: bool):
+def _grid_batch(V: np.ndarray, p: int, order: int, order_A: int, with_A: bool,
+                unit_roots: int = 0):
     """The batched equivalent of :meth:`OdeFilter._build`."""
-    alpha, Q, S2, phP, phM, sP, sM, phA, sA = _unpack(V, p)
+    alpha, Q, S2, phP, phM, sP, sM, phA, sA = _unpack(V, p, unit_roots)
     B, n = V.shape[0], order
     lamP, wP, TP = _chain_batch(phP, sP, n)
     lamM, wM, TM = _chain_batch(phM, sM, n)
@@ -471,10 +548,12 @@ def _grid_batch(V: np.ndarray, p: int, order: int, order_A: int, with_A: bool):
 
 
 def _loglik_batch(y: np.ndarray, V: np.ndarray, p: int, order: int,
-                  order_A: int = 3, with_A: bool = True) -> np.ndarray:
+                  order_A: int = 3, with_A: bool = True,
+                  unit_roots: int = 0) -> np.ndarray:
     """Marginal log-likelihood of ``y`` at every unconstrained vector in ``V``.
 
-    ``V`` is (B, p + 8) in the coordinates of :meth:`Params._vec`.  The
+    ``V`` is (B, p - unit_roots + 8) in the coordinates of
+    :meth:`Params._vec`: the free coefficients, then the noise block.  The
     recursion is the one in :meth:`OdeFilter.update`, GPB1 collapse and all,
     carried out for all B vectors at once; at B = 1 it agrees with
     :meth:`OdeFilter.loglik` to floating-point round-off.  No Step objects, no
@@ -490,7 +569,7 @@ def _loglik_batch(y: np.ndarray, V: np.ndarray, p: int, order: int,
     """
     V = np.atleast_2d(V)
     B = V.shape[0]
-    g = _grid_batch(V, p, order, order_A, with_A)
+    g = _grid_batch(V, p, order, order_A, with_A, unit_roots)
     T, Qg, Rg, Fs, Aidx, nA = (g["T"], g["Qg"], g["Rg"], g["Fs"], g["Aidx"], g["nA"])
     G = Qg.shape[1]
     nN = G // nA
@@ -619,26 +698,42 @@ def _face_profile(y: np.ndarray, alpha: np.ndarray, q: float):
 _Q_SCAN = np.logspace(-7.0, 3.0, 41)            # q is a ratio, so it needs no scaling
 
 
-def _face_optimum(y: np.ndarray, a0: np.ndarray, max_iter: int = 400):
-    """Maximise the concentrated profile over (alpha, log q).  (alpha, Q, S2, u)."""
+def _face_optimum(y: np.ndarray, b0: np.ndarray, max_iter: int = 400,
+                  p: int | None = None, unit_roots: int = 0):
+    """Maximise the concentrated profile over the free coefficients and log q.
+
+    ``b0`` is the start in the FREE coefficients: alpha itself when nothing is
+    pinned, the quotient polynomial's beta when ``unit_roots > 0`` (the pinned
+    factor is multiplied in before every profile evaluation, so the search
+    simply never leaves the constraint surface).  Returns (free, Q, S2, u).
+    """
     from scipy.optimize import minimize
 
-    lls = [_face_profile(y, a0, q)[1] for q in _Q_SCAN]
+    if unit_roots:
+        base_, M_ = _pin_maps(p, unit_roots)
+
+        def full(b):
+            return base_ + np.asarray(b, dtype=float) @ M_
+    else:
+        def full(b):
+            return np.asarray(b, dtype=float)
+
+    lls = [_face_profile(y, full(b0), q)[1] for q in _Q_SCAN]
     lq = math.log(float(_Q_SCAN[int(np.argmax(lls))]))
 
     def nll(v):
-        s2, ll, _ = _face_profile(y, v[:-1], math.exp(min(v[-1], 700.0)))
+        s2, ll, _ = _face_profile(y, full(v[:-1]), math.exp(min(v[-1], 700.0)))
         return math.inf if not math.isfinite(ll) else -ll
 
-    r = minimize(nll, np.concatenate([a0, [lq]]), method="Nelder-Mead",
+    r = minimize(nll, np.concatenate([b0, [lq]]), method="Nelder-Mead",
                  options=dict(maxiter=int(max_iter), xatol=1e-4, fatol=1e-6))
-    v = r.x if math.isfinite(r.fun) else np.concatenate([a0, [lq]])
-    alpha, q = v[:-1], math.exp(min(v[-1], 700.0))
-    s2, ll, u = _face_profile(y, alpha, q)
+    v = r.x if math.isfinite(r.fun) else np.concatenate([b0, [lq]])
+    free, q = v[:-1], math.exp(min(v[-1], 700.0))
+    s2, ll, u = _face_profile(y, full(free), q)
     if not math.isfinite(ll):                   # the scan point is known good
-        alpha, q = a0, math.exp(lq)
-        s2, ll, u = _face_profile(y, alpha, q)
-    return np.asarray(alpha, dtype=float), q * s2, s2, u
+        free, q = np.asarray(b0, dtype=float), math.exp(lq)
+        s2, ll, u = _face_profile(y, full(free), q)
+    return np.asarray(free, dtype=float), q * s2, s2, u
 
 
 _VAR_LOG_CHI2 = math.pi ** 2 / 2.0              # Var(log z^2), z ~ N(0,1), exact
@@ -983,7 +1078,7 @@ class OdeFilter:
     @classmethod
     def fit(cls, y, p: int = 3, order: int = 5, max_iter: int = 400,
             scales: bool = True, dynamics: bool = True,
-            order_A: int = 3) -> "OdeFilter":
+            order_A: int = 3, unit_roots: int = 0) -> "OdeFilter":
         """Learn every parameter from a series and return a fitted filter.
 
         ``p`` is the order of the recurrence: 3 is a second-order ODE plus a
@@ -992,17 +1087,34 @@ class OdeFilter:
         the characteristic polynomial is a channel, choosing ``p`` is the same
         act as counting channels.
 
+        ``unit_roots`` pins that many roots at z = 1 exactly, and fits only the
+        quotient polynomial's p - unit_roots coefficients.  0 (the default)
+        lets every root float -- the weaker and safer assumption, and the
+        behaviour this filter always had.  1 asserts the constant offset;
+        2 asserts a LINEAR offset -- a climbing or declining bias whose rate is
+        part of the state.  A free fit cannot reliably find that bias: a
+        maximum-likelihood unit root lands just inside the circle, and a root
+        at 1 - eps forecasts a drift that decays instead of one that continues
+        (exploration/0040).  Pinning is a hypothesis, not an assumption -- fit
+        with unit_roots at both values and compare the same prequential
+        likelihood this filter uses everywhere else.  This is the internal
+        form of "fit the differenced series" (crypto-predictivity/0016), and
+        strictly dominates it: differencing pushes iid measurement noise out
+        of the model class (it becomes MA(1)); pinning leaves it alone.
+
         ``scales=False`` pins the two log-scale channels off, giving an ordinary
         (non-adaptive) recurrence filter.  Useful as a baseline and much faster.
         ``dynamics=False`` additionally pins the dynamics channel off, giving
         a static ``alpha``.
         """
         f = cls(order=order, order_A=order_A)
-        f.fit_(y, p=p, max_iter=max_iter, scales=scales, dynamics=dynamics)
+        f.fit_(y, p=p, max_iter=max_iter, scales=scales, dynamics=dynamics,
+               unit_roots=unit_roots)
         return f
 
     def fit_(self, y, p: int = 3, max_iter: int = 400,
-             scales: bool = True, dynamics: bool = True) -> "OdeFilter":
+             scales: bool = True, dynamics: bool = True,
+             unit_roots: int = 0) -> "OdeFilter":
         """Fit in place.  Returns self.
 
         Staged, because a nine-dimensional search from one start is not
@@ -1051,6 +1163,12 @@ class OdeFilter:
         dynamics is a regime by construction (0025): it has no first-moment
         signature at all, so the impulsive end of this channel is a different
         object from the impulsive end of the noise channels.
+
+        With ``unit_roots = d`` every pass runs unchanged in the p - d free
+        coefficients: the pinned factor (z - 1)^d is a fixed linear map
+        multiplied in at each likelihood evaluation (:func:`_pin_maps`), so the
+        search simply cannot leave the constraint surface, and d = 0 is
+        bit-for-bit the unconstrained fit.
         """
         y = np.asarray(y, dtype=float)
         finite = np.isfinite(y)
@@ -1059,28 +1177,42 @@ class OdeFilter:
             raise ValueError(f"need at least {8 * p} finite observations")
         n = max(int(finite.sum()), 1)
         off = math.log(1e-6)
+        d = int(unit_roots)
+        m = p - d                                # free coefficients
+        if d:
+            pin_base, pin_M = _pin_maps(p, d)    # validates d in [0, p]
 
-        # pass 0 -- alpha by instrumental variables, and the residual scale that
-        # sets the search box
-        a0 = _iv_alpha(good, p)
+        # pass 0 -- the free coefficients by instrumental variables, and the
+        # residual scale that sets the search box.  With d roots pinned the
+        # quotient dynamics live on the d-times differenced series -- that is
+        # what pinning MEANS -- so the IV start is taken there.  Differencing
+        # thickens the measurement noise, but this is a start, not an estimate;
+        # the likelihood that polishes it runs on the level, in class.
+        if d:
+            good_d = np.diff(y, d)
+            good_d = good_d[np.isfinite(good_d)]
+            b0 = _iv_alpha(good_d, m) if m else np.zeros(0)
+            a0 = pin_base + b0 @ pin_M
+        else:
+            b0 = a0 = _iv_alpha(good, p)
         idx = np.arange(p, good.size)
         r0 = good[idx] - np.column_stack([good[idx - i]
                                           for i in range(1, p + 1)]) @ a0
         g0 = float(np.mean(r0 * r0))
         if not g0 > 0:
             raise ValueError("series has no residual variation; nothing to fit")
-        bounds = _bounds(p, g0)
+        bounds = _bounds(m, g0)
         lo, hi = np.array(bounds).T
 
         # pass 1 -- the s = 0 face, with S2 concentrated out
-        alpha, Q0, s20, resid = _face_optimum(y, a0, max_iter)
-        base = np.concatenate([alpha, [math.log(Q0), math.log(s20),
-                                       _logit(0.5), _logit(0.5), off, off,
-                                       _logit(0.9), off]])
+        free, Q0, s20, resid = _face_optimum(y, b0, max_iter, p, d)
+        base = np.concatenate([free, [math.log(Q0), math.log(s20),
+                                      _logit(0.5), _logit(0.5), off, off,
+                                      _logit(0.9), off]])
         base = np.clip(base, lo, hi)
 
         if not scales:
-            self.params = Params._from_vec(base, p)
+            self.params = Params._from_vec(base, p, d)
             self._built = None
             return self.reset()
 
@@ -1093,21 +1225,22 @@ class OdeFilter:
             for pm in _PHI_GRID:
                 for sp, sm in _S_SPLITS:
                     v = base.copy()
-                    v[p + 2], v[p + 3] = _logit(pp), _logit(pm)
-                    v[p + 4], v[p + 5] = math.log(sp), math.log(sm)
+                    v[m + 2], v[m + 3] = _logit(pp), _logit(pm)
+                    v[m + 4], v[m + 5] = math.log(sp), math.log(sm)
                     starts.append(v)
         if s_hat > 0.0:
             lz, lp = math.log(s_hat), _logit(phi_hat)
             for sp, sm in ((lz, lz), (lz, off), (off, lz)):
                 v = base.copy()
-                v[p + 2], v[p + 3] = lp, lp
-                v[p + 4], v[p + 5] = sp, sm
+                v[m + 2], v[m + 3] = lp, lp
+                v[m + 4], v[m + 5] = sp, sm
                 starts.append(v)
         V = np.clip(np.array(starts), lo, hi)
-        val = _loglik_batch(y, V, p, self.order, self.order_A, with_A=False)
-        loud = V[:, p + 4:p + 6].max(1) > math.log(_QUIET)
-        chosen = [V[np.argmax(np.where(m, val, -np.inf))]
-                  for m in (~loud, loud) if m.any()]
+        val = _loglik_batch(y, V, p, self.order, self.order_A, with_A=False,
+                            unit_roots=d)
+        loud = V[:, m + 4:m + 6].max(1) > math.log(_QUIET)
+        chosen = [V[np.argmax(np.where(msk, val, -np.inf))]
+                  for msk in (~loud, loud) if msk.any()]
 
         # pass 4 -- maximum likelihood, in the cheap subspace first.
         # The six noise coordinates alone are both better conditioned than the
@@ -1116,14 +1249,14 @@ class OdeFilter:
         # cheaper per gradient, because the stencil is 2*6+1 rows rather than
         # 2*(p+6)+1.  The joint step afterwards then starts from a point alpha
         # barely has to move from.
-        noise = list(range(p, p + 6))            # Q, S2, phi_P, phi_M, s_P, s_M
+        noise = list(range(m, m + 6))            # Q, S2, phi_P, phi_M, s_P, s_M
         full, _ = self._polish(y, chosen, noise, bounds, n, p,
-                              max_iter, with_A=False)
-        full, _ = self._polish(y, [full], list(range(p + 6)), bounds, n, p,
-                               max_iter, with_A=False)
+                              max_iter, with_A=False, unit_roots=d)
+        full, _ = self._polish(y, [full], list(range(m + 6)), bounds, n, p,
+                               max_iter, with_A=False, unit_roots=d)
 
         if not dynamics:
-            self.params = Params._from_vec(full, p)
+            self.params = Params._from_vec(full, p, d)
             self._built = None
             return self.reset()
 
@@ -1134,33 +1267,37 @@ class OdeFilter:
         for pa in (0.5, 0.9, 0.98):
             for sa in (0.05, 0.15, 0.6):
                 v = full.copy()
-                v[p + 6], v[p + 7] = _logit(pa), math.log(sa)
+                v[m + 6], v[m + 7] = _logit(pa), math.log(sa)
                 starts.append(v)
         W = np.clip(np.array(starts), lo, hi)
-        valA = _loglik_batch(y, W, p, self.order, self.order_A, with_A=True)
+        valA = _loglik_batch(y, W, p, self.order, self.order_A, with_A=True,
+                             unit_roots=d)
 
         # the reference: the pass-4 optimum scored on the SAME likelihood, the
         # one that carries the channel's grid.  The channel is accepted only if
         # it beats this.
         off_v = full.copy()
-        off_v[p + 7] = _LOG_S_FLOOR
+        off_v[m + 7] = _LOG_S_FLOOR
         ref = float(_loglik_batch(y, off_v[None, :], p, self.order,
-                                  self.order_A, with_A=True)[0]) / n
+                                  self.order_A, with_A=True,
+                                  unit_roots=d)[0]) / n
 
         best_d, bestd = self._polish(y, [W[int(np.argmax(valA))]],
-                                     [p + 6, p + 7], bounds, n, p,
-                                     max_iter, with_A=True)
+                                     [m + 6, m + 7], bounds, n, p,
+                                     max_iter, with_A=True, unit_roots=d)
         if -bestd > ref:
-            best_d, bestd = self._polish(y, [best_d], list(range(p + 8)),
-                                         bounds, n, p, max_iter, with_A=True)
+            best_d, bestd = self._polish(y, [best_d], list(range(m + 8)),
+                                         bounds, n, p, max_iter, with_A=True,
+                                         unit_roots=d)
             if -bestd > ref:
                 full = best_d
 
-        self.params = Params._from_vec(full, p)
+        self.params = Params._from_vec(full, p, d)
         self._built = None
         return self.reset()
 
-    def _polish(self, y, starts, act, bounds, n, p, max_iter, with_A):
+    def _polish(self, y, starts, act, bounds, n, p, max_iter, with_A,
+                unit_roots=0):
         """L-BFGS-B over the coordinates in ``act``, gradient batched.
 
         The gradient is a central difference over ``act`` only, and the whole
@@ -1185,7 +1322,7 @@ class OdeFilter:
             v = v0.copy()
             v[act] = vs
             ll = _loglik_batch(y, v + stencil, p, self.order, self.order_A,
-                               with_A=with_A)
+                               with_A=with_A, unit_roots=unit_roots)
             if not np.isfinite(ll[0]):
                 return 1e10, np.zeros(d)
             up, dn = ll[1::2], ll[2::2]

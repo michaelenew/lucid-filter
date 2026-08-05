@@ -37,7 +37,10 @@ vanishes. $Q$ is badly conditioned from moments (0.66% of $\gamma_0$,
 amplification 151), so it is never believed from the moment identity.
 
 **`fit()` is now ~5.5× faster and no less accurate** — see
-[the speedup](#the-speedup) below.
+[the speedup](#the-speedup) below. **And the offset can now be linear**:
+`fit(unit_roots=d)` pins $d$ roots at $z=1$ exactly, which is the only place a
+climbing or declining bias can live and a place a free fit measurably misses —
+see [*A climbing bias is a pinned root*](#a-climbing-bias-is-a-pinned-root).
 
 ## Symbols
 
@@ -51,6 +54,7 @@ amplification 151), so it is never believed from the moment identity.
 | $\varphi_P,\ \varphi_M$ | **persistence** of each log-scale, in $[0,1)$. Near 0 the channel spikes; near 1 it drifts. Undefined when the corresponding $s$ is 0 |
 | $s_P,\ s_M$ | **log-SD of each channel's scale** — the stationary SD of $\lambda^c$. $s_P=0$ means the process noise is homoscedastic; $s_P>0$ means its variance itself varies over time. This is the coordinate that says *whether there is any volatility structure at all*. $s_P$ is the least reliably estimated quantity in the filter: it lands on the $0$ boundary from local optima the likelihood does not endorse, and $0$ is an absolute claim rather than a small one ([`0039`](exploration/0039_two_zeros.md)) |
 | $u$ | the injection direction, $z_t=Fz_{t-1}+u\,w_t$. **Currently pinned to $e_1$**, not fitted |
+| $d$ (`unit_roots`) | how many roots are **pinned at $z=1$ exactly**, with only the quotient polynomial's $p-d$ coefficients fitted. $d{=}0$ (default) is the old free fit bit-for-bit; $d{=}1$ asserts the constant offset; $d{=}2$ the linear offset — a climbing or declining bias whose rate is a state. See *A climbing bias is a pinned root* below |
 
 **Not in the filter** — analysis coordinates from the drift-law thread
 (`0011`, `0015`–`0020`), which asked whether $\alpha$ should be allowed to
@@ -297,6 +301,56 @@ No fix is shipped, because every candidate tested either did nothing or made it
 worse. But the target is now quantified, which it was not before: **any repair
 must beat 0.0025 nats/pt of premium against 0.0872 of exposure, and leave
 `0032`'s window no worse than +0.0004.**
+
+## A climbing bias is a pinned root
+
+[`0041`](exploration/0041_a_climbing_bias_is_a_pinned_root.md), from
+[`0040`](exploration/0040_can_it_find_a_climbing_bias.py). Acting on
+[`crypto-predictivity/0016`](../crypto-predictivity/SUMMARY.md), which measured
+a linear offset worth up to +0.027 nats/bar by differencing and left
+first-class support as this filter's call.
+
+The model has no intercept, so a climbing or declining bias can only live in a
+**double root at $z=1$** — and the free fit cannot hold a root there. Its ML
+unit root lands at $1\pm\varepsilon$, $\varepsilon=O(1/n)$ (measured
+1.0011–1.0069 on drifting data, both sides on flat data), and a root is an
+exponent: $1+\varepsilon$ renders an *additive* climb as *geometric growth of
+the level*, overshooting at $h{=}20$ by more than a flat forecast undershoots;
+$1-\varepsilon$ decays it. Underneath is an invariance of the parent's own
+kind: within this family, forecast equivariance to $y\mapsto y+c$ **is**
+$\sum\alpha_i=1$, and equivariance to $y\mapsto y+rt$ is the double root. A
+free ML fit always trades that symmetry for in-sample density.
+
+**`fit(unit_roots=d)` buys it back by construction**: the characteristic
+polynomial is written $(z-1)^d(z^m-\sum\beta_jz^{m-j})$ and only the quotient
+is searched — an exact linear map, $d{=}0$ bit-for-bit the old fit,
+$p{=}1,d{=}1$ exactly the parent. Prequential, 3 seeds:
+
+| data | free | pinned | pin − free, nats/pt |
+|---|---|---|---|
+| walk + drift (A) | bias(h=20) **−6.6 to −13.2** | bias **≈ 0** | **+0.052** |
+| in-class $(z-1)^2{\times}$osc (B) | RMSE(h=20) 2448 | RMSE **534** | **+0.62** |
+| trend over *integrated* osc (C) | — | $\hat Q$ inflates 8–42× | **−0.14** |
+| no climb, wrong pin $d{=}2$ (D) | — | — | **−0.148** |
+| no climb, right pin $d{=}1$ (D) | — | — | **+0.0003** |
+
+The right pin is free, the wrong pin is expensive but **loud** — three orders
+of magnitude above the ±0.0004 resolution `0039` set for this criterion — and
+the prequential density **chose correctly in every section**. On in-class data
+the anchor does nearly all the work: with one root pinned the free part lands
+its own root at 0.995–1.001 (crypto's `diff_p3` behaviour), and the second pin
+is free. The pinned fit recovers the quotient cleanly ($|z|=0.94$–0.96 against
+0.949, $\hat Q\approx1$, $\hat\sigma^2\approx9$ — now a slow test). And the
+internal pin **beats the differencing recipe that motivated it** by +0.036
+nats/pt pooled: differencing turns iid measurement noise into an out-of-class
+MA(1); pinning leaves it alone.
+
+The recorded failure mode (C): when the pinned class is wrong the damage lands
+in $\hat Q$ and long-horizon variance, not in a subtle bias. And the standing
+limit: process noise still enters through $u=e_1$ alone, so a pinned slope
+*wanders* with the same $Q$ that drives everything else — a deterministic
+slope over in-class noise is inexpressible at any $d$, which is the $u=e_1$
+commitment (`0030`) with a concrete casualty.
 
 ## Three corrections — read these before anything else
 
@@ -723,6 +777,12 @@ parameter.)
    the cheapest real use of the drift work and needs no grid.
 2. **Widen the battery** — more seeds, more pole locations, and a
    hindsight-tuned constant-gain baseline alongside the parent.
+2a. **Cross the dynamics channel with pinned roots.** Every `0040` fit ran
+   `dynamics=False`. `alpha_at(g)` preserves the $z=1$ root at every $g$ but
+   the double root only at $g=1$ — the right semantics (a drift that can stop
+   governing) — and `_radius`'s $1+10^{-9}$ tolerance sits below the
+   $1\pm10^{-8}$ split of a numerical double root. Needs its own probe before
+   `unit_roots` and the channel are used together.
 3. **Cross persistence into the channel structure.** Every disturbance measured
    so far fires once. Same exact linear algebra as `0021`.
 4. **Is the oscillator phase readable?** The coordinate with no parent analogue:
@@ -766,9 +826,11 @@ so.
   [`0022`](exploration/0022_the_integration_ladder.md),
   [`0024`](exploration/0024_the_modes_are_the_channels.md),
   [`0027`](exploration/0027_the_candidate_filter.md),
-  [`0030`](exploration/0030_the_free_variable_audit.md) — **start at `0027` for
-  the filter, `0030` for the audit, `0024` for the mode structure, `0020` for
-  the drift law**, `0033` for where it loses. [`0031`](exploration/0031_what_the_two_filters_believe.py)
+  [`0030`](exploration/0030_the_free_variable_audit.md),
+  [`0041`](exploration/0041_a_climbing_bias_is_a_pinned_root.md) — **start at
+  `0027` for the filter, `0030` for the audit, `0024` for the mode structure,
+  `0020` for the drift law**, `0033` for where it loses, `0041` for the
+  pinned offset roots. [`0031`](exploration/0031_what_the_two_filters_believe.py)
   is the picture. Three of them withdraw a claim
   from an earlier one (`0007` §2, `0011` §3, `0016` §2); the withdrawals are
   marked in place rather than edited away.
