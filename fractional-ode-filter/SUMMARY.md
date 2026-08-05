@@ -107,6 +107,19 @@ near multiple unit roots need multiplicity-aware tolerance
 (`np.roots` jitter is $O(\varepsilon^{1/m})$ — measured $3\times10^{-8}$ at
 $m=2$, already outside the parent's $10^{-9}$).
 
+**The rule survived its first live test.** The parent's flagged change
+landed on main as `unit_roots=d` — $d$ roots pinned at $z=1$ exactly via a
+fixed linear map. Merged with **zero changes to this workstream**: parent
+tests pass, the prequential regression reproduces bit-for-bit, and the
+alignment is exact — `Params(alpha=gl_split(nu,K), unit_roots=floor(nu))`
+passes the parent's validation with the recovered quotient equal to the
+truncated GL kernel of the fractional part to $10^{-16}$. **The fractional
+order is `unit_roots` made continuous**, and the parent independently
+adopted synthetic division over `np.roots` for the multiplicity question —
+requirement (2) above now stands only for `Params.alpha_at`'s $10^{-9}$
+radius test, which nothing exercises yet. See
+[`0007`](exploration/0007_the_parent_moved_first.md).
+
 ## Next, in order
 
 1. **Grid $\nu$, carry the posterior.** $\hat\nu$ is currently an argmax;
@@ -116,7 +129,11 @@ $m=2$, already outside the parent's $10^{-9}$).
    more gridded channel, a filter pass per node.
 2. **Run the full filter** (noise channels, dynamics channel, `fit_`) over a
    fractional kernel. Nothing in the interface prevents it; nothing has
-   measured it.
+   measured it. After the merge this phrases natively: for each
+   $m\in\{0,1,2\}$, profile $f$ with `fit_(unit_roots=m)` carrying the
+   noise channels — and the new fair baseline is the quotient left *free*
+   (`_face_optimum(..., unit_roots=m)`), which gets the unit roots for free
+   but not the hyperbolic tail ([`0007`](exploration/0007_the_parent_moved_first.md) §2).
 3. **Compose with oscillatory modes** — $(1-B)^{\nu}a(B)$ is the actual
    replacement for integer $p$, and whether $\nu$ and the roots of $a$ stay
    separately identifiable is the next identifiability question.
@@ -135,7 +152,9 @@ $m=2$, already outside the parent's $10^{-9}$).
   each self-contained and runnable (`0004`/`0005` each begin by recording a
   defect in their predecessor; the withdrawals are marked in place).
   [`0006`](exploration/0006_what_the_probes_settle.md) carries the final
-  numbers. Figures in `exploration/figures/`.
+  numbers; [`0007`](exploration/0007_the_parent_moved_first.md) records the
+  merge of the parent's `unit_roots` change and the exact alignment with the
+  split kernel. Figures in `exploration/figures/`.
 - No `output/` yet — nothing here is a deliverable until the full filter has
   run over a fractional kernel.
 
