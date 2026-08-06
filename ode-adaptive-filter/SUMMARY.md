@@ -420,6 +420,29 @@ score for the trusted distribution itself, and negative $\tau$ (leads =
 deferred updates). The AR-vs-exact-discretisation class gap of `0045` §5
 still stands for folding into `core.py`.
 
+**The upper rail now exists online**
+([`0048`](exploration/0048_the_tube_grid.py),
+[`0049`](exploration/0049_the_upper_rail_and_the_anchor.md)): the free
+coupling $b$ is gridded as a **tube around the delay manifold** — tangents =
+gain and derivative directions, so the normal coordinate $\eta$ *is* "neither
+a delay nor a derivative", and $P(\eta{=}0)$ is a tracked posterior. Complete
+reparameterisation at $p=3$; a genuine tube (deferring, not defeating, the
+dimensionality of $b$) above. Measured: the three-way verdict
+null / delay / related-but-not-a-delay works online with no thresholds —
+99:1 in 89 points for "is a delay" against 24 for "is not" (the ledger
+asymmetry: affirming a nested member accrues at the nearest rival's small KL),
+coupling trust unharmed off-manifold (0.65 vs 0.63 nats/pt), and $\hat\tau$
+= 1.2001 in both runs — **the offset stays identified even when the coupling
+is not a pure delay**. And the static anchor is settled: the sliding-window
+cross-covariance (unbiased under independent measurement noises, unlike the
+autocovariance) with the **$\gamma$-shaped interpolant** recovers $\tau$ at
+RMSE 0.015 against ML's 0.012 and the parabola's 0.075 — the variogram-role
+closed-form start for a future `fit()`. Two session proposals recorded
+unprobed in `0049` §3: lead-vs-coupling by backward rolling (as a consistency
+check; leads themselves are deferred updates), and a compressed
+(log-spaced-lag) history buffer feeding the anchor to the $\tau$-grid as a
+restart-proposal channel for offsets beyond the tracked window.
+
 ## Three corrections — read these before anything else
 
 [`0036`](exploration/0036_three_corrections.md), from three objections that all
@@ -931,7 +954,7 @@ so.
   [`0045`](exploration/0045_what_the_offset_probes_settle.md) — **start at
   `0027` for the filter, `0030` for the audit, `0024` for the mode structure,
   `0020` for the drift law**, `0033` for where it loses, `0041` for the
-  pinned offset roots, `0042`/`0045`/`0047` for the two-series offset extension. [`0031`](exploration/0031_what_the_two_filters_believe.py)
+  pinned offset roots, `0042`/`0045`/`0047`/`0049` for the two-series offset extension. [`0031`](exploration/0031_what_the_two_filters_believe.py)
   is the picture. Three of them withdraw a claim
   from an earlier one (`0007` §2, `0011` §3, `0016` §2); the withdrawals are
   marked in place rather than edited away.
