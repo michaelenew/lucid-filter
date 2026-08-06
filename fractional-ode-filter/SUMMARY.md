@@ -104,6 +104,21 @@ Free where the parent's model is true, increasingly ahead as the order moves
 off the integers — and the integer model's rounding is not graceful (a free
 AR(1) on $\nu=1.7$ data is 2–4 nats/pt overconfident out of sample).
 
+**Against a true-parameter oracle** ($\nu,Q,\sigma^2$ known, $K=200$ kernel;
+[`0010`](exploration/0010_the_oracle_gap_in_two_currencies.py)), the fitted
+fractional face filter sits **0.001–0.014 nats/pt from the oracle — 0.07% to
+0.70% of the oracle's nll, under 1% at every truth**. As a fraction of the
+fitted-AR(1)-to-oracle span it closes 42%/60%/95%/99.6% at
+$\nu=0.7/1.0/1.3/1.7$ — the small fractions are of near-nil spans (an
+AR(1)+noise fit is close to oracle-grade for *one-step* prediction of pure
+long memory; the hyperbolic tail pays at long horizons, unmeasured). The
+same probe reruns the parent's oracle-gap gate over four seeds: 81–90% of
+the noise-schedule-oracle span closed (86.5% mean), residual 0.34–0.47% of
+the oracle nll — the recorded 89.5%-of-span and "the gap is under 1%" are
+the same measurement in different denominators. The two oracles differ in
+kind (noise schedule vs true parameters); the adaptivity question for the
+fractional kernel is item 2 below and remains unmeasured.
+
 The truncation budget $K$ is honest (likelihood monotone in $K$) and its
 product is **bias reduction, not likelihood**: $\hat\nu$ bias
 $\approx K^{-0.9}$ at $f=0.7$ while the likelihood moves 9 millinats/pt
