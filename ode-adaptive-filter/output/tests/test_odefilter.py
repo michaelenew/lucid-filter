@@ -73,7 +73,17 @@ def test_roundtrip():
 
 # ------------------------------------------------------------------- the core
 def test_reduces_to_parent():
-    """p = 1, alpha = 1 is exactly the parent's local-level model."""
+    """p = 1, alpha = 1 is the parent's local-level model.
+
+    The contract is in two parts since the GPB1 collapse was removed.  On
+    the s = 0 face the mixture is a single node, no collapse of any kind is
+    in play, and the two implementations must agree to round-off.  With a
+    live scale channel the two share the MODEL but not the inference: the
+    parent collapses to one covariance per step (GPB1 by construction),
+    this filter carries one per node, so the outputs differ by the collapse
+    -- measured at ~6e-3 nats/pt on this data -- and the assertion is only
+    that they describe the same model to that order, not each other's bits.
+    """
     sys.path.insert(0, os.path.abspath(PARENT))
     statfilter = pytest.importorskip("statfilter")
 
@@ -81,17 +91,23 @@ def test_reduces_to_parent():
     theta = np.cumsum(rng.standard_normal(500))
     y = theta + 2.0 * rng.standard_normal(500)
 
-    for (Q, s2, sM, phiM) in [(1.0, 4.0, 0.0, 0.0), (0.5, 3.0, 0.6, 0.8)]:
-        mine = OdeFilter(Params(alpha=(1.0,), Q=Q, s2=s2, s_M=sM, phi_M=phiM),
-                         order=5)
-        theirs = statfilter.AdaptiveFilter(
-            statfilter.Params(Q=Q, s2=s2, s_M=sM, phi_M=phiM), order=5)
-        a, b = mine.filter(y), theirs.filter(y)
-        # the two implementations differ only in how they carry the state, so
-        # the agreement should be far tighter than any modelling difference
-        assert abs(a.loglik - b.loglik) < 1e-6 * abs(b.loglik) + 1e-6
-        assert np.allclose(a.mean, b.mean, rtol=1e-8, atol=1e-8)
-        assert np.allclose(a.var, b.var, rtol=1e-6, atol=1e-8)
+    # exact on the s = 0 face
+    mine = OdeFilter(Params(alpha=(1.0,), Q=1.0, s2=4.0), order=5)
+    theirs = statfilter.AdaptiveFilter(statfilter.Params(Q=1.0, s2=4.0),
+                                       order=5)
+    a, b = mine.filter(y), theirs.filter(y)
+    assert abs(a.loglik - b.loglik) < 1e-6 * abs(b.loglik) + 1e-6
+    assert np.allclose(a.mean, b.mean, rtol=1e-8, atol=1e-8)
+    assert np.allclose(a.var, b.var, rtol=1e-6, atol=1e-8)
+
+    # same model, finer inference, with the channel live
+    mine = OdeFilter(Params(alpha=(1.0,), Q=0.5, s2=3.0, s_M=0.6, phi_M=0.8),
+                     order=5)
+    theirs = statfilter.AdaptiveFilter(
+        statfilter.Params(Q=0.5, s2=3.0, s_M=0.6, phi_M=0.8), order=5)
+    a, b = mine.filter(y), theirs.filter(y)
+    assert abs(a.loglik - b.loglik) / y.size < 0.05
+    assert np.corrcoef(a.mean, b.mean)[0, 1] > 0.999
 
 
 def test_shares_sum_to_one():
@@ -150,11 +166,23 @@ def test_missing_observations():
     assert r.var[109] > r.var[99]              # uncertainty grows through a gap
 
 
-def test_explosive_alpha_is_signalled_not_nan():
+def test_explosive_alpha_never_yields_nan():
+    """An unconstrained search reaches explosive alpha.  The per-node
+    recursion keeps a DETECTABLE explosive system's posterior bounded (the
+    measurement corrects the state every step), so a moderately explosive
+    alpha now carries a genuinely finite likelihood -- the old -inf there
+    was the shared-covariance recursion overflowing, not a property of the
+    model.  What is guaranteed: never NaN (a NaN sends the optimiser
+    chasing it) -- and _loglik_batch's dead-row semantics turn any residual
+    overflow into -inf rather than poisoning the batch.  A consequence worth
+    knowing: the likelihood no longer walls off the unit disc numerically,
+    so a fit CAN land marginally outside it (crypto's p=4, unit_roots=2 cell
+    did); the disc is a modelling commitment, not an emergent property."""
     rng = np.random.default_rng(5)
     y = rng.standard_normal(200)
-    f = OdeFilter(Params(alpha=(3.0, -3.0, 2.0), Q=1.0, s2=1.0), order=5)
-    assert f.loglik(y) == -np.inf
+    for a in [(3.0, -3.0, 2.0), (40.0, -40.0, 39.0)]:
+        ll = OdeFilter(Params(alpha=a, Q=1.0, s2=1.0), order=5).loglik(y)
+        assert not math.isnan(ll) and ll < 0.0
 
 
 def test_streaming_matches_batch():
@@ -390,6 +418,153 @@ def test_a_pure_event_leaves_no_whiteness_trace():
 
 
 # -------------------------------------------------------------------- fitting
+# ------------------------------------------------- the oracle-gap battery
+# These four would have detected the holes filter-oracle-gap found: a
+# likelihood flat along the ridge Q e^{s_P^2/2} = const, a process-scale
+# channel that extracts a fraction of the available evidence, and fits whose
+# (Q, s_P) endpoint was chosen by the optimiser's path rather than the data.
+
+def ar_qseq(n, alpha, Qseq, S2, rng):
+    """AR(p) with a per-step process variance, plus white measurement noise."""
+    p = len(alpha)
+    z = np.zeros(p)
+    x = np.zeros(n)
+    for t in range(n):
+        xn = (float(np.dot(alpha, z))
+              + math.sqrt(Qseq[t]) * rng.standard_normal())
+        z = np.concatenate([[xn], z[:-1]])
+        x[t] = xn
+    return x, x + math.sqrt(S2) * rng.standard_normal(n)
+
+
+def oracle_nll(y, alpha, Qseq, S2, burn):
+    """Exact Kalman filter told Q_t: the evidence ceiling."""
+    a = np.asarray(alpha)
+    p = a.size
+    F = np.zeros((p, p))
+    F[0] = a
+    F[1:, :-1] = np.eye(p - 1)
+    m = np.zeros(p)
+    P = np.eye(p) * (S2 + float(np.max(Qseq))) * p
+    e1 = np.zeros(p)
+    e1[0] = 1.0
+    nll, k = 0.0, 0
+    for t, yt in enumerate(y):
+        m = F @ m
+        A = F @ P @ F.T
+        S = A[0, 0] + Qseq[t] + S2
+        e = float(yt) - m[0]
+        if t >= burn:
+            nll += 0.5 * (e * e / S + math.log(S) + math.log(2 * math.pi))
+            k += 1
+        row = A[:, 0] + Qseq[t] * e1
+        m = m + row / S * e
+        P = A
+        P[0, 0] += Qseq[t]
+        P -= np.outer(row / S, row)
+    return nll / k
+
+
+def test_quadrature_resolution_is_inert_at_s_zero():
+    """At s = 0 every node is identical, so the grid size must not matter:
+    order 3 and order 7 must agree to round-off.  This is the invariance the
+    old gpb1-vs-imm equality test pinned, restated without the removed mode:
+    a recursion that mishandled per-node state would let the nodes diverge
+    and the quadrature resolution would leak into the answer."""
+    rng = np.random.default_rng(51)
+    x, y = ar(300, ALPHA3, 1.0, 9.0, rng)
+    pr = Params(alpha=ALPHA3, Q=1.0, s2=9.0)
+    a = OdeFilter(pr, order=3).filter(y)
+    b = OdeFilter(pr, order=7).filter(y)
+    assert abs(a.loglik - b.loglik) < 1e-9
+    assert np.allclose(a.mean, b.mean, rtol=1e-10, atol=1e-10)
+    assert np.allclose(a.var, b.var, rtol=1e-10, atol=1e-10)
+    assert np.allclose(a.pred_var, b.pred_var, rtol=1e-10, atol=1e-10)
+
+
+def test_streaming_and_batched_agree():
+    from odefilter.core import _loglik_batch
+    rng = np.random.default_rng(52)
+    x, y = ar(300, ALPHA3, 1.0, 9.0, rng)
+    pr = Params(alpha=ALPHA3, Q=1.0, s2=9.0, phi_P=0.9, s_P=0.8,
+                phi_M=0.6, s_M=0.4)
+    lb = float(_loglik_batch(y, pr._vec()[None, :], 3, 5, with_A=False)[0])
+    ls = OdeFilter(pr, order=5).loglik(y)
+    assert abs(lb - ls) < 1e-6 * abs(ls)
+
+
+def test_the_ridge_is_not_flat():
+    """THE HOLE (filter-oracle-gap/0004).  Two hypotheses with the same mean
+    process variance Q e^{s_P^2/2} -- the truth (a live channel) and its
+    homoscedastic ridge-mate -- on data generated with the live channel.
+    The removed GPB1 likelihood could not tell them apart (0.0022 nats/pt);
+    the per-node one must, and in the right direction.  This is the test
+    that would have caught the fitted (Q, s_P) endpoint being the
+    optimiser's choice."""
+    rng = np.random.default_rng(19)
+    n = 900
+    lam = np.zeros(n)
+    nu = math.sqrt(0.8 ** 2 * (1 - 0.9 ** 2))
+    lam[0] = 0.8 * rng.standard_normal()
+    for t in range(1, n):
+        lam[t] = 0.9 * lam[t - 1] + nu * rng.standard_normal()
+    x, y = ar_qseq(n, ALPHA3, np.exp(lam), 9.0, rng)
+
+    qeff = math.exp(0.8 ** 2 / 2.0)
+    truth = Params(alpha=ALPHA3, Q=1.0, s2=9.0, phi_P=0.9, s_P=0.8)
+    mate = Params(alpha=ALPHA3, Q=qeff, s2=9.0)          # same mean variance
+    nll_truth = -OdeFilter(truth, order=5).loglik(y) / n
+    nll_mate = -OdeFilter(mate, order=5).loglik(y) / n
+    sep = nll_mate - nll_truth               # > 0 means the truth is preferred
+    assert sep > 0.004                       # the data can tell, and it sees it
+
+
+def test_forced_channel_extracts_most_of_the_oracle_gap():
+    """THE SYMPTOM (0038/filter-oracle-gap/0002).  A x8 process-noise regime,
+    scored against a Kalman filter told Q_t exactly.  The forced channel
+    under the removed GPB1 collapse stopped near 80% of the static-to-oracle
+    span; the per-node recursion must clear 85%."""
+    rng = np.random.default_rng(4)
+    n, lo, hi = 900, 400, 560
+    Qseq = np.full(n, 1.0)
+    Qseq[lo:hi] = 8.0
+    x, y = ar_qseq(n, ALPHA3, Qseq, 9.0, rng)
+    burn = 60
+
+    nll_o = oracle_nll(y, ALPHA3, Qseq, 9.0, burn)
+    nll_s = oracle_nll(y, ALPHA3, np.full(n, 1.0), 9.0, burn)
+    span = nll_s - nll_o
+    pr = Params(alpha=ALPHA3, Q=1.0, s2=9.0, phi_P=0.9, s_P=0.8)
+    f = OdeFilter(pr, order=5).reset()
+    ll = [f.update(float(v)).loglik for v in y]
+    nll = -float(np.mean(ll[burn:]))
+    assert (nll_s - nll) / span > 0.85
+
+
+@pytest.mark.slow
+def test_fit_on_the_imm_likelihood_stays_off_the_boundary():
+    """THE ENDPOINT (filter-oracle-gap/0006).  On data generated with a live
+    process-scale channel, the fitted s_P must be neither the boundary zero
+    (the old self-confirming endpoint, 0029/0039) nor a wild ridge slide,
+    and the fitted MEAN process variance must be near the truth."""
+    pytest.importorskip("scipy")
+    rng = np.random.default_rng(19)
+    n = 600
+    lam = np.zeros(n)
+    nu = math.sqrt(0.8 ** 2 * (1 - 0.9 ** 2))
+    lam[0] = 0.8 * rng.standard_normal()
+    for t in range(1, n):
+        lam[t] = 0.9 * lam[t - 1] + nu * rng.standard_normal()
+    x, y = ar_qseq(n, ALPHA3, np.exp(lam), 9.0, rng)
+
+    f = OdeFilter.fit(y, p=3, dynamics=False, max_iter=150)
+    pr = f.params
+    qeff = pr.Q * math.exp(pr.s_P ** 2 / 2.0)
+    assert 0.3 < pr.s_P < 1.6                # off the boundary, off the slide
+    assert 0.5 < qeff < 2.0                  # the mean variance is right
+    assert pr.phi_P > 0.4                    # and the channel is persistent
+
+
 @pytest.mark.slow
 def test_fit_recovers_the_modes():
     pytest.importorskip("scipy")

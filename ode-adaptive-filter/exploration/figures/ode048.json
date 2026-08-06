@@ -1,0 +1,21 @@
+{
+ "A_pure_delay": {
+  "P_eta0_final": 1.0,
+  "t99_delay": 89,
+  "Lam_couple_slope": 0.6320539363038585,
+  "tau_hat": 1.200065078003465
+ },
+ "B_off_manifold": {
+  "P_eta0_final": 0.0,
+  "P_eta_at_truth": 1.0000000000000004,
+  "t99_not_delay": 24,
+  "Lam_couple_slope": 0.6530160972080942,
+  "tau_hat": 1.200075247456423
+ },
+ "anchor": {
+  "rmse_parabola": 0.07491724028226003,
+  "rmse_gamma_shape": 0.015000000000000013,
+  "rmse_ml": 0.012247448713915492,
+  "n_trials": 8
+ }
+}

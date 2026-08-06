@@ -1,0 +1,15 @@
+{
+ "rms_err": {
+  "pre-jump": 0.04400170386186454,
+  "post-jump": 0.04274691636757302,
+  "ramp": 0.09877060728646196
+ },
+ "coverage90": 0.9566666666666667,
+ "latency_points": 3,
+ "kl_rate_post_jump": 5.478146058973921,
+ "ledger_predicted_latency": 2.0997751803775864,
+ "lambda_slope_coupled": 2.525397295085285,
+ "lambda_slope_control": -357.1585723697291,
+ "trust_at_20": 1.0,
+ "control_trust_final": 7.124576406741285e-218
+}
