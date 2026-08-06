@@ -112,12 +112,18 @@ fitted-AR(1)-to-oracle span it closes 42%/60%/95%/99.6% at
 $\nu=0.7/1.0/1.3/1.7$ — the small fractions are of near-nil spans (an
 AR(1)+noise fit is close to oracle-grade for *one-step* prediction of pure
 long memory; the hyperbolic tail pays at long horizons, unmeasured). The
-same probe reruns the parent's oracle-gap gate over four seeds: 81–90% of
-the noise-schedule-oracle span closed (86.5% mean), residual 0.34–0.47% of
-the oracle nll — the recorded 89.5%-of-span and "the gap is under 1%" are
-the same measurement in different denominators. The two oracles differ in
-kind (noise schedule vs true parameters); the adaptivity question for the
-fractional kernel is item 2 below and remains unmeasured.
+same probe reruns the parent's oracle-gap *gate* over four seeds as a
+no-regression check: 81–90% of the noise-schedule-oracle span closed at the
+forced-channel tier the gate constructs, residual 0.34–0.47% of the oracle
+nll. **Tier bookkeeping matters here**: 89.5% is the superseded
+forced-AR(1)-channel scoreboard figure; the parent's account of record is
+`filter-oracle-gap/0007`'s full decomposition — a **96.3% causal ceiling
+with every point of the span owned** (6.8% the kept AR(1)-vs-regime channel
+commitment, 3.7% irreducible detection lag). The gate reproducing its tier's
+value confirms the consolidated tree against the catalogue; it does not
+restate the account. The two oracles differ in kind (noise schedule vs true
+parameters); the adaptivity question for the fractional kernel is item 2
+below and remains unmeasured.
 
 The truncation budget $K$ is honest (likelihood monotone in $K$) and its
 product is **bias reduction, not likelihood**: $\hat\nu$ bias

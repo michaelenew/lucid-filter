@@ -5,17 +5,30 @@ repository's recorded 89.5% are correct; they are the same measurement in
 different denominators, and this probe pins both on the consolidated tree.
 
   span currency   fraction of the static-to-oracle span closed
-                  (filter-oracle-gap's accounting: 89.5% shipped,
-                  96.3% causal ceiling)
   nll currency    residual gap as a fraction of the oracle's own
                   negative log-likelihood -- the "less than 1%" reading
 
-Part 1 reruns the parent's own oracle-gap gate construction
+THE PARENT'S LEDGER, so the tiers are not confused (filter-oracle-gap/0007,
+each superseding the last as the account of record):
+
+  80.0%   SUPERSEDED -- forced channel under the removed GPB1 collapse
+  89.5%   SUPERSEDED as the account -- forced AR(1)-log-scale channel under
+          the shipped IMM recursion (80.0 + the 9.5 collapse repair).  It
+          remains the correct value FOR THAT CONFIGURATION, which is what
+          the shipped default runs and what the gate below constructs.
+  96.3%   CURRENT -- the causal ceiling, decomposed and owned point by
+          point: +6.8% is the AR(1)-vs-regime channel model (a KEPT model
+          commitment, roadmap item 4), +3.7% irreducible detection lag.
+          Nothing in the span is unaccounted.
+
+Part 1 reruns the gate construction
 (test_forced_channel_extracts_most_of_the_oracle_gap: x8 process-noise
 regime, forced live channel, scored against a Kalman filter told Q_t
-exactly) over four seeds and reports both currencies.  The gate's canonical
-seed reproduces the recorded 89.5% exactly; the residual gap is 0.3-0.5% of
-the oracle nll on every seed.
+exactly) over four seeds.  By construction this measures the FORCED-CHANNEL
+TIER, so reproducing ~89.5% on the canonical seed is a no-regression check
+of the consolidated tree against the catalogue -- not the current account
+of the gap, which is the 96.3% ceiling above.  The residual gap is 0.3-0.5%
+of the oracle nll on every seed even at this tier.
 
 Part 2 does the same for THIS workstream's filter: the fractional face fit
 (split kernel, wide-q profile, K=25) against a true-parameter oracle
