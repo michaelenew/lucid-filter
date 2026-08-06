@@ -493,6 +493,28 @@ the same scored samples. The `0047` §4 stack is now closed except item 4 (a
 self-consistency score for the trusted distribution — a design question) and
 the `core.py` engineering ledger (`0045` §5).
 
+**And the stack is closed** ([`0056`](exploration/0056_the_decision_loss.py),
+[`0057`](exploration/0057_the_price_of_the_band.md)): item 4 resolved under
+the decision frame — $\tau$'s calibration is scored by the loss of the
+decisions it feeds, i.e. the prequential log score of $h$-step
+cross-forecasts, swept over horizon. Two results. **The knee law**: oracle
+loss-vs-horizon curves sit on one tracking-grade plateau through $h\le\tau$
+and roll off at the first horizon beyond — *the lead time is the
+forecastable horizon*; $\tau$ converts to a horizon budget. **The price of
+the band**: the predicted exposure of the staircase's $\tau$-overconfidence
+at depth *inverts* — the decision loss prices it at **~5 millinats/point at
+every horizon** (the forecast's $\tau$-sensitivity doesn't grow with $h$
+while irreducible variance does). Calibration-in-consequences, not
+calibration-in-$\tau$, is the right currency: cross-forecast consumers
+inherit the knee curve and barely feel the band; alignment-type consumers
+(acting on $\tau$ directly) have `0050`'s $\tau$-RMS/coverage as their
+decision loss already. Report both columns; no scalar calibration score is
+needed, and inventing one would have hidden the consumer-dependence the
+measurement revealed. **Every item of `0047` §4 is now discharged or
+retired** (ledger in `0057` §3); what remains is engineering — the `core.py`
+fold-in (`0045` §5) — and the crypto instantiation, which consumes the knee
+curve at its trade horizon.
+
 ## Three corrections — read these before anything else
 
 [`0036`](exploration/0036_three_corrections.md), from three objections that all
@@ -1004,7 +1026,7 @@ so.
   [`0045`](exploration/0045_what_the_offset_probes_settle.md) — **start at
   `0027` for the filter, `0030` for the audit, `0024` for the mode structure,
   `0020` for the drift law**, `0033` for where it loses, `0041` for the
-  pinned offset roots, `0042`/`0045`/`0047`/`0049`/`0051`/`0053`/`0055` for the two-series offset extension. [`0031`](exploration/0031_what_the_two_filters_believe.py)
+  pinned offset roots, `0042`/`0045`/`0047`/`0049`/`0051`/`0053`/`0055`/`0057` for the two-series offset extension. [`0031`](exploration/0031_what_the_two_filters_believe.py)
   is the picture. Three of them withdraw a claim
   from an earlier one (`0007` §2, `0011` §3, `0016` §2); the withdrawals are
   marked in place rather than edited away.
