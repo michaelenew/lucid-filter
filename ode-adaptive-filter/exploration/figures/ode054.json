@@ -1,0 +1,18 @@
+{
+ "A_leads": {
+  "sign_t99": 20,
+  "P_sign_final": 0.9998896330387461,
+  "rms_tau_err": 0.023984976952469487
+ },
+ "B_lags": {
+  "sign_t99": 20,
+  "P_sign_final": 0.9997703286775497,
+  "rms_tau_err": 0.018187757892156497
+ },
+ "C_flip": {
+  "sign_t99": 20,
+  "P_sign_final": 0.9998387478733024,
+  "rms_tau_err": 0.01908279329802677,
+  "flip_latency_points": 3
+ }
+}

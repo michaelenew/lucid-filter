@@ -475,6 +475,24 @@ anchor's near-efficiency. Joint $(\alpha,\tau)$ is therefore a product of
 existing machinery, not a new estimation problem; the odd axis is the one
 genuine exchange, and the tube already brackets it.
 
+**Which series leads is decided online**
+([`0054`](exploration/0054_which_series_leads.py),
+[`0055`](exploration/0055_which_series_leads.md)): negative $\tau$ built as
+`0042` §4 designed — *a lead is a lag in processing time* — with one repair
+found by measurement: per-node deferral is **biased toward longer deferrals**
+(later processing conditions on more $y_1$; the subsidy showed as a spurious
+band at the deferral-class boundary), and the fix is **uniform deferral** to
+the window max, under which every node predicts with the same information
+set. After it: sign at 99:1 in **20 points** whichever series leads, a
+mid-run lead/lag flip relocated in 3 points, RMS 0.018–0.024 and symmetric.
+Deferral also helped the lag side 5× — offset estimation is a smoothing
+problem wearing filter clothes, and the uniform ledger buys fixed-lag
+smoothing free. The general principle is recorded: prequential comparison
+across members requires the same *information set* at scoring time, not just
+the same scored samples. The `0047` §4 stack is now closed except item 4 (a
+self-consistency score for the trusted distribution — a design question) and
+the `core.py` engineering ledger (`0045` §5).
+
 ## Three corrections — read these before anything else
 
 [`0036`](exploration/0036_three_corrections.md), from three objections that all
@@ -986,7 +1004,7 @@ so.
   [`0045`](exploration/0045_what_the_offset_probes_settle.md) — **start at
   `0027` for the filter, `0030` for the audit, `0024` for the mode structure,
   `0020` for the drift law**, `0033` for where it loses, `0041` for the
-  pinned offset roots, `0042`/`0045`/`0047`/`0049`/`0051`/`0053` for the two-series offset extension. [`0031`](exploration/0031_what_the_two_filters_believe.py)
+  pinned offset roots, `0042`/`0045`/`0047`/`0049`/`0051`/`0053`/`0055` for the two-series offset extension. [`0031`](exploration/0031_what_the_two_filters_believe.py)
   is the picture. Three of them withdraw a claim
   from an earlier one (`0007` §2, `0011` §3, `0016` §2); the withdrawals are
   marked in place rather than edited away.
