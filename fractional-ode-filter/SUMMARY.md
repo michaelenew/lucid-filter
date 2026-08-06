@@ -56,6 +56,33 @@ and integer order is the degenerate case where the density collapses to
 point masses. The memory law generalises the same way: $1/(1-|z|)$ becomes
 hyperbolic, $h_k\sim k^{\nu-1}/\Gamma(\nu)$, no characteristic scale.
 
+## The lag/lead covariance
+
+The parent's cross-correlation extension (`offset.py`) rests on the modal
+form — sums over distinct roots — which does not survive the branch point:
+on fractional kernels its guards refuse the computation, and **whether the
+operation is even defined depends on the truncation budget** (a $K=10$
+artifact root lands on the negative real axis;
+[`0008`](exploration/0008_the_lag_lead_covariance.py)-A). The replacement is
+the workstream's standing move, and it is exact: replacing the sum over
+roots with the integral over the channel density gives
+
+$$\gamma_f(s)=\sigma^2\,\frac{\Gamma(1-2f)\,\Gamma(s+f)}
+{\Gamma(f)\,\Gamma(1-f)\,\Gamma(s+1-f)},$$
+
+**the classical ARFIMA autocovariance with the integer lag continued to real
+$s$** — the Stieltjes and analytic continuations coincide. It is positive
+definite on mixed real grids, and one Schur complement of it supplies both
+the fractional read row (exact pick-out at integers, $10^{-15}$) and the
+in-model bridge variance the parent's "class gap" absorbs into $s_{2}^2$.
+The bridge opens linearly ($R_b\sim s$, slopes 0.96–0.99) for every $f$:
+**the fractional part moves the covariance tail, not the kink** — long
+memory and local roughness separate exactly. The $\gamma_f$-interpolated
+cross anchor recovers fractional $\tau$ on both lead and lag sides, 2.4–3.2×
+better than a parabola, and $\nu=m+f$ anchors through exact
+$m$-differencing. See
+[`0009`](exploration/0009_the_sum_becomes_the_integral_again.md).
+
 ## Headline numbers
 
 Face likelihood, split kernel, path-independent profile, $n=1500$, $K=25$,
@@ -143,6 +170,10 @@ radius test, which nothing exercises yet. See
    volatility is the natural first target (long memory is its textbook
    description, and the oscillator found there is exactly what item 3
    composes with).
+6. **Port the offset channel** onto the fractional read row and bridge of
+   [`0009`](exploration/0009_the_sum_becomes_the_integral_again.md) —
+   mechanical once item 2 exists; the $(\mu,\tau)$ family under the branch
+   point and the undifferenced type-II bridge are its open theory ends.
 
 ## Layout
 
@@ -154,7 +185,9 @@ radius test, which nothing exercises yet. See
   [`0006`](exploration/0006_what_the_probes_settle.md) carries the final
   numbers; [`0007`](exploration/0007_the_parent_moved_first.md) records the
   merge of the parent's `unit_roots` change and the exact alignment with the
-  split kernel. Figures in `exploration/figures/`.
+  split kernel; [`0008`](exploration/0008_the_lag_lead_covariance.py)/[`0009`](exploration/0009_the_sum_becomes_the_integral_again.md)
+  build the fractional lag/lead covariance after the parent's offset channel
+  landed. Figures in `exploration/figures/`.
 - No `output/` yet — nothing here is a deliverable until the full filter has
   run over a fractional kernel.
 
