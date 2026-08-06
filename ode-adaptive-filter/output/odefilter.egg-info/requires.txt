@@ -1,4 +1,0 @@
-numpy>=1.22
-
-[fit]
-scipy>=1.8

@@ -1,8 +1,0 @@
-Metadata-Version: 2.4
-Name: odefilter
-Version: 0.1.0
-Summary: Adaptive filter for a process locally described by a linear ODE
-Requires-Python: >=3.10
-Requires-Dist: numpy>=1.22
-Provides-Extra: fit
-Requires-Dist: scipy>=1.8; extra == "fit"
