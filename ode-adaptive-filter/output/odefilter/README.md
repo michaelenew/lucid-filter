@@ -141,8 +141,50 @@ every other nuisance here) as a follow-up design.
   differencing pushes iid measurement noise out of the model class (MA(1))
   while pinning leaves it alone.
 
+## Two series: the offset channel
+
+`offset.py` detects and tracks the **lead/lag between two series sharing one
+latent process**, online, as a posterior over a time-valued offset `tau`
+(fractional, signed, possibly moving), with trust that the series are related
+at all. The construction and every design choice is pinned by a probe in
+`../../exploration/0042`–`0057`; the module docstring is the map.
+
+```python
+from odefilter import OdeFilter, OffsetFilter, cross_anchor
+
+base = OdeFilter.fit(y1_history)          # the latent, as seen through y1
+null = OdeFilter.fit(y2_history)          # y2 alone: the matched null
+tau0 = cross_anchor(y1, y2, base.params)  # closed-form start (0049)
+
+f = OffsetFilter(base.params, s2_2=..., window=(-2, 3), null=null)
+for a, b in zip(y1, y2):
+    step = f.update(a, b)
+    step.tau_mean, step.p_lead, step.trust  # the offset, who leads, and
+                                            # whether to believe any of it
+```
+
+- `tau > 0`: y2 lags (y1 leads); `p_lead` is the posterior probability y2
+  leads. The sign is *decided*, not assumed — negative offsets are handled by
+  uniform deferred updates ("a lead is a lag in processing time", `0054`,
+  including why the deferral must be uniform).
+- `trust` is a directed-information reading — the evidence that y1's history
+  predicts y2 beyond y2's own — and it needs the matched `null`; without one
+  it is `nan` rather than a number against a strawman (`0046`).
+- The gain grid, restart-mass hyper-grid, and node counts are compute budgets;
+  the restart hypers are Bayes-mixed online with regret bounded by `log 3`.
+- The channel runs on the fitted model's homoscedastic face; fractional-read
+  bridge residuals are absorbed into `s2_2` (the class-gap resolution of
+  `../../exploration/0045` §5).
+- Measured guarantees carried from exploration: dynamics errors cannot bias
+  `tau` (it is the symmetry center of the cross-covariance, `0053`), and the
+  lead time is the horizon out to which y1 forecasts y2 at tracking grade
+  (`0056`'s knee law).
+
 ## Not in here yet
 
 The injection direction as a free parameter (`0022`, `0024`), the oscillator
 phase channel (`0024`), and a second dynamics axis for frequency. All are
-measured to be real; none is yet measured to be worth its cost.
+measured to be real; none is yet measured to be worth its cost. For the
+offset channel: diffusion/kinetic `(tau, taudot)` kernels (`0050` — worth ~5
+millinats/point to forecast consumers, `0056`), the tube grid's "is it a pure
+delay?" verdict (`0048`), and the `(mu, tau)` derivative axis (`0043`).

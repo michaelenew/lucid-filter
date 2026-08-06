@@ -352,6 +352,182 @@ limit: process noise still enters through $u=e_1$ alone, so a pinned slope
 slope over in-class noise is inexpressible at any $d$, which is the $u=e_1$
 commitment (`0030`) with a concrete casualty.
 
+## The offset extension: two series, one clock
+
+[`0042`](exploration/0042_the_offset_frame.md) (frame),
+[`0043`](exploration/0043_the_delay_row.py)/[`0044`](exploration/0044_tracking_the_offset.py)
+(probes), [`0045`](exploration/0045_what_the_offset_probes_settle.md)
+(findings). Opens `0001` §5's "multi-variable" in its minimal form: two series
+reading **one latent process at a time offset $\tau$** — time-valued,
+fractional, drifting — with the lead/lag detected and tracked online as a
+posterior over a $\tau$-grid with the parent's trust semantics.
+
+**The whole extension is one observation row.** The delayed reading is
+$h(\tau)^\top = e_x^\top e^{-\tau G} = e_x^\top F^{-\tau}$ — a fractional
+matrix power of the transition, the same operator calculus as the
+fractional-derivative program in the [README](../README.md#open-directions)
+(in the lag basis it *is* the Grünwald–Letnikov binomial series). Exact on the
+solution space to $6\times10^{-14}$; with process noise the fractional read is
+priced by a closed-form **bridge variance** $R_b(\tau)$ (matches MC within
+0.97–1.02) that vanishes at integer $\tau$ with endpoint exponent $2m-1$ set by
+smoothness. Derivative coupling is the *tangent* of the delay family
+($x(t-\tau)=e^{-\tau D}x$), so "lag or derivative?" is one question: on a
+single oscillator they exchange along a ridge at **a quarter period per
+derivative order** — measured slope 0.7976 against $\arg\lambda/\omega_d =
+0.7979$ — and a second channel collapses the ridge to a point.
+
+**Where $\tau$ information lives, measured:** the oscillator channel reads
+$\tau$ as a **phase** — sharp but aliased mod $2\pi/\omega_d$ (this is `0024`'s
+phase coordinate finding its consumer) — and a rough (unit-root) channel reads
+it absolutely but coarsely, through the noise-correlation structure alone. The
+surprise: at working SNR the alias is separated by the *path-tracking* channel
+at a rate **linear in damping × falling with noise** (0.53 nats/pt at
+$\gamma=0.05,\sigma_2=0.3$; 0.0026 at $\sigma_2=3$, where the comb is truly
+visible), and freeing the gain changes none of it — aliasing is an SNR
+statement, not an absolute one.
+
+**Online**: a 61-node $\tau$-grid mixture (kernel: RW steps + restart mass
+$\varepsilon$, null member = uncoupled) tracks a jumping and ramping offset
+with RMS error 0.044 (grid step 0.05), central-90% coverage 0.957, and
+**relocation latency 3 points against the ledger arithmetic's 2.1** —
+the parent's confirmation-ledger arithmetic transfers to a time-valued,
+observation-geometry nuisance.
+
+**And nothing is hand-set** ([`0046`](exploration/0046_online_learned_offset.py),
+[`0047`](exploration/0047_the_offset_learned_online.md)): the kernel
+$(s_\tau,\varepsilon)$ is a 12-member hyper-grid Bayes-mixed online — with
+"the offset does not move" an explicit FLAT member that takes 0.998 of the
+mass on static data — at a realized cost of 1.4 nats against the
+$\log 12=2.48$ regret bound and one point of relocation latency; the gain $c$
+is a log-spaced grid that resolves the truth to grid resolution; and the null
+is a **matched model** (independent same-class latent read by $y_2$ alone,
+mixed online), never a moment taken from the future. With the matched null,
+**trust is a directed-information measurement**: $\Lambda$'s slope is a
+prequential estimate of the information rate $y_1$'s history adds about $y_2$
+beyond $y_2$'s own — 0.565 nats/pt measured against 0.599 from the
+variance-ratio accounting identity (the strawman null had inflated it 4.5×).
+Two findings with names: a per-step Gaussian kernel below the node spacing
+rounds to the identity (use the **matrix exponential of the diffusion
+generator**), and the ramp segment exposes the $\tau$ kernel's **missing
+persistence axis** — impulse and diffusion cannot represent directed drift,
+so the tracker staircases and undercovers (0.61 on the ramp against ≥0.95
+elsewhere) while remaining prequentially near-optimal, because predictive
+likelihood under-polices coordinates it can barely see. The specifically
+missing techniques are ranked in `0047` §4: the saturated free-$b$ rung online
+(bilinear — the first nuisance where gridding is exponential), the
+$(\tau,\dot\tau)$ persistence grid, joint $(\alpha,\tau)$, a self-consistency
+score for the trusted distribution itself, and negative $\tau$ (leads =
+deferred updates). The AR-vs-exact-discretisation class gap of `0045` §5
+still stands for folding into `core.py`.
+
+**The upper rail now exists online**
+([`0048`](exploration/0048_the_tube_grid.py),
+[`0049`](exploration/0049_the_upper_rail_and_the_anchor.md)): the free
+coupling $b$ is gridded as a **tube around the delay manifold** — tangents =
+gain and derivative directions, so the normal coordinate $\eta$ *is* "neither
+a delay nor a derivative", and $P(\eta{=}0)$ is a tracked posterior. Complete
+reparameterisation at $p=3$; a genuine tube (deferring, not defeating, the
+dimensionality of $b$) above. Measured: the three-way verdict
+null / delay / related-but-not-a-delay works online with no thresholds —
+99:1 in 89 points for "is a delay" against 24 for "is not" (the ledger
+asymmetry: affirming a nested member accrues at the nearest rival's small KL),
+coupling trust unharmed off-manifold (0.65 vs 0.63 nats/pt), and $\hat\tau$
+= 1.2001 in both runs — **the offset stays identified even when the coupling
+is not a pure delay**. And the static anchor is settled: the sliding-window
+cross-covariance (unbiased under independent measurement noises, unlike the
+autocovariance) with the **$\gamma$-shaped interpolant** recovers $\tau$ at
+RMSE 0.015 against ML's 0.012 and the parabola's 0.075 — the variogram-role
+closed-form start for a future `fit()`. Two session proposals recorded
+unprobed in `0049` §3: lead-vs-coupling by backward rolling (as a consistency
+check; leads themselves are deferred updates), and a compressed
+(log-spaced-lag) history buffer feeding the anchor to the $\tau$-grid as a
+restart-proposal channel for offsets beyond the tracked window.
+
+**The persistence axis holds**
+([`0050`](exploration/0050_the_persistence_axis.py),
+[`0051`](exploration/0051_the_kinetic_member.md)): a **kinetic
+$(\tau,\dot\tau)$ member** — advection along $\tau$ at each node's velocity,
+first-order upwind, plus velocity switching and restart — Bayes-mixed against
+FLAT and DIFFUSE fixes the ramp: coverage **0.61 → 0.93**, with KINETIC taking
+0.998 of the mass on the ramp and only there, FLAT keeping 0.9998 on static
+data (no hallucinated drift), and $\dot\tau$ becoming a readable (sign and
+order right; magnitude 35% low at 5 velocity nodes). The fix is
+**calibration, not points** — ramp RMS unchanged — confirming `0047` §3 from
+the other side. One more level-up echo: static Bayes over members has no
+forgetting, so one jump permanently discredits FLAT and KINETIC's
+$\dot\tau{=}0$ nodes inherit the role.
+
+**And the joint-$(\alpha,\tau)$ threat is refuted**
+([`0052`](exploration/0052_dynamics_error_and_the_offset.py),
+[`0053`](exploration/0053_the_symmetry_center.md)): the predicted
+$d\tau/d\omega=-\tau/\omega$ exchange measures **zero to machine precision**,
+plug-in frequency errors move $\hat\tau$ by exactly nothing, marginalising
+$\omega$ costs no width, and the exchange does not reappear at low SNR. The
+correct picture: the cross-covariance under a delay is $c\,\gamma(s-\tau)$
+and every stationary $\gamma$ is **even about its center**, so $\tau$ is a
+symmetry center that no dynamics error can move (delay commutes with the
+flow) — first-order immunity to arbitrary dynamics misspecification, verified
+along $\omega$. The symmetry-center object unifies the aliasing comb
+(approximate centers spaced by the period, broken at the envelope rate), the
+$(\mu,\tau)$ ridge (a derivative is the one coupling that adds an **odd**
+component — odd-ness, not phase, is the exchangeable currency), and the
+anchor's near-efficiency. Joint $(\alpha,\tau)$ is therefore a product of
+existing machinery, not a new estimation problem; the odd axis is the one
+genuine exchange, and the tube already brackets it.
+
+**Which series leads is decided online**
+([`0054`](exploration/0054_which_series_leads.py),
+[`0055`](exploration/0055_which_series_leads.md)): negative $\tau$ built as
+`0042` §4 designed — *a lead is a lag in processing time* — with one repair
+found by measurement: per-node deferral is **biased toward longer deferrals**
+(later processing conditions on more $y_1$; the subsidy showed as a spurious
+band at the deferral-class boundary), and the fix is **uniform deferral** to
+the window max, under which every node predicts with the same information
+set. After it: sign at 99:1 in **20 points** whichever series leads, a
+mid-run lead/lag flip relocated in 3 points, RMS 0.018–0.024 and symmetric.
+Deferral also helped the lag side 5× — offset estimation is a smoothing
+problem wearing filter clothes, and the uniform ledger buys fixed-lag
+smoothing free. The general principle is recorded: prequential comparison
+across members requires the same *information set* at scoring time, not just
+the same scored samples. The `0047` §4 stack is now closed except item 4 (a
+self-consistency score for the trusted distribution — a design question) and
+the `core.py` engineering ledger (`0045` §5).
+
+**And the stack is closed** ([`0056`](exploration/0056_the_decision_loss.py),
+[`0057`](exploration/0057_the_price_of_the_band.md)): item 4 resolved under
+the decision frame — $\tau$'s calibration is scored by the loss of the
+decisions it feeds, i.e. the prequential log score of $h$-step
+cross-forecasts, swept over horizon. Two results. **The knee law**: oracle
+loss-vs-horizon curves sit on one tracking-grade plateau through $h\le\tau$
+and roll off at the first horizon beyond — *the lead time is the
+forecastable horizon*; $\tau$ converts to a horizon budget. **The price of
+the band**: the predicted exposure of the staircase's $\tau$-overconfidence
+at depth *inverts* — the decision loss prices it at **~5 millinats/point at
+every horizon** (the forecast's $\tau$-sensitivity doesn't grow with $h$
+while irreducible variance does). Calibration-in-consequences, not
+calibration-in-$\tau$, is the right currency: cross-forecast consumers
+inherit the knee curve and barely feel the band; alignment-type consumers
+(acting on $\tau$ directly) have `0050`'s $\tau$-RMS/coverage as their
+decision loss already. Report both columns; no scalar calibration score is
+needed, and inventing one would have hidden the consumer-dependence the
+measurement revealed. **Every item of `0047` §4 is now discharged or
+retired** (ledger in `0057` §3).
+
+**And the fold-in is shipped**: `output/odefilter/offset.py` — `OffsetFilter`
+(online lead/lag tracking with signed fractional $\tau$, uniform deferral,
+gain grid, restart hyper-grid with log-3 regret, matched-null trust),
+`delay_row` (the fractional shift in the lag basis, exact on the solution
+space, with the two branch guards), and `cross_anchor` (the $\gamma$-shaped
+sliding-covariance start, differencing at unit roots). The class gap is
+resolved by absorption — fractional-read bridge residuals land in the second
+channel's fitted $s^2_2$ — and the channel runs on the fitted model's
+homoscedastic face. Ten tests pin the exploration results at test scale
+(row exactness, anchor, sign detection both ways, matched-null trust and its
+control, missing data, FLAT survival); the full fast suite passes. Left out
+with pointers: diffusion/kinetic kernels, the tube verdict, the $(\mu,\tau)$
+axis. What remains is the crypto instantiation, which consumes the knee curve
+at its trade horizon.
+
 ## Three corrections — read these before anything else
 
 [`0036`](exploration/0036_three_corrections.md), from three objections that all
@@ -815,6 +991,18 @@ already optimises. See `filter-optimality-proof/0036`.)
    so far fires once. Same exact linear algebra as `0021`.
 4. **Is the oscillator phase readable?** The coordinate with no parent analogue:
    excite at a grid of phases and measure pairwise separability.
+   > **Update:** the offset extension gives the phase its meaning and its
+   > instrument — a lead/lag measurement *is* a phase measurement of the
+   > oscillator channel, read through a second series (`0042`–`0045`). The
+   > single-series version of the question is still open.
+4a. **Fold the $\tau$ channel into `output/odefilter`.** The construction is
+   probed and the numbers are in (`0044`); ~~learning $(s_\tau,\varepsilon,c)$~~
+   — **done online in `0046`** with bounded regret and a matched null. What
+   remains is the lag-basis GLS form of the bridge row on `core.py`'s state,
+   the AR-vs-exact-discretisation class gap (`0045` §5), and the ranked list
+   in `0047` §4 — first among them the saturated free-$b$ rung (bilinear; the
+   first nuisance where gridding is exponential) and the $(\tau,\dot\tau)$
+   persistence grid the ramp segment demands.
 5. **Free $u$ in the filter** and confirm the likelihood has $2p+1$ identifiable
    directions and no more — turning the count into a measurement.
 6. **Redo the drift-direction sweep at constant Fisher length**, with generating
@@ -855,10 +1043,12 @@ so.
   [`0024`](exploration/0024_the_modes_are_the_channels.md),
   [`0027`](exploration/0027_the_candidate_filter.md),
   [`0030`](exploration/0030_the_free_variable_audit.md),
-  [`0041`](exploration/0041_a_climbing_bias_is_a_pinned_root.md) — **start at
+  [`0041`](exploration/0041_a_climbing_bias_is_a_pinned_root.md),
+  [`0042`](exploration/0042_the_offset_frame.md),
+  [`0045`](exploration/0045_what_the_offset_probes_settle.md) — **start at
   `0027` for the filter, `0030` for the audit, `0024` for the mode structure,
   `0020` for the drift law**, `0033` for where it loses, `0041` for the
-  pinned offset roots. [`0031`](exploration/0031_what_the_two_filters_believe.py)
+  pinned offset roots, `0042`/`0045`/`0047`/`0049`/`0051`/`0053`/`0055`/`0057` for the two-series offset extension. [`0031`](exploration/0031_what_the_two_filters_believe.py)
   is the picture. Three of them withdraw a claim
   from an earlier one (`0007` §2, `0011` §3, `0016` §2); the withdrawals are
   marked in place rather than edited away.

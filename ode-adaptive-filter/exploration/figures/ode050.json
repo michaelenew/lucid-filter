@@ -1,0 +1,29 @@
+{
+ "A_moving": {
+  "coverage90_ramp": 0.9333333333333333,
+  "coverage90_all": 0.97,
+  "rms_err_ramp": 0.10336292055328662,
+  "latency_points": 5,
+  "member_mass_ramp": {
+   "FLAT": 0.0,
+   "DIFFUSE": 0.001907621350821058,
+   "KINETIC": 0.9980923786491789
+  },
+  "member_mass_prejump": {
+   "FLAT": 0.5048302519968924,
+   "DIFFUSE": 0.2314355200827589,
+   "KINETIC": 0.2637342279203488
+  },
+  "taudot_mean_ramp": -0.002384293923765951,
+  "taudot_true_ramp": -0.003678929765886287,
+  "Lam_slope": 0.5671688609078727
+ },
+ "B_static": {
+  "member_mass_final": {
+   "FLAT": 0.9998212244299898,
+   "DIFFUSE": 1.2633875816676326e-13,
+   "KINETIC": 0.00017877556988400736
+  },
+  "taudot_mean_final": -0.0002252739686537267
+ }
+}
