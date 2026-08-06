@@ -511,9 +511,22 @@ inherit the knee curve and barely feel the band; alignment-type consumers
 decision loss already. Report both columns; no scalar calibration score is
 needed, and inventing one would have hidden the consumer-dependence the
 measurement revealed. **Every item of `0047` §4 is now discharged or
-retired** (ledger in `0057` §3); what remains is engineering — the `core.py`
-fold-in (`0045` §5) — and the crypto instantiation, which consumes the knee
-curve at its trade horizon.
+retired** (ledger in `0057` §3).
+
+**And the fold-in is shipped**: `output/odefilter/offset.py` — `OffsetFilter`
+(online lead/lag tracking with signed fractional $\tau$, uniform deferral,
+gain grid, restart hyper-grid with log-3 regret, matched-null trust),
+`delay_row` (the fractional shift in the lag basis, exact on the solution
+space, with the two branch guards), and `cross_anchor` (the $\gamma$-shaped
+sliding-covariance start, differencing at unit roots). The class gap is
+resolved by absorption — fractional-read bridge residuals land in the second
+channel's fitted $s^2_2$ — and the channel runs on the fitted model's
+homoscedastic face. Ten tests pin the exploration results at test scale
+(row exactness, anchor, sign detection both ways, matched-null trust and its
+control, missing data, FLAT survival); the full fast suite passes. Left out
+with pointers: diffusion/kinetic kernels, the tube verdict, the $(\mu,\tau)$
+axis. What remains is the crypto instantiation, which consumes the knee curve
+at its trade horizon.
 
 ## Three corrections — read these before anything else
 
