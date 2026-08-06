@@ -443,6 +443,38 @@ check; leads themselves are deferred updates), and a compressed
 (log-spaced-lag) history buffer feeding the anchor to the $\tau$-grid as a
 restart-proposal channel for offsets beyond the tracked window.
 
+**The persistence axis holds**
+([`0050`](exploration/0050_the_persistence_axis.py),
+[`0051`](exploration/0051_the_kinetic_member.md)): a **kinetic
+$(\tau,\dot\tau)$ member** — advection along $\tau$ at each node's velocity,
+first-order upwind, plus velocity switching and restart — Bayes-mixed against
+FLAT and DIFFUSE fixes the ramp: coverage **0.61 → 0.93**, with KINETIC taking
+0.998 of the mass on the ramp and only there, FLAT keeping 0.9998 on static
+data (no hallucinated drift), and $\dot\tau$ becoming a readable (sign and
+order right; magnitude 35% low at 5 velocity nodes). The fix is
+**calibration, not points** — ramp RMS unchanged — confirming `0047` §3 from
+the other side. One more level-up echo: static Bayes over members has no
+forgetting, so one jump permanently discredits FLAT and KINETIC's
+$\dot\tau{=}0$ nodes inherit the role.
+
+**And the joint-$(\alpha,\tau)$ threat is refuted**
+([`0052`](exploration/0052_dynamics_error_and_the_offset.py),
+[`0053`](exploration/0053_the_symmetry_center.md)): the predicted
+$d\tau/d\omega=-\tau/\omega$ exchange measures **zero to machine precision**,
+plug-in frequency errors move $\hat\tau$ by exactly nothing, marginalising
+$\omega$ costs no width, and the exchange does not reappear at low SNR. The
+correct picture: the cross-covariance under a delay is $c\,\gamma(s-\tau)$
+and every stationary $\gamma$ is **even about its center**, so $\tau$ is a
+symmetry center that no dynamics error can move (delay commutes with the
+flow) — first-order immunity to arbitrary dynamics misspecification, verified
+along $\omega$. The symmetry-center object unifies the aliasing comb
+(approximate centers spaced by the period, broken at the envelope rate), the
+$(\mu,\tau)$ ridge (a derivative is the one coupling that adds an **odd**
+component — odd-ness, not phase, is the exchangeable currency), and the
+anchor's near-efficiency. Joint $(\alpha,\tau)$ is therefore a product of
+existing machinery, not a new estimation problem; the odd axis is the one
+genuine exchange, and the tube already brackets it.
+
 ## Three corrections — read these before anything else
 
 [`0036`](exploration/0036_three_corrections.md), from three objections that all
@@ -954,7 +986,7 @@ so.
   [`0045`](exploration/0045_what_the_offset_probes_settle.md) — **start at
   `0027` for the filter, `0030` for the audit, `0024` for the mode structure,
   `0020` for the drift law**, `0033` for where it loses, `0041` for the
-  pinned offset roots, `0042`/`0045`/`0047`/`0049` for the two-series offset extension. [`0031`](exploration/0031_what_the_two_filters_believe.py)
+  pinned offset roots, `0042`/`0045`/`0047`/`0049`/`0051`/`0053` for the two-series offset extension. [`0031`](exploration/0031_what_the_two_filters_believe.py)
   is the picture. Three of them withdraw a claim
   from an earlier one (`0007` §2, `0011` §3, `0016` §2); the withdrawals are
   marked in place rather than edited away.

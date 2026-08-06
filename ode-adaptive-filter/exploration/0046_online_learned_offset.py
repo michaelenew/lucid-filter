@@ -128,14 +128,18 @@ def kernel(s_tau, eps):
 class Mixture:
     """One (s_tau, eps) member: an IMM mixture over the (tau, c) nodes."""
 
-    def __init__(self, F, Q, C0, h1, H2, R2, D, s_tau, eps):
+    def __init__(self, F, Q, C0, h1, H2, R2, D, s_tau=0.0, eps=0.0, T=None):
         self.F, self.Q, self.h1, self.H2, self.R2 = F, Q, h1, H2, R2
         B = len(H2)
         self.m = np.zeros((B, D))
         self.P = np.broadcast_to(C0, (B, D, D)).copy()
         self.w = np.full(B, 1.0 / B)
-        self.T = kernel(s_tau, eps)
-        self.mix = s_tau > 0 or eps > 0
+        if T is None:
+            self.T = kernel(s_tau, eps)
+            self.mix = s_tau > 0 or eps > 0
+        else:
+            self.T = T
+            self.mix = True
         self.B, self.D = B, D
 
     def step(self, y1t, y2t):
