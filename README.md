@@ -1,81 +1,461 @@
-# stat-tracker
+# lucid
 
-Adaptive filters with no theoretically relevant free parameters.
+**Adaptive filters with no theoretically relevant free parameters.**
 
-A compute budget is not a free parameter: it trades a real-world cost (time)
+A *lucid filter* is a state estimator — an observer, in the control-engineering
+sense — for systems whose dynamics can change while they are running. It is a
+Kalman filter at every node of a quadrature grid, and exactly one ordinary
+Kalman filter when the scale channels are off. The family is named by its model
+class: the **lucid random walk filter**, the **lucid ODE filter**, and the
+in-progress **lucid fractional filter**.
+
+What makes it lucid is that it reports the standing of its own answer alongside
+the answer: how much of its fitted model is currently in force, whether its
+residuals are still white, how far ahead there is anything to predict at all,
+and where each surprise went. It is calibrated where a fixed-gain filter is
+confidently wrong.
+
+Every number these filters need is learned from the data by maximum marginal
+likelihood. There are no thresholds, no forgetting factors, no changepoint
+detectors, no windows to pick, and no hyperparameters to tune. You hand a
+filter a series; it fits itself to that series once, and then runs.
+
+A *compute budget* is not a free parameter: it trades a real-world cost (time)
 against theoretical accuracy and nothing else, so it is allowed and is always
-labelled as such.
+labelled as such. Quadrature resolutions are budgets. Model order is a
+commitment. Everything else is fitted.
+
+---
+
+## What is in here
 
 | workstream | state |
 |---|---|
-| [`adaptive-random-walk-filter/`](adaptive-random-walk-filter/SUMMARY.md) | delivered: a tuning-free filter for an unbiased random walk observed with noise |
-| [`filter-optimality-proof/`](filter-optimality-proof/SUMMARY.md) | one layer proved, one measured, one open — where "optimal" does and does not hold |
-| [`ode-adaptive-filter/`](ode-adaptive-filter/SUMMARY.md) | in progress: extending to processes locally described by a second-order linear ODE |
-| [`crypto-predictivity/`](crypto-predictivity/SUMMARY.md) | the filters pointed at real series: no dynamics in a price at any frequency on any clock, half the volatility channel is the clock, and an oscillator in realised volatility |
-| [`fractional-ode-filter/`](fractional-ode-filter/SUMMARY.md) | in progress: the order made continuous — $\nu$ is learnable from both sides with an error bar, recovers the parent at $\hat\nu\approx1$, and one coordinate beats $p$ free ones prequentially at fractional orders |
+| [`adaptive-random-walk-filter/`](adaptive-random-walk-filter/SUMMARY.md) | **delivered** — `statfilter`, a tuning-free filter for an unbiased random walk observed with noise |
+| [`ode-adaptive-filter/`](ode-adaptive-filter/SUMMARY.md) | **candidate shipped** — `odefilter`, the same idea for processes locally described by a linear ODE, plus `offset.py` for the lead/lag between two series |
+| [`filter-optimality-proof/`](filter-optimality-proof/SUMMARY.md) | one layer proved, one measured, one open — where "optimal" does and does not hold, and why the *class* of processes was the hard part |
+| [`filter-oracle-gap/`](filter-oracle-gap/SUMMARY.md) | how far the filter is from an oracle told the noise schedule exactly, decomposed line by line — and the repair that closed most of it |
+| [`fractional-ode-filter/`](fractional-ode-filter/SUMMARY.md) | **in progress** — model order made continuous: $\nu$ is learnable from both sides with an error bar, recovers the parent at $\hat\nu\approx1$, and one coordinate beats $p$ free ones at fractional orders |
+
+Each workstream is `SUMMARY.md` (the current state, kept honest), `exploration/`
+(numbered probes, each a script and usually a writeup), and — where there is a
+deliverable — `output/` (the installable package and its tests).
+
+---
+
+## Why this matters
+
+### Near-oracle accuracy at a cost you can afford
+
+The strongest benchmark available is an **oracle**: a filter handed the true
+noise schedule, the true parameters, or both. That is the ceiling nothing
+causal can beat.
+
+- Against a noise-schedule oracle, the ODE filter's **causal ceiling is 96.3%
+  of the oracle's advantage**, and the decomposition says exactly where each
+  piece goes: 80.0% the shipped channel, 9.5% the covariance collapse
+  (repairable, and repaired), 6.8% the channel model, and **3.7% irreducible
+  detection lag** — you cannot react to a regime before evidence of it exists.
+  Almost nothing about this gap is fundamental
+  ([`filter-oracle-gap/0007`](filter-oracle-gap/exploration/0007_decomposing_the_remaining_gap.py)).
+  At the tier the no-regression gate constructs, the shipped filter measures
+  81–90% across seeds.
+- Against a true-parameter oracle, the fitted filters sit **under 1% of the
+  oracle's negative log-likelihood on their own class** (0.07%–0.70% for the
+  fractional face filter; residual 0.34%–0.47% for the parent's gate)
+  ([`fractional-ode-filter/0010`](fractional-ode-filter/exploration/0010_the_oracle_gap_in_two_currencies.py)).
+- Against a constant-gain Kalman filter *tuned in hindsight per series*, the
+  random-walk filter's error ratio has a geometric mean of **0.678** over a
+  9-probe battery, worst case **1.017**, and lands within 0.5% of optimal on
+  stationary diffusions where the Kalman filter is provably optimal.
+
+The cost of that is a small mixture over a quadrature grid. Filtering and
+streaming are cheap — a handful of small matrix operations per sample, no
+sampling, no backward pass, no optimiser in the loop. The expensive step is
+the one-off offline `fit()`, and it is expensive only because the likelihood
+replays a sequential recursion in Python — one that cannot be vectorised,
+because it is sequential in time. For the parent filter the per-step arithmetic
+is a 5×5 grid, and profiling attributes almost all of the cost to numpy call
+overhead rather than flops; a compiled implementation is estimated at roughly
+**40× faster**. That is a language cost, not an algorithmic one.
+
+So the deployment shape is: `fit()` once, offline, on representative history —
+then stream forever at near-oracle accuracy on a budget an embedded target can
+carry.
+
+### Physical systems whose dynamics change while you are flying them
+
+A second-order linear ODE is the local model of essentially every mechanical
+system: a mass with a restoring force and damping. The interesting case is when
+the ODE *changes* mid-run — a drone that loses part of a propeller, a joint that
+develops friction, a payload that shifts, a wing that ices. The airframe's modes
+move, and every filter tuned to the old modes is now confidently wrong.
+
+Most systems handle this with a forgetting factor, a sliding window, or a
+changepoint detector — each one a tuning knob, and each one a way to throw away
+good evidence in order to be able to react to bad news. This filter has none of
+them. Instead, **"the dynamics have stopped governing" is a member of the model
+family with its own likelihood.** The `dynamics` output is the posterior mean of
+a scalar $g$: how much of the fitted ODE is in force right now, where $g=0$ is
+*exactly* the parent random-walk model and $g=1$ is the fitted ODE. The filter
+falls toward $g=0$ on affirmative evidence and comes back when the evidence
+does — no decay, no threshold, nothing to tune.
+
+Alongside it, `whiteness` (the running lag-1 innovation autocorrelation) is a
+free always-on residual check that stays at ~0 for a one-off disturbance of any
+size — a gust *is* process noise — and departs from 0 when the dynamics
+themselves no longer fit. It is cumulative, so it is a smoke alarm, not a
+controller; `dynamics` is the controller.
+
+Two honest caveats. $g$ is one scalar along one direction: it says how much of
+the fitted departure-from-flat is in force, and **it cannot express a change of
+frequency**. And nothing here has been flown. The mechanism is measured on
+synthetic systems with known ground truth; hardware validation is not part of
+this repository.
+
+---
+
+## Performance
+
+*Every figure below is regenerated by the numbered script next to it; nothing is
+drawn by hand.*
+
+### The ODE filter against the random-walk parent
+
+![forecast battery](ode-adaptive-filter/exploration/figures/fig18-forecast-battery.png)
+
+Forecast MSE ratio, filter over parent, lower is better. On its target class it
+forecasts **1.5–3.7× better** at short horizons. On a plain random walk — the
+parent's *own* model, where a strict extension has everything to lose — it costs
+within ±5%.
+
+The gain decaying with horizon is not a defect; it was predicted before the
+filter existed. The oscillator's memory is $1/(1-|z|)$, here 19.6 steps, so by
+$h=20$ only the unit root is left and the parent models that too.
+
+| data | $\kappa$ | $h{=}1$ | $h{=}5$ | $h{=}20$ |
+|---|---|---|---|---|
+| **ODE** (target class) | 0.25 | **0.273** | **0.457** | 0.885 |
+| **ODE** | 1.00 | **0.663** | **0.616** | 0.914 |
+| WALK (the parent's own model) | 0.25 | 0.996 | 0.983 | 0.954 |
+| WALK | 1.00 | 1.005 | 1.013 | 1.054 |
+
+### Dynamics that stop, and come back
+
+![dynamics reversion](ode-adaptive-filter/exploration/figures/fig24-dynamics-reversion.png)
+
+The damaged-propeller case in miniature. The ODE governs, then stops (shaded),
+then resumes. The middle panel is the filter's own belief about whether its
+fitted dynamics apply: it falls to $g\approx0.33$ within a few dozen samples of
+the change, holds there, and snaps back the moment the dynamics return. **No
+forgetting factor is involved** — the flat model is a hypothesis with a
+likelihood, so evidence alone moves the posterior, in both directions.
+
+The bottom panel is the price and the payoff: adaptive beats static throughout
+the regime it detects, and pays a brief, visible spike at the return — the
+detection lag, which is the part of the oracle gap that is genuinely
+irreducible.
+
+### Being wrong versus being wrong *and confident*
+
+![distributional score](ode-adaptive-filter/exploration/figures/fig22-distributional-score.png)
+
+Point error is the wrong lens for a filter whose job is to say what it does not
+know. On a series whose assumptions expire mid-run, the two filters' point
+forecasts are level — but the ODE filter's forecast *distribution* is better by
+**0.289 nats/point**, and it is calibrated ($E[e^2/S]\approx1$) exactly where
+the parent is **1.6–2.9× overconfident**. The right-hand panel is the summary:
+points below the line are honest about their own error even when the point
+forecast is worse.
+
+### How fast a change can possibly be detected
+
+![detection latency](ode-adaptive-filter/exploration/figures/fig23-detection-latency.png)
+
+Evidence for a velocity mode accumulates as $n^3$ and for an acceleration mode
+as $n^5$, so the number of samples needed to notice a change of dynamics is
+small and sharply bounded. From a cold start the posterior converges to its
+steady state within about 10 measurements in all three coordinates. This is the
+budget that sets how quickly the `dynamics` channel in the previous figure can
+possibly react.
+
+### Order as a continuous, estimable coordinate
+
+![nu profiles](fractional-ode-filter/exploration/figures/fig01-nu-profiles.png)
+
+The integer order $p$ was the one genuinely categorical axis left in the filter
+— learnable from below, nearly blind from above. Replacing it with a fractional
+order $\nu$ makes it a coordinate with a two-sided likelihood profile and an
+honest error bar: $\hat\nu = 1.03/1.04$ at a truth of 1.0 with a profile SE of
+0.02–0.05, and prequentially **one fractional coordinate beats $p$ free integer
+ones** by +0.024 nats/pt at $\nu=1.3$ and +0.117 at $\nu=1.7$.
+
+---
+
+## The filters
+
+### `statfilter` — the random-walk parent
+[`adaptive-random-walk-filter/output/`](adaptive-random-walk-filter/output/statfilter/README.md)
+
+```
+theta_t = theta_{t-1} + w_t,   w_t ~ N(0, Q  * exp(lamP_t))
+x_t     = theta_t     + v_t,   v_t ~ N(0, s2 * exp(lamM_t))
+lam_t   = phi * lam_{t-1} + noise      (per channel: P = process, M = measurement)
+```
+
+Six learned numbers: `Q, s2, phi_P, phi_M, s_P, s_M`. The four classical
+deviation modes — level jump, outlier, drift-rate change, noise-level change —
+are **not four detectors**. They are two channels crossed with the two ends of
+each channel's persistence ($\varphi\to0$ impulsive, $\varphi\to1$ persistent):
+one continuous state, reported every step, no thresholds anywhere.
+
+```python
+from statfilter import AdaptiveFilter
+f = AdaptiveFilter.fit(x)     # x: a 1-D array
+r = f.filter(x)
+```
+
+### `odefilter` — locally linear ODE dynamics
+[`ode-adaptive-filter/output/`](ode-adaptive-filter/output/odefilter/README.md)
+
+```
+x_t = alpha(g_t) . (x_{t-1}, ..., x_{t-p}) + w_t
+y_t = x_t + v_t
+```
+
+A strict extension: at `p = 1, alpha = 1` it is `statfilter` bit-for-bit, and
+the test suite asserts the two agree to 1e-8. `p + 8` learned numbers. The
+roots of the characteristic polynomial are the ODE's modes, and **each root is
+a channel** — so choosing `p` is the same act as counting channels.
+
+```python
+from odefilter import OdeFilter
+f = OdeFilter.fit(y, p=3)     # learn everything
+r = f.filter(y)               # r.mean, r.var, r.whiteness, ...
+f.reset()
+for v in stream:              # then stream
+    step = f.update(v)
+f.predict(20)                 # mean and variance 20 steps out
+
+g = OdeFilter.fit(y, p=4, unit_roots=2)   # pin a LINEAR offset: a climbing or
+                                          # declining bias is part of the state
+```
+
+`f.params.roots` are the modes. `f.params.memory()` is $1/(1-|z|_{\max})$ — the
+horizon over which dynamics affect a forecast, and therefore the number of steps
+of genuine predictive power you have. `f.derivatives()` returns the posterior in
+$(x,\dot x,\ddot x)$ coordinates via a fixed involutive integer change of basis,
+so nothing is created or lost.
+
+### `OffsetFilter` — two series, one clock
+[`ode-adaptive-filter/output/odefilter/offset.py`](ode-adaptive-filter/output/odefilter/offset.py)
+
+Detects and tracks the **lead/lag between two series sharing one latent
+process**, online, as a posterior over a time-valued offset `tau` — fractional,
+signed, possibly moving — together with the evidence that the two series are
+related at all.
+
+```python
+from odefilter import OdeFilter, OffsetFilter, cross_anchor
+base = OdeFilter.fit(y1_history)          # the latent, as seen through y1
+null = OdeFilter.fit(y2_history)          # y2 alone: the matched null
+f = OffsetFilter(base.params, s2_2=..., window=(-2, 3), null=null)
+step = f.update(a, b)
+step.tau_mean, step.p_lead, step.trust
+```
+
+`trust` is a directed-information reading — how much y1's history predicts y2
+*beyond y2's own past* — and it requires the matched null; without one it
+returns `nan` rather than a number against a strawman. The sign of the lead is
+decided, not assumed. Two measured guarantees carry: errors in the dynamics
+**provably cannot bias `tau`** (it is the symmetry center of the
+cross-covariance), and the lead time is exactly the horizon out to which y1
+forecasts y2 at tracking grade.
+
+### The fractional face filter — exploration, not yet shipped
+[`fractional-ode-filter/`](fractional-ode-filter/SUMMARY.md)
+
+$(1-B)^{\nu}x_t = w_t$ with $\nu$ real. The integer faces are exact members of
+the existing ladder: $\nu=1$ is the parent, $\nu=2$ the double unit root (a
+linear offset). For $0<\nu<1$ the impulse response is *exactly* a continuous
+mixture of AR(1) decays, verified to machine precision — so "how many channels"
+becomes "what exponent", and the memory law $1/(1-|z|)$ generalises from
+exponential to hyperbolic, $h_k \sim k^{\nu-1}/\Gamma(\nu)$, with no
+characteristic scale.
+
+---
+
+## Assumptions, and what they bought
+
+### What must be true for these filters to be right
+
+- **The observation model is additive:** $y_t = x_t + v_t$, uniformly sampled.
+- **The latent evolution is locally a linear recurrence** — a random walk for
+  the parent, an order-$p$ recurrence for `odefilter`. A second-order linear ODE
+  with a constant offset is annihilated by $(z-1)(z-z_1)(z-z_2)$, so **the
+  constant offset is a root at $z=1$, not an extra state**: it costs one order
+  like any other mode and carries its own uncertainty automatically.
+- **Noise scales move slowly, on the log scale.** This is not a convenience —
+  it is forced. Proposition 1 of the optimality workstream shows that if the
+  variances may move unpredictably, then "the level jumped" and "the sensor
+  glitched" are *identically distributed* at every step, and no causal estimator
+  has a bounded competitive ratio. The class must constrain how fast the scales
+  move; by scale equivariance the constraint must live on the log scale; two
+  numbers per channel suffice (magnitude $s_c$, persistence $\varphi_c$).
+  **The filter's scale parameters are the definition of the class, not
+  parameters within it.**
+- **$\mathbb E[e^{\lambda}] < \infty$.** Silently assumed for a long time, and
+  necessary: without it the actual noise variance can have infinite mean while
+  every stated constraint holds, and the minimax problem under log-loss is
+  vacuous.
+- **The injection direction is pinned** to $u = e_1$, and the unit disc is a
+  modelling commitment rather than a numerical wall — `unit_roots` is how you
+  assert the boundary cases exactly.
+- **`p` is a commitment.** It is learnable from below (a 0.40 nats/point climb
+  from $p{=}1$ to $p{=}3$ on ODE data, and it recovers $p{=}1$ on random-walk
+  data) but nearly blind above. Run several orders in parallel and let each
+  one's tracked predictive likelihood decide — that is the same grid-the-nuisance
+  architecture the filter already uses one level down.
+
+### Insights worth carrying to any filter, not just these
+
+- **MSE is the wrong lens.** A filter's job includes saying what it does not
+  know. Log-loss sees the whole predictive distribution; squared error sees a
+  point and leaves variance-only directions unidentified. Both layers of the
+  optimality proof now read under code length, and it is the same loss `fit()`
+  optimises.
+- **Collapsing covariances destroys the evidence you most need.** Handing every
+  grid node one shared covariance (GPB1) makes the likelihood *flat along the
+  ridge* $Q\,e^{s_P^2/2} = \text{const}$: it can measure the mean process
+  variance but cannot split it into a constant level and a wandering scale.
+  Keeping one $(m,P)$ per node — same model, no new parameters, ~1.4× the cost —
+  moved ridge relief from 0.0022 to 0.0101 nats/pt and put the argmin back on
+  the generating value.
+- **A zero is an absolute claim.** Fisher information in a spread parameter
+  vanishes at zero spread, so a fitted $s_P \approx 0$ is ill-posed for *any*
+  point estimator, not just this search. Read a small fitted $s_P$ as cheap
+  insurance, not as a finding; the principled fix is to marginalise it like
+  every other nuisance.
+- **Some parameters must never be believed from moments.** $Q$ is under 1% of
+  the residual variance for a smooth process (amplification ×151), so the
+  closed-form estimate is a scale hint and the likelihood does the rest.
+- **Distinguish evidence from a threshold.** Every adaptive behaviour here — a
+  regime change, a dynamics failure, an offset flip — is a hypothesis with a
+  likelihood inside a family, so it reverts *and returns* on evidence. That is
+  what removes the forgetting factor.
+- **Compute budgets are not free parameters,** and saying so out loud keeps the
+  two kinds of knob from being confused.
+
+---
+
+## Extending this to your own problem
+
+The construction generalises more readily than the specific models suggest.
+The recipe:
+
+1. **Write the local dynamics as a linear recurrence.** If your system is
+   governed by a linear ODE of order $k$, sample it uniformly and it is
+   annihilated by an order-$k$ recurrence; add one root at $z=1$ per constant of
+   integration you want carried as state. Set `p` accordingly — for a damped
+   oscillator with a constant offset, `p = 3`.
+2. **Assert the offsets you know about.** `fit(unit_roots=1)` asserts a constant
+   offset, `unit_roots=2` a linear one (a climbing or declining bias whose *rate*
+   is a state). A free fit cannot represent that bias: its ML unit root lands at
+   $1\pm\epsilon$, which forecasts a drift that decays or compounds
+   geometrically instead of one that continues. This is the internal form of
+   "fit the differenced series", and it beats it — differencing pushes iid
+   measurement noise out of the model class, pinning leaves it alone. Which `d`
+   is right is itself a hypothesis, decided by the same prequential density the
+   filter uses everywhere else; it chose correctly in every section of the probe
+   built to break it.
+3. **Do not choose the order if you can avoid choosing.** Fit several `p` and
+   let each one's tracked predictive likelihood say which fits. Marginal
+   likelihood pins a floor on `p` reliably and is nearly blind above it, so
+   running the plausible orders in parallel costs little and removes the one
+   remaining categorical choice.
+4. **Read the right output for the question.** `predict(h)` is where the
+   dynamics earn their keep — tracking error is nearly blind to them, forecast
+   error is not. `dynamics` is the controller for "does my model still apply".
+   `whiteness` is the free smoke alarm. `memory()` tells you how far ahead
+   there is anything to predict.
+5. **Two sensors on one latent → `OffsetFilter`.** Any pair of series sharing a
+   process — a leading indicator, a duplicated sensor, an upstream and
+   downstream measurement — is the offset problem, and `trust` tells you whether
+   to believe the relationship at all.
+6. **Heavy tails are already covered.** The increments are Gaussian scale
+   mixtures with the mixing scale constrained only in magnitude and persistence,
+   so excess kurtosis is inside the class, not an outlier problem bolted onto it.
+
+What you should *not* do without new work: change the observation map to
+something nonlinear, sample non-uniformly, or expect $g$ to track a change of
+*frequency* rather than a change of *degree*.
+
+---
 
 ## Open directions
 
-### Fractional derivatives and an integral transform for the dynamics
+The two major targets, in order of intended attack.
 
-> **Now being pursued in [`fractional-ode-filter/`](fractional-ode-filter/SUMMARY.md)**,
-> which has measured the claims below on the likelihood face. The text is
-> kept as the original motivation.
+### 1. PDEs of a specific structure
 
-The ODE workstream currently commits to an integer order $p$ — a recurrence
-$x_t=\sum_{i=1}^{p}\alpha_i x_{t-i}+w_t$, whose characteristic roots are the
-modes. The audit in
-[`ode-adaptive-filter/exploration/0030`](ode-adaptive-filter/exploration/0030_the_free_variable_audit.md)
-shows $p$ is learnable from below but not from above, and that it is the one
-axis in the filter that is genuinely categorical: you pick an integer, and
-picking between integers is not defined.
+The natural next class is linear PDEs that reduce, under semi-discretisation in
+space (method of lines), to a linear ODE system in time — diffusion, wave, and
+advection–diffusion on a fixed grid or in a truncated modal basis. The
+structural bet is that the machinery already in place transfers exactly: each
+spatial mode is a channel, the characteristic roots of the semi-discretised
+operator are the modes, and the scale channels ride on top unchanged.
 
-**Replacing the integer order with a fractional one would make degree a
-continuous coordinate, and therefore learnable by the same marginal likelihood
-as everything else.** The natural machinery is the one that already defines
-fractional differentiation: the Grünwald–Letnikov series
+What has to be built is the bookkeeping the univariate case never needed —
+boundary conditions as constraints on the root structure (the way a constant
+offset is already a pinned root at $z=1$), and a compute budget for how many
+spatial modes are kept. This was deliberately out of scope for the ODE
+workstream and is recorded there as deferred.
 
-$$\Delta^{\nu}x_t=\sum_{k\ge0}(-1)^k\binom{\nu}{k}x_{t-k}$$
+### 2. Multivariate, for three or more variables
 
-is exactly a recurrence with *infinitely many* lags whose coefficients are a
-smooth function of a single real $\nu$. Equivalently, in the transform domain,
-$(1-z^{-1})^{\nu}$ — a filter with a branch point where the integer case has a
-pole of integer multiplicity. So the dynamics would be specified by a *kernel*
-against which the history is integrated, rather than by a finite coefficient
-vector, and the model would be written as a transform integral rather than a
-sum.
+`OffsetFilter` handles the two-series case — two observations of one latent
+process, with a learned lead/lag between them. Three or more variables is a
+genuinely different object: a vector-valued state with per-mode injection
+directions (the direction $u$ is currently pinned to $e_1$, which is one of the
+three commitments the free-variable audit found binding), a coupling structure
+to identify, and the trust object generalised from a scalar to a posterior over
+a vector-valued nuisance grid — sketched already in
+[`0042` §6](ode-adaptive-filter/exploration/0042_the_offset_frame.md).
 
-Why this is worth doing beyond removing a knob:
+The identifiability question is the interesting one: the univariate budget is
+$2p+1$ numbers, and how that scales with dimension decides whether "each mode
+gets its own noise channel" is estimable in practice or only in principle.
 
-- **Degree becomes an estimate with an error bar.** "Is it second order?"
-  stops being a model-selection question with no continuous answer and becomes
-  a coordinate with a likelihood profile, like every other quantity in these
-  filters. It also gives a principled reading of the in-between cases the
-  integer model has to round.
-- **It is the natural home for long memory.** $\nu\notin\mathbb Z$ gives
-  hyperbolic rather than exponential decay of the impulse response, so
-  $1/(1-|z|)$ — the memory law these filters keep rediscovering — would
-  generalise to a power law. Processes whose autocorrelation refuses to fit an
-  exponential are common and currently have to be forced into extra integer
-  modes.
-- **It may reorganise the channel structure.** `0024` established that the
-  channels are the roots of the characteristic polynomial. Under a branch point
-  there are no isolated roots, so "how many channels" would become a question
-  about a continuous spectrum — which is either a much cleaner statement of the
-  same fact or a sign that the discrete picture was an artifact of integer
-  order. Either outcome is informative.
+### Also open, and smaller
 
-The obvious costs: the state is no longer finite-dimensional, so it has to be
-truncated (a compute budget, which is allowed, but a new one), and the
-errors-in-variables result that instruments at lags $\ge p+1$ annihilate the
-measurement noise relies on the residual touching finitely many lags — it would
-need restating.
+- **Fractional order**, in progress in
+  [`fractional-ode-filter/`](fractional-ode-filter/SUMMARY.md) — the continuous
+  replacement for the categorical $p$.
+- **Marginalising $(\varphi_P, s_P)$** over a small grid, like every other
+  nuisance here, which is the principled fix for the ill-posed zero.
+- **The injection direction as a free parameter**, and **a second dynamics axis
+  for frequency** — both measured to be real, neither yet measured to be worth
+  its cost.
+- **The oscillator phase channel**, and the diffusion/kinetic $(\tau,\dot\tau)$
+  kernels for the offset channel (worth ~5 millinats/point to forecast
+  consumers).
 
-This machinery now has a first consumer: the two-series offset extension
-([`ode-adaptive-filter/exploration/0042`](ode-adaptive-filter/exploration/0042_the_offset_frame.md))
-reads one series at a fractional time offset from another through
-$F^{-\tau}$ — a fractional power of the *shift* where $\Delta^\nu$ is a
-fractional power of the *difference* — and the joint family
-$\lambda^\mu e^{-\lambda\tau}$ (fractional derivative read at a fractional
-lag) is measured there, including the quarter-period-per-order exchange rate
-between the two.
+---
+
+## Install
+
+```bash
+pip install -e 'adaptive-random-walk-filter/output[fit]'
+pip install -e 'ode-adaptive-filter/output[fit]'
+```
+
+`numpy` is always required; `scipy` only if you will call `fit()`.
+
+## A note on reading this repository
+
+Every `SUMMARY.md` is written to be falsifiable and is edited when a probe
+contradicts it — superseded claims are struck through and kept, with the
+measurement that retired them. Where a result is a negative one, it is recorded
+as a result. The numbered files in each `exploration/` directory are in
+chronological order, and predictions are recorded before the runs that test
+them.

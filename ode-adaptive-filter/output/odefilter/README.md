@@ -94,7 +94,7 @@ ridge relief 0.0022 → 0.0101 nats/pt and fitted endpoints that come home
 (`s_P` 0.87 against a truth of 0.8 where the old fit wandered between 0 and
 2.1 by optimiser path). The collapse was strictly dominated — same model,
 strictly more of the evidence, ~1.4× cost — so it was **removed** once
-`crypto`'s `mixture.py` migrated off the collapsed internals, and there is
+the one downstream reader migrated off the collapsed internals, and there is
 no `collapse` option anymore.
 
 Two consequences of the removal worth knowing. **The parent reduction
@@ -137,7 +137,7 @@ every other nuisance here) as a follow-up design.
   (`../../exploration/0040`). Which `d` is right is a hypothesis, decided by
   the same prequential density the filter uses everywhere else — it chose
   correctly in every section of the probe. This is the internal form of "fit
-  the differenced series" (`crypto-predictivity/0016`) and beats it, because
+  the differenced series" and beats it, because
   differencing pushes iid measurement noise out of the model class (MA(1))
   while pinning leaves it alone.
 

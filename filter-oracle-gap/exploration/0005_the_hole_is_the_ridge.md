@@ -48,7 +48,7 @@ below resolution). Sharper both ways.
   is not. Two fit pipelines, two endpoints, one flat ridge. **The reported
   "inconsistent behaviour" is the optimiser's path being the only thing that
   picks a point on it.**
-- **Crypto `FILTER-NOTES` §4's basin roulette** — persistent-moderate against
+- **The applied `FILTER-NOTES` §4's basin roulette** — persistent-moderate against
   impulsive-large, 0.003 nats/pt apart in-sample, 0.042 out — is the same
   degeneracy with $\varphi_P$ as a second ridge coordinate: two splits of
   similar total variance the collapsed likelihood cannot tell apart.
@@ -61,7 +61,7 @@ below resolution). Sharper both ways.
   is, in this frame, "place the start *on* the ridge". On `0029`-style data
   it changes nothing (`0003` B: all four screen variants polish to the same
   endpoint — at $n=900$ the polish slides along the flat ridge unassisted).
-  Its 10-nat value on BTC is real but belongs to a rougher surface than this
+  Its 10-nat value on real data is real but belongs to a rougher surface than this
   one; the correction is a start-quality fix, not the hole.
 
 ## The oracle gap, revisited
@@ -94,9 +94,9 @@ about this filter.
   (`_loglik_batch`'s shape) and has not been done. That, plus the `0032`
   do-no-harm gate (≤ +0.0004), is what stands between this finding and a
   patch to `core.py`.
-- **Whether IMM's sharper likelihood un-flattens crypto's actual basin pair**
+- **Whether IMM's sharper likelihood un-flattens the applied basin pair**
   — needs the real series, not `0003` A's synthetic.
 - The IMM premium (+0.0056 on one draw) against the scoreboard's 0.0025 —
   needs seeds.
-- `FILTER-NOTES` §8 (wide root nulls) and `crypto/0022` (the `dynamics`
+- `FILTER-NOTES` §8 (wide root nulls) and the applied §22 (the `dynamics`
   diagnostic tracking the spread) remain unassigned to this mechanism.

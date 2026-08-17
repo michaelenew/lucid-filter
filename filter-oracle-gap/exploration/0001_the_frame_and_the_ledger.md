@@ -22,18 +22,17 @@ and priced the asymmetry: carrying the channel unnecessarily costs
 
 ## The ledger of reported symptoms
 
-The crypto workstreams ran this filter hard on data with a genuinely live
-scale channel and reported back
-([`FILTER-NOTES`](../../crypto-predictivity/FILTER-NOTES.md)). Read together
+An applied workstream ran this filter hard on real data with a genuinely
+live scale channel and reported back (its `FILTER-NOTES`). Read together
 with `0038`/`0039`, the entries sort into two piles.
 
 **Pile 1 — the likelihood is less decisive than it should be** (online):
 
-- **§4, the sharpest one.** On BTC the surface has two optima — the two *ends*
+- **§4, the sharpest one.** On real data the surface has two optima — the two *ends*
   of the process-scale channel, persistent-moderate ($\varphi_P\!\approx\!0.8$,
   $s_P\!\approx\!1.2$) against impulsive-large ($\varphi_P\!\approx\!0.25$,
   $s_P\!\approx\!1.9$) — separated by **0.003 nats/pt in-sample** and
-  **0.042 nats/bar out-of-sample** (`crypto/0001`, `0007`). The marginal
+  **0.042 nats/bar out-of-sample**. The marginal
   likelihood is nearly indifferent between hypotheses that differ 14× more
   than that out of sample. *Which basin the optimiser lands in decides the
   answer, and the data does not.*
@@ -55,19 +54,19 @@ with `0038`/`0039`, the entries sort into two piles.
 - **§1.** $Q$ is the *median* process variance, so a start-screen candidate
   with $s_P > 0$ at the homoscedastic fit's $Q$ carries a **mean** variance
   inflated by $e^{s_P^2/2}$ — every live-channel candidate is scored at a $Q$
-  it would never choose. Measured cost on BTC: the uncorrected ranking landed
+  it would never choose. Measured cost on real data: the uncorrected ranking landed
   the whole fit **10 nats worse**; the one-line correction
   ($\log Q \mathrel{-}= s_P^2/2$) recovered it. Inert when $\hat s_P=0$ —
   which is why the ODE workstream never felt it.
-- **§1 related.** `_S_SPLITS` tops out at 0.6; daily crypto fits
+- **§1 related.** `_S_SPLITS` tops out at 0.6; the applied daily fits
   $s_P = 1.24$–2.04. A screen that cannot propose the answer cannot rank it.
 - **§5.** `_iv_alpha` defaults $m$ where `0028` measured it as a precondition
   ($m=p$ diverges, $\hat Q = 409$ against 1). Known, listed as `0b`, still
   open.
 
 **Unassigned, kept in view:** §8 (fitted root moduli have a wide null and
-nothing reports it), `crypto/0022` (the `dynamics` diagnostic tracks the
-bid-ask bounce within eras, r = +0.902), `crypto/0023` (`dynamics` is not a
+nothing reports it), its §22 (the `dynamics` diagnostic tracks a
+microstructure artifact within eras, r = +0.902), its §23 (`dynamics` is not a
 fraction — it went to −0.404 on 2013 and that reading was *correct*). These
 may be downstream of pile 1 — a filter whose scale posterior moves on
 one-step evidence only is easier for microstructure to lead around — but that
@@ -81,7 +80,7 @@ $(\varphi_P, s_P)$ is flatter than the data warrants; the screen then starts
 the search at candidates handicapped by the median/mean mismatch (pile 2), and
 on a flat surface the start decides the endpoint. The observed endpoints are
 the reported symptoms: boundary zeros on synthetic data generated with a live
-channel (`0029`), basin roulette on crypto, 0% of an oracle the forced channel
+channel (`0029`), basin roulette on real data, 0% of an oracle the forced channel
 gets 80% of, and online diagnostics computed from a posterior that never
 sharpens.
 

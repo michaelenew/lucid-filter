@@ -98,4 +98,5 @@ Two changes are now earned, and they are one design:
 Not established: the marginalised design's cost and its score on the full
 `0032` series; the batched IMM's fit-time cost inside `fit_` (the reference
 fits ran ~4 minutes at $n = 900$ against ~15 s shipped — the polish, not
-the evaluator, is where the time went); crypto's real basins under IMM.
+the evaluator, is where the time went); the applied workstream's real
+basins under IMM.

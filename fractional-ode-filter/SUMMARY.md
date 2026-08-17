@@ -30,7 +30,7 @@ Degree is a real number. The integer faces are exact members of the existing
 ladder: $\nu=1$ is the parent random-walk filter, $\nu=2$ is the double unit
 root — i.e. **the linear offset / directional bias planned for the parent is
 already in this family**
-([`crypto-predictivity/0016`](../crypto-predictivity/exploration/0016_a_linear_offset_is_a_double_unit_root.md)),
+(the applied workstream's linear-offset probe),
 with $\nu\in(1,2)$ a bias that decays hyperbolically.
 
 **The production map is the split kernel**
@@ -187,7 +187,7 @@ radius test, which nothing exercises yet. See
    separately identifiable is the next identifiability question.
 4. **The quadrature realisation** of the channel density, now actively
    motivated by the small-$f$ tail numbers.
-5. **Real data**, through `crypto-predictivity`'s pipeline — realised
+5. **Real data**, through the applied workstream's pipeline — realised
    volatility is the natural first target (long memory is its textbook
    description, and the oscillator found there is exactly what item 3
    composes with).

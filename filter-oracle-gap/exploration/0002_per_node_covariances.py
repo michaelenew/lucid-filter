@@ -10,7 +10,7 @@ it a tax, because what survived was enough for a FORCED channel to close 80%
 of the oracle gap.  `0001` suspects it is not a tax but the hole: compressed
 evidence means a flat likelihood in the scale coordinates, and a flat
 likelihood is what lets the fit land on self-confirming boundaries (0039), lets
-the optimiser rather than the data pick between crypto's two basins
+the optimiser rather than the data pick between two reported basins
 (FILTER-NOTES section 4), and caps the forced channel at 80%.
 
 The alternative carried here is IMM: each grid node keeps its own (m_g, P_g),

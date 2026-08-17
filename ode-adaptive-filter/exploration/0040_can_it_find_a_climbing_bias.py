@@ -3,7 +3,7 @@
 The model has no intercept anywhere.  A constant offset is a root at z = 1;
 a LINEAR offset -- a level whose rate of change is itself part of the state,
 which is what a climbing or declining bias is -- is a DOUBLE root at z = 1.
-crypto-predictivity/0016 measured that structure worth +0.005 to +0.027
+The applied workstream measured that structure worth +0.005 to +0.027
 nats/bar by fitting the differenced series, and flagged first-class support
 as this filter's call.  `fit(unit_roots=d)` now pins d roots at z = 1 exactly
 and searches only the quotient polynomial.  This probe asks whether that was
@@ -32,12 +32,12 @@ worth building, in five sections:
      uses everywhere else, so the premium/exposure asymmetry is the number
      that matters.
 
-  E  INTERNAL PIN vs EXTERNAL DIFFERENCING.  The crypto recipe -- fit(p) on
+  E  INTERNAL PIN vs EXTERNAL DIFFERENCING.  The external recipe -- fit(p) on
      dy -- is the same hypothesis as unit_roots=1 on the level with one more
      order, except that differencing pushes iid measurement noise out of the
      model class (it becomes MA(1)) and the internal pin leaves it alone.
      One-step held-out densities are directly comparable (the Jacobian of
-     y -> dy given the past is 1, crypto-predictivity/0016).
+     y -> dy given the past is 1).
 
 Scoring is prequential throughout: fit on the first half, stream over the
 whole series, sum log predictive density over the second half only.
@@ -245,7 +245,7 @@ def main():
 
     # ---------------------------------------------------------------- E
     print("=== E: internal pin vs external differencing, same hypothesis")
-    # On the B data (linear offset + oscillator): the crypto recipe is
+    # On the B data (linear offset + oscillator): the external recipe is
     # fit(p=3) on dy; the internal form is fit(p=4, unit_roots=1) on y.
     # Same root budget for the same job; only the measurement noise differs
     # in treatment.  One-step densities are comparable (Jacobian 1); the

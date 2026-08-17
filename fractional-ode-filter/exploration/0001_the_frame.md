@@ -28,7 +28,7 @@ vector is a smooth function of one real $\nu$.
 | $\nu$ | $\alpha$ | which existing object this is |
 |---|---|---|
 | 1 | $(1)$ | the parent random-walk filter (`statfilter`), exactly |
-| 2 | $(2,-1)$ | the double unit root — **a linear offset**, [`crypto-predictivity/0016`](../../crypto-predictivity/exploration/0016_a_linear_offset_is_a_double_unit_root.md) |
+| 2 | $(2,-1)$ | the double unit root — **a linear offset** |
 | 3 | $(3,-3,1)$ | the triple root: quadratic drift |
 
 (Verified numerically: at integer $\nu$ the recurrence for $c_k$ terminates

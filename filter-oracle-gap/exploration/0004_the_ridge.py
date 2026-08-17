@@ -10,7 +10,7 @@ within this window's draw).  So the likelihood pins the MEAN variance and is
 nearly flat along the ridge that trades the median Q against the spread s_P.
 
 That is the same degeneracy `0039` met at the boundary (s_P = 0 is the
-ridge's endpoint), the same one that makes crypto's two basins -- two
+ridge's endpoint), the same one that makes the two reported basins -- two
 different (phi, s) splits of similar total variance -- an optimiser's choice,
 and the same evidence the GPB1 collapse deletes: WHICH split is right is
 visible only in the accumulated history of the covariance, which a shared-P

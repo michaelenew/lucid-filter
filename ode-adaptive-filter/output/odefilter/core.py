@@ -1122,9 +1122,9 @@ class OdeFilter:
         (exploration/0040).  Pinning is a hypothesis, not an assumption -- fit
         with unit_roots at both values and compare the same prequential
         likelihood this filter uses everywhere else.  This is the internal
-        form of "fit the differenced series" (crypto-predictivity/0016), and
-        strictly dominates it: differencing pushes iid measurement noise out
-        of the model class (it becomes MA(1)); pinning leaves it alone.
+        form of "fit the differenced series", and strictly dominates it:
+        differencing pushes iid measurement noise out of the model class
+        (it becomes MA(1)); pinning leaves it alone.
 
         ``scales=False`` pins the two log-scale channels off, giving an ordinary
         (non-adaptive) recurrence filter.  Useful as a baseline and much faster.

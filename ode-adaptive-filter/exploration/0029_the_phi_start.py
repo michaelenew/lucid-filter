@@ -19,7 +19,8 @@ import time
 
 import numpy as np
 
-sys.path.insert(0, "/home/user/stat-tracker/ode-adaptive-filter/output")
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(HERE), "output"))
 from odefilter import OdeFilter, Params  # noqa: E402
 from odefilter.core import _iv_alpha, _moment_noises, _logit  # noqa: E402
 

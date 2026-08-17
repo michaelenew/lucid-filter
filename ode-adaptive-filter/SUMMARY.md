@@ -306,7 +306,7 @@ must beat 0.0025 nats/pt of premium against 0.0872 of exposure, and leave
 
 [`0041`](exploration/0041_a_climbing_bias_is_a_pinned_root.md), from
 [`0040`](exploration/0040_can_it_find_a_climbing_bias.py). Acting on
-[`crypto-predictivity/0016`](../crypto-predictivity/SUMMARY.md), which measured
+the applied workstream's linear-offset probe, which measured
 a linear offset worth up to +0.027 nats/bar by differencing and left
 first-class support as this filter's call.
 
@@ -338,7 +338,7 @@ The right pin is free, the wrong pin is expensive but **loud** — three orders
 of magnitude above the ±0.0004 resolution `0039` set for this criterion — and
 the prequential density **chose correctly in every section**. On in-class data
 the anchor does nearly all the work: with one root pinned the free part lands
-its own root at 0.995–1.001 (crypto's `diff_p3` behaviour), and the second pin
+its own root at 0.995–1.001 (the applied `diff_p3` behaviour), and the second pin
 is free. The pinned fit recovers the quotient cleanly ($|z|=0.94$–0.96 against
 0.949, $\hat Q\approx1$, $\hat\sigma^2\approx9$ — now a slow test). And the
 internal pin **beats the differencing recipe that motivated it** by +0.036
@@ -525,8 +525,8 @@ homoscedastic face. Ten tests pin the exploration results at test scale
 (row exactness, anchor, sign detection both ways, matched-null trust and its
 control, missing data, FLAT survival); the full fast suite passes. Left out
 with pointers: diffusion/kinetic kernels, the tube verdict, the $(\mu,\tau)$
-axis. What remains is the crypto instantiation, which consumes the knee curve
-at its trade horizon.
+axis. What remains is the applied instantiation, which consumes the knee
+curve at its own horizon.
 
 ## Three corrections — read these before anything else
 
@@ -962,14 +962,14 @@ already optimises. See `filter-optimality-proof/0036`.)
    > across pipeline versions are all that one degeneracy. Forced-channel
    > extraction under IMM: 89.5% of the oracle gap against 80.0%, and nearly
    > flat across the forced $s_P$. **Shipped, then made the only recursion**:
-   > crypto's `mixture.py` migrated to the per-node state and the GPB1
+   > the one downstream reader migrated to the per-node state and the GPB1
    > collapse and its `collapse` flag were deleted; the oracle-gap battery in
    > `output/tests/` pins the repair. Two knock-ons (odefilter README): the
    > parent reduction is exact on the $s=0$ face and ~6e-3 nats/pt loose with
    > a live channel (the parent is GPB1 by construction), and a detectable
    > explosive $\alpha$ now carries a *finite* likelihood — the old `-inf`
    > was GPB1 overflowing, so the unit disc is a commitment (`unit_roots`),
-   > not an emergent wall. Crypto's `0032` observed the consequence: one
+   > not an emergent wall. An applied probe observed the consequence: one
    > pinned-root fit landed a quotient root at $|z|=8.3$ under the dynamics
    > channel (its density fine, its roots unreadable) — item 2a's
    > `unit_roots` × dynamics interaction, now with a concrete casualty.

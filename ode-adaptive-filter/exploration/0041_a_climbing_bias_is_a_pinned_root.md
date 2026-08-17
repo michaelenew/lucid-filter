@@ -10,7 +10,7 @@ The model has no intercept anywhere. A constant offset can only live in a root
 at $z=1$; a **linear** offset — a level whose rate of change is part of the
 state, which is what a climbing or declining bias is — can only live in a
 **double** root at $z=1$. That much was already in `0001` and in
-[`crypto-predictivity/0016`](../../crypto-predictivity/exploration/0016_a_linear_offset_is_a_double_unit_root.md),
+the applied workstream's linear-offset probe,
 which measured the structure worth +0.005 to +0.027 nats/bar by fitting the
 differenced series and left first-class support as "the filter's call".
 
@@ -81,7 +81,7 @@ a level in the thousands.
 
 Two structural readings. **The anchor does almost all the work**: with one
 root pinned, the free part puts its own root at 0.995–1.001 — the same
-"chose the double root by itself" that crypto's `diff_p3` showed — and the
+"chose the double root by itself" that the applied `diff_p3` showed — and the
 density is flat between `unit_roots=1` and `2` (±0.003 nats/pt). The second
 pin costs nothing and completes the hypothesis. And **the pinned fit recovers
 the quotient cleanly**: the oscillator pair comes back at $|z|=0.94$–0.96
@@ -122,7 +122,7 @@ correctly in every section of this probe.
 
 ## E — the pin beats the differencing recipe that motivated it
 
-Same hypothesis two ways on the section-B data: crypto's `fit(p=3)` on
+Same hypothesis two ways on the section-B data: the external `fit(p=3)` on
 $\Delta y$ against the internal `fit(p=4, unit_roots=1)` on $y$ (identical
 root budget; one-step densities comparable, Jacobian 1):
 
@@ -134,7 +134,7 @@ root budget; one-step densities comparable, Jacobian 1):
 
 Differencing hands the filter a measurement noise it cannot represent — iid
 $v_t$ becomes MA(1) $\Delta v_t$ — and at $\sigma^2=9$ that tax is +0.036
-nats/pt pooled, larger than the entire +0.005 to +0.027 gain crypto measured
+nats/pt pooled, larger than the entire +0.005 to +0.027 gain measured
 *through* the tax. The constraint belongs inside the filter, where the noise
 stays in class.
 

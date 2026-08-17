@@ -7,7 +7,7 @@ s_P, 5x the depth).  This probe measures the two symptoms that a flat surface
 plus a biased start screen would produce, and tests the one-line repair
 FILTER-NOTES section 1 proposed.
 
-  A  BASIN INDIFFERENCE, synthetically.  Crypto section 4 reported two optima
+  A  BASIN INDIFFERENCE, synthetically.  The applied workstream reported two optima
      -- persistent-moderate (phi_P ~ 0.8, s_P ~ 1.2) and impulsive-large
      (phi_P ~ 0.25, s_P ~ 1.9) -- separated by 0.003 nats/pt in-sample and
      0.042 out-of-sample: the optimiser picks the answer, not the data.
@@ -87,7 +87,7 @@ def part_a():
         out[src] = row
     print("    gap = nll(il) - nll(pm): positive means the data prefers the")
     print("    persistent-moderate hypothesis.  The question is magnitude:")
-    print("    crypto measured 0.003 in-sample under gpb1 against 0.042 of")
+    print("    the applied fit measured 0.003 in-sample under gpb1 against 0.042 of")
     print("    out-of-sample consequence.")
     return out
 

@@ -3,7 +3,7 @@
 Closing the gap between the ODE filter and an oracle told the noise schedule
 exactly — and finding the hole behind symptoms reported from three
 workstreams: `0039`'s 80%-forced / 0%-as-fitted process-scale channel, the
-self-confirming $s_P=0$ boundary, crypto's basin roulette, and fits whose
+self-confirming $s_P=0$ boundary, an applied workstream's basin roulette, and fits whose
 endpoints depend on which optimiser walked there.
 
 **The hole is found, measured, and decomposed.** The GPB1 collapse — one
@@ -79,8 +79,8 @@ and a single located target for what remains (marginalisation).
    channel must clear 85% of the oracle gap, the fitted $s_P$ must stay off
    the boundary. Through the core path the fit lands $\hat s_P = 0.87$
    against a truth of 0.8 at $n=600$.
-0a. ~~**Delete GPB1 once crypto migrates.**~~ — **done**:
-   `crypto-predictivity/output/mixture.py` now reads the per-node state (the
+0a. ~~**Delete GPB1 once the downstream reader migrates.**~~ — **done**:
+   the one downstream reader now reads the per-node state (the
    mixture is richer — every node carries its own accumulated covariance
    history), the `collapse` flag is gone, and the per-node recursion is the
    only one. Two knock-ons recorded in the odefilter README: the parent
@@ -95,11 +95,11 @@ and a single located target for what remains (marginalisation).
 2. **Fit-time cost.** An IMM fit runs ~107 s at $n=600$ against ~15 s
    shipped — the polish loop, not the evaluator (1.4×), is where the time
    goes; it needs the same stencil economics the speedup gave GPB1.
-3. **Crypto's real basins** under the IMM likelihood — does 0.003
-   in-sample become a decision on the actual BTC series.
+3. **The applied workstream's real basins** under the IMM likelihood — does 0.003
+   in-sample become a decision on the actual series.
 4. The channel model's 6.8% (a regime-hazard or heavier-tailed chain in
    place of AR(1) — touches `FILTER-NOTES` §7's long-memory note).
-5. Unassigned symptoms: `FILTER-NOTES` §8 (root nulls), `crypto/0022`
+5. Unassigned symptoms: the applied `FILTER-NOTES` §8 (root nulls), its §22
    (`dynamics` as a spread detector).
 
 ## Layout

@@ -9,7 +9,7 @@ leader's history predicting the follower at horizon $h$) or through $\tau$
 directly; the score is the prequential log score of $h$-step forecasts of
 $y^{(2)}$, swept over $h$. It is log-loss again — no new parameters — it
 verifies against realised observations, so no proxy truth is needed, and the
-horizon axis is the decision class. Crypto is one consumer: its $h$ is the
+horizon axis is the decision class. The applied workstream is one consumer: its $h$ is the
 trade horizon.
 
 ## 1. The knee law: the lead time is the forecastable horizon
@@ -71,5 +71,5 @@ With this, every item of `0047` §4 is discharged or retired:
 
 What remains for the offset extension is engineering, not theory: folding the
 channel into `output/odefilter` (`0045` §5 — the lag-basis GLS bridge row,
-the AR-vs-exact-discretisation class gap), and the crypto instantiation,
+the AR-vs-exact-discretisation class gap), and the applied instantiation,
 which consumes the knee curve at its trade horizon.

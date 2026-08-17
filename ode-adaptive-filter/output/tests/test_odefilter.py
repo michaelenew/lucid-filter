@@ -176,7 +176,7 @@ def test_explosive_alpha_never_yields_nan():
     chasing it) -- and _loglik_batch's dead-row semantics turn any residual
     overflow into -inf rather than poisoning the batch.  A consequence worth
     knowing: the likelihood no longer walls off the unit disc numerically,
-    so a fit CAN land marginally outside it (crypto's p=4, unit_roots=2 cell
+    so a fit CAN land marginally outside it (an applied p=4, unit_roots=2 cell
     did); the disc is a modelling commitment, not an emergent property."""
     rng = np.random.default_rng(5)
     y = rng.standard_normal(200)
