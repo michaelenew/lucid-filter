@@ -29,17 +29,33 @@ commitment. Everything else is fitted.
 
 ## What is in here
 
+The repository is split in two, because the two halves have different
+audiences and should not constrain each other.
+
+```
+lucid/       the product   — the installable package and its tests
+research/    the iceberg   — every probe, proof and figure behind it
+```
+
+**[`lucid/`](lucid/README.md) is self-contained.** It is one distribution
+(`lucid-filter`) with no dependency on anything in `research/`; you can take it
+alone and never read another word. See [its README](lucid/README.md) for the
+API.
+
+**[`research/`](research/README.md) is why any of it is true.** Five
+workstreams, each a `SUMMARY.md` that is kept falsifiable and the numbered
+probes that produced it:
+
 | workstream | state |
 |---|---|
-| [`adaptive-random-walk-filter/`](adaptive-random-walk-filter/SUMMARY.md) | **delivered** — `statfilter`, a tuning-free filter for an unbiased random walk observed with noise |
-| [`ode-adaptive-filter/`](ode-adaptive-filter/SUMMARY.md) | **candidate shipped** — `odefilter`, the same idea for processes locally described by a linear ODE, plus `offset.py` for the lead/lag between two series |
-| [`filter-optimality-proof/`](filter-optimality-proof/SUMMARY.md) | one layer proved, one measured, one open — where "optimal" does and does not hold, and why the *class* of processes was the hard part |
-| [`filter-oracle-gap/`](filter-oracle-gap/SUMMARY.md) | how far the filter is from an oracle told the noise schedule exactly, decomposed line by line — and the repair that closed most of it |
-| [`fractional-ode-filter/`](fractional-ode-filter/SUMMARY.md) | **in progress** — model order made continuous: $\nu$ is learnable from both sides with an error bar, recovers the parent at $\hat\nu\approx1$, and one coordinate beats $p$ free ones at fractional orders |
+| [`random-walk-filter/`](research/random-walk-filter/SUMMARY.md) | **delivered** — `statfilter`, a tuning-free filter for an unbiased random walk observed with noise |
+| [`ode-filter/`](research/ode-filter/SUMMARY.md) | **candidate shipped** — `odefilter`, the same idea for processes locally described by a linear ODE, plus the offset channel for the lead/lag between two series |
+| [`optimality-proof/`](research/optimality-proof/SUMMARY.md) | one layer proved, one measured, one open — where "optimal" does and does not hold, and why the *class* of processes was the hard part |
+| [`oracle-gap/`](research/oracle-gap/SUMMARY.md) | how far the filter is from an oracle told the noise schedule exactly, decomposed line by line — and the repair that closed most of it |
+| [`fractional-filter/`](research/fractional-filter/SUMMARY.md) | **in progress** — model order made continuous: $\nu$ is learnable from both sides with an error bar, recovers the parent at $\hat\nu\approx1$, and one coordinate beats $p$ free ones at fractional orders |
 
-Each workstream is `SUMMARY.md` (the current state, kept honest), `exploration/`
-(numbered probes, each a script and usually a writeup), and — where there is a
-deliverable — `output/` (the installable package and its tests).
+Probes in `research/` import the package from `lucid/` by relative path, so the
+dependency runs one way only: the product never reaches into the research.
 
 ---
 
@@ -57,13 +73,13 @@ causal can beat.
   (repairable, and repaired), 6.8% the channel model, and **3.7% irreducible
   detection lag** — you cannot react to a regime before evidence of it exists.
   Almost nothing about this gap is fundamental
-  ([`filter-oracle-gap/0007`](filter-oracle-gap/exploration/0007_decomposing_the_remaining_gap.py)).
+  ([`oracle-gap/0007`](research/oracle-gap/0007_decomposing_the_remaining_gap.py)).
   At the tier the no-regression gate constructs, the shipped filter measures
   81–90% across seeds.
 - Against a true-parameter oracle, the fitted filters sit **under 1% of the
   oracle's negative log-likelihood on their own class** (0.07%–0.70% for the
   fractional face filter; residual 0.34%–0.47% for the parent's gate)
-  ([`fractional-ode-filter/0010`](fractional-ode-filter/exploration/0010_the_oracle_gap_in_two_currencies.py)).
+  ([`fractional-filter/0010`](research/fractional-filter/0010_the_oracle_gap_in_two_currencies.py)).
 - Against a constant-gain Kalman filter *tuned in hindsight per series*, the
   random-walk filter's error ratio has a geometric mean of **0.678** over a
   9-probe battery, worst case **1.017**, and lands within 0.5% of optimal on
@@ -122,7 +138,7 @@ drawn by hand.*
 
 ### The ODE filter against the random-walk parent
 
-![forecast battery](ode-adaptive-filter/exploration/figures/fig18-forecast-battery.png)
+![forecast battery](research/ode-filter/figures/fig18-forecast-battery.png)
 
 Forecast MSE ratio, filter over parent, lower is better. On its target class it
 forecasts **1.5–3.7× better** at short horizons. On a plain random walk — the
@@ -142,7 +158,7 @@ $h=20$ only the unit root is left and the parent models that too.
 
 ### Dynamics that stop, and come back
 
-![dynamics reversion](ode-adaptive-filter/exploration/figures/fig24-dynamics-reversion.png)
+![dynamics reversion](research/ode-filter/figures/fig24-dynamics-reversion.png)
 
 The damaged-propeller case in miniature. The ODE governs, then stops (shaded),
 then resumes. The middle panel is the filter's own belief about whether its
@@ -158,7 +174,7 @@ irreducible.
 
 ### Being wrong versus being wrong *and confident*
 
-![distributional score](ode-adaptive-filter/exploration/figures/fig22-distributional-score.png)
+![distributional score](research/ode-filter/figures/fig22-distributional-score.png)
 
 Point error is the wrong lens for a filter whose job is to say what it does not
 know. On a series whose assumptions expire mid-run, the two filters' point
@@ -170,7 +186,7 @@ forecast is worse.
 
 ### How fast a change can possibly be detected
 
-![detection latency](ode-adaptive-filter/exploration/figures/fig23-detection-latency.png)
+![detection latency](research/ode-filter/figures/fig23-detection-latency.png)
 
 Evidence for a velocity mode accumulates as $n^3$ and for an acceleration mode
 as $n^5$, so the number of samples needed to notice a change of dynamics is
@@ -181,7 +197,7 @@ possibly react.
 
 ### Order as a continuous, estimable coordinate
 
-![nu profiles](fractional-ode-filter/exploration/figures/fig01-nu-profiles.png)
+![nu profiles](research/fractional-filter/figures/fig01-nu-profiles.png)
 
 The integer order $p$ was the one genuinely categorical axis left in the filter
 — learnable from below, nearly blind from above. Replacing it with a fractional
@@ -195,7 +211,7 @@ ones** by +0.024 nats/pt at $\nu=1.3$ and +0.117 at $\nu=1.7$.
 ## The filters
 
 ### `statfilter` — the random-walk parent
-[`adaptive-random-walk-filter/output/`](adaptive-random-walk-filter/output/statfilter/README.md)
+[`lucid/statfilter/`](lucid/statfilter/README.md)
 
 ```
 theta_t = theta_{t-1} + w_t,   w_t ~ N(0, Q  * exp(lamP_t))
@@ -216,7 +232,7 @@ r = f.filter(x)
 ```
 
 ### `odefilter` — locally linear ODE dynamics
-[`ode-adaptive-filter/output/`](ode-adaptive-filter/output/odefilter/README.md)
+[`lucid/odefilter/`](lucid/odefilter/README.md)
 
 ```
 x_t = alpha(g_t) . (x_{t-1}, ..., x_{t-p}) + w_t
@@ -248,7 +264,7 @@ $(x,\dot x,\ddot x)$ coordinates via a fixed involutive integer change of basis,
 so nothing is created or lost.
 
 ### `OffsetFilter` — two series, one clock
-[`ode-adaptive-filter/output/odefilter/offset.py`](ode-adaptive-filter/output/odefilter/offset.py)
+[`lucid/odefilter/offset.py`](lucid/odefilter/offset.py)
 
 Detects and tracks the **lead/lag between two series sharing one latent
 process**, online, as a posterior over a time-valued offset `tau` — fractional,
@@ -273,7 +289,7 @@ cross-covariance), and the lead time is exactly the horizon out to which y1
 forecasts y2 at tracking grade.
 
 ### The fractional face filter — exploration, not yet shipped
-[`fractional-ode-filter/`](fractional-ode-filter/SUMMARY.md)
+[`fractional-filter/`](research/fractional-filter/SUMMARY.md)
 
 $(1-B)^{\nu}x_t = w_t$ with $\nu$ real. The integer faces are exact members of
 the existing ladder: $\nu=1$ is the parent, $\nu=2$ the double unit root (a
@@ -420,7 +436,7 @@ directions (the direction $u$ is currently pinned to $e_1$, which is one of the
 three commitments the free-variable audit found binding), a coupling structure
 to identify, and the trust object generalised from a scalar to a posterior over
 a vector-valued nuisance grid — sketched already in
-[`0042` §6](ode-adaptive-filter/exploration/0042_the_offset_frame.md).
+[`0042` §6](research/ode-filter/0042_the_offset_frame.md).
 
 The identifiability question is the interesting one: the univariate budget is
 $2p+1$ numbers, and how that scales with dimension decides whether "each mode
@@ -429,7 +445,7 @@ gets its own noise channel" is estimable in practice or only in principle.
 ### Also open, and smaller
 
 - **Fractional order**, in progress in
-  [`fractional-ode-filter/`](fractional-ode-filter/SUMMARY.md) — the continuous
+  [`fractional-filter/`](research/fractional-filter/SUMMARY.md) — the continuous
   replacement for the categorical $p$.
 - **Marginalising $(\varphi_P, s_P)$** over a small grid, like every other
   nuisance here, which is the principled fix for the ill-posed zero.
@@ -445,10 +461,10 @@ gets its own noise channel" is estimable in practice or only in principle.
 ## Install
 
 ```bash
-pip install -e 'adaptive-random-walk-filter/output[fit]'
-pip install -e 'ode-adaptive-filter/output[fit]'
+pip install -e 'lucid[fit]'
 ```
 
+One distribution, `lucid-filter`, providing both `statfilter` and `odefilter`.
 `numpy` is always required; `scipy` only if you will call `fit()`.
 
 ## A note on reading this repository
