@@ -6,9 +6,16 @@ parameters.
 A *lucid filter* is a state estimator — an observer, in the control-engineering
 sense — for systems whose dynamics can change while they are running. It is a
 Kalman filter at every node of a quadrature grid, and exactly one ordinary
-Kalman filter when the scale channels are off. Every number it needs is learned
-from the data by maximum marginal likelihood: no thresholds, no forgetting
+Kalman filter when the scale channels are off. No thresholds, no forgetting
 factors, no changepoint detectors, no windows.
+
+**It is an online filter.** `fit()` is called once and fixes a *class* — how
+fast each noise scale may move, and roughly how big it is. It does not fix the
+operating point. Where the scales actually are right now is a posterior
+recomputed from evidence at every step, and `update()` never touches the fitted
+parameters. All the adaptation you see — absorbing a jump, backing off when a
+sensor degrades, widening the error bars — happens on one causal pass, with no
+refitting and no lookahead.
 
 This directory is the product, and it is self-contained — it imports nothing
 from `../research/`. The measurements behind every claim here live in
@@ -41,7 +48,7 @@ reach for `odefilter` when it oscillates, drifts, or decays.
 ```python
 from statfilter import AdaptiveFilter
 
-f = AdaptiveFilter.fit(x)          # x: a 1-D array. Learns all six numbers.
+f = AdaptiveFilter.fit(x)          # once: fixes the class, not the operating point
 r = f.filter(x)                    # r.mean, r.var, and the deviation channels
 ```
 
@@ -51,7 +58,7 @@ from odefilter import OdeFilter
 f = OdeFilter.fit(y, p=3)          # p=3: a damped oscillator plus a constant offset
 r = f.filter(y)
 
-f.reset()                          # then stream
+f.reset()                          # then stream — everything below is online
 for v in incoming:
     step = f.update(v)
     step.dynamics                  # how much of the fitted ODE is in force now
@@ -62,10 +69,19 @@ f.params.roots                     # the ODE's modes
 f.params.memory()                  # how far ahead there is anything to predict
 ```
 
-The deployment shape is `fit()` once offline on representative history, then
-stream forever. Filtering is a handful of small matrix operations per sample —
-no sampling, no backward pass, no optimiser in the loop. `fit()` is the
-expensive step and is meant to be rare.
+The deployment shape is `fit()` once offline to fix the class, then stream
+forever. Filtering is a handful of small matrix operations per sample — no
+sampling, no backward pass, no optimiser in the loop. `fit()` is the expensive
+step and is meant to be rare.
+
+It also does not have to be accurate. Sweeping each fitted coordinate and
+rerunning a full series, five of the six tolerate being wrong by factors of two
+to ten with almost no effect, and a deliberately careless vector still tracks a
+steady stretch to within 0.5% of a Kalman filter handed the true variances. The
+exception is `s_P`, which behaves like a switch rather than a dial: it has to be
+large enough for the process-scale channel to exist at all. That is why the
+history you fit on should contain the kind of disturbance the deployment will
+see — fitted on quiet data, `s_P` pins at zero and the channel goes with it.
 
 ## What to read from it
 

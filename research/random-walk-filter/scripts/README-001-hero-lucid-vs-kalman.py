@@ -18,15 +18,21 @@ Same data, same starting information, three regimes:
      does neither: it keeps chasing noise and keeps reporting regime-A error
      bars.
 
-The lucid filter is fitted ONCE, on a separate stretch of representative
-history from the same process -- history that contains the kind of disturbance
-the deployment will actually see.  That matters, and is documented: fitted on
-quiet homoscedastic data the process-scale channel is weakly identified and
-lands on s_P = 0, which switches off the very channel that absorbs a jump.
-"Representative" is doing real work in "fit once on representative history".
+The lucid filter is fitted ONCE, on a separate stretch of history, and then
+never touched again.  Everything it does on the series plotted is online: the
+fit fixes a class (how fast each scale may move), not an operating point, and
+`update()` never revisits the parameters.  What moves, step by step, is the
+posterior over the scale grid.
 
-Neither filter is refitted on the series plotted.  Everything the lucid filter
-does here is online.
+The fit does not have to be good -- README-003 sweeps it and finds five of the
+six coordinates tolerate factors of two to ten, with a deliberately careless
+vector still landing within 0.5% of this Kalman filter on the steady stretch.
+The exception is s_P, which is a switch rather than a dial: fitted on quiet
+homoscedastic data the process-scale channel is weakly identified, lands on
+s_P = 0, and takes with it the very channel that absorbs a jump.  So the
+history fitted on here contains the disturbances the deployment will see.
+"Representative" is doing the work in "fit once on representative history";
+"accurate" is not.
 
 Writes figures/hero-lucid-vs-kalman.png and figures/hero-lucid-vs-kalman.json.
 """

@@ -10,25 +10,51 @@ The true value is jittery and its measurements are noisy — a sensor operating
 under vibration, a drone on a windy day. Then the level jumps, and later the
 sensor itself degrades.
 
-On steady-state data the lucid filter tracks the truth to **within 5.6%** of a
-Kalman filter's error — and the Kalman filter is *provably optimal* there. But
-it is optimal because it was **told** the true process and measurement
-variances. The lucid filter was told nothing; it learned everything it uses
-from a stretch of history, and 5.6% is the entire price of not being told.
+On the steady stretch the lucid filter tracks the truth to **within a few
+percent** of the Kalman filter's error — and the Kalman filter is *provably
+optimal* there, because it was **told** the true process and measurement
+variances. The lucid filter was told nothing.
 
 Then the level jumps. The lucid filter absorbs it in **1 step**; the Kalman
 filter takes **16**, because a fixed gain must average a jump away over its own
-memory. The lucid filter is fast because its opinions come from what it sees,
-not from what it was assuming.
+memory. And when the sensor degrades, the two filters' point accuracy is a wash
+— but their honesty is not. Scored against its own claim, the Kalman filter's
+error is **4.6× larger than the uncertainty it reports**: its error bars are
+half the width they should be, and it has no way to notice. The lucid filter's
+are right. **It knows what it doesn't know, and reports the gap.**
 
-And when the sensor degrades, the two filters' point accuracy is a wash — but
-their honesty is not. Scored on its own claim, the Kalman filter's error is
-**4.6× larger than the uncertainty it reports**; its error bars are half the
-width they should be, and it has no way to notice. The lucid filter's are
-right. **It knows what it doesn't know, and reports the gap.**
+**None of that comes from the training run.** It is worth being exact about
+what `fit()` does, because it is easy to mistake for the whole story. It is
+called once, and what it picks is a *class* — how fast each noise scale is
+allowed to move, and roughly how big it is. It does **not** pick the operating
+point. Where the scales actually are at time *t* is a posterior recomputed from
+evidence at **every single step**; `update()` never touches the parameters at
+all. Everything above happens online, on one pass, with no refitting and no
+lookahead.
 
-*(Numbers and figure: [`README-001`](research/random-walk-filter/scripts/README-001-hero-lucid-vs-kalman.py),
-which regenerates both. Neither filter is refitted on the series shown.)*
+Which is why the fit does not have to be good. Sweeping each fitted coordinate
+across its range and rerunning the whole series
+([`README-003`](research/random-walk-filter/scripts/README-003-the-fit-is-an-envelope.py)):
+five of the six can be wrong by factors of two to ten and almost nothing moves —
+the process persistence $\varphi_P$ is flat anywhere from 0 to 0.8, and $Q$
+tolerates two decades. A **deliberately careless** vector, every coordinate set
+to a wrong round number, tracks the steady stretch to **+0.5% of the oracle-tuned
+Kalman** — better than the properly fitted vector does. The fit is choosing a
+point on a cheap trade-off, not a setting that has to be right.
+
+The one coordinate that is not forgiving, $s_P$, is not a precision setting
+either — it is closer to a switch. It has to be large enough for the process
+channel to exist at all; below about 2 the channel is effectively off, the jump
+takes hundreds of steps instead of one, and the reported uncertainty stops
+meaning anything. That is the same boundary the
+[`oracle-gap`](research/oracle-gap/SUMMARY.md) workstream found and priced, and
+it is the reason the training history has to contain the kind of disturbance the
+deployment will actually see. Fitted on quiet data, $s_P$ pins at zero and takes
+the channel with it.
+
+*(Numbers and figure: [`README-001`](research/random-walk-filter/scripts/README-001-hero-lucid-vs-kalman.py)
+and [`README-003`](research/random-walk-filter/scripts/README-003-the-fit-is-an-envelope.py),
+which regenerate both. Neither filter is refitted on the series shown.)*
 
 ---
 
@@ -39,10 +65,11 @@ Kalman filter when the scale channels are off. The family is named by its model
 class: the **lucid random walk filter**, the **lucid ODE filter**, and the
 in-progress **lucid fractional filter**.
 
-Every number these filters need is learned from the data by maximum marginal
-likelihood. There are no thresholds, no forgetting factors, no changepoint
-detectors, no windows to pick, and no hyperparameters to tune. You hand a
-filter a series; it fits itself to that series once, and then runs.
+The handful of numbers these filters need are learned from data by maximum
+marginal likelihood, once. There are no thresholds, no forgetting factors, no
+changepoint detectors, no windows to pick, and no hyperparameters to tune. You
+hand a filter a stretch of history to fix its class, and from then on it runs
+online — one causal pass, no refitting, no lookahead.
 
 A *compute budget* is not a free parameter: it trades a real-world cost (time)
 against theoretical accuracy and nothing else, so it is allowed and is always
@@ -119,9 +146,11 @@ is a 5×5 grid, and profiling attributes almost all of the cost to numpy call
 overhead rather than flops; a compiled implementation is estimated at roughly
 **40× faster**. That is a language cost, not an algorithmic one.
 
-So the deployment shape is: `fit()` once, offline, on representative history —
-then stream forever at near-oracle accuracy on a budget an embedded target can
-carry.
+So the deployment shape is: `fit()` once, offline, to fix the class — then
+stream forever, fully online, at near-oracle accuracy on a budget an embedded
+target can carry. Nothing after the fit is a batch operation, and nothing after
+the fit revisits the parameters: the adaptation is the scale posterior moving,
+step by step, on evidence.
 
 ### Physical systems whose dynamics change while you are flying them
 
@@ -270,10 +299,10 @@ a channel** — so choosing `p` is the same act as counting channels.
 
 ```python
 from odefilter import OdeFilter
-f = OdeFilter.fit(y, p=3)     # learn everything
+f = OdeFilter.fit(y, p=3)     # once: fixes the class, not the operating point
 r = f.filter(y)               # r.mean, r.var, r.whiteness, ...
 f.reset()
-for v in stream:              # then stream
+for v in stream:              # then stream — everything here is online
     step = f.update(v)
 f.predict(20)                 # mean and variance 20 steps out
 
