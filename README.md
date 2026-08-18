@@ -2,18 +2,42 @@
 
 **Adaptive filters with no theoretically relevant free parameters.**
 
+Real-world data is noisy, and regimes change. Look at this graph.
+
+![the lucid filter against an oracle-tuned Kalman filter](research/random-walk-filter/figures/hero-lucid-vs-kalman.png)
+
+The true value is jittery and its measurements are noisy — a sensor operating
+under vibration, a drone on a windy day. Then the level jumps, and later the
+sensor itself degrades.
+
+On steady-state data the lucid filter tracks the truth to **within 5.6%** of a
+Kalman filter's error — and the Kalman filter is *provably optimal* there. But
+it is optimal because it was **told** the true process and measurement
+variances. The lucid filter was told nothing; it learned everything it uses
+from a stretch of history, and 5.6% is the entire price of not being told.
+
+Then the level jumps. The lucid filter absorbs it in **1 step**; the Kalman
+filter takes **16**, because a fixed gain must average a jump away over its own
+memory. The lucid filter is fast because its opinions come from what it sees,
+not from what it was assuming.
+
+And when the sensor degrades, the two filters' point accuracy is a wash — but
+their honesty is not. Scored on its own claim, the Kalman filter's error is
+**4.6× larger than the uncertainty it reports**; its error bars are half the
+width they should be, and it has no way to notice. The lucid filter's are
+right. **It knows what it doesn't know, and reports the gap.**
+
+*(Numbers and figure: [`README-001`](research/random-walk-filter/scripts/README-001-hero-lucid-vs-kalman.py),
+which regenerates both. Neither filter is refitted on the series shown.)*
+
+---
+
 A *lucid filter* is a state estimator — an observer, in the control-engineering
 sense — for systems whose dynamics can change while they are running. It is a
 Kalman filter at every node of a quadrature grid, and exactly one ordinary
 Kalman filter when the scale channels are off. The family is named by its model
 class: the **lucid random walk filter**, the **lucid ODE filter**, and the
 in-progress **lucid fractional filter**.
-
-What makes it lucid is that it reports the standing of its own answer alongside
-the answer: how much of its fitted model is currently in force, whether its
-residuals are still white, how far ahead there is anything to predict at all,
-and where each surprise went. It is calibrated where a fixed-gain filter is
-confidently wrong.
 
 Every number these filters need is learned from the data by maximum marginal
 likelihood. There are no thresholds, no forgetting factors, no changepoint
@@ -302,6 +326,36 @@ characteristic scale.
 ---
 
 ## Assumptions, and what they bought
+
+### The founding insight: the four failure modes are one square
+
+Monitoring systems usually ship four detectors — one for outliers, one for
+level jumps, one for drift changes, one for noise-level changes — each with a
+threshold, each able to fire when it shouldn't.
+
+They are not four things.
+
+![the deviation square](research/random-walk-filter/figures/hero-mode-square.png)
+
+Each noise channel carries a log-scale that is an AR(1), and an AR(1) has two
+ends: impulsive ($\varphi\to0$, a one-off excursion) and persistent
+($\varphi\to1$, a carried-over level). **Two channels crossed with the two
+ends of persistence gives four corners of one continuous square**, and the
+filter reports a point inside it at every step. There are no thresholds because
+nothing is ever being decided.
+
+The trajectory above is real, from the hero figure's data: the step where the
+level jumped lands on the process-anomaly corner, the degraded-sensor steps
+cluster on the measurement-regime corner, and the quiet steps spread through
+the interior — where no named mode lives and a four-detector system has nothing
+to say.
+
+This is what generalises. **The count is channels × 2, not a fixed four**: the
+ODE filter adds a third channel for the dynamics, so its square becomes a prism
+with six corners, and every further channel doubles again. The measured version
+of the square — shading the exact expected posterior over $(a,\varphi)$ — is
+[`fig14`](research/random-walk-filter/figures/fig14-deviation-square.png), from
+[`THEORY-005`](research/random-walk-filter/scripts/THEORY-005-gradient-allocation.py).
 
 ### What must be true for these filters to be right
 

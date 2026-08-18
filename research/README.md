@@ -25,6 +25,13 @@ were followed throughout:
 Probes import the package from `../lucid/` by relative path, so they run
 against the shipped code rather than a copy.
 
+The two figures at the top of the repository README are generated the same way,
+by [`README-001`](random-walk-filter/scripts/README-001-hero-lucid-vs-kalman.py)
+(the lucid filter against an oracle-tuned Kalman filter) and
+[`README-002`](random-walk-filter/scripts/README-002-the-mode-square.py) (the
+deviation square, with a real trajectory on it). Nothing in this repository is
+drawn by hand.
+
 ## The workstreams
 
 | | what it settled |

@@ -1,0 +1,38 @@
+{
+  "seed": 11,
+  "hist_seed": 4,
+  "n": 900,
+  "n_hist": 900,
+  "fitted": {
+    "Q": 0.0002801656197546516,
+    "s2": 0.9847942197160093,
+    "phi_P": 8.315280276641321e-07,
+    "phi_M": 0.9259464451811306,
+    "s_P": 3.6939761247772913,
+    "s_M": 1.6157176096157835
+  },
+  "truth": {
+    "Q": 0.02,
+    "s2_A": 1.0,
+    "s2_C": 9.0,
+    "jump": 9.0
+  },
+  "steady_state": {
+    "lucid_rmse": 0.3936337355417371,
+    "kalman_rmse": 0.3728433505472053,
+    "lucid_penalty_pct": 5.576171591639945
+  },
+  "after_noise_change": {
+    "lucid_rmse": 0.7839580885127563,
+    "kalman_rmse": 0.7748298907642781,
+    "kalman_penalty_pct": -1.164373182984213
+  },
+  "calibration_after_noise_change": {
+    "lucid": 0.6642650411688052,
+    "kalman": 4.555976321859218
+  },
+  "jump_rise_time_steps": {
+    "lucid": 1,
+    "kalman": 16
+  }
+}
