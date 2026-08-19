@@ -108,7 +108,8 @@ spacing lesson (`ode-filter/0047`).
   [`0005`](0005_the_move.py) the move ·
   [`0006`](0006_what_the_probes_settle.md) reading ·
   [`0007`](0007_online_convergence.py) convergence ·
-  [`0008`](0008_online_convergence.md) reading.
+  [`0008`](0008_online_convergence.md) reading ·
+  [`0009`](0009_settling.py) settling chart.
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
-  `0007-the-move`, `0008-online-convergence`.
+  `0007-the-move`, `0008-online-convergence`, `0009-settling`.
