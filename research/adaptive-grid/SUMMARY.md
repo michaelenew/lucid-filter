@@ -249,6 +249,27 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    finite computer: nodes live only where the truth is, and the window telescopes
    out to find it rather than gridding the span between.
 
+10. **The dense overlapping walk-out, tuned to critical damping — and where τ
+    lands** ([`0023`](0023_critically_damped_walkout.py)). Tie the stride to the
+    grid: with **`mu_cap = gap`** the window shifts at most **one node per step**,
+    so consecutive windows overlap on all but one node — the walk stays dense and
+    overlapping *by construction*. That pins the slew and leaves only the bandwidth
+    `q_mu` (≡ `τ`) free. Set it by **damping**: the walk-out is second-order (μ
+    slews, the inner posterior π lags, the pair can overshoot and ring), and
+    **critical damping** (ζ=1, the fastest arrival with no overshoot) is the
+    boundary between the sluggish over-damped and the ringing under-damped walk.
+    Measured on a +3 walk-out (I≈0.41): overshoot onset at **r\* ≈ 3.5e-4** →
+    settle ≈ 17 steps, no overshoot, so the rule is **`q_mu* ≈ 3.5e-4 / I = 3.5e-4·R`**.
+    Because `mu_cap` slew-limits the approach, **convergence rate saturates**: the
+    rate peak (r≈4e-3) is only **~18% faster** but overshoots and raises the floor,
+    and past it more `q_mu` buys only floor and a **reversion bias** (−0.3 nats at
+    r≈0.08). So critical damping sits right at the **knee** of the rate-vs-floor
+    curve — the defensible operating point, with τ then *determined* rather than
+    free. The idealised scalar-Kalman **45° knee** (in the dimensionless pair
+    convergence-rate `K` vs floor `√K`, the tangent `d√K/dK=1` sits at **K=¼**,
+    r=0.083, τ≈3.5) lands **past** that rollover — the capped, reversion-limited
+    walk never reaches it, so critical damping (the more conservative point) binds.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -294,8 +315,9 @@ spacing lesson (`ode-filter/0047`).
   [`0019`](0019_blowup_vs_coverage.py) blow-up is coverage ·
   [`0020`](0020_dimensionless_tradeoff.py) config-invariant tradeoff (r=q_mu·I) ·
   [`0021`](0021_optimal_gridding.py) optimal uniform gridding ·
-  [`0022`](0022_unbounded_reach.py) unbounded reach (overshoot + hunting).
+  [`0022`](0022_unbounded_reach.py) unbounded reach (overshoot + hunting) ·
+  [`0023`](0023_critically_damped_walkout.py) critically-damped dense walk-out.
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`.

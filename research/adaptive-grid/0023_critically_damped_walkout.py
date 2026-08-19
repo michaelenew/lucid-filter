@@ -114,7 +114,7 @@ def main():
     r_knee45 = 0.0833                              # idealised K=1/4 knee
     tau_crit = float(np.interp(r_crit, rr, tset))
     print(f"\n[I(d=3)] {I3:.3f}   R=1/I={1/I3:.2f}")
-    print(f"[critical damping] r*={r_crit:.4f}  q_mu*={q_crit:.4f}  (= {r_crit:.3f}/I)  "
+    print(f"[critical damping] r*={r_crit:.2e}  q_mu*={q_crit:.2e}  (= {r_crit:.2e}/I = {r_crit:.2e}*R)  "
           f"settle~{tau_crit:.0f} steps, no overshoot")
     print(f"[rate peak] r={rr[k_peak]:.4f} settle={tset[k_peak]:.0f} (only "
           f"{100*(1-tset[k_peak]/tau_crit):.0f}% faster, with overshoot+floor)")
@@ -130,18 +130,17 @@ def main():
 
     a = ts.tidy(ax[0])
     a.axhline(D, color=ts.INK, lw=1.0, ls=":", label="truth +3")
-    a.axvline(0, color=ts.GRID, lw=1.0)
-    ec = curves[q_crit_t]
-    a.fill_between(tt, ec - HALF, ec + HALF, color=ts.SEQ[3], alpha=0.25, lw=0,
-                   label="window ±1.35 (overlaps step-to-step)")
-    for q, c, lb in [(q_over, ts.SERIES[3], "over-damped"),
+    for q, c, lb in [(q_over, ts.SERIES[3], "over-damped (slow)"),
                      (q_crit_t, ts.SERIES[7], "critically damped"),
-                     (q_under, ts.SERIES[1], "under-damped (rings)")]:
-        a.plot(tt, curves[q], color=c, lw=1.8, label=lb)
-    a.set_xlim(-15, 120); a.set_ylim(-0.6, 3.9)
+                     (q_under, ts.SERIES[1], "under-damped (overshoots)")]:
+        a.plot(tt, curves[q], color=c, lw=1.9, label=lb)
+    a.set_xlim(-6, 70); a.set_ylim(1.9, 3.28)
+    a.text(0.03, 0.06, "cap = gap = 0.45: window shifts ≤ 1 node/step\n"
+           "→ consecutive windows overlap (dense walk-out)",
+           transform=a.transAxes, fontsize=7.2, color=ts.INK2, va="bottom")
     a.set_xlabel("steps since jump"); a.set_ylabel("log-scale estimate (nats)")
-    a.set_title("(a) dense overlapping walk-out, three dampings")
-    a.legend(loc="lower right", fontsize=7.6)
+    a.set_title("(a) walk-out arrival: three dampings (zoom)")
+    a.legend(loc="lower right", fontsize=7.8)
 
     a = ts.tidy(ax[1])
     a.axhline(0.0, color=ts.INK, lw=0.8)
@@ -164,13 +163,16 @@ def main():
               s=150, lw=2.2, zorder=5, label=f"critical damping (r={r_crit:.1e})")
     a.scatter([dfloor[k_peak]], [rate[k_peak]], color=ts.SERIES[1], s=45, zorder=5,
               label="rate peak (overshoots)")
-    a.annotate("more q_mu → higher floor,\nreversion bias, no speed",
-               (dfloor[-1], rate[-1]), fontsize=7.4, ha="right", va="bottom",
-               color=ts.INK2, xytext=(0, 6), textcoords="offset points")
+    a.annotate("more q_mu →\nfloor + bias,\nno speed", (dfloor[-1], rate[-1]),
+               fontsize=7.2, ha="right", va="center", color=ts.INK2,
+               xytext=(-6, 0), textcoords="offset points")
+    a.annotate("45° knee (K=¼)\nis off to the right\n(r=0.083, biased)",
+               (dfloor[-2], rate[-2]), fontsize=7.0, ha="right", va="top",
+               color=ts.SERIES[1], xytext=(-2, -8), textcoords="offset points")
     a.set_xlabel("dimensionless steady floor  √I · RMS")
     a.set_ylabel("convergence rate  1/settle  (1/steps)")
     a.set_title("(c) rate saturates; critical damping sits at the knee")
-    a.legend(loc="lower right", fontsize=7.8)
+    a.legend(loc="upper left", fontsize=7.8)
     ts.save(fig, os.path.join(HERE, "figures", "0022-critically-damped-walkout.png"))
 
 
