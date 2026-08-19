@@ -90,23 +90,26 @@ def recovery(d, q_mu, nseed=40):
 
 
 def main():
+    # observability over the full range; the recovery U only for MEANINGFUL
+    # up-jumps (|d| < thr is trivially "recovered", so it is excluded)
     dd = np.round(np.arange(-2.0, 6.01, 0.5), 2)
+    ddr = np.round(np.arange(1.0, 6.01, 0.5), 2)
     Iof = np.array([observability(d) for d in dd])
-    recmin = np.zeros(dd.size); qopt = np.zeros(dd.size)
-    for k, d in enumerate(dd):
-        rc = np.array([recovery(d, q) for q in QGRID])
-        j = int(np.argmin(rc)); recmin[k] = rc[j]; qopt[k] = QGRID[j]
+    Ir = np.array([Iof[np.argmin(np.abs(dd - d))] for d in ddr])
+    recmin = np.zeros(ddr.size)
+    for k, d in enumerate(ddr):
+        recmin[k] = min(recovery(d, q) for q in QGRID)
 
     kmin = int(np.argmin(recmin))
-    # prediction ln(|d|/thr)/sqrt(I(d)) for d>0, scaled to the measured minimum
-    pos = dd > 0
-    pred = np.log(np.maximum(dd, 1e-9) / THRESH) / np.sqrt(np.maximum(Iof, 1e-6))
-    scale = recmin[pos].min() / pred[pos].min()
-    kpred = int(np.where(pos)[0][np.argmin(pred[pos])])
-    print(f"[U-min] measured recovery minimum at d={dd[kmin]:+.2f} ({recmin[kmin]:.0f} steps)")
-    print(f"[prediction] ln|d|/sqrt(I) minimum at d={dd[kpred]:+.2f}")
-    print(f"[observability] I saturates: I(+1)={Iof[dd==1][0]:.3f}, "
-          f"I(+3)={Iof[dd==3][0]:.3f}, I(+5)={Iof[dd==5][0]:.3f}")
+    basin = ddr[recmin <= 1.3 * recmin[kmin]]        # within 30% of the minimum
+    pred = np.log(ddr / THRESH) / np.sqrt(Ir)        # tau ~ 1/sqrt(I), t_rec ~ ln(d/thr)*tau
+    kpred = int(np.argmin(pred))
+    scale = recmin[kmin] / pred[kpred]
+    print(f"[U-min] measured recovery minimum at d={ddr[kmin]:+.2f} "
+          f"({recmin[kmin]:.0f} steps); flat basin d in [{basin.min():+.1f}, {basin.max():+.1f}]")
+    print(f"[prediction] ln(d/thr)/sqrt(I) minimum at d={ddr[kpred]:+.2f}")
+    print(f"[observability] I: I(+1)={Iof[dd==1][0]:.3f}, I(+2)={Iof[dd==2][0]:.3f}, "
+          f"I(+3)={Iof[dd==3][0]:.3f}, I(+5)={Iof[dd==5][0]:.3f}  (ceiling 0.5)")
 
     # (c) dimensional law at a fixed observable regime d0=+3
     d0 = 3.0
@@ -120,19 +123,22 @@ def main():
     a = ts.tidy(ax[0])
     a.plot(dd, Iof, color=ts.SERIES[2], lw=2.0, marker="o", ms=3.5)
     a.axhline(0.5, color=ts.INK2, lw=1.0, ls=":", label="chi-square ceiling ½")
-    a.axvline(dd[kmin], color=ts.SERIES[7], lw=1.1, ls="--", label=f"recovery min d={dd[kmin]:+.1f}")
+    a.axvspan(basin.min(), basin.max(), color=ts.SEQ[1], alpha=0.5, lw=0,
+              label="recovery basin")
     a.set_xlabel("destination d  (nats)"); a.set_ylabel("observability  I  (per-step Fisher info)")
-    a.set_title("(a) observability saturates near the recovery-min")
+    a.set_title("(a) observability saturates over the recovery basin")
     a.legend(loc="lower right", fontsize=8)
 
     a = ts.tidy(ax[1])
-    a.plot(dd, recmin, color=ts.SERIES[1], lw=2.0, marker="o", ms=3.5, label="measured min recovery")
-    a.plot(dd[pos], scale * pred[pos], color=ts.SERIES[5], lw=1.5, ls="--",
+    a.axvspan(basin.min(), basin.max(), color=ts.SEQ[1], alpha=0.5, lw=0,
+              label=f"basin [{basin.min():.0f},{basin.max():.0f}]")
+    a.plot(ddr, recmin, color=ts.SERIES[1], lw=2.0, marker="o", ms=3.5, label="measured min recovery")
+    a.plot(ddr, scale * pred, color=ts.SERIES[5], lw=1.5, ls="--",
            label="prediction  ln(d/thr)/√I  (scaled)")
-    a.scatter([dd[kmin]], [recmin[kmin]], facecolors="none", edgecolors=ts.SERIES[7],
+    a.scatter([ddr[kmin]], [recmin[kmin]], facecolors="none", edgecolors=ts.SERIES[7],
               s=150, lw=2.0, zorder=5)
-    a.set_xlabel("destination d  (nats)"); a.set_ylabel("min recovery time (steps)")
-    a.set_title(f"(b) U-minimum at d≈{dd[kmin]:+.1f} nats")
+    a.set_xlabel("up-jump size d  (nats)"); a.set_ylabel("min recovery time (steps)")
+    a.set_title(f"(b) broad basin; min d≈{ddr[kmin]:+.1f}, explodes past ~5")
     a.legend(loc="upper center", fontsize=8)
 
     a = ts.tidy(ax[2])

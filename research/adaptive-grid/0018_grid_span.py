@@ -1,16 +1,16 @@
 """Does a wider fine grid settle faster and quieter -- and does it move the optimum?
 
-The fine grid captures fast log-scale fluctuations around the moving centre; the
-centre mu (a noisy, slow Kalman integrator) only carries the slow part.  A WIDER
-span (larger s -> coverage ±2.857 s) lets the fine grid absorb more without
-moving mu, so more of the estimate comes from the fast, low-noise posterior and
-less from the noisy centre.  Hypothesis: wider span -> lower steady floor and
-faster recovery.
-
-But span is not free: at fixed order, wider s means a wider node GAP, and past
-the no-dead-zone bound (max gap <~ 0.6 nats, i.e. s <~ 0.4 at order 5) the
-grid-shift score develops dead zones (finding 2/3).  So span helps only until
-the gap opens a dead zone -- unless the order is raised with it (compute cost).
+Hypothesis (measured WRONG, kept as a result): a wider fine grid lets the grid
+absorb more without moving the noisy centre mu, so wider span -> lower floor and
+faster recovery.  The opposite holds: a wider grid is a COARSER grid (node gap
+grows with s), so the within-window posterior mean is noisier and the steady
+floor RISES with span; recovery does not improve; and past the no-dead-zone
+bound (max gap <~ 0.6 nats, s <~ 0.4 at order 5) it breaks outright.  Raising the
+order barely helps -- the outer GH gap shrinks only slowly with order, so
+avoiding dead zones still needs small s.  Conclusion: keep the grid FINE and get
+coverage from MOTION (the programme's thesis), confirmed quantitatively.  The
+~3-nat recovery minimum is INTRINSIC (it stays put across spans) -- it is the
+observability/SNR knee (0017), not a grid feature.
 
 Measured (fixed disturbance d=+3, q_mu=5e-3):
 (a) static steady floor vs span, at order 5 and order 9 (dead-zone-free);
@@ -97,7 +97,7 @@ def main():
         a.plot(spans, fl[o], color=ocol[o], lw=1.9, marker="o", ms=3.5, label=f"order {o}")
     a.axvline(0.4, color=ts.INK2, lw=1.0, ls=":", label="order-5 dead-zone bound")
     a.set_xlabel("grid span  s  (coverage ±2.857 s)"); a.set_ylabel("static steady floor (RMS)")
-    a.set_title("(a) wider span → lower floor (until dead zones at order 5)")
+    a.set_title("(a) wider span → HIGHER floor: finer grid is quieter")
     a.legend(loc="upper right", fontsize=8)
 
     a = ts.tidy(ax[1])
@@ -105,7 +105,7 @@ def main():
         a.plot(spans, rc[o], color=ocol[o], lw=1.9, marker="o", ms=3.5, label=f"order {o}")
     a.axvline(0.4, color=ts.INK2, lw=1.0, ls=":")
     a.set_xlabel("grid span  s"); a.set_ylabel("recovery time, d=+3 (steps)")
-    a.set_title("(b) wider span → faster recovery; order-5 breaks past the bound")
+    a.set_title("(b) recovery flat with span; dead zones (gap>0.6) break it")
     a.legend(loc="upper right", fontsize=8)
 
     a = ts.tidy(ax[2])
@@ -115,7 +115,7 @@ def main():
         kb = int(np.argmin(ucurve[s]))
         a.scatter([dd[kb]], [ucurve[s][kb]], facecolors="none", edgecolors=c, s=120, lw=1.8)
     a.set_xlabel("destination d  (nats)"); a.set_ylabel("recovery time (steps)")
-    a.set_title("(c) does the U-minimum move with span? (order 9)")
+    a.set_title("(c) U-minimum stays at d≈3 across spans (it is SNR, not grid)")
     a.legend(loc="upper center", fontsize=8, title="span s")
     ts.save(fig, os.path.join(HERE, "figures", "0017-grid-span.png"))
 
