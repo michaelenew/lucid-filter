@@ -139,6 +139,19 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    mandated (Prop 1), empirically robust, and its only tradeoff is
    reactivity-vs-precision read against a settling-time budget.
 
+   The reactivity optimum's *location* is governed by the **observability of the
+   regime the disturbance lands in**, not the jump size or direction as such
+   ([`0016`](0016_step_size_dependence.py) — a first "two-wall / up-faster"
+   prediction was measured wrong and kept as a result). A **louder** destination
+   (up-jump, high process SNR) pins fast: recovery is flat across low `q_mu` and
+   the optimum is low; a **quieter** destination (down-jump, low SNR) is barely
+   observable, so recovery is far slower (~10×), needs a higher `q_mu` (~3×10⁻²),
+   and at low `q_mu` never recovers in-window. Optimal `q_mu` falls monotonically
+   as the destination gets louder (3×10⁻² at `d=−3` → 1×10⁻⁵ at `d=+5`); min
+   recovery is U-shaped — observability-limited on the quiet side, distance-limited
+   for very large climbs. So the principled `q_mu` is "match the kept gain to the
+   observability of the regime you land in" — itself a grid-readable quantity.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -177,8 +190,9 @@ spacing lesson (`ode-filter/0047`).
   [`0012`](0012_surrogate_vs_optimal.py) surrogate vs optimal ·
   [`0013`](0013_self_calibrating_tracker.py) self-calibrating (no a,b,R) ·
   [`0014`](0014_q_mu_sweep.py) q_mu sweep ·
-  [`0015`](0015_q_mu_settling_horizon.py) post-jump settling horizon.
+  [`0015`](0015_q_mu_settling_horizon.py) post-jump settling horizon ·
+  [`0016`](0016_step_size_dependence.py) step-size / observability.
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`.

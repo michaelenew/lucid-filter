@@ -26,8 +26,9 @@ observability of the regime you land in".  Signed destination d (jump 0 -> d):
 Chart
 -----
 (a) recovery-vs-q_mu for a range of destinations, optima marked;
-(b) optimal q_mu and min recovery vs destination d;
-(c) min recovery vs destination process SNR exp(d) -- the observability law.
+(b) optimal q_mu vs destination d (louder/observable -> lower q_mu);
+(c) min recovery vs d -- U-shaped: observability-limited (quiet) then
+    distance-limited (far climb), min at a moderate up-jump.
 
 Run: python 0016_step_size_dependence.py   (heavy; ~2-3 min)
 """
@@ -47,7 +48,6 @@ from gridlab import simulate  # noqa: E402
 from moving_grid import MovingChannel  # noqa: E402
 import theory_style as ts  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
-import matplotlib.cm as cm  # noqa: E402
 
 QGRID = np.logspace(-5.0, -0.3, 12)
 DESTS = [-3.0, -1.5, 1.5, 3.0, 5.0]
@@ -76,7 +76,12 @@ def recovery(dest, q_mu, nseed):
 
 
 def main(nseed=50):
-    curves = {d: np.array([recovery(d, q, nseed) for q in QGRID]) for d in DESTS}
+    cache = os.path.join(os.environ.get("TMPDIR", "/tmp"), "adgrid_0016_curves.npy")
+    if os.path.exists(cache):
+        curves = {d: c for d, c in zip(DESTS, np.load(cache))}
+    else:
+        curves = {d: np.array([recovery(d, q, nseed) for q in QGRID]) for d in DESTS}
+        np.save(cache, np.array([curves[d] for d in DESTS]))
     optk = {d: int(np.argmin(curves[d])) for d in DESTS}
 
     print("[destination sweep]  d :  optimal q_mu | min recovery | process SNR e^d")
@@ -84,45 +89,47 @@ def main(nseed=50):
         print(f"   {d:+.1f} :  {QGRID[optk[d]]:.2e}   |   {curves[d][optk[d]]:6.0f}   |  {np.exp(d):7.2f}")
 
     norm = plt.Normalize(-3.5, 5.5)
-    cmap = cm.get_cmap("coolwarm")
+    cmap = plt.get_cmap("coolwarm")
+    dcol = {d: cmap(norm(d)) for d in DESTS}
+    dd = np.array(DESTS)
     fig, ax = plt.subplots(1, 3, figsize=(16.2, 4.5))
 
+    # (a) the bathtubs
     a = ts.tidy(ax[0])
     for d in DESTS:
-        c = cmap(norm(d))
-        a.plot(QGRID, curves[d], color=c, lw=1.9, marker="o", ms=3,
+        a.plot(QGRID, curves[d], color=dcol[d], lw=1.9, marker="o", ms=3,
                label=f"d={d:+g} ({'louder' if d > 0 else 'quieter'})")
         a.scatter([QGRID[optk[d]]], [curves[d][optk[d]]], facecolors="none",
-                  edgecolors=c, s=130, lw=1.8, zorder=4)
+                  edgecolors=dcol[d], s=130, lw=1.8, zorder=4)
     a.set_xscale("log")
     a.set_xlabel("q_mu"); a.set_ylabel("recovery time (steps to <0.5 nat; 1000 = capped)")
-    a.set_title("(a) quiet destinations: slow, need higher q_mu; loud: fast & flat")
+    a.set_title("(a) quiet dest: slow, needs higher q_mu; loud: fast & flat")
     a.legend(loc="upper left", fontsize=7.6)
 
+    # (b) optimal q_mu vs destination -- the actionable trend
     a = ts.tidy(ax[1])
-    dd = np.array(DESTS)
-    a.plot(dd, [QGRID[optk[d]] for d in DESTS], color=ts.SERIES[5], lw=1.9, marker="o", ms=5)
+    for d in DESTS:
+        a.scatter([d], [QGRID[optk[d]]], color=dcol[d], s=60, zorder=3)
+    a.plot(dd, [QGRID[optk[d]] for d in DESTS], color=ts.INK2, lw=1.2, zorder=1)
     a.set_yscale("log")
     a.set_xlabel("destination d  (nats; − quieter, + louder)")
-    a.set_ylabel("optimal q_mu", color=ts.SERIES[5])
-    a.tick_params(axis="y", labelcolor=ts.SERIES[5])
-    a2 = a.twinx()
-    a2.plot(dd, [curves[d][optk[d]] for d in DESTS], color=ts.SERIES[1], lw=1.9, marker="s", ms=5)
-    a2.set_ylabel("min recovery (steps)", color=ts.SERIES[1])
-    a2.tick_params(axis="y", labelcolor=ts.SERIES[1])
-    a.set_title("(b) quieter → higher optimal q_mu and slower recovery")
+    a.set_ylabel("optimal q_mu")
+    a.set_title("(b) louder / more observable → lower optimal q_mu")
 
+    # (c) min recovery vs destination -- U-shape from two mechanisms
     a = ts.tidy(ax[2])
-    snr = np.exp(dd)
     mn = np.array([curves[d][optk[d]] for d in DESTS])
-    a.plot(snr, mn, color=ts.SERIES[2], lw=1.6, marker="o", ms=6)
     for d in DESTS:
-        a.annotate(f"d={d:+g}", (np.exp(d), curves[d][optk[d]]), fontsize=7.5,
-                   xytext=(5, 4), textcoords="offset points")
-    a.set_xscale("log"); a.set_yscale("log")
-    a.set_xlabel("destination process SNR  e^d  (process var / meas var)")
+        a.scatter([d], [curves[d][optk[d]]], color=dcol[d], s=60, zorder=3)
+    a.plot(dd, mn, color=ts.INK2, lw=1.2, zorder=1)
+    a.annotate("observability-limited\n(quiet = unobservable)", (-3.0, 202),
+               fontsize=7.5, ha="left", va="top", xytext=(4, -4),
+               textcoords="offset points", color=ts.INK2)
+    a.annotate("distance-limited\n(far climb)", (5.0, 53), fontsize=7.5,
+               ha="right", xytext=(-4, 8), textcoords="offset points", color=ts.INK2)
+    a.set_xlabel("destination d  (nats)")
     a.set_ylabel("min recovery time (steps)")
-    a.set_title("(c) the observability law: recovery ∝ 1/observability")
+    a.set_title("(c) recovery is U-shaped: observability vs travel distance")
     ts.save(fig, os.path.join(HERE, "figures", "0015-step-size-dependence.png"))
 
 
