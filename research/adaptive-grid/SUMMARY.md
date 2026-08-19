@@ -18,7 +18,7 @@ likelihood.
 
 ## What is established
 
-The programme now rests on five measured results
+The programme now rests on seven measured results
 ([`0006`](0006_what_the_probes_settle.md) reads them in full; all run the shipped
 recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
 
@@ -79,6 +79,24 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    score alone stalls from below (`Qg/S` suppression at low SNR, 247/1000); the
    natural-gradient step fixes the speed but wanders as a pure integrator.
 
+7. **The ranging is a likelihood-gradient flow — the optimality hook**
+   ([`0010`](0010_ranging_is_a_likelihood_gradient_flow.py),
+   [`0011`](0011_toward_defensibly_optimal_ranging.md)). The settling *is* a real
+   dynamical system: the phase-space force that moves the window coincides with
+   the **exact marginal-likelihood gradient** `dℓ/dμ` (corr 0.83, shared local
+   Fisher information `I ≈ 0.068/step`). So the window ranges by **gradient
+   ascent on `ℓ(μ)` — online ML tracking of the log-scale**, log-loss being the
+   repo's optimality currency. The well is *stiffening* (harmonic core, anharmonic
+   walls), so damping is amplitude-dependent (the soft core overshoots most —
+   which is why the Robbins–Monro decay helps). Near the optimum it linearises to
+   a **steady-state Kalman / α-β tracker**: `α = 1−β`, `β_αβ = (1−β)Iη`, optimal
+   at Benedict–Bordner `β_αβ = α²/(2−α)`, critically damped at `Iη =
+   (1−√β)/(1+√β)` — gains fixed by `I` and the drift variance, no free parameter.
+   The current servo (`pi.lam + w·score`) is a **surrogate** for the gradient
+   (sign-aligned, suppressed from below); using the exact/natural gradient, or
+   linearising the force via the far-field log-distance, is the route to a
+   defensibly optimal, uniformly-damped ranging.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -87,10 +105,12 @@ spacing lesson (`ode-filter/0047`).
 
 ## Open
 
-- **A principled schedule.** `τ` and `eta_floor` are hand-set; tie `τ` to the
-  detection-lag bound and `eta_floor` to the expected drift rate. The overlap
-  `cap` also sets a speed/overlap budget for far starts (±6 still takes a few
-  hundred steps).
+- **The defensibly-optimal ranging** (from 7). Drive `μ` by the exact/natural
+  marginal-likelihood gradient (efficient, un-suppressed) and/or linearise the
+  force via the far-field log-distance, giving a uniform α-β / steady-state-Kalman
+  tracker whose min-variance gains come from `I` and the drift variance. Measure
+  `I` across regimes to check the gains are truly knob-free. This subsumes the
+  hand-set `η`, `β`, `τ`, `eta_floor`.
 - **The two-channel move**, honouring the covered-channel constraint from 4
   (a channel driven off-grid corrupts the others' move direction).
 - **A moving truth beyond a ramp** (oscillating, jumping) and the lag it costs.
@@ -109,7 +129,10 @@ spacing lesson (`ode-filter/0047`).
   [`0006`](0006_what_the_probes_settle.md) reading ·
   [`0007`](0007_online_convergence.py) convergence ·
   [`0008`](0008_online_convergence.md) reading ·
-  [`0009`](0009_settling.py) settling chart.
+  [`0009`](0009_settling.py) settling chart ·
+  [`0010`](0010_ranging_is_a_likelihood_gradient_flow.py) gradient-flow ·
+  [`0011`](0011_toward_defensibly_optimal_ranging.md) optimality path.
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
-  `0007-the-move`, `0008-online-convergence`, `0009-settling`.
+  `0007-the-move`, `0008-online-convergence`, `0009-settling`,
+  `0010-likelihood-gradient-flow`.

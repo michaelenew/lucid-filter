@@ -158,4 +158,5 @@ class MovingChannel:
         self._pi = pi
         self.loglik += ll
         return dict(mean=self._m, var=self._P, mu=self.mu,
-                    logscale=self.mu + float(pi @ lam), score=score, loglik=ll)
+                    logscale=self.mu + float(pi @ lam), score=score,
+                    signal=signal, loglik=ll)
