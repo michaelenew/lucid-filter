@@ -109,6 +109,20 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    measurement, so this is "optimal gains on the cheap signal"; the exact-gradient
    measurement is the remaining step.
 
+   **The calibration is not fit — it is read off the grid**
+   ([`0013`](0013_self_calibrating_tracker.py)). `a, b, R` are properties of the
+   current grid geometry, so they need no offline fit and cannot go stale: the
+   per-step Fisher information `I_t = Σ_i π_i·½(Qg_i/S_i)²` supplies the slope,
+   `R_t = 1/I_t` (Cramér–Rao), and `b = 0` (score-based, no reversion term). The
+   natural-gradient step `g/I_t` cancels the `Qg/S` prefactor and the Kalman gain
+   `K_t = P_t/(P_t+1/I_t)` down-weights low-information steps automatically — so
+   the only inputs are `q_mu` (drift / keep-alive) and a diffuse `P0`, **no
+   `a,b,R,η,β,τ,cap`**. This self-calibrating tracker **beats the hand-calibrated
+   one from every start** (0.03–0.05 vs 0.11–0.12 final error) and tracks a
+   0→+5 regime shift with no calibration. One subtlety: `q_mu=0` lets `P` collapse
+   and freeze a slow far-below climb; a small keep-alive `q_mu` fixes it. The
+   remaining hand number is `q_mu` (the drift rate), itself estimable online.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -144,8 +158,9 @@ spacing lesson (`ode-filter/0047`).
   [`0009`](0009_settling.py) settling chart ·
   [`0010`](0010_ranging_is_a_likelihood_gradient_flow.py) gradient-flow ·
   [`0011`](0011_toward_defensibly_optimal_ranging.md) optimality path ·
-  [`0012`](0012_surrogate_vs_optimal.py) surrogate vs optimal tracker.
+  [`0012`](0012_surrogate_vs_optimal.py) surrogate vs optimal ·
+  [`0013`](0013_self_calibrating_tracker.py) self-calibrating (no a,b,R).
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`.

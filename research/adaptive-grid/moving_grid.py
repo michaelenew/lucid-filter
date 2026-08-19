@@ -136,6 +136,24 @@ class MovingChannel:
         # suppresses grad far below the measurement floor (see 0007).
         gS = Qg / S
         grad = float(pi @ (0.5 * gS * (e2 / S - 1.0)))
+        if self.step == "kalman_auto":
+            # Self-calibrating optimal tracker (0013): no a, b, R constants.
+            # The per-step Fisher information about the shift is read straight
+            # off the current grid, I_t = sum_i pi_i * 0.5 (Qg_i/S_i)^2, so the
+            # natural-gradient step g/I is the offset estimate (Qg/S cancels ->
+            # no from-below suppression, b=0) and R_t = 1/I_t (Cramer-Rao).  The
+            # Kalman gain then down-weights low-information steps automatically.
+            # Everything recomputes each step, so it follows a shifting regime.
+            I = float(pi @ (0.5 * gS * gS)) + self.ridge
+            R = 1.0 / I
+            K = self._Pmu / (self._Pmu + R)
+            self.mu = self.mu + K * (grad / I)           # ascend, Kalman-averaged
+            self._Pmu = (1.0 - K) * self._Pmu + self.q_mu
+            self._pi = pi
+            self.loglik += ll
+            return dict(mean=self._m, var=self._P, mu=self.mu,
+                        logscale=self.mu + float(pi @ lam), score=grad,
+                        signal=grad, fisher=I, gain=K, loglik=ll)
         if self.step == "kalman":
             # Optimal linearised tracker (0012).  The signal is a noisy linear
             # measurement of the offset: signal ~ a*(mu - truth) + noise.  So
