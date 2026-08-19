@@ -73,7 +73,8 @@ class MovingChannel:
                  eta=0.4, cap=0.12, beta=0.6, ridge=1e-4, w_score=2.0,
                  tau=60.0, eta_floor=0.05,
                  a_slope=-0.138, b_int=-0.016, R_meas=15.0, q_mu=0.0, P0=25.0,
-                 uniform=None):
+                 uniform=None, mu_cap=None,
+                 hop_thresh=None, hop_patience=3, hop0=1.0, hop_grow=1.8):
         self.Q, self.s2 = float(Q), float(s2)
         self.order = int(order)
         if uniform is not None:
@@ -95,6 +96,22 @@ class MovingChannel:
         # variance, drift variance, initial truth-uncertainty
         self.a_slope, self.b_int = a_slope, b_int
         self.R_meas, self.q_mu, self.P0 = R_meas, q_mu, P0
+        # unbounded-reach hunter (kalman_auto only; all default to no-op).  The
+        # natural-gradient step grad/I ~ (e^2 - S)/Qg is unbounded in the
+        # innovation, so a single huge e^2 (a big up-jump lands the truth many
+        # nats out) makes mu LEAP past the truth; the collapsed steady gain then
+        # cannot walk it back -> the recovery "blow-up" (0019/0022) is an
+        # OVERSHOOT, not a lack of reach.  mu_cap clamps |dmu| to a bounded
+        # stride (the overlap constraint), so the window walks out steadily and
+        # captures any distance.  hop_thresh arms a rail-triggered geometric
+        # expansion (Nelder-Mead): when the edge node's responsibility stays
+        # above hop_thresh the truth is beyond the window, so jump mu by a
+        # stride that grows *hop_grow each rail step -- bracketing the truth in
+        # O(log distance) big steps, then the fine grid locks locally.  Compute
+        # stays fixed: the fine window MOVES, it never grids the whole span.
+        self.mu_cap = mu_cap
+        self.hop_thresh = hop_thresh
+        self.hop_patience, self.hop0, self.hop_grow = hop_patience, hop0, hop_grow
         self.reset()
 
     def reset(self, mu=0.0):
@@ -105,6 +122,9 @@ class MovingChannel:
         self._score_ema = 0.0
         self._t = 0
         self._Pmu = self.P0              # kalman truth-uncertainty
+        self._upc = 0                    # consecutive top-edge rail steps
+        self._dnc = 0                    # consecutive bottom-edge rail steps
+        self._hop = self.hop0            # current expansion stride
         self.loglik = 0.0
         return self
 
@@ -157,13 +177,29 @@ class MovingChannel:
             I = float(pi @ (0.5 * gS * gS)) + self.ridge
             R = 1.0 / I
             K = self._Pmu / (self._Pmu + R)
-            self.mu = self.mu + K * (grad / I)           # ascend, Kalman-averaged
+            dmu = K * (grad / I)                          # ascend, Kalman-averaged
+            if self.mu_cap is not None:                  # bounded stride: no leap
+                dmu = float(np.clip(dmu, -self.mu_cap, self.mu_cap))
+            self.mu = self.mu + dmu
             self._Pmu = (1.0 - K) * self._Pmu + self.q_mu
+            top = float(pi[-1]); bot = float(pi[0])
+            if self.hop_thresh is not None:              # rail-triggered expansion
+                self._upc = self._upc + 1 if top > self.hop_thresh else 0
+                self._dnc = self._dnc + 1 if bot > self.hop_thresh else 0
+                if top <= self.hop_thresh and bot <= self.hop_thresh:
+                    self._hop = self.hop0                # bracketed: reset stride
+                if self._upc >= self.hop_patience:
+                    self.mu += self._hop; self._Pmu = self.P0
+                    self._hop *= self.hop_grow; self._upc = 0
+                elif self._dnc >= self.hop_patience:
+                    self.mu -= self._hop; self._Pmu = self.P0
+                    self._hop *= self.hop_grow; self._dnc = 0
             self._pi = pi
             self.loglik += ll
             return dict(mean=self._m, var=self._P, mu=self.mu,
                         logscale=self.mu + float(pi @ lam), score=grad,
-                        signal=grad, fisher=I, gain=K, loglik=ll)
+                        signal=grad, fisher=I, gain=K, loglik=ll,
+                        top=top, bot=bot, hop=self._hop)
         if self.step == "kalman":
             # Optimal linearised tracker (0012).  The signal is a noisy linear
             # measurement of the offset: signal ~ a*(mu - truth) + noise.  So
