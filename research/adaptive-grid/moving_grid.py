@@ -71,7 +71,8 @@ class MovingChannel:
 
     def __init__(self, Q, s2, phi=0.9, s=0.3, order=5, step="servo",
                  eta=0.4, cap=0.12, beta=0.6, ridge=1e-4, w_score=2.0,
-                 tau=60.0, eta_floor=0.05):
+                 tau=60.0, eta_floor=0.05,
+                 a_slope=-0.138, b_int=-0.016, R_meas=15.0, q_mu=0.0, P0=25.0):
         self.Q, self.s2 = float(Q), float(s2)
         self.order = int(order)
         self.lam, self.w0, self.T = grid(phi, s, order)
@@ -80,6 +81,10 @@ class MovingChannel:
         self.beta, self.ridge, self.w_score = beta, ridge, w_score
         self.tau = tau                   # Robbins-Monro decay time
         self.eta_floor = eta_floor       # residual gain for tracking a drift
+        # kalman-mode inputs (measured, not tuned): signal slope, measurement
+        # variance, drift variance, initial truth-uncertainty
+        self.a_slope, self.b_int = a_slope, b_int
+        self.R_meas, self.q_mu, self.P0 = R_meas, q_mu, P0
         self.reset()
 
     def reset(self, mu=0.0):
@@ -89,6 +94,7 @@ class MovingChannel:
         self._P = None
         self._score_ema = 0.0
         self._t = 0
+        self._Pmu = self.P0              # kalman truth-uncertainty
         self.loglik = 0.0
         return self
 
@@ -130,6 +136,23 @@ class MovingChannel:
         # suppresses grad far below the measurement floor (see 0007).
         gS = Qg / S
         grad = float(pi @ (0.5 * gS * (e2 / S - 1.0)))
+        if self.step == "kalman":
+            # Optimal linearised tracker (0012).  The signal is a noisy linear
+            # measurement of the offset: signal ~ a*(mu - truth) + noise.  So
+            # z = signal/a estimates the offset and (mu - z) measures the truth;
+            # a scalar Kalman filter fuses those measurements.  Gains come only
+            # from a (measured signal slope), R (measured measurement variance)
+            # and q_mu (drift variance) -- no hand-set eta/beta/tau/cap.
+            signal = float(pi @ lam) + self.w_score * grad
+            z = (signal - self.b_int) / self.a_slope     # offset estimate (debiased)
+            K = self._Pmu / (self._Pmu + self.R_meas)
+            self.mu = self.mu - K * z                     # = truth-estimate update
+            self._Pmu = (1.0 - K) * self._Pmu + self.q_mu
+            self._pi = pi
+            self.loglik += ll
+            return dict(mean=self._m, var=self._P, mu=self.mu,
+                        logscale=self.mu + float(pi @ lam), score=grad,
+                        signal=signal, gain=K, loglik=ll)
         if self.step == "servo":
             # posterior mean (drives from below, restoring within coverage) plus
             # the raw score (drives from above, where the shelf is flat and the

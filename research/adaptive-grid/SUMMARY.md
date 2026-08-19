@@ -97,6 +97,18 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    linearising the force via the far-field log-distance, is the route to a
    defensibly optimal, uniformly-damped ranging.
 
+   **A first data-derived optimal tracker** ([`0012`](0012_surrogate_vs_optimal.py))
+   linearises the signal (measured `signal ≈ −0.138·offset + noise`, so one
+   step's offset estimate has variance `R ≈ 15`) and runs a scalar **Kalman
+   filter** on `mu`: `K_t = P_t/(P_t+R)`, `mu ← mu − K_t·(signal−b)/a`,
+   `P ← (1−K)P + q_mu`. Gains come only from measured `a, b, R` and the drift
+   `q_mu` (0 for static) — **no `eta/beta/tau/cap`**. It snaps in within a few
+   steps, is **monotone from below (0% overshoot** vs the surrogate's ~49%),
+   settles to a consistent floor across starts, and its RMS error decays as
+   `t^−0.41` (near the Cramér–Rao `t^−0.5`). The surrogate signal is still the
+   measurement, so this is "optimal gains on the cheap signal"; the exact-gradient
+   measurement is the remaining step.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -131,8 +143,9 @@ spacing lesson (`ode-filter/0047`).
   [`0008`](0008_online_convergence.md) reading ·
   [`0009`](0009_settling.py) settling chart ·
   [`0010`](0010_ranging_is_a_likelihood_gradient_flow.py) gradient-flow ·
-  [`0011`](0011_toward_defensibly_optimal_ranging.md) optimality path.
+  [`0011`](0011_toward_defensibly_optimal_ranging.md) optimality path ·
+  [`0012`](0012_surrogate_vs_optimal.py) surrogate vs optimal tracker.
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`.
