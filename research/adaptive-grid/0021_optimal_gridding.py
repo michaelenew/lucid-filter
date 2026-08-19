@@ -119,10 +119,15 @@ def main():
 
     # (c) between-node score across the span: uniform vs span-matched GH
     off = np.linspace(-W, W, 121)
-    sc_u = score_vs_truth(lamu, w0u, Tu, off)
-    # a GH grid on the same +-W (order 5, stretched) -> wide outer gaps
-    _, w0s, Ts = grid(0.9, s_stretch, 5)
-    sc_g = score_vs_truth(lam_stretch, w0s, Ts, off)
+    _, w0s, Ts = grid(0.9, s_stretch, 5)         # GH on same +-W -> wide outer gaps
+    cache = os.path.join(os.environ.get("TMPDIR", "/tmp"), "adgrid_0021_scores.npz")
+    if os.path.exists(cache):
+        z = np.load(cache)
+        sc_u, sc_g = z["sc_u"], z["sc_g"]
+    else:
+        sc_u = score_vs_truth(lamu, w0u, Tu, off)
+        sc_g = score_vs_truth(lam_stretch, w0s, Ts, off)
+        np.savez(cache, sc_u=sc_u, sc_g=sc_g)
 
     print(f"[delta] gap = {GAP:.3f} nats (safety {SAFETY} x delta {DELTA})")
     print(f"[uniform ±{W:.0f}] {lamu.size} nodes, max gap {np.diff(lamu).max():.3f}")
@@ -160,16 +165,20 @@ def main():
     a.plot(off, sc_g, color=ts.SERIES[1], lw=1.8, label="GH ±3 (order 5)")
     a.plot(off, sc_u, color=ts.SERIES[3], lw=1.8, label="uniform ±3 at δ")
     for L in lam_stretch:
-        a.axvline(L, color=ts.SERIES[1], lw=0.5, alpha=0.35)
-    # mark where GH reverses: score points AWAY from the truth (opposite sign to
-    # the offset) -- a dead zone.  Correct pointing has sign(score)=sign(offset).
-    wrong = (off * sc_g < 0) & (np.abs(off) > 0.2)
-    if wrong.any():
-        a.scatter(off[wrong], sc_g[wrong], color=ts.SERIES[1], s=10, zorder=4)
+        a.axvline(L, color=ts.SERIES[1], lw=0.6, alpha=0.4)
+    # dead zone = the signal SAGS as the truth recedes.  The score is monotone
+    # INCREASING through the origin when the grid points at the truth everywhere
+    # (more positive above, more negative below); where d score/d offset goes
+    # NEGATIVE the direction signal has reversed -- a dead zone.
+    gslope = np.gradient(sc_g, off)
+    dead = (gslope < 0) & (np.abs(off) > 0.4)
+    if dead.any():
+        a.scatter(off[dead], sc_g[dead], color=ts.SERIES[1], s=22, zorder=4,
+                  label="GH dead zone (signal sags)")
     a.set_xlabel("true log-scale offset from centre  (nats)")
     a.set_ylabel("grid-shift score  (>0: slide up)")
-    a.set_title("(c) uniform points at truth everywhere; GH reverses in outer gap")
-    a.legend(loc="upper right", fontsize=7.8)
+    a.set_title("(c) uniform strengthens monotonically; GH sags in the outer gap")
+    a.legend(loc="upper left", fontsize=7.6)
     ts.save(fig, os.path.join(HERE, "figures", "0020-optimal-gridding.png"))
 
 

@@ -174,6 +174,52 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    coverage — motion is. The ~3-nat recovery basin is **intrinsic**: it stays put
    across spans (it is SNR, not a grid artifact).
 
+8. **A uniform grid is optimal; the reach wall is coverage; the tradeoff is one
+   config-invariant curve** ([`0019`](0019_blowup_vs_coverage.py),
+   [`0020`](0020_dimensionless_tradeoff.py), [`0021`](0021_optimal_gridding.py)).
+
+   **Grid the window uniformly at the dead-zone threshold, not Gauss–Hermite**
+   ([`0021`](0021_optimal_gridding.py)). For a *moving* window GH commits both
+   sins at once: it over-clusters the centre (spacing → 0, wasted compute) and
+   lets the outer gap grow past δ (a dead zone). Stretched to ±3 its outer gap is
+   **1.58 nats** (a dead zone) while the centre is over-resolved; the grid-shift
+   score then **sags** across that outer gap (weakens as the truth recedes),
+   whereas a **uniform** grid's score strengthens monotonically everywhere. The
+   optimal discretisation is equispaced at `gap = safety·δ ≈ 0.45` nats (δ ≈ 0.6
+   the dead-zone threshold, a likelihood property): constant resolution, no gap
+   over δ, no node wasted. To cover ±W dead-zone-free the GH node budget is
+   **super-linear** (±3 → 21, ±5 → 37 nodes) vs uniform's minimal linear
+   `2W/gap+1` (±3 → 13, ±5 → 23). Recipe: δ from the score, `gap = safety·δ`,
+   half-width W from the reach one move step cannot supply, nodes uniform.
+
+   **The big-jump recovery wall is COVERAGE, not a ceiling**
+   ([`0019`](0019_blowup_vs_coverage.py)). The recovery blow-up (~+4 nats for the
+   narrow grid) is where *that* grid runs out of instant reach, not an inherent
+   observability limit. Holding the density fixed (gap 0.45, dead-zone-free) and
+   **widening** the uniform grid slides the wall out nearly 1:1 with the
+   half-width — GH ±1 → d≈4.2; uniform ±2 → 4.7, ±3 → 5.3, ±4 → 6.1, ±5 → 7.5 —
+   because the within-window posterior covers instantly to the edge and only the
+   last stretch is walked by μ. It saturates near +7.5 past ±5 (the true
+   observability/window limit). Reach costs nodes linearly, so a wider-and-just-
+   as-dense grid **does** raise the saturation point; but the programme's answer
+   is to spend those nodes through *motion*, where the truth actually is.
+
+   **The settling↔floor tradeoff is one curve in `r = q_mu·I`**
+   ([`0020`](0020_dimensionless_tradeoff.py)) — the config-invariant graph. The
+   centre is a scalar Kalman filter with measurement noise `R = 1/I`, so
+   everything depends only on the dimensionless **tracking index `r = q_mu·I`**
+   through the steady gain `K(r) = ρ/(ρ+1)`, `ρ² − rρ − r = 0`. Across regimes
+   spanning `I = 0.02 → 0.41` (via loudness d) and `r` over two decades, the
+   dimensionless steady floor `√I·RMS` collapses onto **≈ 0.8·√K(r)** (below the
+   scalar-Kalman bound `√K`, because the readout `μ + π·λ` adds a sub-grid
+   posterior term) and the perturb-and-relax settling `τ` collapses onto the pole
+   **`−1/ln(1−K(r))`**. Eliminating `r` traces a single achievable **frontier**
+   `τ` vs floor — fast **or** quiet, `q_mu` sliding along it — invariant of the
+   filter configuration. (The clean law is the *locked* regime; too little
+   `q_mu` in a mid-observability regime can lose lock, a heavy-tailed reliability
+   tail distinct from the precision floor.) This is the selection graph: choose
+   the frontier point, read `r`, set `q_mu = r/I` from the grid-readable `I`.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -215,8 +261,11 @@ spacing lesson (`ode-filter/0047`).
   [`0015`](0015_q_mu_settling_horizon.py) post-jump settling horizon ·
   [`0016`](0016_step_size_dependence.py) step-size / observability ·
   [`0017`](0017_observability_and_units.py) observability + units ·
-  [`0018`](0018_grid_span.py) grid span.
+  [`0018`](0018_grid_span.py) grid span ·
+  [`0019`](0019_blowup_vs_coverage.py) blow-up is coverage ·
+  [`0020`](0020_dimensionless_tradeoff.py) config-invariant tradeoff (r=q_mu·I) ·
+  [`0021`](0021_optimal_gridding.py) optimal uniform gridding.
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`.
