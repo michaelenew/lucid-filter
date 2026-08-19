@@ -127,10 +127,17 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    glitch" are identically distributed and no causal filter has a bounded
    competitive ratio. `q_mu` is that bound (≈ the log-scale's own innovation
    variance). Profiled ([`0014`](0014_q_mu_sweep.py)) it is a **smooth, forgiving
-   dial**: static floor and jump-recovery each span ~5× over three decades, with
-   a broad usable band (1e-4–1e-2) and an elbow near 1e-3; too-large `q_mu` (0.1)
-   is Pareto-dominated — noisy *and* slow to re-acquire. So the one remaining knob
-   is both theoretically mandated and empirically robust to mis-setting.
+   dial**: the static floor is monotone (lower `q_mu`, lower floor), while
+   jump-recovery has a clean interior optimum at **`q_mu ≈ 5×10⁻³`** (~17 steps),
+   confirmed threshold-free by an integrated-error metric at the same location;
+   too-large `q_mu` is Pareto-dominated. The apparent post-jump *steady-state*
+   optimum is a **finite-settling-time** effect
+   ([`0015`](0015_q_mu_settling_horizon.py)): after a jump `P` has collapsed, so a
+   small `q_mu` keeps descending for ~1000 steps — its true floor is lower, it
+   just arrives later. The reactivity-optimal `q_mu` slides from `1e-3` (short
+   budget) to `<5e-5` (long budget). So the one remaining knob is theoretically
+   mandated (Prop 1), empirically robust, and its only tradeoff is
+   reactivity-vs-precision read against a settling-time budget.
 
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
@@ -169,8 +176,9 @@ spacing lesson (`ode-filter/0047`).
   [`0011`](0011_toward_defensibly_optimal_ranging.md) optimality path ·
   [`0012`](0012_surrogate_vs_optimal.py) surrogate vs optimal ·
   [`0013`](0013_self_calibrating_tracker.py) self-calibrating (no a,b,R) ·
-  [`0014`](0014_q_mu_sweep.py) q_mu sweep.
+  [`0014`](0014_q_mu_sweep.py) q_mu sweep ·
+  [`0015`](0015_q_mu_settling_horizon.py) post-jump settling horizon.
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`.

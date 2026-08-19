@@ -37,6 +37,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 QMUS = [0.0, 1e-4, 1e-3, 1e-2, 1e-1]
 COLORS = [ts.INK2, ts.SEQ[1], ts.SEQ[3], ts.SEQ[4], ts.SERIES[1]]
+QGRID = np.logspace(-5.0, -0.3, 20)          # dense sweep, 1e-5 .. 0.5
 
 
 def run_batch(lam_t, mu0, q_mu, nseed):
@@ -61,58 +62,74 @@ def rms(E, truth):
     return np.sqrt(((E - truth) ** 2).mean(0))
 
 
-def main(nseed=80):
+def cross_time(after, level=0.5):
+    """Interpolated first step at which the (post-jump) RMS drops below level."""
+    hit = np.where(after < level)[0]
+    if hit.size == 0:
+        return float(after.size)
+    i = hit[0]
+    if i == 0:
+        return 0.0
+    y0, y1 = after[i - 1], after[i]
+    return float((i - 1) + (y0 - level) / (y0 - y1))
+
+
+def main(nseed=120):
+    # dense sweep: static floor, threshold recovery, and threshold-FREE
+    # integrated post-jump error (to check the optimum is not a threshold artefact)
+    flat = np.zeros(700)
+    jt = 200
+    jump = np.zeros(450); jump[jt:] = 3.0
+    floor = np.zeros(QGRID.size)
+    recov = np.zeros(QGRID.size)
+    integ = np.zeros(QGRID.size)
+    for k, q in enumerate(QGRID):
+        floor[k] = rms(run_batch(flat, 3.0, q, nseed), 0.0)[-200:].mean()
+        r = rms(run_batch(jump, 0.0, q, nseed), jump)
+        after = r[jt:]
+        recov[k] = cross_time(after, 0.5)
+        integ[k] = after[:200].sum()                 # integrated excess error, 200 steps
+    k_rec = int(np.argmin(recov)); k_int = int(np.argmin(integ))
+    print(f"[recovery optimum]  min recovery-to-0.5 at q_mu={QGRID[k_rec]:.2e} "
+          f"({recov[k_rec]:.0f} steps)")
+    print(f"[integ  optimum ]  min integrated error at q_mu={QGRID[k_int]:.2e}")
+
     fig, ax = plt.subplots(1, 3, figsize=(16.0, 4.4))
 
-    # (a) static precision: converge from +3 and hold
-    nt = 900
-    flat = np.zeros(nt)
     a = ts.tidy(ax[0])
-    floors = {}
-    for q, c in zip(QMUS, COLORS):
-        r = rms(run_batch(flat, 3.0, q, nseed), 0.0)
-        floors[q] = r[-200:].mean()
-        a.plot(np.maximum(r, 1e-3), color=c, lw=1.7,
-               label=f"q_mu={q:g}" + (" (P collapse)" if q == 0 else ""))
-    a.set_yscale("log")
-    a.set_xlabel("step"); a.set_ylabel("RMS error  (nats)")
-    a.set_title("(a) static: small q_mu keeps averaging; q_mu=0 can freeze")
-    a.legend(loc="upper right", fontsize=8)
+    a.plot(QGRID, recov, color=ts.SERIES[5], lw=1.9, marker="o", ms=3)
+    a.axvline(QGRID[k_rec], color=ts.SERIES[7], lw=1.1, ls="--",
+              label=f"optimum q_mu≈{QGRID[k_rec]:.1e}")
+    a.set_xscale("log")
+    a.set_xlabel("q_mu"); a.set_ylabel("jump-recovery time (steps to <0.5 nat)")
+    a.set_title("(a) recovery has an interior optimum")
+    a.legend(loc="upper center", fontsize=8)
 
-    # (b) reactivity: truth jumps 0 -> +3 at t=250
-    nt = 600
-    jump = np.zeros(nt); jump[250:] = 3.0
     a = ts.tidy(ax[1])
-    recov = {}
-    for q, c in zip(QMUS, COLORS):
-        r = rms(run_batch(jump, 0.0, q, nseed), jump)
-        after = r[250:]
-        hit = np.where(after < 0.5)[0]
-        recov[q] = int(hit[0]) if hit.size else nt
-        a.plot(np.maximum(r, 1e-3), color=c, lw=1.7, label=f"q_mu={q:g}")
-    a.axvline(250, color=ts.INK2, lw=0.9, ls="--")
-    a.set_yscale("log")
-    a.set_xlabel("step"); a.set_ylabel("RMS error  (nats)")
-    a.set_title("(b) reactivity: truth jumps +3 at t=250")
-    a.legend(loc="lower right", fontsize=8)
+    a.plot(QGRID, integ, color=ts.SERIES[3], lw=1.9, marker="o", ms=3)
+    a.axvline(QGRID[k_int], color=ts.SERIES[7], lw=1.1, ls="--",
+              label=f"optimum q_mu≈{QGRID[k_int]:.1e}")
+    a.set_xscale("log")
+    a.set_xlabel("q_mu"); a.set_ylabel("integrated post-jump error (200 steps)")
+    a.set_title("(b) threshold-free: same optimum, real not artefact")
+    a.legend(loc="upper center", fontsize=8)
 
-    # (c) the trade: floor vs jump-recovery, parameterised by q_mu
     a = ts.tidy(ax[2])
-    fl = np.array([floors[q] for q in QMUS])
-    rc = np.array([recov[q] for q in QMUS])
-    a.plot(rc, fl, color=ts.INK2, lw=1.2, zorder=1)
-    for q, c in zip(QMUS, COLORS):
-        a.scatter([recov[q]], [floors[q]], color=c, s=55, zorder=3)
-        a.annotate(f"{q:g}", (recov[q], floors[q]), fontsize=8,
-                   xytext=(6, 4), textcoords="offset points", color=c)
+    a.plot(recov, floor, color=ts.INK2, lw=1.0, zorder=1)
+    sc = a.scatter(recov, floor, c=np.log10(QGRID), cmap="viridis", s=42, zorder=3)
+    a.scatter([recov[k_rec]], [floor[k_rec]], facecolors="none",
+              edgecolors=ts.SERIES[7], s=140, lw=1.8, zorder=4, label="recovery optimum")
     a.set_yscale("log")
-    a.set_xlabel("jump-recovery time  (steps to <0.5 nat)")
+    a.set_xlabel("jump-recovery time  (steps)")
     a.set_ylabel("static floor  (RMS, nats)")
-    a.set_title("(c) the trade q_mu buys: precision vs reactivity")
+    a.set_title("(c) the trade, dense (colour = log10 q_mu)")
+    a.legend(loc="upper right", fontsize=8)
+    fig.colorbar(sc, ax=a, fraction=0.046, pad=0.04, label="log10 q_mu")
 
-    print("[q_mu sweep]  q_mu :  static floor  |  jump-recovery steps")
-    for q in QMUS:
-        print(f"           {q:>7g} :   {floors[q]:.3f}       |   {recov[q]}")
+    print("\n[q_mu sweep]   q_mu   : floor | recov | integ")
+    for k, q in enumerate(QGRID):
+        mark = "  <-- recov opt" if k == k_rec else ""
+        print(f"           {q:.2e} : {floor[k]:.3f} | {recov[k]:5.1f} | {integ[k]:6.1f}{mark}")
     ts.save(fig, os.path.join(HERE, "figures", "0013-q-mu-sweep.png"))
 
 
