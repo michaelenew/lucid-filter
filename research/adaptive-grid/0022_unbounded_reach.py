@@ -131,7 +131,7 @@ def main():
     for m in MODES:
         a.plot(np.arange(ntt), traces[m][1], color=MCOL[m], lw=1.6, label=m)
     a.set_xlabel("step"); a.set_ylabel("edge-node responsibility  (rail detector)")
-    a.set_title("(b) the rail lights up when the truth is outside — clears on lock")
+    a.set_title("(b) rail detector: fires when truth is outside")
     a.legend(loc="upper right", fontsize=8)
 
     a = ts.tidy(ax[2])
@@ -142,7 +142,7 @@ def main():
                   edgecolors=MCOL[m], s=55, lw=1.6, zorder=5)
     a.set_xlabel("up-jump size  (nats out of a ±1.35-nat window)")
     a.set_ylabel("median capture time  (steps; hollow = <90% reliable)")
-    a.set_title(f"(c) capped: reliable to +26; +hop: ~flat — at {nodes} nodes throughout")
+    a.set_title(f"(c) capped: reliable & linear to +26  ({nodes} nodes throughout)")
     a.legend(loc="upper left", fontsize=8)
     ts.save(fig, os.path.join(HERE, "figures", "0021-unbounded-reach.png"))
 

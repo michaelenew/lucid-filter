@@ -220,6 +220,35 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    tail distinct from the precision floor.) This is the selection graph: choose
    the frontier point, read `r`, set `q_mu = r/I` from the grid-readable `I`.
 
+9. **Unbounded reach: the blow-up is an overshoot, cured by bounded, bracketed
+   hunting** ([`0022`](0022_unbounded_reach.py)). Traced step by step, the
+   big-jump "blow-up" (finding 8) is not a lack of reach — it is an **overshoot**.
+   `kalman_auto`'s natural-gradient step `dμ = K·grad/I` with `grad/I ~ (e²−S)/Qg`
+   is **unbounded in the innovation**, so the first step after a large up-jump
+   (truth many nats out → `e² ~ e^d` astronomically large) makes μ **leap
+   thousands of nats past the truth** (+14 jump → μ ≈ +4800); the steady gain has
+   by then collapsed, so μ can only creep back — it never arrives. It is
+   **detectable live**: the posterior rails and the edge node's responsibility
+   `π_edge → 1`. Two opt-in fixes on `kalman_auto` (both default off, so findings
+   1–8 are unchanged):
+   - **`mu_cap`** clamps `|dμ|` to a bounded stride (the overlap constraint
+     `kalman_auto` had dropped). No leap; the fine window **walks** out.
+     **100%-reliable capture at every distance tested, out to +26 nats**, with
+     capture time growing only **linearly** (+3 → 11 steps, +26 → 62). This alone
+     is the robust win.
+   - **`hop_thresh`** arms a **rail-triggered geometric expansion** (Nelder–Mead):
+     while the edge stays railed, jump μ by a stride growing `×hop_grow` each rail
+     step, bracketing the truth in **O(log distance)** big steps; the fine grid
+     then locks locally. Typically **near-constant** capture time (~8–12 steps),
+     but the geometric stride can overshoot at some distances (≈20–90% reliable in
+     spots) — a faster accelerator that still wants tuning, layered on the
+     reliable cap.
+
+   The grid stays a **fixed 7-node fine window that moves** — the reachable set is
+   unbounded while the compute is fixed. That is "grid the infinite plane" with a
+   finite computer: nodes live only where the truth is, and the window telescopes
+   out to find it rather than gridding the span between.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -264,8 +293,9 @@ spacing lesson (`ode-filter/0047`).
   [`0018`](0018_grid_span.py) grid span ·
   [`0019`](0019_blowup_vs_coverage.py) blow-up is coverage ·
   [`0020`](0020_dimensionless_tradeoff.py) config-invariant tradeoff (r=q_mu·I) ·
-  [`0021`](0021_optimal_gridding.py) optimal uniform gridding.
+  [`0021`](0021_optimal_gridding.py) optimal uniform gridding ·
+  [`0022`](0022_unbounded_reach.py) unbounded reach (overshoot + hunting).
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`.
