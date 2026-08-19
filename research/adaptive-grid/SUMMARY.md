@@ -152,6 +152,28 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    for very large climbs. So the principled `q_mu` is "match the kept gain to the
    observability of the regime you land in" — itself a grid-readable quantity.
 
+   **The ~3-nat feature is observability saturation, and `q_mu`↔settling share a
+   unit** ([`0017`](0017_observability_and_units.py)). The per-step Fisher
+   information `I(d)` at a regime saturates toward the χ² ceiling ½ as the process
+   overtakes the measurement (`I(+1)=0.18, I(+3)=0.41, I(+5)=0.49`). The
+   recovery-vs-jump-size U-minimum sits at **`d≈+3` with a flat basin `[+1.5,+4]`**
+   — exactly the saturation knee: below it more loudness buys observability, above
+   it (past ~5) recovery explodes on distance alone. So ~3 nats is a defensible
+   design-disturbance size (observability is ~80% saturated; diminishing returns
+   beyond). The settling constant obeys **`τ ~ 1/√(q_mu·I)`**, i.e. the invariant
+   `q_mu·I·τ² ≈ const` — the shared unit for `q_mu` [nats²], `I` [1/nats²] and `τ`
+   [steps]. That gives a selection rule: **pick a settling budget `τ*`, then
+   `q_mu = 1/(I·τ*²)`** from the grid-readable `I` (the tracking index `q_mu·I`
+   is the dimensionless quantity to commit to).
+
+   **Grid span: keep it fine, coverage from motion** ([`0018`](0018_grid_span.py)
+   — hypothesis measured wrong, kept). A *wider* fine grid is a *coarser* one, so
+   the steady floor **rises** monotonically with span (0.34→0.66) and recovery
+   does not improve; past the dead-zone bound (gap ≳ 0.6 nats) it breaks outright,
+   and raising the order barely helps. Finer is quieter; width is not the way to
+   coverage — motion is. The ~3-nat recovery basin is **intrinsic**: it stays put
+   across spans (it is SNR, not a grid artifact).
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -191,8 +213,10 @@ spacing lesson (`ode-filter/0047`).
   [`0013`](0013_self_calibrating_tracker.py) self-calibrating (no a,b,R) ·
   [`0014`](0014_q_mu_sweep.py) q_mu sweep ·
   [`0015`](0015_q_mu_settling_horizon.py) post-jump settling horizon ·
-  [`0016`](0016_step_size_dependence.py) step-size / observability.
+  [`0016`](0016_step_size_dependence.py) step-size / observability ·
+  [`0017`](0017_observability_and_units.py) observability + units ·
+  [`0018`](0018_grid_span.py) grid span.
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`.
