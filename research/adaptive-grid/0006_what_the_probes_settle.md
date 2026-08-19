@@ -96,11 +96,13 @@ binding constraint for the multivariate extension.
 ## 5. The move: coverage from motion, safety from a gap that never opens
 
 [`moving_grid.py`](moving_grid.py) keeps a **fine** grid (s=0.30, order 5:
-max gap 0.45 nats, no dead zone, coverage only ±0.86) and lets its centre `mu`
-**integrate the grid-shift score**, clamped per step so consecutive windows
-overlap. Two timescales: the fine grid resolves fluctuations in a co-moving
-frame (so the posterior needs no re-projection), the centre slides with
-unbounded reach.
+max gap 0.45 nats, no dead zone, coverage only ±0.86) and **slides its centre
+`mu`** toward the truth, clamped per step so consecutive windows overlap. Two
+timescales: the fine grid resolves fluctuations in a co-moving frame (so the
+posterior needs no re-projection), the centre slides with unbounded reach. The
+signal that drives `mu` and its Robbins–Monro schedule are worked out by the
+convergence profiling in [`0008`](0008_online_convergence.md); the numbers below
+use that final servo.
 
 Against a truth ramping 0→+5 nats and back — a channel driven far past any fixed
 grid ([`0005`](0005_the_move.py), `figures/0007-the-move.png`), 60 seeds:
@@ -109,7 +111,7 @@ grid ([`0005`](0005_the_move.py), `figures/0007-the-move.png`), 60 seeds:
 |---|---|---|
 | fixed fine (s=0.30) | **+5.64** | 2.34 |
 | fixed wide (s=1.60) | +0.056 | 0.378 |
-| **moving fine** | **+0.037** | **0.272** |
+| **moving fine** | **+0.018** | **0.120** |
 | oracle (re-centred) | 0 | 0.019 |
 
 The moving fine grid tracks the ramp to +5 (the fine fixed grid saturates at
@@ -125,8 +127,9 @@ resolution rule that forbids it, that it lives in the likelihood (resolution is
 the cure), that the channels separate while covered, and a working single-channel
 move that turns a fine dead-zone-free grid into one with unbounded reach.
 
-Open, in order: (i) a principled gain/step for `mu` (Fisher-scoring using the
-score's curvature, rather than the hand-set `eta`/`cap` here) and its detection
-lag versus the oracle bound; (ii) the two-channel move with the covered-channel
-constraint; (iii) folding the move into `fit()`'s start, or shipping it as an
-online augmentation, priced against simply raising the order.
+Open, in order: (i) the step that drives `mu` and its online convergence —
+**done next in [`0007`](0007_online_convergence.py)/[`0008`](0008_online_convergence.md)**,
+which settle on the recentring servo and a Robbins–Monro schedule; (ii) the
+two-channel move with the covered-channel constraint; (iii) folding the move
+into `fit()`'s start, or shipping it as an online augmentation, priced against
+simply raising the order.

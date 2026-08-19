@@ -51,18 +51,35 @@ class MovingChannel:
                 Keep s small: the no-dead-zone rule is max_gap = maxgap(order)*s
                 <~ 0.6 nats.  Reach comes from the move, not from s.
     order       quadrature nodes.
-    eta         integration gain on the score.
+    step        which signal drives the window centre (see 0007):
+                "recenter" (default) slides mu to zero the within-window
+                  posterior mean, dmu = rate * (pi @ lam).  Within coverage this
+                  is the unbiased offset (a servo with a restoring force -> no
+                  wander), off-window it saturates at +-edge (constant-rate
+                  travel, right direction), and it reads relative fit across
+                  nodes so it is SNR-robust.  Fast, symmetric, unbiased.
+                "fisher" integrates the natural-gradient step (score / Fisher
+                  ~0.5(Qg/S)^2): fast but a pure integrator on a noisy gradient,
+                  so it wanders and biases.  "score" is the raw gradient
+                  (also asymmetric: suppressed by Qg/S below the noise floor).
+                  Both kept for the comparison in 0007.
+    eta         gain: `rate` for "recenter", integration gain for the others.
     cap         per-step clamp on |d mu|, in nats -- the overlap constraint.
-    beta        EMA smoothing of the score before the step.
+    beta        EMA smoothing of the step signal.
+    ridge       stabiliser added to the Fisher information before dividing.
     """
 
-    def __init__(self, Q, s2, phi=0.9, s=0.3, order=5,
-                 eta=0.5, cap=0.12, beta=0.6):
+    def __init__(self, Q, s2, phi=0.9, s=0.3, order=5, step="servo",
+                 eta=0.4, cap=0.12, beta=0.6, ridge=1e-4, w_score=2.0,
+                 tau=60.0, eta_floor=0.05):
         self.Q, self.s2 = float(Q), float(s2)
         self.order = int(order)
         self.lam, self.w0, self.T = grid(phi, s, order)
         self.max_gap = float(np.diff(self.lam).max())
-        self.eta, self.cap, self.beta = eta, cap, beta
+        self.step, self.eta, self.cap = step, eta, cap
+        self.beta, self.ridge, self.w_score = beta, ridge, w_score
+        self.tau = tau                   # Robbins-Monro decay time
+        self.eta_floor = eta_floor       # residual gain for tracking a drift
         self.reset()
 
     def reset(self, mu=0.0):
@@ -71,6 +88,7 @@ class MovingChannel:
         self._m = None
         self._P = None
         self._score_ema = 0.0
+        self._t = 0
         self.loglik = 0.0
         return self
 
@@ -106,10 +124,35 @@ class MovingChannel:
         self._m = self._m + Kbar * e
         self._P = float(pi @ ((1.0 - K) * (P + Qg)) + e2 * (pi @ (K - Kbar) ** 2))
 
-        # the move: integrate the (smoothed) grid-shift score, clamp for overlap
-        score = float(pi @ (0.5 * (Qg / S) * (e2 / S - 1.0)))
-        self._score_ema = self.beta * self._score_ema + (1.0 - self.beta) * score
-        dmu = float(np.clip(self.eta * self._score_ema, -self.cap, self.cap))
+        # the move: integrate the (smoothed) grid-shift step, clamp for overlap.
+        # grad is the raw score; fisher ~ 0.5 (Qg/S)^2 is the shift information.
+        # The natural-gradient step grad/fisher cancels the Qg/S prefactor that
+        # suppresses grad far below the measurement floor (see 0007).
+        gS = Qg / S
+        grad = float(pi @ (0.5 * gS * (e2 / S - 1.0)))
+        if self.step == "servo":
+            # posterior mean (drives from below, restoring within coverage) plus
+            # the raw score (drives from above, where the shelf is flat and the
+            # posterior mean stalls).  Complementary; neither amplifies noise.
+            signal = float(pi @ lam) + self.w_score * grad
+        elif self.step == "recenter":
+            signal = float(pi @ lam)                 # within-window posterior mean
+        elif self.step == "fisher":
+            fisher = float(pi @ (0.5 * gS * gS))
+            signal = grad / (fisher + self.ridge)
+        else:
+            signal = grad
+        score = grad
+        self._score_ema = self.beta * self._score_ema + (1.0 - self.beta) * signal
+        # Robbins-Monro step size: eta_t = max(eta_floor, eta / (1 + t/tau)).
+        # A decaying step is stochastic approximation -- it converges to the true
+        # fixed point (mu = truth) with vanishing wander, so the estimate reaches
+        # the oracle floor for a static log-scale.  eta_floor > 0 keeps a constant
+        # residual gain so a drifting log-scale is still tracked (bandwidth is a
+        # tracking budget, not a free parameter).
+        self._t += 1
+        eta_t = max(self.eta_floor, self.eta / (1.0 + self._t / self.tau))
+        dmu = float(np.clip(eta_t * self._score_ema, -self.cap, self.cap))
         self.mu += dmu
 
         self._pi = pi

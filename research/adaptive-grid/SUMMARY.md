@@ -51,17 +51,33 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    so the move must keep every channel covered ([`0004`](0004_exact_gradient_measurement_and_plane.py)).
 
 5. **The move works.** [`moving_grid.py`](moving_grid.py): a **fine**
-   (dead-zone-free) grid whose centre integrates the score, clamped per step for
-   overlap — coverage from motion, safety from a gap that never opens. Against a
-   truth ramping 0→+5 nats it tracks to +5 and **beats a fixed wide grid on both
+   (dead-zone-free) grid whose centre is a servo, clamped per step for overlap —
+   coverage from motion, safety from a gap that never opens. Against a truth
+   ramping 0→+5 nats it tracks to +5 and **beats a fixed wide grid on both
    loglik and tracking**, closest to the oracle ([`0005`](0005_the_move.py)):
 
    | grid | loglik/pt gap to oracle | track error (loud) |
    |---|---|---|
    | fixed fine (s=0.30) | +5.64 | 2.34 |
    | fixed wide (s=1.60) | +0.056 | 0.378 |
-   | **moving fine** | **+0.037** | **0.272** |
+   | **moving fine** | **+0.018** | **0.120** |
    | oracle | 0 | 0.019 |
+
+6. **It converges online from a random start** ([`0007`](0007_online_convergence.py),
+   [`0008`](0008_online_convergence.md)). Profiling forced the servo's form. The
+   centre step is the recentring signal `Σπ_i lam_i + w·score` — the posterior
+   mean (drives from below and inside coverage, unbiased fixed point) plus the
+   raw score (drives from above, where the flat shelf stalls the posterior mean)
+   — integrated with a Robbins–Monro step `eta_t = max(eta_floor, eta/(1+t/τ))`.
+   The decay is required: the in-frame AR(1) reverts to the frame centre, so the
+   estimate is unbiased only at `mu = truth`, and a constantly-moving servo
+   wanders. Result: **symmetric convergence from any start** (O(10–50) steps
+   within ±2 nats), settling to the oracle floor with decay; a residual
+   `eta_floor` trades precision for drift-tracking bandwidth. The fineness
+   constraint is load-bearing here too — a **coarse grid stalls in dead zones**
+   (101/1000 vs 7/1000 for the fine grid). Failures that shaped this: the raw
+   score alone stalls from below (`Qg/S` suppression at low SNR, 247/1000); the
+   natural-gradient step fixes the speed but wanders as a pure integrator.
 
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
@@ -71,10 +87,12 @@ spacing lesson (`ode-filter/0047`).
 
 ## Open
 
-- **A principled step for the centre.** The move uses a hand-set gain/clamp
-  (`eta`, `cap`); the Fisher-scoring step (score over its curvature) with a
-  measured detection lag against the oracle bound is the next probe.
-- **The two-channel move**, honouring the covered-channel constraint from 4.
+- **A principled schedule.** `τ` and `eta_floor` are hand-set; tie `τ` to the
+  detection-lag bound and `eta_floor` to the expected drift rate. The overlap
+  `cap` also sets a speed/overlap budget for far starts (±6 still takes a few
+  hundred steps).
+- **The two-channel move**, honouring the covered-channel constraint from 4
+  (a channel driven off-grid corrupts the others' move direction).
 - **A moving truth beyond a ramp** (oscillating, jumping) and the lag it costs.
 - **Where it ships.** Online augmentation of the filter, or an aid to `fit()`'s
   start — priced against simply raising the order.
@@ -88,7 +106,9 @@ spacing lesson (`ode-filter/0047`).
   [`0003`](0003_the_bells_and_the_resolution_criterion.py) bells + criterion ·
   [`0004`](0004_exact_gradient_measurement_and_plane.py) exact/measurement/plane ·
   [`0005`](0005_the_move.py) the move ·
-  [`0006`](0006_what_the_probes_settle.md) reading.
+  [`0006`](0006_what_the_probes_settle.md) reading ·
+  [`0007`](0007_online_convergence.py) convergence ·
+  [`0008`](0008_online_convergence.md) reading.
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
-  `0007-the-move`.
+  `0007-the-move`, `0008-online-convergence`.
