@@ -1,25 +1,33 @@
-"""How the step-response optimum moves with the size (and sign) of the jump.
+"""How the step-response optimum moves with the disturbance -- size AND sign.
 
-0014-0015 established that jump-recovery time has a genuine interior optimum in
-q_mu.  This asks how that optimum depends on the DATA -- the size of the regime
-change, and its direction.
+0014-0015 found a genuine interior optimum in q_mu for jump-recovery.  This asks
+how it depends on the data: the jump lands the tracker in a new regime, and the
+governing quantity turns out to be the OBSERVABILITY of that destination regime,
+not the jump size or the from-below/above geometry.
 
-Reasoning (to be tested): the recovery bathtub has two walls of different origin.
-  * high-q_mu wall: the steady noise floor rises to the 0.5-nat threshold; this
-    is set by q_mu and the measurement noise, NOT by the jump size -- so it is
-    roughly Δ-independent.
-  * low-q_mu wall: the catch-up time from distance Δ, ~ ln(Δ/0.5)·sqrt(R/q_mu),
-    which grows with Δ.
-So bigger jumps push the low-q_mu wall up, moving the optimum to HIGHER q_mu and
-raising the minimum recovery time.  Direction matters too: an up-jump (louder)
-lands the tracker in the from-below low-Fisher-information regime, so it should
-recover slower than a down-jump of the same size.
+A first prediction was wrong and is kept as a result: I expected a two-wall
+bathtub whose optimum moves right with jump size, and up-jumps faster than down
+(from-below suppression).  Measured, the opposite: the destination's process SNR
+governs everything.
+
+  * LOUDER destination (up-jump, high process SNR = highly observable): the
+    scale pins fast, so recovery-to-0.5-nat is fast and nearly FLAT across low
+    q_mu -- no left wall; only very high q_mu (noise) hurts.  Large up-jumps even
+    prefer MINIMAL q_mu.
+  * QUIETER destination (down-jump, low process SNR = barely observable): the
+    scale is hard to pin, so recovery is far slower, needs a HIGHER q_mu to keep
+    the gain alive, and at low q_mu P collapses before arrival (never recovers in
+    the window).
+
+So the reactivity optimum is really "match the kept gain q_mu to the
+observability of the regime you land in".  Signed destination d (jump 0 -> d):
+|d| is the step size, sign is louder(+)/quieter(-).
 
 Chart
 -----
-(a) recovery-vs-q_mu bathtubs for several up-jump sizes, optima marked;
-(b) the summary: optimal q_mu and optimal recovery time vs jump size;
-(c) up vs down jump of the same size -- the shelf/cliff asymmetry in time.
+(a) recovery-vs-q_mu for a range of destinations, optima marked;
+(b) optimal q_mu and min recovery vs destination d;
+(c) min recovery vs destination process SNR exp(d) -- the observability law.
 
 Run: python 0016_step_size_dependence.py   (heavy; ~2-3 min)
 """
@@ -39,16 +47,17 @@ from gridlab import simulate  # noqa: E402
 from moving_grid import MovingChannel  # noqa: E402
 import theory_style as ts  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
+import matplotlib.cm as cm  # noqa: E402
 
-QGRID = np.logspace(-5.0, -0.3, 13)
+QGRID = np.logspace(-5.0, -0.3, 12)
+DESTS = [-3.0, -1.5, 1.5, 3.0, 5.0]
 JT = 100
 NT = 1100
 THRESH = 0.5
 
 
-def jump_recovery(delta, q_mu, nseed):
-    """Interpolated steps after the jump for RMS to fall below THRESH."""
-    lam = np.zeros(NT); lam[JT:] = delta
+def recovery(dest, q_mu, nseed):
+    lam = np.zeros(NT); lam[JT:] = dest
     E = np.zeros((nseed, NT))
     for sd in range(nseed):
         rng = np.random.default_rng(700 + sd)
@@ -63,62 +72,57 @@ def jump_recovery(delta, q_mu, nseed):
     if hit.size == 0:
         return float(r.size)
     i = hit[0]
-    if i == 0:
-        return 0.0
-    y0, y1 = r[i - 1], r[i]
-    return float((i - 1) + (y0 - THRESH) / (y0 - y1))
+    return 0.0 if i == 0 else float((i - 1) + (r[i - 1] - THRESH) / (r[i - 1] - r[i]))
 
 
-def curve(delta, nseed):
-    return np.array([jump_recovery(delta, q, nseed) for q in QGRID])
+def main(nseed=50):
+    curves = {d: np.array([recovery(d, q, nseed) for q in QGRID]) for d in DESTS}
+    optk = {d: int(np.argmin(curves[d])) for d in DESTS}
 
+    print("[destination sweep]  d :  optimal q_mu | min recovery | process SNR e^d")
+    for d in DESTS:
+        print(f"   {d:+.1f} :  {QGRID[optk[d]]:.2e}   |   {curves[d][optk[d]]:6.0f}   |  {np.exp(d):7.2f}")
 
-def main(nseed=60):
-    sizes = [1.0, 2.0, 3.0, 5.0]
-    scols = [ts.SEQ[2], ts.SEQ[3], ts.SEQ[4], ts.SEQ[6]]
-    up = {d: curve(d, nseed) for d in sizes}
-    opt_q = {d: QGRID[int(np.argmin(up[d]))] for d in sizes}
-    opt_t = {d: up[d].min() for d in sizes}
-    down3 = curve(-3.0, nseed)
-
-    print("[step-size dependence] up-jumps:")
-    for d in sizes:
-        print(f"  Δ=+{d}: optimum q_mu={opt_q[d]:.2e}, min recovery={opt_t[d]:.0f} steps")
-    print(f"  Δ=-3 (down): optimum q_mu={QGRID[int(np.argmin(down3))]:.2e}, "
-          f"min recovery={down3.min():.0f} steps  (vs +3: {opt_t[3.0]:.0f})")
-
-    fig, ax = plt.subplots(1, 3, figsize=(16.0, 4.5))
+    norm = plt.Normalize(-3.5, 5.5)
+    cmap = cm.get_cmap("coolwarm")
+    fig, ax = plt.subplots(1, 3, figsize=(16.2, 4.5))
 
     a = ts.tidy(ax[0])
-    for d, c in zip(sizes, scols):
-        a.plot(QGRID, up[d], color=c, lw=1.8, marker="o", ms=3, label=f"Δ=+{d:g}")
-        kb = int(np.argmin(up[d]))
-        a.scatter([QGRID[kb]], [up[d][kb]], facecolors="none", edgecolors=c,
-                  s=130, lw=1.8, zorder=4)
+    for d in DESTS:
+        c = cmap(norm(d))
+        a.plot(QGRID, curves[d], color=c, lw=1.9, marker="o", ms=3,
+               label=f"d={d:+g} ({'louder' if d > 0 else 'quieter'})")
+        a.scatter([QGRID[optk[d]]], [curves[d][optk[d]]], facecolors="none",
+                  edgecolors=c, s=130, lw=1.8, zorder=4)
     a.set_xscale("log")
-    a.set_xlabel("q_mu"); a.set_ylabel("jump-recovery time (steps to <0.5 nat)")
-    a.set_title("(a) bigger jumps: optimum moves right, min rises")
-    a.legend(loc="upper center", fontsize=8, title="jump size")
+    a.set_xlabel("q_mu"); a.set_ylabel("recovery time (steps to <0.5 nat; 1000 = capped)")
+    a.set_title("(a) quiet destinations: slow, need higher q_mu; loud: fast & flat")
+    a.legend(loc="upper left", fontsize=7.6)
 
     a = ts.tidy(ax[1])
-    dd = np.array(sizes)
-    a.plot(dd, [opt_q[d] for d in sizes], color=ts.SERIES[5], lw=1.9, marker="o", ms=5)
+    dd = np.array(DESTS)
+    a.plot(dd, [QGRID[optk[d]] for d in DESTS], color=ts.SERIES[5], lw=1.9, marker="o", ms=5)
     a.set_yscale("log")
-    a.set_xlabel("jump size Δ (nats)"); a.set_ylabel("optimal q_mu", color=ts.SERIES[5])
+    a.set_xlabel("destination d  (nats; − quieter, + louder)")
+    a.set_ylabel("optimal q_mu", color=ts.SERIES[5])
     a.tick_params(axis="y", labelcolor=ts.SERIES[5])
     a2 = a.twinx()
-    a2.plot(dd, [opt_t[d] for d in sizes], color=ts.SERIES[1], lw=1.9, marker="s", ms=5)
-    a2.set_ylabel("min recovery time (steps)", color=ts.SERIES[1])
+    a2.plot(dd, [curves[d][optk[d]] for d in DESTS], color=ts.SERIES[1], lw=1.9, marker="s", ms=5)
+    a2.set_ylabel("min recovery (steps)", color=ts.SERIES[1])
     a2.tick_params(axis="y", labelcolor=ts.SERIES[1])
-    a.set_title("(b) optimal q_mu and min recovery vs jump size")
+    a.set_title("(b) quieter → higher optimal q_mu and slower recovery")
 
     a = ts.tidy(ax[2])
-    a.plot(QGRID, up[3.0], color=ts.SERIES[1], lw=1.9, marker="o", ms=3, label="up  Δ=+3 (louder)")
-    a.plot(QGRID, down3, color=ts.SERIES[0], lw=1.9, marker="s", ms=3, label="down Δ=−3 (quieter)")
-    a.set_xscale("log")
-    a.set_xlabel("q_mu"); a.set_ylabel("jump-recovery time (steps)")
-    a.set_title("(c) direction asymmetry: up (from-below) is slower")
-    a.legend(loc="upper center", fontsize=8)
+    snr = np.exp(dd)
+    mn = np.array([curves[d][optk[d]] for d in DESTS])
+    a.plot(snr, mn, color=ts.SERIES[2], lw=1.6, marker="o", ms=6)
+    for d in DESTS:
+        a.annotate(f"d={d:+g}", (np.exp(d), curves[d][optk[d]]), fontsize=7.5,
+                   xytext=(5, 4), textcoords="offset points")
+    a.set_xscale("log"); a.set_yscale("log")
+    a.set_xlabel("destination process SNR  e^d  (process var / meas var)")
+    a.set_ylabel("min recovery time (steps)")
+    a.set_title("(c) the observability law: recovery ∝ 1/observability")
     ts.save(fig, os.path.join(HERE, "figures", "0015-step-size-dependence.png"))
 
 
