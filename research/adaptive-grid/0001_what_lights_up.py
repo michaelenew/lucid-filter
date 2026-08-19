@@ -54,83 +54,16 @@ import time
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "lucid"))
+sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "random-walk-filter", "scripts"))
 
-from statfilter.core import _chain, AdaptiveFilter, Params  # noqa: E402
+from gridlab import grid, simulate, run_channel, verify  # noqa: E402
 import theory_style as ts  # noqa: E402
 import matplotlib.pyplot as plt  # noqa: E402
 
-_LOG2PI = np.log(2.0 * np.pi)
 
-
-# ------------------------------------------------------------------ recursion
-def run_channel(x, lam, w0, T, Q, s2):
-    """Batched single-process-channel filter over rows of ``x`` (B, n_t).
-
-    Returns a dict of per-series time-averaged reads.  This is the shipped
-    ``update`` recursion with the measurement grid collapsed to its s_M = 0
-    face (R constant); :func:`_verify` checks it agrees with the full filter.
-    """
-    x = np.atleast_2d(x)
-    B, nt = x.shape
-    n = lam.size
-    Qg = Q * np.exp(lam)                                # (n,)
-    R = s2
-    m = x[:, 0].astype(float).copy()
-    P = np.full(B, float(Qg.max() + R))
-    pi = np.tile(w0, (B, 1)).astype(float)
-
-    ll = np.zeros(B)
-    score_acc = np.zeros(B)
-    mean_acc = np.zeros(B)
-    top_acc = np.zeros(B)
-    bot_acc = np.zeros(B)
-    cnt = 0
-    for t in range(nt):
-        pi = pi @ T
-        Pp = P[:, None] + Qg[None, :]                  # (B, n)
-        S = Pp + R
-        e = x[:, t] - m                                # (B,)
-        e2 = e * e
-        lg = -0.5 * (np.log(S) + e2[:, None] / S)
-        mx = lg.max(1)
-        w = pi * np.exp(lg - mx[:, None])
-        Z = w.sum(1)
-        ll += np.log(Z) + mx - 0.5 * _LOG2PI
-        pi = w / Z[:, None]
-        K = Pp / S
-        Kbar = (pi * K).sum(1)
-        m = m + Kbar * e
-        P = (pi * ((1.0 - K) * Pp)).sum(1) + e2 * (pi * (K - Kbar[:, None]) ** 2).sum(1)
-        # diagnostics on the post-update posterior
-        score_acc += (pi * (0.5 * (Qg[None, :] / S) * (e2[:, None] / S - 1.0))).sum(1)
-        mean_acc += (pi * lam[None, :]).sum(1)
-        top_acc += pi[:, -1]
-        bot_acc += pi[:, 0]
-        cnt += 1
-    return dict(loglik=ll, score=score_acc / cnt, postmean=mean_acc / cnt,
-                top=top_acc / cnt, bot=bot_acc / cnt)
-
-
-def simulate(rng, lam_star, Q, s2, nt):
-    """Random walk with constant excess log-scale lam*, observed with N(0, s2)."""
-    qstep = Q * np.exp(lam_star)
-    theta = np.cumsum(rng.normal(0.0, np.sqrt(qstep), size=nt))
-    return theta + rng.normal(0.0, np.sqrt(s2), size=nt)
-
-
-# ------------------------------------------------------------------- verify
-def _verify(order=5, phi=0.98, s=0.8, Q=1.0, s2=1.0, nt=400):
-    """The single-channel recursion equals the shipped filter at s_M = 0."""
-    rng = np.random.default_rng(0)
-    x = simulate(rng, 0.7, Q, s2, nt)
-    lam, w0, T = _chain(phi, s, order)
-    mine = run_channel(x, lam, w0, T, Q, s2)["loglik"][0]
-    f = AdaptiveFilter(Params(Q=Q, s2=s2, phi_P=phi, s_P=s, phi_M=0.0, s_M=0.0),
-                       order=order)
-    theirs = f.loglik(x)
-    assert abs(mine - theirs) < 1e-7, (mine, theirs)
+def _verify():
+    mine, theirs = verify()
     print(f"verify: single-channel loglik matches shipped filter "
           f"({mine:.6f} vs {theirs:.6f})")
 
@@ -139,7 +72,7 @@ def _verify(order=5, phi=0.98, s=0.8, Q=1.0, s2=1.0, nt=400):
 def experiment_one(order=5, phi=0.98, s=0.8, Q=1.0, s2=1.0,
                    nt=700, nseed=80):
     """Sweep a constant lam* across and beyond one grid; read both signals."""
-    lam, w0, T = _chain(phi, s, order)
+    lam, w0, T = grid(phi, s, order)
     lam_top = float(lam.max())
     lam_star = np.linspace(-5.0, 7.0, 31)
 
@@ -253,7 +186,7 @@ def experiment_two(order=5, phi=0.98, Q=1.0, s2=1.0, nt=700, nseed=96):
 
     print("\n[exp2] between nodes at three spreads")
     for k, s in enumerate(spreads):
-        lam, w0, T = _chain(phi, s, order)
+        lam, w0, T = grid(phi, s, order)
         lam_top = float(lam.max())
         pm = np.zeros(lam_star.size)
         sc = np.zeros(lam_star.size)
