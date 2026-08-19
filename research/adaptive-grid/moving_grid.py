@@ -38,7 +38,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from gridlab import grid, _LOG2PI  # noqa: E402
+from gridlab import grid, uniform_grid, _LOG2PI  # noqa: E402
 
 
 class MovingChannel:
@@ -72,10 +72,20 @@ class MovingChannel:
     def __init__(self, Q, s2, phi=0.9, s=0.3, order=5, step="servo",
                  eta=0.4, cap=0.12, beta=0.6, ridge=1e-4, w_score=2.0,
                  tau=60.0, eta_floor=0.05,
-                 a_slope=-0.138, b_int=-0.016, R_meas=15.0, q_mu=0.0, P0=25.0):
+                 a_slope=-0.138, b_int=-0.016, R_meas=15.0, q_mu=0.0, P0=25.0,
+                 uniform=None):
         self.Q, self.s2 = float(Q), float(s2)
         self.order = int(order)
-        self.lam, self.w0, self.T = grid(phi, s, order)
+        if uniform is not None:
+            # uniform=(half_width, gap): equispaced nodes at spacing `gap` over
+            # +-half_width.  The optimal moving-grid discretisation -- constant
+            # spacing means no over-clustered centre wasting compute and no
+            # widening outer gap opening a dead zone.  `order` is then ignored
+            # (the node count is fixed by half_width/gap).
+            half_width, gap = uniform
+            self.lam, self.w0, self.T = uniform_grid(phi, s, half_width, gap)
+        else:
+            self.lam, self.w0, self.T = grid(phi, s, order)
         self.max_gap = float(np.diff(self.lam).max())
         self.step, self.eta, self.cap = step, eta, cap
         self.beta, self.ridge, self.w_score = beta, ridge, w_score

@@ -30,6 +30,30 @@ def grid(phi, s, order):
     return _chain(phi, s, order)
 
 
+def uniform_grid(phi, s, half_width, gap):
+    """A UNIFORM node grid: spacing `gap` over +-half_width, centred on a node.
+
+    For a moving grid the fine grid needs uniform overlap for the shift score, so
+    a uniform spacing at the dead-zone threshold is the natural discretisation --
+    no over-clustered centre, no widening outer gap.  Nodes evenly spaced;
+    stationary weights are the AR(1) stationary Gaussian N(0, s^2) at the nodes
+    (normalised); the transition is the exact AR(1) kernel N(phi*lam_i, nu) on
+    the nodes.  (For the equispaced grid the s^2 reweighting of :func:`_chain`
+    cancels, leaving the bare AR(1) Gaussian.)
+    """
+    K = int(np.floor(half_width / gap + 1e-9))
+    lam = gap * np.arange(-K, K + 1, dtype=float)
+    if not s > 0.0 or s * s <= 0.0:
+        w0 = np.full(lam.size, 1.0 / lam.size)
+        return np.zeros(lam.size), w0, np.tile(w0, (lam.size, 1))
+    w0 = np.exp(-0.5 * (lam / s) ** 2)
+    w0 /= w0.sum()
+    nu = max(s * s * (1.0 - phi * phi), 1e-12)
+    T = np.exp(np.clip(-0.5 * (lam[None, :] - phi * lam[:, None]) ** 2 / nu, -700.0, 700.0))
+    T /= T.sum(1, keepdims=True)
+    return lam, w0, T
+
+
 def simulate(rng, lam_star, Q, s2, nt):
     """Random walk with constant excess log-scale lam*, observed with N(0, s2)."""
     qstep = Q * np.exp(lam_star)
