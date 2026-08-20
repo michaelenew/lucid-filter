@@ -482,11 +482,17 @@ spacing lesson (`ode-filter/0047`).
   tails (dead zones for off-centre truths) — a mismatch to what these grids are
   for. **Re-examine the node spacing in the existing shipped members** (`_chain`
   and the odefilter grids): a uniform-at-δ (or whitened-hexagonal, jointly)
-  discretisation should be dead-zone-free at equal or lower node count. Caveat to
-  weigh: GH is genuinely appropriate for the *stationary marginal-likelihood
-  integral* `AdaptiveFilter` computes, so the change trades quadrature accuracy of
-  that integral for resolvability across the range, and will move the fit surface
-  — measure both before switching.
+  discretisation should be dead-zone-free at equal or lower node count. (Both the
+  legacy and the walking members run the *same kind* of per-step marginal-
+  likelihood integral `Z = Σ_i π_i·N(x; m, S_i)`; the walking members already do
+  it on a uniform-at-δ grid, so this open is about the legacy GH members only.)
+  Note GH's optimality is for the *expected* Gaussian-weighted integral, which is
+  the wrong objective: the dead zone is a *specific-realisation* failure — when a
+  run's log-scale sits persistently in GH's sparse tail the coverage collapses —
+  and GH's quadrature guarantee says nothing about that worst case. So the case
+  for uniform is stronger than a naive "accuracy vs coverage" trade suggests; the
+  thing to measure before switching is whether the fitted loglik surface moves,
+  not whether GH's quadrature accuracy is worth keeping.
 - **The two-channel move**, honouring the covered-channel constraint from 4
   (a channel driven off-grid corrupts the others' move direction); and the bank
   extended to the joint plane (whitened-hexagonal grid).
