@@ -20,8 +20,10 @@ See ``statfilter.core`` / ``statfilter.walking`` for the models and ``theory/``
 for their derivations.
 """
 from .core import AdaptiveFilter, FilterResult, Params, Step
-from .walking import WalkingFilter, WalkResult, WalkStep
+from .walking import (WalkingFilter, WalkResult, WalkStep,
+                      WalkingBank, BankStep, BankResult)
 
 __all__ = ["AdaptiveFilter", "FilterResult", "Params", "Step",
-           "WalkingFilter", "WalkResult", "WalkStep"]
-__version__ = "1.1.0"
+           "WalkingFilter", "WalkResult", "WalkStep",
+           "WalkingBank", "BankStep", "BankResult"]
+__version__ = "1.2.0"

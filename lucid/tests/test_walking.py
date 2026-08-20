@@ -121,3 +121,87 @@ def test_reset_chains_and_seeds_scale():
     f = WalkingFilter(Q=1.0, s2=1.0, phi=0.9, s=0.30)
     assert f.reset(scale=2.0) is f
     assert f.mu == 2.0
+
+
+# --------------------------------------------------------------- WalkingBank
+from statfilter import WalkingBank, BankResult  # noqa: E402
+
+
+def test_bank_construction_validates():
+    with pytest.raises(ValueError):
+        WalkingBank(Q=1.0, s2=1.0, forget=0.0)
+    with pytest.raises(ValueError):
+        WalkingBank(Q=1.0, s2=1.0, forget=1.5)
+    with pytest.raises(ValueError):
+        WalkingBank(Q=1.0, s2=1.0, phis=[], ss=[0.3])
+
+
+def test_bank_defaults_grid():
+    b = WalkingBank(Q=1.0, s2=1.0)
+    assert len(b.filters) == 3 * 5           # default 3 phis x 5 ss
+    assert b.phi_arr.size == len(b.filters) and b.s_arr.size == len(b.filters)
+
+
+def test_bank_streaming_matches_batch():
+    x, _ = scale_series(400, 1.0, seed=11)
+    b = WalkingBank(Q=1.0, s2=1.0)
+    r = b.filter(x)
+    b.reset()
+    streamed = np.array([b.update(v).process_scale for v in x])
+    assert np.allclose(streamed, r.process_scale)
+
+
+def test_bank_filter_does_not_disturb_state():
+    x, _ = scale_series(300, 0.5, seed=12)
+    b = WalkingBank(Q=1.0, s2=1.0)
+    b.update(x[0]); b.update(x[1])
+    snap = b._logw.copy()
+    b.filter(x)
+    assert np.allclose(b._logw, snap)
+
+
+def test_bank_weights_are_a_distribution():
+    x, _ = scale_series(500, 2.0, seed=13)
+    b = WalkingBank(Q=1.0, s2=1.0)
+    r = b.filter(x)
+    assert np.all(r.n_eff >= 1.0 - 1e-9) and np.all(r.n_eff <= len(b.filters) + 1e-9)
+    # learned (phi, s) stay inside the grid box
+    assert b.s_arr.min() - 1e-9 <= r.s_hat[-1] <= b.s_arr.max() + 1e-9
+    assert b.phi_arr.min() - 1e-9 <= r.phi_hat[-1] <= b.phi_arr.max() + 1e-9
+
+
+def test_bank_concentrates_on_the_ridge():
+    """With enough data the bank sheds models -- weight collects on the ridge."""
+    x, _ = scale_series(2000, 2.5, seed=14)
+    r = WalkingBank(Q=1.0, s2=1.0).filter(x)
+    assert r.n_eff[-1] < len(WalkingBank(Q=1.0, s2=1.0).filters)   # not uniform
+
+
+def test_bank_matches_oracle_without_being_told_phi_s():
+    """Level tracking at parity with a single filter given the true (phi, s)."""
+    rng = np.random.default_rng(15)
+    NT = 2000
+    lam = np.cumsum(rng.standard_normal(NT) * 0.05)      # a slowly wandering scale
+    theta = np.cumsum(rng.standard_normal(NT) * np.sqrt(np.exp(lam)))
+    x = theta + rng.standard_normal(NT)
+    r_bank = WalkingBank(Q=1.0, s2=1.0).filter(x)
+    r_one = WalkingFilter(Q=1.0, s2=1.0, phi=0.95, s=0.30).filter(x)
+    def rmse(m):
+        return float(np.sqrt(np.mean((m[100:] - theta[100:]) ** 2)))
+    assert rmse(r_bank.mean) < 1.25 * rmse(r_one.mean)   # within 25% of a hand-set filter
+
+
+def test_bank_handles_missing():
+    x, _ = scale_series(200, 0.0, seed=16)
+    x[100] = np.nan
+    r = WalkingBank(Q=1.0, s2=1.0).filter(x)
+    assert isinstance(r, BankResult)
+    assert np.isfinite(r.mean[100]) and math.isnan(r.innovation[100])
+
+
+def test_bank_forget_keeps_models_alive():
+    """A forgetting factor < 1 stops the weights collapsing onto one model."""
+    x, _ = scale_series(3000, 2.0, seed=17)
+    r_pure = WalkingBank(Q=1.0, s2=1.0, forget=1.0).filter(x)
+    r_forget = WalkingBank(Q=1.0, s2=1.0, forget=0.98).filter(x)
+    assert r_forget.n_eff[-1] > r_pure.n_eff[-1]

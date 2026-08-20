@@ -341,6 +341,112 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     regimes, so the oracle still wins the *scale* RMSE, 0.39 vs 0.72 — the level
     tracking, what a filter is for, is at parity.)
 
+13. **Grid the nuisance `(φ, s)`: a ridge, not a peak — but the ridge is flat in
+    what matters** ([`0026`](0026_grid_the_nuisance.py), figure
+    `0025-grid-the-nuisance.png`). Applying the programme's own move to the last
+    commitment — a bank of models over `(φ, s)`, gridded and compared — gives two
+    landscapes.
+    - **Resolvability ("where the dip appears").** At a fixed kernel, gridding the
+      node *spacing* shows the dead-zone dip in the grid-shift score open exactly
+      as spacing passes ~2s (score sags, then inverts, between nodes): the coarse
+      models can't see through their own gaps. Confirms finding 11's bound as a
+      geometric property of each model, mapped across the bank.
+    - **Evidence.** The exact generative log-likelihood over `(φ, s)` is a broad
+      **ridge**, not a peak (~0.008 nats/pt spread; argmax wanders off-truth by a
+      realisation): `φ` and `s` **trade off** (high persistence + small swing ≈ low
+      persistence + large swing give nearly the same log-innovation
+      autocovariance), so a moderate sample only weakly identifies the pair — a
+      broad prior does **not** wash out to a point.
+    - **But it doesn't matter.** The WalkingFilter's scale-tracking RMSE over the
+      same grid is nearly **flat** (14% spread across the whole bank), flattest
+      along the evidence ridge; a causal Bayesian model average over the bank tracks
+      at **0.55 ≈ oracle 0.56**. The direction the data can't pin is the direction
+      that barely changes the answer.
+
+    So gridding the nuisance is the honest resolution of "why not zero": you cannot
+    *identify* `(φ, s)` to a point (ridge), but you need not — the tracking cost is
+    nearly constant along the ridge, and a model average removes the point
+    commitment entirely, leaving only a broad prior whose exact shape is almost
+    irrelevant. The two parameters are irreducible in **count**, nearly free in
+    **effect**.
+
+14. **The ridge, spoken plainly: (φ, s) are identified but sloppy — the block is
+    the class, not a number** ([`0027`](0027_ridge_theory.py), figure
+    `0026-ridge-theory.png`). Finding 13's "irreducible in count, free in effect"
+    was a resting place; the Fisher geometry settles it.
+    - **Full rank.** The Fisher information of `(φ, s)` at the truth has *both*
+      eigenvalues positive (≈ 92 and 1429) — no flat direction, so `(φ, s)` **are
+      identified**. There is **no permanent free number on the ridge**.
+    - **Sloppy, not degenerate.** The eigenvalues differ ~**15×**: one combination
+      (stiff) is pinned to 1σ ≈ 0.03, the other (sloppy — the ridge) to ≈ 0.10. At
+      a finite sample the loose one reads as a ridge; its width falls as **1/√n**
+      (measured slope −0.56), so the ridge **sharpens with data** and collapses
+      onto the truth. A sloppy model in Transtrum's sense, not a degenerate one.
+    - **Where the block actually is.** Since the numbers are learnable, the
+      irreducible commitment is **not a number** — it is the model **class** (that
+      the log-scale is a single-timescale stationary AR(1)), a functional form
+      chosen once. The no-zero-parameters theorem lives there, not on the ridge.
+
+    **Reduce 2 → 1, then average it away.** In the eigenbasis the data determines
+    the stiff coordinate; only the sloppy one (position along the ridge) is loose —
+    *one* loosely-known number, not two. And because tracking is flat along the
+    sloppy direction (finding 13), point-estimating it only injects its estimation
+    noise, while **marginalising** it (a small evidence-weighted bank along the
+    ridge) is safe and **insensitive to the prior** placed on it: a deliberately
+    wrong narrow prior (centre 0.65) tracks at 0.571 and widening it to average the
+    ridge converges to the true-(φ,s) filter's 0.560. This is "find the ridge the
+    data allows, then average over the freedom" — the last degree of freedom parked
+    in the least consequential direction and integrated out, and it shrinks to a
+    point as n grows on its own.
+
+15. **Shipped as `statfilter.WalkingBank`: the ridge-average made a filter**
+    ([`0028`](0028_result_bank.py), figure `0027-walking-bank.png`). Finding 14's
+    construction is now a class: a bank of `WalkingFilter`s over a `(φ, s)` grid,
+    combined by online Bayesian model averaging (weight `w_i ∝ w_i^forget·p_i(x)`).
+    The caller supplies only `Q, s2` and the class (a broad grid box) — **no
+    `(φ, s)` number**. The data pours weight onto the ridge and averages the sloppy
+    direction; `phi_hat, s_hat` report what it learned, `n_eff` how many models
+    remain. Measured on a regime-shifting scale, the bank (told nothing) tracks at
+    level-RMSE **0.86 = the oracle single filter told the true `(φ, s)`** (0.86);
+    `phi_hat, s_hat` settle onto the ridge and `n_eff` sheds from 15 to a handful.
+    The `forget < 1` option keeps the bank re-selectable if `(φ, s)` drift. This is the
+    end state: the only input left is the model *class* — a shape assumption, not a
+    number.
+
+16. **The last knob is `forget`, and it lives in the least consequential channel**
+    ([`0029`](0029_forget_the_last_knob.py), figure `0028-forget-the-last-knob.png`).
+    The bank's model averaging has one residual free parameter: the weight
+    persistence `forget`. Under pure Bayes (`forget = 1`) the weights concentrate
+    onto the ridge and then **freeze** — a large sustained shift in the process
+    `(φ, s)` still re-selects, but stickily, so `phi_hat, s_hat` lock on a long
+    static run. `forget < 1` keeps them alive.
+
+    So there *is* a free parameter — but it has been pushed to the slowest,
+    least-impactful channel that exists, and this is (I believe provably)
+    load-bearing:
+    - it governs the drift rate of `(φ, s)`, which are the **slowest-varying**
+      quantities in the model (class properties, not the state);
+    - and `(φ, s)` sit on the **flat identification ridge** (finding 14), so their
+      value barely reaches the estimate.
+
+    Both legs are measured. Through an `s: 0.25 → 0.70` mid-stream shift, the
+    new-regime tracking is **identical** across `forget ∈ {1.0, 0.999, 0.99}` and
+    even for a single filter **frozen at the stale `s = 0.25`** (level-RMSE 0.826
+    vs 0.827 for the correct-`s` filter; scale within 5%) — because the μ-walk
+    tracks regardless and the ridge is flat. And static level-RMSE is flat across
+    `forget ∈ [0.95, 1.0]` (0.8002–0.8007), while post-shift re-selection peaks at
+    **`forget = 0.999`** (Δŝ 0.153, vs 0.087 for the sticky 1.0 and 0.019 for the
+    never-concentrating 0.95). The default is therefore set to **`0.999`**: a
+    ~1000-step memory that concentrates on the ridge yet stays re-selectable, at
+    no measurable tracking cost against the (unknown) optimum.
+
+    **This knob can be eliminated without violating the no-zero-parameters proof.**
+    The proof's irreducible commitment is the AR(1) *shape*; deriving the `(φ, s)`
+    drift rate *from that shape* (rather than setting `forget` by hand) leans only
+    on the assumption already made, so it adds nothing. Finding that optimal
+    derivation is a theory task (see Open); practically `forget ≈ 0.999` will not
+    differ measurably from it.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -349,17 +455,51 @@ spacing lesson (`ode-filter/0047`).
 
 ## Open
 
-- **The defensibly-optimal ranging** (from 7). Drive `μ` by the exact/natural
-  marginal-likelihood gradient (efficient, un-suppressed) and/or linearise the
-  force via the far-field log-distance, giving a uniform α-β / steady-state-Kalman
-  tracker whose min-variance gains come from `I` and the drift variance. Measure
-  `I` across regimes to check the gains are truly knob-free. This subsumes the
-  hand-set `η`, `β`, `τ`, `eta_floor`.
+- **Eliminate `forget` from the AR(1) shape (finding 16).** There is one residual
+  free parameter — the bank's weight persistence — but it governs the drift rate
+  of `(φ, s)`, the slowest and least consequential channel (on the flat ridge).
+  It can be removed *without violating the no-zero-parameters proof*, because the
+  irreducible commitment is the AR(1) *shape*, and deriving the `(φ, s)` drift
+  rate from that shape leans only on the assumption already made. The task is to
+  find the optimal such derivation (e.g. a second-level walk/keep-alive on the
+  model weights, self-calibrated like `q_mu = r*/I` was one level down). Practical
+  payoff is near zero (`forget ≈ 0.999` already tracks at the optimum within
+  measurement); the value is theoretical closure.
+- **Restart the optimality-proof thread on the clean `forget = 1` object.** Pure
+  Bayesian model averaging over the `(φ, s)` grid (finding 15) is theoretically
+  clean — a well-posed marginal likelihood, no forgetting heuristic. It is now a
+  tidy enough object to carry the log-loss optimality argument (`optimality-proof/`)
+  through end to end: the bank is Bayes-optimal for the class given the grid, and
+  the WalkingFilter inside each cell is the online-ML tracker (finding 7).
+- **The node positions are Gauss–Hermite by inheritance, and that is the wrong
+  criterion.** GH nodes (`statfilter/core.py::_chain`, and the `odefilter`
+  members) are the roots optimal for *integrating a smooth function against a
+  Gaussian weight* — a quadrature-accuracy objective. The adaptive-grid work
+  established that for *representing / resolving* a log-scale the right criterion
+  is uniform spacing at the dead-zone threshold (finding 11), whose 2-D form is
+  the triangular/hexagonal lattice (the thinnest covering) after Fisher-whitening
+  (finding 11-iii). GH clusters at the centre (over-resolved) and thins at the
+  tails (dead zones for off-centre truths) — a mismatch to what these grids are
+  for. **Re-examine the node spacing in the existing shipped members** (`_chain`
+  and the odefilter grids): a uniform-at-δ (or whitened-hexagonal, jointly)
+  discretisation should be dead-zone-free at equal or lower node count. (Both the
+  legacy and the walking members run the *same kind* of per-step marginal-
+  likelihood integral `Z = Σ_i π_i·N(x; m, S_i)`; the walking members already do
+  it on a uniform-at-δ grid, so this open is about the legacy GH members only.)
+  Note GH's optimality is for the *expected* Gaussian-weighted integral, which is
+  the wrong objective: the dead zone is a *specific-realisation* failure — when a
+  run's log-scale sits persistently in GH's sparse tail the coverage collapses —
+  and GH's quadrature guarantee says nothing about that worst case. So the case
+  for uniform is stronger than a naive "accuracy vs coverage" trade suggests; the
+  thing to measure before switching is whether the fitted loglik surface moves,
+  not whether GH's quadrature accuracy is worth keeping.
 - **The two-channel move**, honouring the covered-channel constraint from 4
-  (a channel driven off-grid corrupts the others' move direction).
+  (a channel driven off-grid corrupts the others' move direction); and the bank
+  extended to the joint plane (whitened-hexagonal grid).
 - **A moving truth beyond a ramp** (oscillating, jumping) and the lag it costs.
-- **Where it ships.** Online augmentation of the filter, or an aid to `fit()`'s
-  start — priced against simply raising the order.
+- *(Resolved)* Defensibly-optimal ranging (findings 10–13, shipped as
+  `WalkingFilter`); where it ships (findings 12, 15 — `WalkingFilter`,
+  `WalkingBank`).
 
 ## Files
 
@@ -388,8 +528,13 @@ spacing lesson (`ode-filter/0047`).
   [`0021`](0021_optimal_gridding.py) optimal uniform gridding ·
   [`0022`](0022_unbounded_reach.py) unbounded reach (overshoot + hunting) ·
   [`0023`](0023_critically_damped_walkout.py) critically-damped dense walk-out ·
-  [`0024`](0024_gap_theory.py) theory of the gap (KL zone, resolution, hexagonal).
+  [`0024`](0024_gap_theory.py) theory of the gap (KL zone, resolution, hexagonal) ·
+  [`0025`](0025_result_walking_vs_fit.py) headline result: walking vs fit ·
+  [`0026`](0026_grid_the_nuisance.py) grid the nuisance (φ,s) ·
+  [`0027`](0027_ridge_theory.py) ridge theory: identified-but-sloppy, block is the class ·
+  [`0028`](0028_result_bank.py) shipped: WalkingBank (no numbers, just the class) ·
+  [`0029`](0029_forget_the_last_knob.py) the last knob (forget) and where it lives.
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`, `0028-forget-the-last-knob`.

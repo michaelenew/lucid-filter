@@ -56,9 +56,15 @@ from dataclasses import dataclass
 
 import numpy as np
 
-__all__ = ["WalkingFilter", "WalkStep", "WalkResult"]
+__all__ = ["WalkingFilter", "WalkStep", "WalkResult",
+           "WalkingBank", "BankStep", "BankResult"]
 
 _LOG2PI = math.log(2.0 * math.pi)
+
+
+def _logsumexp(a: np.ndarray) -> float:
+    m = float(a.max())
+    return m + math.log(float(np.exp(a - m).sum()))
 
 # Derived constants (see theory/adaptive-grid/SUMMARY.md findings 10-11):
 _R_STAR = 3.5e-4        # critical-damping tracking index r = q_mu * I (finding 10)
@@ -258,3 +264,175 @@ class WalkingFilter:
             return WalkResult(loglik=total, **out)
         finally:
             (self._pi, self._m, self._P, self.mu, self._Pmu, self.loglik) = saved
+
+
+# --------------------------------------------------------------------- the bank
+@dataclass
+class BankStep:
+    """Everything the bank knows after one observation (the model-averaged state)."""
+
+    mean: float            #: model-averaged posterior level
+    var: float             #: its variance (within-model + across-model spread)
+    innovation: float      #: x_t - the mixture prior mean
+    loglik: float          #: log predictive density of x_t under the mixture
+    process_scale: float   #: model-averaged process log-scale
+    n_eff: float           #: effective number of models carrying weight (1 .. M)
+    phi_hat: float         #: posterior-mean persistence (what the data learned)
+    s_hat: float           #: posterior-mean scale swing
+
+
+@dataclass
+class BankResult:
+    """Batch output.  Arrays of length n, except ``loglik``."""
+
+    mean: np.ndarray
+    var: np.ndarray
+    innovation: np.ndarray
+    process_scale: np.ndarray
+    n_eff: np.ndarray
+    phi_hat: np.ndarray
+    s_hat: np.ndarray
+    loglik: float = 0.0
+
+    def __len__(self) -> int:
+        return len(self.mean)
+
+
+class WalkingBank:
+    """The fully self-tuning walking filter: no numbers, only the class and a range.
+
+    A single :class:`WalkingFilter` still needs the pair ``(phi, s)``.  Those two
+    live on a *sloppy ridge* the data identifies only weakly (theory finding 14),
+    but tracking is nearly flat along it -- so the right move is not to pick a
+    point but to run a **bank** of walkers over a grid of ``(phi, s)`` and combine
+    them by online Bayesian model averaging.  The evidence concentrates weight
+    onto the ridge the data allows; the flat, sloppy direction is averaged out.
+    The caller commits only to the model *class* (a stationary AR(1) log-scale)
+    and a broad grid *range* -- both shape assumptions, no fitted numbers.
+
+    Each step, every walker absorbs the observation and returns its predictive
+    log-density; the mixture weight of walker i is ``w_i ∝ w_i^forget · p_i(x_t)``
+    (pure Bayes at ``forget = 1``).  The reported state is the weight-average of
+    the walkers, and ``phi_hat, s_hat`` report the posterior-mean ``(phi, s)`` --
+    what the data learned about the process.
+
+    Parameters
+    ----------
+    Q, s2 : float
+        Median process and measurement variance (as in :class:`WalkingFilter`).
+    phis, ss : sequence of float, optional
+        The grid over the AR(1) pair.  Defaults span a broad, dead-zone-free box
+        (persistence 0.7-0.95, swing 0.2-0.8 nats); widen them freely, since the
+        data down-weights the parts of the box it does not support.
+    nodes : int
+        Window nodes per walker (a resolution; see :class:`WalkingFilter`).
+    forget : float
+        Weight persistence in ``(0, 1]``; the ONE residual free parameter, and it
+        governs the slowest, least consequential channel in the model -- the drift
+        rate of the class pair ``(phi, s)``, which is both the slowest-varying
+        quantity and the one on the flat identification ridge, so its exact value
+        barely reaches the estimate (theory finding 16).  ``1.0`` is exact
+        Bayesian averaging: weights concentrate onto the ridge and then *freeze*
+        (a large sustained shift still re-selects, but only stickily).  The
+        default ``0.999`` is near-but-not-1: a ~1000-step memory that still
+        concentrates on the ridge yet keeps the bank able to re-select if the
+        process ``(phi, s)`` themselves drift.  Measured, ``forget`` anywhere in
+        ``[0.99, 1.0]`` gives identical tracking on both static and shifted scales
+        -- so a value near 1 will not cost a measurable amount against the
+        (unknown) optimum.  Set ``1.0`` for the clean-Bayes / static-class case.
+    """
+
+    def __init__(self, Q, s2, phis=None, ss=None, nodes=7, forget=0.999):
+        if not 0.0 < forget <= 1.0:
+            raise ValueError("forget must lie in (0, 1]")
+        phis = (0.70, 0.85, 0.95) if phis is None else tuple(float(p) for p in phis)
+        ss = (0.20, 0.30, 0.45, 0.60, 0.80) if ss is None else tuple(float(s) for s in ss)
+        if not phis or not ss:
+            raise ValueError("phis and ss must be non-empty")
+        self.Q, self.s2 = float(Q), float(s2)
+        self.nodes = int(nodes)
+        self.forget = float(forget)
+        self.filters = [WalkingFilter(Q, s2, phi=p, s=s, nodes=nodes)
+                        for p in phis for s in ss]
+        self.phi_arr = np.array([p for p in phis for _ in ss])
+        self.s_arr = np.array([s for _ in phis for s in ss])
+        self.reset()
+
+    def __repr__(self) -> str:
+        return (f"WalkingBank(Q={self.Q:.4g}, s2={self.s2:.4g}, "
+                f"{len(self.filters)} models, forget={self.forget})")
+
+    def reset(self, level: float | None = None, scale: float = 0.0) -> "WalkingBank":
+        """Clear every walker and reset the weights to uniform.  Chains."""
+        for f in self.filters:
+            f.reset(level=level, scale=scale)
+        self._logw = np.zeros(len(self.filters))     # uniform prior (unnormalised)
+        self.loglik = 0.0
+        return self
+
+    def update(self, x: float) -> BankStep:
+        """Absorb one observation; average the bank; return the combined state."""
+        M = len(self.filters)
+        prior = self._logw - _logsumexp(self._logw)  # normalised prior weights (log)
+        pw = np.exp(prior)
+        ll = np.empty(M); m = np.empty(M); P = np.empty(M)
+        sc = np.empty(M); innov = np.empty(M)
+        for i, f in enumerate(self.filters):
+            st = f.update(x)
+            ll[i] = st.loglik; m[i] = st.mean; P[i] = st.var
+            sc[i] = st.process_scale; innov[i] = st.innovation
+
+        if np.isfinite(x):
+            bank_ll = _logsumexp(prior + ll)         # mixture predictive density
+            self._logw = self.forget * prior + ll    # Bayes update (with forgetting)
+            innovbar = float(pw @ innov)
+        else:                                        # missing: propagate, no reweight
+            bank_ll = 0.0
+            self._logw = prior
+            innovbar = math.nan
+
+        post = np.exp(self._logw - _logsumexp(self._logw))
+        mbar = float(post @ m)
+        Pbar = float(post @ (P + (m - mbar) ** 2))   # mixture-collapse variance
+        scbar = float(post @ sc)
+        n_eff = float(1.0 / (post @ post))
+        self.loglik += bank_ll
+        return BankStep(mbar, Pbar, innovbar, bank_ll, scbar, n_eff,
+                        float(post @ self.phi_arr), float(post @ self.s_arr))
+
+    # ----------------------------------------------------------------- batch
+    def loglik_of(self, x) -> float:
+        """Marginal log-likelihood of a series under the mixture.  No state touch."""
+        return self._run(np.asarray(x, dtype=float), want=False)
+
+    def filter(self, x) -> BankResult:
+        """Run over a whole series from a fresh state.  Does not touch state."""
+        return self._run(np.asarray(x, dtype=float), want=True)
+
+    def _run(self, x: np.ndarray, want: bool):
+        if x.ndim != 1 or x.size == 0:
+            raise ValueError("x must be a non-empty 1-D array")
+        saved = ([f._pi for f in self.filters], [f._m for f in self.filters],
+                 [f._P for f in self.filters], [f.mu for f in self.filters],
+                 [f._Pmu for f in self.filters], self._logw.copy(), self.loglik)
+        try:
+            self.reset()
+            if not want:
+                total = 0.0
+                for v in x:
+                    total += self.update(v).loglik
+                return total
+            n = x.size
+            cols = ("mean", "var", "innovation", "process_scale", "n_eff", "phi_hat", "s_hat")
+            out = {c: np.empty(n) for c in cols}
+            total = 0.0
+            for i, v in enumerate(x):
+                st = self.update(v)
+                for c in cols:
+                    out[c][i] = getattr(st, c)
+                total += st.loglik
+            return BankResult(loglik=total, **out)
+        finally:
+            for f, pi, m, P, mu, Pmu in zip(self.filters, *saved[:5]):
+                f._pi, f._m, f._P, f.mu, f._Pmu = pi, m, P, mu, Pmu
+            self._logw, self.loglik = saved[5], saved[6]
