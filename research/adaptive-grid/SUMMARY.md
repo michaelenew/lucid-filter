@@ -557,23 +557,33 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     everything else fixed. Across a punishing battery (extreme up/down jumps,
     staircase, fast square-wave, slow/resonant/fast sinusoids, out-of-class AR(2)):
 
-    | regime | shipped−oracle RMSE gap |
-    |---|---|
-    | jumps / staircase | **24–31%** |
-    | oscillations / fast-switching | **8–13%** |
+    `shipped − oracle` came to 24–31% on jumps/staircase, 8–13% on oscillations —
+    but **that comparison is confounded**: shipped is a realized filter carrying
+    estimation noise, so `shipped − oracle` mixes the nonlinearity with the noise of
+    the Newton-from-data step. The fair isolation is **oracle vs oracle**, both fed
+    the true offset, differing *only* in the step response: `dmu = K·e` (linear
+    well) vs `dmu = K·(1−e⁻ᵉ)` (the well's Newton nonlinearity). That gap is the
+    pure cost of the stiffening, estimation perfect in both:
 
-    Two clear verdicts. **(a) It is not marginal** — unlike `forget`, the
-    nonlinearity leaves a real ~10–30% on the table, concentrated on transients
-    (the smaller oscillation gaps are because *both* arms are bandwidth-limited
-    there, so the nonlinearity is a minor part of a large shared error). **(b) It
-    is the offset ESTIMATION, not reach**: the capped and uncapped oracles are
-    within ~1% everywhere, so the cap costs only a few transient steps of RMSE.
-    This redirects the scale-space/expansion thread (findings 19 Open) — grid
-    *reach* is the wrong lever for RMSE; a better derived *offset estimator* on
-    uncorrupted inputs is the right one. But no such estimator has been realised
-    (finding 19: grid transforms corrupt; the dilation/scale-adaptation regresses
-    moderate precision). So the stiffening nonlinearity is a **live practical
-    target with an open realization**, not a theory-only revisit.
+    | regime | orac-linear | orac-with-NL | NL cost (var) |
+    |---|---|---|---|
+    | extreme jump **up** (+6) | 0.319 | 0.734 | **81%** |
+    | jump down / staircase / fast square / fast sine | — | — | **0% (NL ≤ linear)** |
+    | slow / resonant sine, AR(2) | — | — | 7–20% |
+
+    **Revised verdict: the nonlinearity is largely cheap, not "not marginal".** Its
+    cost is regime-specific and net near-neutral — the 24–31% of the naive
+    shipped−oracle gap was mostly *estimation noise*, not the force shape. It costs
+    badly in exactly one place: **loud upward jumps** (81% variance), where
+    `1−e⁻ᵉ` saturates at 1 and under-steps the ascent (it cannot even use the full
+    cap — the one genuinely reach-related cost). Everywhere else the Newton step is
+    a *good match to the asymmetric well* — aggressive on the flat quiet side
+    (helps descent), gentle on the steep loud side — so linearizing is a wash or
+    slightly *worse*. Net this puts the stiffening nonlinearity in the `forget`
+    bucket: **theory-interesting, practically minor**, worth revisiting only for the
+    loud-upward-reach regime, not as a general filter improvement. (The NL arm uses
+    the ideal `1−e⁻ᵉ`; grid corruption from finding 19 sits on top of this as a
+    separate realization issue.)
 
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
@@ -583,19 +593,19 @@ spacing lesson (`ode-filter/0047`).
 
 ## Open
 
-- **A better derived offset estimator on uncorrupted inputs (findings 19–20).**
-  The linearizing coordinate `e = log(I/I₀) = −log(1−g/I)` is exact but unusable on
-  a fixed finite grid, which corrupts `(g, I)` once the offset leaves the window.
-  Finding 20 shows this is worth ~10–30% RMSE (biggest on jumps) and that it is an
-  *estimation*, not a reach, problem (capped ≈ uncapped oracle) — so grid *reach*
-  (expansion/hopping, the dilation-score scale-adaptation) is the wrong lever, and
-  it regressed moderate precision besides. The right target is an offset estimator
-  that stays uncorrupted at large offset — e.g. a grid whose *resolution* follows
-  the posterior only when the posterior genuinely leaves the span (strict
-  edge-saturation gating, still untested), or a direct log-variance-ratio estimate
-  that does not route through the saturating grid Newton step. Needs a derived
-  trigger/ratio (not a threshold), then re-run the `0034` battery to see how much
-  of the oracle gap a *realisable* estimator recovers.
+- **The loud-upward-reach saturation (findings 19–20).** The oracle-vs-oracle test
+  (finding 20) narrowed the nonlinearity's practical cost to essentially one
+  regime: a large jump *up* into a loud regime, where the Newton response
+  `1−e⁻ᵉ` saturates at 1 and under-steps the ascent (81% of that scenario's error
+  variance; ≤0 everywhere else). This is a genuine but narrow cost, and it is
+  reach-shaped (the ascent cannot use the full cap). The clean fix is still the
+  derived coordinate `e = log(I/I₀) = −log(1−g/I)` — exact, but grid-corrupted
+  beyond the window span, so it needs uncorrupted `(g, I)` (a grid that reaches, or
+  a direct log-variance-ratio estimate that bypasses the saturating Newton step,
+  with a derived trigger/ratio). Given the cost is now known to be narrow, this is
+  a theory-completeness item alongside `forget`, not a general-purpose win; re-run
+  the `0034` oracle-vs-oracle test on any candidate to check it recovers the
+  loud-up-jump variance without regressing the regimes where NL currently helps.
 - **Uniform damping vs deep-quiet capture across the 84× observability swing
   (finding 18).** A fixed `q_mu` is critically damped only at the characteristic
   regime; a constant gain `K*` (`q_mu ∝ 1/I`) is uniformly damped but cannot
@@ -689,7 +699,7 @@ spacing lesson (`ode-filter/0047`).
   [`0031`](0031_derived_walk_loop.py) derived walk loop: critical damping K*=(1−φ)/4, zero free params ·
   [`0032`](0032_linearize_the_wall.py) force/observability map, linearizing-coordinate search ·
   [`0033`](0033_the_linearizing_coordinate.py) the linearizing coordinate is exact but grid-corrupted (finding 19) ·
-  [`0034`](0034_stress_battery.py) stress battery vs oracle: the nonlinearity costs 8–31% RMSE, it's estimation not reach (finding 20).
+  [`0034`](0034_stress_battery.py) stress battery + oracle-vs-oracle: the nonlinearity is largely cheap, costly only on loud up-jumps (finding 20).
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,

@@ -50,8 +50,12 @@ def _grid(phi, s, Q, s2, nodes):
     return lam, w0, T, gap
 
 
-def run(x, lam_true=None, phi=0.9, s=0.30, Q=1.0, s2=1.0, nodes=7, uncapped=False):
-    """Shipped filter (lam_true=None), or oracle stepping on the true offset."""
+def run(x, lam_true=None, phi=0.9, s=0.30, Q=1.0, s2=1.0, nodes=7, uncapped=False,
+        nl=False):
+    """Shipped (lam_true=None); or an oracle stepping on the true offset -- linearly
+    (nl=False) or through the well's Newton nonlinearity 1-e^-off (nl=True).  The
+    oracle-linear vs oracle-nl gap isolates the pure cost of the stiffening, since
+    both have perfect estimation (finding 20)."""
     lam, w0, T, gap = _grid(phi, s, Q, s2, nodes); cap = gap
     f0 = WalkingFilter(Q, s2, phi=phi, s=s); qmu = f0._qmu
     mu = 0.0; pi = None; m = None; P = None; Pmu = s * s
@@ -72,7 +76,8 @@ def run(x, lam_true=None, phi=0.9, s=0.30, Q=1.0, s2=1.0, nodes=7, uncapped=Fals
         if lam_true is None:                               # shipped: grid Newton step
             e_est = float(pi @ (0.5 * gS * (e2 / S - 1.0))) / info
         else:                                              # oracle: exact offset
-            e_est = float(lam_true[i]) - mu
+            off = float(lam_true[i]) - mu
+            e_est = (1.0 - float(np.exp(-min(off, 60.0)))) if nl else off
         R_mu = 1.0 / info; K_mu = Pmu / (Pmu + R_mu)
         step = K_mu * e_est
         mu += step if uncapped else float(np.clip(step, -cap, cap))
@@ -126,25 +131,27 @@ def main():
     names = list(paths.keys()) + ["AR(2) oscillatory"]
     NSEED = 30
 
-    rms = {n: {"ship": [], "orac": [], "orac_unc": []} for n in names}
+    rms = {n: {"ship": [], "orac": [], "orac_nl": []} for n in names}
     demo = {}                                               # one seed for the trajectory plot
     for sd in range(NSEED):
         rng = np.random.default_rng(4000 + sd)
         for n in names:
             lam = _ar2(rng, NT) if n == "AR(2) oscillatory" else paths[n]
             x = _data(rng, lam)
-            es = run(x); eo = run(x, lam_true=lam); eu = run(x, lam_true=lam, uncapped=True)
+            es = run(x); eo = run(x, lam_true=lam); enl = run(x, lam_true=lam, nl=True)
             rms[n]["ship"].append(_rmse(es, lam)); rms[n]["orac"].append(_rmse(eo, lam))
-            rms[n]["orac_unc"].append(_rmse(eu, lam))
+            rms[n]["orac_nl"].append(_rmse(enl, lam))
             if sd == 0:
                 demo[n] = (x, lam, es, eo)
 
-    print(f"{'scenario':26s} {'shipped':>8s} {'oracle':>8s} {'orac-unc':>9s} "
-          f"{'gap%':>6s} {'unc%':>6s}")
+    # shipped vs oracle CONFOUNDS the nonlinearity with estimation noise; the fair
+    # isolation is oracle-linear vs oracle-with-NL (both perfect offset, finding 20).
+    print(f"{'scenario':26s} {'shipped':>8s} {'orac-lin':>8s} {'orac-NL':>8s} "
+          f"{'NL cost(var%)':>13s}")
     for n in names:
-        sh = np.mean(rms[n]["ship"]); orc = np.mean(rms[n]["orac"]); unc = np.mean(rms[n]["orac_unc"])
-        print(f"{n:26s} {sh:8.3f} {orc:8.3f} {unc:9.3f} "
-              f"{100*(sh-orc)/sh:6.1f} {100*(sh-unc)/sh:6.1f}")
+        sh = np.mean(rms[n]["ship"]); li = np.mean(rms[n]["orac"]); nl = np.mean(rms[n]["orac_nl"])
+        cost = 100 * (1 - (li / nl) ** 2) if nl > li else 0.0
+        print(f"{n:26s} {sh:8.3f} {li:8.3f} {nl:8.3f} {cost:12.0f}%")
 
     # -------- trajectory figure: grey data-scale proxy, black truth, colored ests
     fig, ax = plt.subplots(2, 4, figsize=(21, 8.5))
