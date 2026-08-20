@@ -1,7 +1,9 @@
 # Current state
 
-**Exploration stage — a working single-channel move, no shipped change yet.**
-Making the noise-channel quadrature grids **move**.
+**Shipped: `statfilter.WalkingFilter` and `WalkingBank`** (findings 12, 15–18) —
+the single-channel moving grid, packaged. This file records the full arc, from the
+first probes to the shipped filters. Making the noise-channel quadrature grids
+**move**.
 
 ## The idea
 
@@ -447,6 +449,156 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     derivation is a theory task (see Open); practically `forget ≈ 0.999` will not
     differ measurably from it.
 
+17. **The stiff wall's last bite: set the gain from the regime's steady
+    observability, not the local curvature** ([`0030`](0030_stiff_wall_gain.py),
+    figure `0029-stiff-wall-gain.png`). The tracker descends the asymmetric well
+    `D(x)=½(eˣ−1−x)` (finding 11) — exponential wall on the loud side, flat
+    plateau on the quiet side — so the per-step Fisher `I` (the observability the
+    gain is built from) swings ~**20×** across the reachable range. Finding 10's
+    rule `q_mu = r*/I` used the **instantaneous** `I`, which over-reacts to that
+    swing: where `I` is momentarily low (a quiet stretch, the soft plateau)
+    `r*/I` blows the drift variance up, the gain over-shoots and chatters. Two
+    consequences, both measured and both real defects of the shipped filter:
+    - **it fails to capture quiet regimes** — a jump *down* to `d=−2` was captured
+      **~8%** of the time (it chatters instead of settling);
+    - **it tracks fluctuations worse** — steady-regime RMSE ~10% above a steady gain.
+
+    The first fix used a slow EMA of `I` (`q_mu = r*/Ī`, rate `(1−φ)/30`, seed
+    `0.4`). It worked (quiet capture 8%→95%) but introduced **three un-derived
+    constants** — `r*`, the seed `0.4`, and the rate `30`. Asked "where did the
+    `30` come from?", a sweep showed the claim of insensitivity was wrong: larger
+    divisor was monotonically better and the limit (no EMA, a *constant* `q_mu`)
+    was strictly best. **The EMA was an over-engineered wrong turn** — superseded
+    by the derivation in finding 18. The diagnosis stands (the loop gain must not
+    be built from the well's *local* curvature); the fix was replaced by a
+    first-principles one.
+
+18. **The walk loop is parameter-free: critical damping pins the gain**
+    ([`0031`](0031_derived_walk_loop.py), figure `0030-derived-walk-loop.png`).
+    The window-centre `μ` integrates the grid-shift score, but the grid state
+    relaxes only at ~`φ` per step, so the walk is a **second-order loop**. Writing
+    the error `e=λ−μ` and the grid's lagged offset `y`:
+    `e_t = e_{t−1} − K y_{t−1}`, `y_t = φ y_{t−1} + (1−φ) e_{t−1}`, whose
+    characteristic equation `z² − (1+φ)z + φ + K(1−φ) = 0` has a double root
+    (critical damping — fastest response, no overshoot) exactly when
+    **`K* = (1−φ)/4`** — a pure function of `φ`, everything else cancelling. The
+    drift variance that settles the μ-Kalman to that steady gain is
+    **`q_mu = K*²/(I_char(1−K*))`**, fixed once at reset from `K*` and `I_char`,
+    the grid's steady Fisher information. The `K*=(1−φ)/4` result is verified on
+    the exact linear loop — the overshoot-onset gain matches `(1−φ)/4` to <1% for
+    `φ ≤ 0.9` (it drifts high only at `φ ≥ 0.95`, where discrete-time effects
+    enter). `I_char` is evaluated at the **scale-free regime** (effective process
+    variance = `s2`, SNR=1) so it stays `Q`-invariant and does not break the
+    wrong-`Q` absorption (finding 9); it is derived, not the hardcoded `0.4`, and
+    matches the empirical steady observability (`0.076` at `s=0.30`). The cold-start
+    prior is the AR(1) stationary variance **`Pmu₀ = s²`** (before data, the regime
+    is `N(0, s²)`). This eliminates **all five** tuned constants (`r*`, `0.4`, `30`,
+    `25`, and the EMA), and the filter performs comparably: capture within a few
+    points of the tuned filter, steady-tracking RMSE ~10% higher (the honest cost
+    of critical damping over the old min-variance-leaning gain), and cold-start
+    overshoot **164→20%** (from `Pmu₀=s²`).
+
+    **What it does not do — the stiff wall is not fully flattened.** The
+    natural-gradient step and the step cap tame *large* excursions (0010's servo
+    overshot ~100% on a small step and was cap-limited on large ones; here large
+    mid-stream steps settle with ~0% overshoot). But a *fixed* `q_mu` is critically
+    damped only at the reference regime: because the grid observability `I` swings
+    **~84×** across the well (0.005 quiet → 0.41 loud), the steady gain
+    `K=Pmu/(Pmu+1/I)` is **over-driven where `I` is high** (a small step *up* into a
+    loud regime overshoots ~150% in the mean) and sluggish where `I` is low. Perfect
+    uniform damping needs a *constant* gain `K*` at every regime — i.e. `q_mu ∝ 1/I`
+    — but that rule inflates `q_mu` on the quiet plateau and loses deep-quiet capture
+    (`d=−2` capture → 0%). So the 84× asymmetry forces a genuine trade between
+    uniform damping and quiet-regime acquisition; the shipped filter takes the
+    capture side (fixed `q_mu`, critical at the characteristic regime), and the
+    residual regime-dependent damping is the honest fingerprint of the stiff wall,
+    not a tunable knob. Closing that trade with zero parameters is an Open.
+
+19. **The linearizing coordinate is derived and exact — and a finite grid cannot
+    realise it** ([`0032`](0032_linearize_the_wall.py) map,
+    [`0033`](0033_the_linearizing_coordinate.py) theory, figures
+    `0031-linearize-the-wall`, `0032-linearizing-coordinate`). To remove the
+    stiffening well's amplitude-dependent damping (0010 panel c) with a *derived*
+    (not fitted) force-linearization: for the scale family the score is
+    `g(e)=½(eᵉ−1)` and the Fisher `I(e)=½eᵉ`, so the offset is recovered exactly by
+    **`e = log(I/I₀) = −log(1 − g/I)`** — two identities, verified to machine zero,
+    with no free constant. Stepping `μ` by `γ·e` makes the force `de/dt=−γe` linear
+    at every amplitude, so finding-18's `K*=(1−φ)/4` critical damping would hold
+    *globally*, not just at the reference regime. Neither the raw score (explodes
+    loud) nor the natural gradient `g/I=1−e⁻ᵉ` (saturates loud, explodes quiet) is
+    the offset; only these transforms are.
+    **The obstacle is the grid, and it is fundamental, not a tuning failure.** The
+    identities take the *ideal* `(g, I)`. A finite window of half-span `H` supplies
+    them only while `|e| ≤ H`; beyond, every node reports the wrong variance, the
+    prefactors collapse, and the measured `g/I` stops obeying `1−e⁻ᵉ` — it
+    *overshoots* the ideal ceiling of 1 (measured `~66` at `e=+5`). Feeding that
+    into `−log(1−g/I)` clips at the pole and emits huge steps; applied in the
+    walking filter it blows the loud side up (mid-stream overshoot 21%→130%,
+    tracking 0.48→1.25). Every empirical transform tried (`asinh(g/I_char)`,
+    `asinh(g/info)`, soft-threshold blends) failed the same way — because they fit
+    scale factors to corrupted inputs, exactly the non-defensible move to avoid.
+    **Consequence:** the amplitude-dependent damping *inside* the window span is
+    already ~removed (the shipped Newton step `g/info` matches the exact coordinate
+    to first order at `e=0`, and empirically stays ~linear, R²≈0.97, for `|e|≲2`);
+    *beyond* the span it is a grid-**reach** problem, not a force-shape one, and no
+    transform of grid quantities can fix it. The theoretically clean cure is to
+    keep the offset inside the span — an expanding/hopping grid (the adaptive-grid
+    thesis) so the derived transform always sees uncorrupted `(g, I)` — recorded as
+    an Open. The residual overshoot the shipped filter still shows at *moderate*
+    in-span amplitudes is the separate finding-18 gain/observability trade, not the
+    force nonlinearity.
+
+20. **How much the stiffening nonlinearity actually costs — a stress battery with
+    an oracle upper bound** ([`0034`](0034_stress_battery.py), figure
+    `0033-stress-battery`). The oracle is the shipped filter in every respect
+    (grid, level filter, drift variance, cap) *except* the walk step is fed the
+    **true** offset `lam_true − mu` — a perfect force-linearization on uncorrupted
+    inputs, so `shipped − oracle` is exactly the cost of the nonlinearity with
+    everything else fixed. Across a punishing battery (extreme up/down jumps,
+    staircase, fast square-wave, slow/resonant/fast sinusoids, out-of-class AR(2)):
+
+    `shipped − oracle` came to 24–31% on jumps/staircase, 8–13% on oscillations —
+    but **that comparison is confounded**: shipped is a realized filter carrying
+    estimation noise, so `shipped − oracle` mixes the nonlinearity with the noise of
+    the Newton-from-data step. The fair isolation is **oracle vs oracle**, both fed
+    the true offset, differing *only* in the step response: `dmu = K·e` (linear
+    well) vs `dmu = K·(1−e⁻ᵉ)` (the well's Newton nonlinearity). That gap is the
+    pure cost of the stiffening, estimation perfect in both:
+
+    | regime | orac-linear | orac-with-NL | apparent NL "cost" |
+    |---|---|---|---|
+    | extreme jump **up** (+6) | 0.319 | 0.734 | linear settles 13 vs 70 steps |
+    | jump down / staircase / fast square / fast sine | ~0.4–1.3 | slightly lower | *(confound, see below)* |
+    | slow / resonant sine, AR(2) | — | — | linear better by 7–20% |
+
+    First pass read this as "the nonlinearity is largely cheap — NL ≤ linear on
+    most scenarios." **That was wrong**, and the trajectories say why. Two separate
+    mechanisms were tangled in the oracle-NL numbers:
+    - **Loud up-jump**: linear settles in **13 steps**, NL in **70**, same steady
+      state — the Newton response `1−e⁻ᵉ` saturates at 1 and crawls, while the
+      linear step uses the full cap. Handling the nonlinearity is a clean ~5×
+      faster ascent. Always favours linear.
+    - **Quiet down-jump**: NL *looked* better, but *both* oracles stalled ~0.3–0.44
+      **above** the truth despite a perfect offset — that stall is finding-18's
+      **gain collapse** (`info→0` in a quiet regime → `K_mu→0`, the step dies). NL
+      only shoved μ further through it via its exponentially-larger magnitude
+      `1−e^{|e|}`. Give the linear oracle full gain (`K_mu=1`, trusting the perfect
+      offset) and it reaches `−3` **exactly** (residual `−0.003`) — so
+      linear+proper-gain beats NL there too. The "NL wins on quiet" was NL's
+      over-aggression masking a *different* bug, not a benefit of the nonlinearity.
+
+    **Corrected verdict: the stiffening nonlinearity is not beneficial anywhere;
+    handling it (stepping linearly) is genuinely better, clearly so on loud
+    up-jumps.** It is *not* a `forget`-bucket footnote. But the benefit is
+    concentrated on large-jump transient reach, and it remains gated on the
+    finding-19 realization problem (the exact linearizing estimate is
+    grid-corrupted). So: a real improvement target for jump/transient response, with
+    an open realization — and entangled with the finding-18 quiet-gain collapse,
+    which should be fixed alongside. The naive 24–31% shipped−oracle gap of the
+    first pass was still mostly estimation noise; the clean signal is the up-jump
+    reach and the quiet-gain collapse, both realization/gain issues rather than a
+    cost of the force shape itself.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -455,6 +607,32 @@ spacing lesson (`ode-filter/0047`).
 
 ## Open
 
+- **The stiffening nonlinearity — BANKED as a stalled direction (findings 19–20).**
+  Status: not being pursued. The oracle-vs-oracle test (finding 20) confirms real
+  headroom exists — stepping in the true linear coordinate beats the Newton
+  response on loud up-jumps (~5× faster settle; Newton saturates at 1 and crawls)
+  and, once the finding-18 quiet-gain collapse is separated out, on quiet descents
+  too. The derived coordinate is exact: `e = log(I/I₀) = −log(1−g/I)`. **But every
+  realisable route to it regressed the filter.** The transforms (`asinh`,
+  soft-threshold, the exact `−log(1−g/I)`) blow up because the finite grid corrupts
+  `(g, I)` beyond the window span (finding 19); the scale-space / dilation
+  adaptation reached faster but wrecked moderate precision. The honest reading
+  (concurred by the maintainer): an attempt to *add information* to the filter made
+  it worse across the board, which is evidence the current grid **structure is near
+  the saturation point of what it can extract** — the headroom is real but not
+  reachable without a structural change, not a tuning tweak. Re-open only with a
+  genuinely new structure (a grid that reaches with uncorrupted `(g, I)`, or a
+  direct log-variance-ratio estimate bypassing the grid Newton step); pair any
+  candidate with the finding-18 quiet-gain fix below, since the two are entangled,
+  and re-score on the `0034` oracle-vs-oracle battery.
+- **Uniform damping vs deep-quiet capture across the 84× observability swing
+  (finding 18) — also banked, same structural wall.** A fixed `q_mu` is critically
+  damped only at the characteristic regime; a constant gain `K*` (`q_mu ∝ 1/I`) is
+  uniformly damped but cannot acquire quiet regimes (`info→0 ⇒ K_mu→0`). The trade
+  is plausibly the same "slowest channel" residual as `forget` (finding 16). The
+  shipped filter takes the capture side; the residual regime-dependent overshoot is
+  characterised in `0031`. Entangled with the nonlinearity item above and banked
+  with it.
 - **Eliminate `forget` from the AR(1) shape (finding 16).** There is one residual
   free parameter — the bank's weight persistence — but it governs the drift rate
   of `(φ, s)`, the slowest and least consequential channel (on the flat ridge).
@@ -533,8 +711,14 @@ spacing lesson (`ode-filter/0047`).
   [`0026`](0026_grid_the_nuisance.py) grid the nuisance (φ,s) ·
   [`0027`](0027_ridge_theory.py) ridge theory: identified-but-sloppy, block is the class ·
   [`0028`](0028_result_bank.py) shipped: WalkingBank (no numbers, just the class) ·
-  [`0029`](0029_forget_the_last_knob.py) the last knob (forget) and where it lives.
+  [`0029`](0029_forget_the_last_knob.py) the last knob (forget) and where it lives ·
+  [`0030`](0030_stiff_wall_gain.py) stiff-wall gain (steady observability; EMA, superseded) ·
+  [`0031`](0031_derived_walk_loop.py) derived walk loop: critical damping K*=(1−φ)/4, zero free params ·
+  [`0032`](0032_linearize_the_wall.py) force/observability map, linearizing-coordinate search ·
+  [`0033`](0033_the_linearizing_coordinate.py) the linearizing coordinate is exact but grid-corrupted (finding 19) ·
+  [`0034`](0034_stress_battery.py) stress battery + oracle-vs-oracle: stepping linearly beats the Newton response (up-jump reach; quiet win is a gain-collapse confound) (finding 20).
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`, `0028-forget-the-last-knob`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`, `0028-forget-the-last-knob`, `0029-stiff-wall-gain`, `0030-derived-walk-loop`,
+  `0031-linearize-the-wall`, `0032-linearizing-coordinate`, `0033-stress-battery`.

@@ -26,4 +26,4 @@ from .walking import (WalkingFilter, WalkResult, WalkStep,
 __all__ = ["AdaptiveFilter", "FilterResult", "Params", "Step",
            "WalkingFilter", "WalkResult", "WalkStep",
            "WalkingBank", "BankStep", "BankResult"]
-__version__ = "1.2.0"
+__version__ = "1.3.0"
