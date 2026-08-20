@@ -118,7 +118,7 @@ sets it apart:
 |---|---|---|
 | noise-scale level | fit offline, then frozen | **walked online**, unbounded reach |
 | step gain | from fitted `Q, s2` | **read off the grid** each step (Fisher info `I`) |
-| drift variance `q_mu` | — | **`r*/I`**, the critical-damping point (`r*=3.5e-4`) |
+| drift variance `q_mu` | — | **`r*/Ī`**, critical damping at the regime's steady observability |
 | grid spacing | `order` (resolution) | **`1.5 s`**, the resolution limit |
 | what you supply | six numbers via `fit(x)` | **two**: `phi, s` (+ base `Q, s2`) |
 

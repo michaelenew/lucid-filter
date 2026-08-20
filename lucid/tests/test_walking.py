@@ -205,3 +205,26 @@ def test_bank_forget_keeps_models_alive():
     r_pure = WalkingBank(Q=1.0, s2=1.0, forget=1.0).filter(x)
     r_forget = WalkingBank(Q=1.0, s2=1.0, forget=0.98).filter(x)
     assert r_forget.n_eff[-1] > r_pure.n_eff[-1]
+
+
+def test_captures_a_quiet_destination():
+    """A jump DOWN to a quiet (low-observability) regime is captured -- the drift
+    variance uses the regime's steady observability Ibar, not the instantaneous
+    curvature, so it does not over-gain and chatter in the quiet well (finding 17)."""
+    rng = np.random.default_rng(31)
+    NT, JT, D = 1000, 100, -2.0
+    lam = np.zeros(NT); lam[JT:] = D
+    step = rng.standard_normal(NT) * np.sqrt(np.exp(lam))
+    x = np.cumsum(step) + rng.standard_normal(NT)
+    r = WalkingFilter(Q=1.0, s2=1.0, phi=0.9, s=0.30).filter(x)
+    assert abs(np.mean(r.process_scale[-200:]) - D) < 0.6
+
+
+def test_drift_variance_uses_steady_observability():
+    """Ibar is seeded at the characteristic observability and evolves slowly."""
+    f = WalkingFilter(Q=1.0, s2=1.0, phi=0.9, s=0.30)
+    assert f._Ibar == pytest.approx(0.4)                 # characteristic seed
+    assert 0.0 < f._ibar_rate < 0.02                     # a slow, regime-level rate
+    x, _ = scale_series(300, 1.0, seed=32)
+    f.filter(x)                                          # stateless run must restore Ibar
+    assert f._Ibar == pytest.approx(0.4)

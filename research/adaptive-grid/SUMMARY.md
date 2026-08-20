@@ -1,7 +1,9 @@
 # Current state
 
-**Exploration stage — a working single-channel move, no shipped change yet.**
-Making the noise-channel quadrature grids **move**.
+**Shipped: `statfilter.WalkingFilter` and `WalkingBank`** (findings 12, 15–17) —
+the single-channel moving grid, packaged. This file records the full arc, from the
+first probes to the shipped filters. Making the noise-channel quadrature grids
+**move**.
 
 ## The idea
 
@@ -447,6 +449,32 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     derivation is a theory task (see Open); practically `forget ≈ 0.999` will not
     differ measurably from it.
 
+17. **The stiff wall's last bite: set the gain from the regime's steady
+    observability, not the local curvature** ([`0030`](0030_stiff_wall_gain.py),
+    figure `0029-stiff-wall-gain.png`). The tracker descends the asymmetric well
+    `D(x)=½(eˣ−1−x)` (finding 11) — exponential wall on the loud side, flat
+    plateau on the quiet side — so the per-step Fisher `I` (the observability the
+    gain is built from) swings ~**20×** across the reachable range. Finding 10's
+    rule `q_mu = r*/I` used the **instantaneous** `I`, which over-reacts to that
+    swing: where `I` is momentarily low (a quiet stretch, the soft plateau)
+    `r*/I` blows the drift variance up, the gain over-shoots and chatters. Two
+    consequences, both measured and both real defects of the shipped filter:
+    - **it fails to capture quiet regimes** — a jump *down* to `d=−2` was captured
+      **~8%** of the time (it chatters instead of settling);
+    - **it tracks fluctuations worse** — steady-regime RMSE ~10% above a steady gain.
+
+    The fix (now in `WalkingFilter`): the per-step gradient step and the
+    Cramér-Rao down-weight `R=1/I` keep the instantaneous `I`, but the **drift
+    variance** uses a slow, regime-level average — `q_mu = r*/Ī`, `Ī` an EMA of `I`
+    at rate `(1−φ)/30`, seeded at the characteristic locked value `0.4`. It is
+    insensitive to the rate (every slow value beats instantaneous) and does not
+    add a tunable knob (the timescale scales with the class persistence `1/(1−φ)`).
+    Measured after the fix: quiet capture `d=−2` **~95%** (loud capture still 100%),
+    tracking RMSE down ~4–5% across scale swings, and a loud→quiet regime shift
+    that the instantaneous rule failed outright (new-regime RMSE **1.72 → 0.62**).
+    The principle: don't build the loop gain from the well's *local* curvature —
+    the nonlinearity makes that jitter; use the regime's steady curvature.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -533,8 +561,9 @@ spacing lesson (`ode-filter/0047`).
   [`0026`](0026_grid_the_nuisance.py) grid the nuisance (φ,s) ·
   [`0027`](0027_ridge_theory.py) ridge theory: identified-but-sloppy, block is the class ·
   [`0028`](0028_result_bank.py) shipped: WalkingBank (no numbers, just the class) ·
-  [`0029`](0029_forget_the_last_knob.py) the last knob (forget) and where it lives.
+  [`0029`](0029_forget_the_last_knob.py) the last knob (forget) and where it lives ·
+  [`0030`](0030_stiff_wall_gain.py) stiff-wall gain (steady observability).
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`, `0028-forget-the-last-knob`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`, `0028-forget-the-last-knob`, `0029-stiff-wall-gain`.

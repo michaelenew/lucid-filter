@@ -22,8 +22,10 @@ every other filter in this package:
     grid-shift score, walking (with unbounded reach) to the truth;
   * **how fast to correct it** -- the step gain is a scalar Kalman gain built from
     the per-step Fisher information ``I`` read straight off the grid, with the
-    drift variance set online to the critical-damping point ``q_mu = r*/I``
-    (``r* = 3.5e-4``: the fastest tracking with no overshoot);
+    drift variance set to the critical-damping point ``q_mu = r*/Ibar``
+    (``r* = 3.5e-4``: fastest tracking with no overshoot), where ``Ibar`` is the
+    REGIME's slowly-averaged observability -- using the instantaneous ``I`` there
+    over-reacts to the asymmetric well's curvature swings and chatters (finding 17);
   * **the grid spacing** -- ``gap = 1.5 s`` (nodes at ~2/3 of a posterior width,
     the resolution limit: fine enough for no dead zone, no finer);
   * **the step cap** -- ``mu_cap = gap`` keeps successive windows overlapping, so
@@ -70,6 +72,8 @@ def _logsumexp(a: np.ndarray) -> float:
 _R_STAR = 3.5e-4        # critical-damping tracking index r = q_mu * I (finding 10)
 _GAP_FACTOR = 1.5       # gap = 1.5 * s: the resolution/Sparrow spacing (finding 11)
 _RIDGE = 1e-4           # stabiliser on the Fisher information before dividing
+_I_CHAR = 0.4           # characteristic locked observability; seeds Ibar (finding 17)
+                        # so q_mu starts well-damped and only loosens in quiet regimes
 
 
 # --------------------------------------------------------------------- results
@@ -143,6 +147,13 @@ class WalkingFilter:
         self.nodes = int(nodes)
         self.gap = _GAP_FACTOR * self.s                 # resolution spacing (finding 11)
         self.cap = self.gap                             # overlap: <= one node / step
+        # The drift variance is set from the REGIME's steady observability, not the
+        # per-step one: q_mu = r*/Ibar with Ibar a slow EMA of the grid Fisher I
+        # (finding 17).  Reacting to the instantaneous I over-gains in low-curvature
+        # (quiet) stretches of the asymmetric well -- it chatters, tracks worse, and
+        # loses quiet regimes.  The averaging timescale scales with the regime's own
+        # persistence 1/(1-phi); the result is insensitive to the constant.
+        self._ibar_rate = float((1.0 - self.phi) / 30.0)
         self._build()
         self.reset()
 
@@ -170,6 +181,7 @@ class WalkingFilter:
         self._P = None
         self.mu = float(scale)
         self._Pmu = 25.0            # diffuse start on the scale: washes out in a few steps
+        self._Ibar = _I_CHAR        # running estimate of the regime's steady observability
         self.loglik = 0.0
         return self
 
@@ -216,12 +228,17 @@ class WalkingFilter:
         # one node for overlap, with the drift variance set to critical damping.
         gS = Qg / S
         grad = float(pi @ (0.5 * gS * (e2 / S - 1.0)))
-        info = float(pi @ (0.5 * gS * gS)) + _RIDGE
+        info = float(pi @ (0.5 * gS * gS)) + _RIDGE           # per-step curvature
+        # R (Cramer-Rao down-weight) and the natural-gradient step use the
+        # instantaneous curvature; only the drift variance q_mu uses the slow,
+        # regime-level Ibar (finding 17) so it does not over-react to the well's
+        # local curvature swings.
+        self._Ibar += self._ibar_rate * (info - self._Ibar)
         R_mu = 1.0 / info
         K_mu = self._Pmu / (self._Pmu + R_mu)
         dmu = float(np.clip(K_mu * (grad / info), -self.cap, self.cap))
         self.mu += dmu
-        self._Pmu = (1.0 - K_mu) * self._Pmu + _R_STAR * R_mu     # q_mu = r*/I
+        self._Pmu = (1.0 - K_mu) * self._Pmu + _R_STAR / self._Ibar   # q_mu = r*/Ibar
 
         self._pi, self._m, self._P = pi, m_new, P_new
         self.loglik += ll
@@ -240,7 +257,7 @@ class WalkingFilter:
     def _run(self, x: np.ndarray, want: bool):
         if x.ndim != 1 or x.size == 0:
             raise ValueError("x must be a non-empty 1-D array")
-        saved = (self._pi, self._m, self._P, self.mu, self._Pmu, self.loglik)
+        saved = (self._pi, self._m, self._P, self.mu, self._Pmu, self._Ibar, self.loglik)
         try:
             self.reset()
             if not want:
@@ -263,7 +280,7 @@ class WalkingFilter:
                 total += st.loglik
             return WalkResult(loglik=total, **out)
         finally:
-            (self._pi, self._m, self._P, self.mu, self._Pmu, self.loglik) = saved
+            (self._pi, self._m, self._P, self.mu, self._Pmu, self._Ibar, self.loglik) = saved
 
 
 # --------------------------------------------------------------------- the bank
@@ -414,7 +431,8 @@ class WalkingBank:
             raise ValueError("x must be a non-empty 1-D array")
         saved = ([f._pi for f in self.filters], [f._m for f in self.filters],
                  [f._P for f in self.filters], [f.mu for f in self.filters],
-                 [f._Pmu for f in self.filters], self._logw.copy(), self.loglik)
+                 [f._Pmu for f in self.filters], [f._Ibar for f in self.filters],
+                 self._logw.copy(), self.loglik)
         try:
             self.reset()
             if not want:
@@ -433,6 +451,6 @@ class WalkingBank:
                 total += st.loglik
             return BankResult(loglik=total, **out)
         finally:
-            for f, pi, m, P, mu, Pmu in zip(self.filters, *saved[:5]):
-                f._pi, f._m, f._P, f.mu, f._Pmu = pi, m, P, mu, Pmu
-            self._logw, self.loglik = saved[5], saved[6]
+            for f, pi, m, P, mu, Pmu, Ibar in zip(self.filters, *saved[:6]):
+                f._pi, f._m, f._P, f.mu, f._Pmu, f._Ibar = pi, m, P, mu, Pmu, Ibar
+            self._logw, self.loglik = saved[6], saved[7]
