@@ -565,25 +565,39 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     well) vs `dmu = K·(1−e⁻ᵉ)` (the well's Newton nonlinearity). That gap is the
     pure cost of the stiffening, estimation perfect in both:
 
-    | regime | orac-linear | orac-with-NL | NL cost (var) |
+    | regime | orac-linear | orac-with-NL | apparent NL "cost" |
     |---|---|---|---|
-    | extreme jump **up** (+6) | 0.319 | 0.734 | **81%** |
-    | jump down / staircase / fast square / fast sine | — | — | **0% (NL ≤ linear)** |
-    | slow / resonant sine, AR(2) | — | — | 7–20% |
+    | extreme jump **up** (+6) | 0.319 | 0.734 | linear settles 13 vs 70 steps |
+    | jump down / staircase / fast square / fast sine | ~0.4–1.3 | slightly lower | *(confound, see below)* |
+    | slow / resonant sine, AR(2) | — | — | linear better by 7–20% |
 
-    **Revised verdict: the nonlinearity is largely cheap, not "not marginal".** Its
-    cost is regime-specific and net near-neutral — the 24–31% of the naive
-    shipped−oracle gap was mostly *estimation noise*, not the force shape. It costs
-    badly in exactly one place: **loud upward jumps** (81% variance), where
-    `1−e⁻ᵉ` saturates at 1 and under-steps the ascent (it cannot even use the full
-    cap — the one genuinely reach-related cost). Everywhere else the Newton step is
-    a *good match to the asymmetric well* — aggressive on the flat quiet side
-    (helps descent), gentle on the steep loud side — so linearizing is a wash or
-    slightly *worse*. Net this puts the stiffening nonlinearity in the `forget`
-    bucket: **theory-interesting, practically minor**, worth revisiting only for the
-    loud-upward-reach regime, not as a general filter improvement. (The NL arm uses
-    the ideal `1−e⁻ᵉ`; grid corruption from finding 19 sits on top of this as a
-    separate realization issue.)
+    First pass read this as "the nonlinearity is largely cheap — NL ≤ linear on
+    most scenarios." **That was wrong**, and the trajectories say why. Two separate
+    mechanisms were tangled in the oracle-NL numbers:
+    - **Loud up-jump**: linear settles in **13 steps**, NL in **70**, same steady
+      state — the Newton response `1−e⁻ᵉ` saturates at 1 and crawls, while the
+      linear step uses the full cap. Handling the nonlinearity is a clean ~5×
+      faster ascent. Always favours linear.
+    - **Quiet down-jump**: NL *looked* better, but *both* oracles stalled ~0.3–0.44
+      **above** the truth despite a perfect offset — that stall is finding-18's
+      **gain collapse** (`info→0` in a quiet regime → `K_mu→0`, the step dies). NL
+      only shoved μ further through it via its exponentially-larger magnitude
+      `1−e^{|e|}`. Give the linear oracle full gain (`K_mu=1`, trusting the perfect
+      offset) and it reaches `−3` **exactly** (residual `−0.003`) — so
+      linear+proper-gain beats NL there too. The "NL wins on quiet" was NL's
+      over-aggression masking a *different* bug, not a benefit of the nonlinearity.
+
+    **Corrected verdict: the stiffening nonlinearity is not beneficial anywhere;
+    handling it (stepping linearly) is genuinely better, clearly so on loud
+    up-jumps.** It is *not* a `forget`-bucket footnote. But the benefit is
+    concentrated on large-jump transient reach, and it remains gated on the
+    finding-19 realization problem (the exact linearizing estimate is
+    grid-corrupted). So: a real improvement target for jump/transient response, with
+    an open realization — and entangled with the finding-18 quiet-gain collapse,
+    which should be fixed alongside. The naive 24–31% shipped−oracle gap of the
+    first pass was still mostly estimation noise; the clean signal is the up-jump
+    reach and the quiet-gain collapse, both realization/gain issues rather than a
+    cost of the force shape itself.
 
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
@@ -593,19 +607,21 @@ spacing lesson (`ode-filter/0047`).
 
 ## Open
 
-- **The loud-upward-reach saturation (findings 19–20).** The oracle-vs-oracle test
-  (finding 20) narrowed the nonlinearity's practical cost to essentially one
-  regime: a large jump *up* into a loud regime, where the Newton response
-  `1−e⁻ᵉ` saturates at 1 and under-steps the ascent (81% of that scenario's error
-  variance; ≤0 everywhere else). This is a genuine but narrow cost, and it is
-  reach-shaped (the ascent cannot use the full cap). The clean fix is still the
-  derived coordinate `e = log(I/I₀) = −log(1−g/I)` — exact, but grid-corrupted
-  beyond the window span, so it needs uncorrupted `(g, I)` (a grid that reaches, or
-  a direct log-variance-ratio estimate that bypasses the saturating Newton step,
-  with a derived trigger/ratio). Given the cost is now known to be narrow, this is
-  a theory-completeness item alongside `forget`, not a general-purpose win; re-run
-  the `0034` oracle-vs-oracle test on any candidate to check it recovers the
-  loud-up-jump variance without regressing the regimes where NL currently helps.
+- **Realise the linear step for jump/transient reach (findings 18–20).** The
+  oracle-vs-oracle test (finding 20) shows stepping linearly beats the Newton
+  response clearly on loud up-jumps (settles ~5× faster — Newton saturates at 1
+  and crawls) and, once the finding-18 quiet-gain collapse is accounted for, on
+  quiet descents too (linear+full-gain reaches the truth exactly; the Newton
+  step's apparent quiet win was only its over-aggression masking that collapse).
+  So the clean target is the derived linear coordinate
+  `e = log(I/I₀) = −log(1−g/I)` — exact, but grid-corrupted beyond the window span
+  (finding 19), so it needs uncorrupted `(g, I)`: a grid that reaches, or a direct
+  log-variance-ratio estimate that bypasses the saturating Newton step, with a
+  derived trigger/ratio. **Pair it with the finding-18 quiet-gain fix** — the two
+  are entangled (the Newton over-aggression currently compensates the collapse, so
+  fixing one without the other can regress quiet capture). Re-run the `0034`
+  oracle-vs-oracle test on any candidate. This is a real jump/transient-response
+  improvement, not a `forget`-bucket footnote.
 - **Uniform damping vs deep-quiet capture across the 84× observability swing
   (finding 18).** A fixed `q_mu` is critically damped only at the characteristic
   regime; a constant gain `K*` (`q_mu ∝ 1/I`) is uniformly damped but cannot
@@ -699,7 +715,7 @@ spacing lesson (`ode-filter/0047`).
   [`0031`](0031_derived_walk_loop.py) derived walk loop: critical damping K*=(1−φ)/4, zero free params ·
   [`0032`](0032_linearize_the_wall.py) force/observability map, linearizing-coordinate search ·
   [`0033`](0033_the_linearizing_coordinate.py) the linearizing coordinate is exact but grid-corrupted (finding 19) ·
-  [`0034`](0034_stress_battery.py) stress battery + oracle-vs-oracle: the nonlinearity is largely cheap, costly only on loud up-jumps (finding 20).
+  [`0034`](0034_stress_battery.py) stress battery + oracle-vs-oracle: stepping linearly beats the Newton response (up-jump reach; quiet win is a gain-collapse confound) (finding 20).
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
