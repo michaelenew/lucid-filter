@@ -607,31 +607,32 @@ spacing lesson (`ode-filter/0047`).
 
 ## Open
 
-- **Realise the linear step for jump/transient reach (findings 18–20).** The
-  oracle-vs-oracle test (finding 20) shows stepping linearly beats the Newton
-  response clearly on loud up-jumps (settles ~5× faster — Newton saturates at 1
-  and crawls) and, once the finding-18 quiet-gain collapse is accounted for, on
-  quiet descents too (linear+full-gain reaches the truth exactly; the Newton
-  step's apparent quiet win was only its over-aggression masking that collapse).
-  So the clean target is the derived linear coordinate
-  `e = log(I/I₀) = −log(1−g/I)` — exact, but grid-corrupted beyond the window span
-  (finding 19), so it needs uncorrupted `(g, I)`: a grid that reaches, or a direct
-  log-variance-ratio estimate that bypasses the saturating Newton step, with a
-  derived trigger/ratio. **Pair it with the finding-18 quiet-gain fix** — the two
-  are entangled (the Newton over-aggression currently compensates the collapse, so
-  fixing one without the other can regress quiet capture). Re-run the `0034`
-  oracle-vs-oracle test on any candidate. This is a real jump/transient-response
-  improvement, not a `forget`-bucket footnote.
+- **The stiffening nonlinearity — BANKED as a stalled direction (findings 19–20).**
+  Status: not being pursued. The oracle-vs-oracle test (finding 20) confirms real
+  headroom exists — stepping in the true linear coordinate beats the Newton
+  response on loud up-jumps (~5× faster settle; Newton saturates at 1 and crawls)
+  and, once the finding-18 quiet-gain collapse is separated out, on quiet descents
+  too. The derived coordinate is exact: `e = log(I/I₀) = −log(1−g/I)`. **But every
+  realisable route to it regressed the filter.** The transforms (`asinh`,
+  soft-threshold, the exact `−log(1−g/I)`) blow up because the finite grid corrupts
+  `(g, I)` beyond the window span (finding 19); the scale-space / dilation
+  adaptation reached faster but wrecked moderate precision. The honest reading
+  (concurred by the maintainer): an attempt to *add information* to the filter made
+  it worse across the board, which is evidence the current grid **structure is near
+  the saturation point of what it can extract** — the headroom is real but not
+  reachable without a structural change, not a tuning tweak. Re-open only with a
+  genuinely new structure (a grid that reaches with uncorrupted `(g, I)`, or a
+  direct log-variance-ratio estimate bypassing the grid Newton step); pair any
+  candidate with the finding-18 quiet-gain fix below, since the two are entangled,
+  and re-score on the `0034` oracle-vs-oracle battery.
 - **Uniform damping vs deep-quiet capture across the 84× observability swing
-  (finding 18).** A fixed `q_mu` is critically damped only at the characteristic
-  regime; a constant gain `K*` (`q_mu ∝ 1/I`) is uniformly damped but cannot
-  acquire quiet regimes. The trade is set by how much transient gain the loop
-  keeps in low-observability stretches — plausibly the same "slowest channel"
-  residual as `forget` (finding 16), one level down. A zero-parameter rule that is
-  both uniformly damped and quiet-capturing (e.g. a gain that locks to `K*` in
-  steady state but re-diffuses on a *derived* innovation scale, not a threshold)
-  would close it. The shipped filter takes the capture side; the residual
-  regime-dependent overshoot is characterised in `0031`.
+  (finding 18) — also banked, same structural wall.** A fixed `q_mu` is critically
+  damped only at the characteristic regime; a constant gain `K*` (`q_mu ∝ 1/I`) is
+  uniformly damped but cannot acquire quiet regimes (`info→0 ⇒ K_mu→0`). The trade
+  is plausibly the same "slowest channel" residual as `forget` (finding 16). The
+  shipped filter takes the capture side; the residual regime-dependent overshoot is
+  characterised in `0031`. Entangled with the nonlinearity item above and banked
+  with it.
 - **Eliminate `forget` from the AR(1) shape (finding 16).** There is one residual
   free parameter — the bank's weight persistence — but it governs the drift rate
   of `(φ, s)`, the slowest and least consequential channel (on the flat ridge).
