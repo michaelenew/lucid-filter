@@ -341,6 +341,35 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     regimes, so the oracle still wins the *scale* RMSE, 0.39 vs 0.72 — the level
     tracking, what a filter is for, is at parity.)
 
+13. **Grid the nuisance `(φ, s)`: a ridge, not a peak — but the ridge is flat in
+    what matters** ([`0026`](0026_grid_the_nuisance.py), figure
+    `0025-grid-the-nuisance.png`). Applying the programme's own move to the last
+    commitment — a bank of models over `(φ, s)`, gridded and compared — gives two
+    landscapes.
+    - **Resolvability ("where the dip appears").** At a fixed kernel, gridding the
+      node *spacing* shows the dead-zone dip in the grid-shift score open exactly
+      as spacing passes ~2s (score sags, then inverts, between nodes): the coarse
+      models can't see through their own gaps. Confirms finding 11's bound as a
+      geometric property of each model, mapped across the bank.
+    - **Evidence.** The exact generative log-likelihood over `(φ, s)` is a broad
+      **ridge**, not a peak (~0.008 nats/pt spread; argmax wanders off-truth by a
+      realisation): `φ` and `s` **trade off** (high persistence + small swing ≈ low
+      persistence + large swing give nearly the same log-innovation
+      autocovariance), so a moderate sample only weakly identifies the pair — a
+      broad prior does **not** wash out to a point.
+    - **But it doesn't matter.** The WalkingFilter's scale-tracking RMSE over the
+      same grid is nearly **flat** (14% spread across the whole bank), flattest
+      along the evidence ridge; a causal Bayesian model average over the bank tracks
+      at **0.55 ≈ oracle 0.56**. The direction the data can't pin is the direction
+      that barely changes the answer.
+
+    So gridding the nuisance is the honest resolution of "why not zero": you cannot
+    *identify* `(φ, s)` to a point (ridge), but you need not — the tracking cost is
+    nearly constant along the ridge, and a model average removes the point
+    commitment entirely, leaving only a broad prior whose exact shape is almost
+    irrelevant. The two parameters are irreducible in **count**, nearly free in
+    **effect**.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -388,8 +417,10 @@ spacing lesson (`ode-filter/0047`).
   [`0021`](0021_optimal_gridding.py) optimal uniform gridding ·
   [`0022`](0022_unbounded_reach.py) unbounded reach (overshoot + hunting) ·
   [`0023`](0023_critically_damped_walkout.py) critically-damped dense walk-out ·
-  [`0024`](0024_gap_theory.py) theory of the gap (KL zone, resolution, hexagonal).
+  [`0024`](0024_gap_theory.py) theory of the gap (KL zone, resolution, hexagonal) ·
+  [`0025`](0025_result_walking_vs_fit.py) headline result: walking vs fit ·
+  [`0026`](0026_grid_the_nuisance.py) grid the nuisance (φ,s).
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`.
