@@ -1,5 +1,14 @@
 """The stiff, asymmetric well: don't set the gain from the LOCAL curvature.
 
+SUPERSEDED by finding 18 (0031_derived_walk_loop.py).  The DIAGNOSIS here stands
+-- the observability I swings across the well and the loop gain must not be built
+from the local curvature -- but the EMA fix below (q_mu = r*/Ibar) introduced
+three un-derived constants (r*, the seed 0.4, the rate 30) and was replaced by a
+first-principles derivation: critical damping pins K* = (1-phi)/4, and q_mu
+follows from K* and the derived steady Fisher I_char.  This file is kept as the
+arc that led there; its "now shipped" labels are no longer accurate.
+
+
 The tracker descends the scale-family well D(x)=1/2(e^x-1-x) (finding 11): convex
 but wildly asymmetric -- an exponential wall on the loud side, a flat plateau on
 the quiet side.  Its curvature, and the filter's per-step Fisher information I

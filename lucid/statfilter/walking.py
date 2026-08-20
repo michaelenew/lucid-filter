@@ -21,15 +21,20 @@ every other filter in this package:
   * **where the scale is** -- the window centre ``mu`` integrates the exact
     grid-shift score, walking (with unbounded reach) to the truth;
   * **how fast to correct it** -- the step gain is a scalar Kalman gain built from
-    the per-step Fisher information ``I`` read straight off the grid, with the
-    drift variance set to the critical-damping point ``q_mu = r*/Ibar``
-    (``r* = 3.5e-4``: fastest tracking with no overshoot), where ``Ibar`` is the
-    REGIME's slowly-averaged observability -- using the instantaneous ``I`` there
-    over-reacts to the asymmetric well's curvature swings and chatters (finding 17);
+    the per-step Fisher information ``I`` read straight off the grid.  Its
+    steady-state value is pinned to the **critically-damped** gain of the walk
+    loop, ``K* = (1 - phi) / 4`` -- the fastest response with no overshoot,
+    derived by treating the (window-centre integrator) + (grid lag ~ phi) as a
+    second-order loop and setting its damping ratio to one (finding 18).  The
+    drift variance that yields that steady gain, ``q_mu = K*^2 / (I_char (1-K*))``,
+    is fixed once at reset from ``K*`` and the grid's steady Fisher information
+    ``I_char`` -- both derived from ``(phi, s, Q, s2)``, no tuned constant;
   * **the grid spacing** -- ``gap = 1.5 s`` (nodes at ~2/3 of a posterior width,
     the resolution limit: fine enough for no dead zone, no finer);
   * **the step cap** -- ``mu_cap = gap`` keeps successive windows overlapping, so
-    the walk stays dense.
+    the walk stays dense;
+  * **the cold-start prior** -- ``Pmu_0 = s^2``, the AR(1) stationary variance of
+    the log-scale: before any data the regime is ``N(0, s^2)`` (finding 18).
 
 There is no ``fit()``.  The only free numbers are ``(phi, s)``, which are not a
 tuning knob but the model of the process itself -- the irreducible class
@@ -68,12 +73,9 @@ def _logsumexp(a: np.ndarray) -> float:
     m = float(a.max())
     return m + math.log(float(np.exp(a - m).sum()))
 
-# Derived constants (see theory/adaptive-grid/SUMMARY.md findings 10-11):
-_R_STAR = 3.5e-4        # critical-damping tracking index r = q_mu * I (finding 10)
+# Derived constants (see theory/adaptive-grid/SUMMARY.md findings 11, 18):
 _GAP_FACTOR = 1.5       # gap = 1.5 * s: the resolution/Sparrow spacing (finding 11)
 _RIDGE = 1e-4           # stabiliser on the Fisher information before dividing
-_I_CHAR = 0.4           # characteristic locked observability; seeds Ibar (finding 17)
-                        # so q_mu starts well-damped and only loosens in quiet regimes
 
 
 # --------------------------------------------------------------------- results
@@ -147,14 +149,20 @@ class WalkingFilter:
         self.nodes = int(nodes)
         self.gap = _GAP_FACTOR * self.s                 # resolution spacing (finding 11)
         self.cap = self.gap                             # overlap: <= one node / step
-        # The drift variance is set from the REGIME's steady observability, not the
-        # per-step one: q_mu = r*/Ibar with Ibar a slow EMA of the grid Fisher I
-        # (finding 17).  Reacting to the instantaneous I over-gains in low-curvature
-        # (quiet) stretches of the asymmetric well -- it chatters, tracks worse, and
-        # loses quiet regimes.  The averaging timescale scales with the regime's own
-        # persistence 1/(1-phi); the result is insensitive to the constant.
-        self._ibar_rate = float((1.0 - self.phi) / 30.0)
         self._build()
+        # The whole walk loop is parameter-free (finding 18).  The window-centre
+        # integrator fed by the grid-shift score, with the grid state relaxing at
+        # ~phi per step, is a second-order loop; setting its damping ratio to one
+        # (critical damping: fastest, no overshoot) pins the steady-state gain to
+        #     K* = (1 - phi) / 4
+        # -- a pure function of phi, everything else cancels.  The drift variance
+        # that makes the mu-Kalman settle to that gain is
+        #     q_mu = K*^2 / (I_char (1 - K*)),
+        # fixed once here from K* and I_char, the grid's steady Fisher information
+        # at the stationary regime (derived, not tuned; see _steady_fisher).
+        self._Kstar = (1.0 - self.phi) / 4.0
+        self._Ichar = self._steady_fisher()
+        self._qmu = self._Kstar ** 2 / (self._Ichar * (1.0 - self._Kstar))
         self.reset()
 
     def __repr__(self) -> str:
@@ -173,6 +181,30 @@ class WalkingFilter:
         T /= T.sum(1, keepdims=True)
         self.lam, self.w0, self.T = lam, w0, T
 
+    def _steady_fisher(self) -> float:
+        """I_char: the grid's steady Fisher information at the scale-free regime.
+
+        The walk absorbs the nominal base ``Q`` (finding 9: a wrong ``Q`` is taken
+        up by ``mu``, leaving ``Q*exp(mu)`` invariant), so ``I_char`` must be
+        evaluated at a **Q-invariant** operating point or the walk loses that
+        equivariance.  The only scale-free reference is SNR = 1: effective process
+        variance equal to the measurement scale ``s2`` (``Qg_centre = s2``).  There
+        the observability is a function of ``s`` alone.  Iterate the level-variance
+        recursion to its fixed point under a calibrated observation (``E[e^2]=S``,
+        so the variance-inflation term drops), then read the grid Fisher
+        ``I = sum_i w0_i * 0.5 (Qg_i / S_i)^2``.  Deterministic; matches the
+        empirically measured steady observability at that regime (finding 18).
+        """
+        lam, w0 = self.lam, self.w0
+        Qg = self.s2 * np.exp(np.clip(lam, -60.0, 60.0))    # SNR = 1 reference (Q-invariant)
+        P = float(Qg.max() + self.s2)
+        for _ in range(400):
+            S = P + Qg + self.s2
+            K = (P + Qg) / S
+            P = float(w0 @ ((1.0 - K) * (P + Qg)))
+        S = P + Qg + self.s2
+        return float(w0 @ (0.5 * (Qg / S) ** 2)) + _RIDGE
+
     # ------------------------------------------------------------- streaming
     def reset(self, level: float | None = None, scale: float = 0.0) -> "WalkingFilter":
         """Clear the streaming state.  ``scale`` seeds the window centre.  Chains."""
@@ -180,8 +212,7 @@ class WalkingFilter:
         self._m = level
         self._P = None
         self.mu = float(scale)
-        self._Pmu = 25.0            # diffuse start on the scale: washes out in a few steps
-        self._Ibar = _I_CHAR        # running estimate of the regime's steady observability
+        self._Pmu = self.s * self.s   # AR(1) stationary prior on the log-scale (finding 18)
         self.loglik = 0.0
         return self
 
@@ -229,16 +260,16 @@ class WalkingFilter:
         gS = Qg / S
         grad = float(pi @ (0.5 * gS * (e2 / S - 1.0)))
         info = float(pi @ (0.5 * gS * gS)) + _RIDGE           # per-step curvature
-        # R (Cramer-Rao down-weight) and the natural-gradient step use the
-        # instantaneous curvature; only the drift variance q_mu uses the slow,
-        # regime-level Ibar (finding 17) so it does not over-react to the well's
-        # local curvature swings.
-        self._Ibar += self._ibar_rate * (info - self._Ibar)
+        # The natural-gradient step grad/info linearises the stiffening well, so a
+        # single gain is critically damped at every amplitude.  R = 1/info is the
+        # per-step Cramer-Rao down-weight; the drift variance self._qmu is the fixed
+        # derived constant that settles the mu-Kalman to the critically-damped gain
+        # K* = (1-phi)/4 (finding 18).
         R_mu = 1.0 / info
         K_mu = self._Pmu / (self._Pmu + R_mu)
         dmu = float(np.clip(K_mu * (grad / info), -self.cap, self.cap))
         self.mu += dmu
-        self._Pmu = (1.0 - K_mu) * self._Pmu + _R_STAR / self._Ibar   # q_mu = r*/Ibar
+        self._Pmu = (1.0 - K_mu) * self._Pmu + self._qmu
 
         self._pi, self._m, self._P = pi, m_new, P_new
         self.loglik += ll
@@ -257,7 +288,7 @@ class WalkingFilter:
     def _run(self, x: np.ndarray, want: bool):
         if x.ndim != 1 or x.size == 0:
             raise ValueError("x must be a non-empty 1-D array")
-        saved = (self._pi, self._m, self._P, self.mu, self._Pmu, self._Ibar, self.loglik)
+        saved = (self._pi, self._m, self._P, self.mu, self._Pmu, self.loglik)
         try:
             self.reset()
             if not want:
@@ -280,7 +311,7 @@ class WalkingFilter:
                 total += st.loglik
             return WalkResult(loglik=total, **out)
         finally:
-            (self._pi, self._m, self._P, self.mu, self._Pmu, self._Ibar, self.loglik) = saved
+            (self._pi, self._m, self._P, self.mu, self._Pmu, self.loglik) = saved
 
 
 # --------------------------------------------------------------------- the bank
@@ -431,8 +462,7 @@ class WalkingBank:
             raise ValueError("x must be a non-empty 1-D array")
         saved = ([f._pi for f in self.filters], [f._m for f in self.filters],
                  [f._P for f in self.filters], [f.mu for f in self.filters],
-                 [f._Pmu for f in self.filters], [f._Ibar for f in self.filters],
-                 self._logw.copy(), self.loglik)
+                 [f._Pmu for f in self.filters], self._logw.copy(), self.loglik)
         try:
             self.reset()
             if not want:
@@ -451,6 +481,6 @@ class WalkingBank:
                 total += st.loglik
             return BankResult(loglik=total, **out)
         finally:
-            for f, pi, m, P, mu, Pmu, Ibar in zip(self.filters, *saved[:6]):
-                f._pi, f._m, f._P, f.mu, f._Pmu, f._Ibar = pi, m, P, mu, Pmu, Ibar
-            self._logw, self.loglik = saved[6], saved[7]
+            for f, pi, m, P, mu, Pmu in zip(self.filters, *saved[:5]):
+                f._pi, f._m, f._P, f.mu, f._Pmu = pi, m, P, mu, Pmu
+            self._logw, self.loglik = saved[5], saved[6]

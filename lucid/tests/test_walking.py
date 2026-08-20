@@ -208,9 +208,9 @@ def test_bank_forget_keeps_models_alive():
 
 
 def test_captures_a_quiet_destination():
-    """A jump DOWN to a quiet (low-observability) regime is captured -- the drift
-    variance uses the regime's steady observability Ibar, not the instantaneous
-    curvature, so it does not over-gain and chatter in the quiet well (finding 17)."""
+    """A jump DOWN to a quiet (low-observability) regime is captured -- the fixed
+    derived drift variance is moderate, so it neither stalls on the quiet plateau
+    nor over-gains and chatters (finding 18)."""
     rng = np.random.default_rng(31)
     NT, JT, D = 1000, 100, -2.0
     lam = np.zeros(NT); lam[JT:] = D
@@ -220,11 +220,47 @@ def test_captures_a_quiet_destination():
     assert abs(np.mean(r.process_scale[-200:]) - D) < 0.6
 
 
-def test_drift_variance_uses_steady_observability():
-    """Ibar is seeded at the characteristic observability and evolves slowly."""
+def test_walk_loop_gain_is_derived_and_parameter_free():
+    """The walk loop carries no tuned constant: the steady gain is the critically
+    damped K* = (1-phi)/4, I_char is the grid's derived steady Fisher, the drift
+    variance follows from both, and the cold-start prior is s^2 (finding 18)."""
+    for phi in (0.70, 0.90, 0.95):
+        f = WalkingFilter(Q=1.0, s2=1.0, phi=phi, s=0.30)
+        assert f._Kstar == pytest.approx((1.0 - phi) / 4.0)          # critical damping
+        assert 0.0 < f._Ichar < 1.0                                  # derived, not 0.4
+        assert f._qmu == pytest.approx(
+            f._Kstar ** 2 / (f._Ichar * (1.0 - f._Kstar)))           # q_mu from K*, I_char
+        f.reset()
+        assert f._Pmu == pytest.approx(0.30 ** 2)                    # AR(1) stationary prior
+    # I_char matches the empirical steady observability at the stationary mean.
     f = WalkingFilter(Q=1.0, s2=1.0, phi=0.9, s=0.30)
-    assert f._Ibar == pytest.approx(0.4)                 # characteristic seed
-    assert 0.0 < f._ibar_rate < 0.02                     # a slow, regime-level rate
-    x, _ = scale_series(300, 1.0, seed=32)
-    f.filter(x)                                          # stateless run must restore Ibar
-    assert f._Ibar == pytest.approx(0.4)
+    assert f._Ichar == pytest.approx(0.076, abs=0.02)
+
+
+def _midstream_scale(D0, D1, jump, seed, burn=400, post=300, Q=1.0, s2=1.0):
+    """A random-walk level whose process log-scale jumps from D0 to D1 at `burn`."""
+    rng = np.random.default_rng(seed)
+    lam = np.concatenate([np.full(burn, D0), np.full(post, D1)])
+    step = rng.standard_normal(burn + post) * np.sqrt(Q * np.exp(lam))
+    x = np.cumsum(step) + rng.standard_normal(burn + post) * np.sqrt(s2)
+    return x, burn, post, D1
+
+
+def test_large_mid_stream_step_is_cap_tamed():
+    """A large mid-stream step is walked out without a big mean overshoot: the
+    natural-gradient step plus the step cap keep the descent monotone (finding 18).
+    (Small steps retain a modest regime-dependent overshoot -- the 84x observability
+    asymmetry -- which is characterised in research/adaptive-grid/0031, not asserted
+    here.)"""
+    for D0, D1 in ((2.0, -1.0), (-1.0, 2.0)):              # down by 3, up by 3
+        amp = abs(D1 - D0)
+        traj = []
+        for sd in range(40):
+            x, burn, post, dest = _midstream_scale(D0, D1, amp, seed=700 + sd)
+            f = WalkingFilter(Q=1.0, s2=1.0, phi=0.9, s=0.30)
+            traj.append(f.filter(x).process_scale[burn:])
+        m = np.mean(traj, axis=0) - D1                     # mean error vs destination
+        past = max(m.max(), -m.min()) if D1 > D0 else max(-m.min(), m.max())
+        # overshoot past the destination stays a small fraction of the 3-nat jump
+        over = max(0.0, m.max()) if D1 > D0 else max(0.0, -m.min())
+        assert over / amp < 0.25

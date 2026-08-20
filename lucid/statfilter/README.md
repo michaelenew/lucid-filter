@@ -118,7 +118,8 @@ sets it apart:
 |---|---|---|
 | noise-scale level | fit offline, then frozen | **walked online**, unbounded reach |
 | step gain | from fitted `Q, s2` | **read off the grid** each step (Fisher info `I`) |
-| drift variance `q_mu` | — | **`r*/Ī`**, critical damping at the regime's steady observability |
+| drift variance `q_mu` | — | derived: settles the gain to the **critically-damped `K*=(1−φ)/4`** |
+| cold-start prior | — | `s²`, the AR(1) stationary variance |
 | grid spacing | `order` (resolution) | **`1.5 s`**, the resolution limit |
 | what you supply | six numbers via `fit(x)` | **two**: `phi, s` (+ base `Q, s2`) |
 

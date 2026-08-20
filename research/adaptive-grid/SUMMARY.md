@@ -1,6 +1,6 @@
 # Current state
 
-**Shipped: `statfilter.WalkingFilter` and `WalkingBank`** (findings 12, 15–17) —
+**Shipped: `statfilter.WalkingFilter` and `WalkingBank`** (findings 12, 15–18) —
 the single-channel moving grid, packaged. This file records the full arc, from the
 first probes to the shipped filters. Making the noise-channel quadrature grids
 **move**.
@@ -463,17 +463,56 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
       **~8%** of the time (it chatters instead of settling);
     - **it tracks fluctuations worse** — steady-regime RMSE ~10% above a steady gain.
 
-    The fix (now in `WalkingFilter`): the per-step gradient step and the
-    Cramér-Rao down-weight `R=1/I` keep the instantaneous `I`, but the **drift
-    variance** uses a slow, regime-level average — `q_mu = r*/Ī`, `Ī` an EMA of `I`
-    at rate `(1−φ)/30`, seeded at the characteristic locked value `0.4`. It is
-    insensitive to the rate (every slow value beats instantaneous) and does not
-    add a tunable knob (the timescale scales with the class persistence `1/(1−φ)`).
-    Measured after the fix: quiet capture `d=−2` **~95%** (loud capture still 100%),
-    tracking RMSE down ~4–5% across scale swings, and a loud→quiet regime shift
-    that the instantaneous rule failed outright (new-regime RMSE **1.72 → 0.62**).
-    The principle: don't build the loop gain from the well's *local* curvature —
-    the nonlinearity makes that jitter; use the regime's steady curvature.
+    The first fix used a slow EMA of `I` (`q_mu = r*/Ī`, rate `(1−φ)/30`, seed
+    `0.4`). It worked (quiet capture 8%→95%) but introduced **three un-derived
+    constants** — `r*`, the seed `0.4`, and the rate `30`. Asked "where did the
+    `30` come from?", a sweep showed the claim of insensitivity was wrong: larger
+    divisor was monotonically better and the limit (no EMA, a *constant* `q_mu`)
+    was strictly best. **The EMA was an over-engineered wrong turn** — superseded
+    by the derivation in finding 18. The diagnosis stands (the loop gain must not
+    be built from the well's *local* curvature); the fix was replaced by a
+    first-principles one.
+
+18. **The walk loop is parameter-free: critical damping pins the gain**
+    ([`0031`](0031_derived_walk_loop.py), figure `0030-derived-walk-loop.png`).
+    The window-centre `μ` integrates the grid-shift score, but the grid state
+    relaxes only at ~`φ` per step, so the walk is a **second-order loop**. Writing
+    the error `e=λ−μ` and the grid's lagged offset `y`:
+    `e_t = e_{t−1} − K y_{t−1}`, `y_t = φ y_{t−1} + (1−φ) e_{t−1}`, whose
+    characteristic equation `z² − (1+φ)z + φ + K(1−φ) = 0` has a double root
+    (critical damping — fastest response, no overshoot) exactly when
+    **`K* = (1−φ)/4`** — a pure function of `φ`, everything else cancelling. The
+    drift variance that settles the μ-Kalman to that steady gain is
+    **`q_mu = K*²/(I_char(1−K*))`**, fixed once at reset from `K*` and `I_char`,
+    the grid's steady Fisher information. The `K*=(1−φ)/4` result is verified on
+    the exact linear loop — the overshoot-onset gain matches `(1−φ)/4` to <1% for
+    `φ ≤ 0.9` (it drifts high only at `φ ≥ 0.95`, where discrete-time effects
+    enter). `I_char` is evaluated at the **scale-free regime** (effective process
+    variance = `s2`, SNR=1) so it stays `Q`-invariant and does not break the
+    wrong-`Q` absorption (finding 9); it is derived, not the hardcoded `0.4`, and
+    matches the empirical steady observability (`0.076` at `s=0.30`). The cold-start
+    prior is the AR(1) stationary variance **`Pmu₀ = s²`** (before data, the regime
+    is `N(0, s²)`). This eliminates **all five** tuned constants (`r*`, `0.4`, `30`,
+    `25`, and the EMA), and the filter performs comparably: capture within a few
+    points of the tuned filter, steady-tracking RMSE ~10% higher (the honest cost
+    of critical damping over the old min-variance-leaning gain), and cold-start
+    overshoot **164→20%** (from `Pmu₀=s²`).
+
+    **What it does not do — the stiff wall is not fully flattened.** The
+    natural-gradient step and the step cap tame *large* excursions (0010's servo
+    overshot ~100% on a small step and was cap-limited on large ones; here large
+    mid-stream steps settle with ~0% overshoot). But a *fixed* `q_mu` is critically
+    damped only at the reference regime: because the grid observability `I` swings
+    **~84×** across the well (0.005 quiet → 0.41 loud), the steady gain
+    `K=Pmu/(Pmu+1/I)` is **over-driven where `I` is high** (a small step *up* into a
+    loud regime overshoots ~150% in the mean) and sluggish where `I` is low. Perfect
+    uniform damping needs a *constant* gain `K*` at every regime — i.e. `q_mu ∝ 1/I`
+    — but that rule inflates `q_mu` on the quiet plateau and loses deep-quiet capture
+    (`d=−2` capture → 0%). So the 84× asymmetry forces a genuine trade between
+    uniform damping and quiet-regime acquisition; the shipped filter takes the
+    capture side (fixed `q_mu`, critical at the characteristic regime), and the
+    residual regime-dependent damping is the honest fingerprint of the stiff wall,
+    not a tunable knob. Closing that trade with zero parameters is an Open.
 
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
@@ -483,6 +522,16 @@ spacing lesson (`ode-filter/0047`).
 
 ## Open
 
+- **Uniform damping vs deep-quiet capture across the 84× observability swing
+  (finding 18).** A fixed `q_mu` is critically damped only at the characteristic
+  regime; a constant gain `K*` (`q_mu ∝ 1/I`) is uniformly damped but cannot
+  acquire quiet regimes. The trade is set by how much transient gain the loop
+  keeps in low-observability stretches — plausibly the same "slowest channel"
+  residual as `forget` (finding 16), one level down. A zero-parameter rule that is
+  both uniformly damped and quiet-capturing (e.g. a gain that locks to `K*` in
+  steady state but re-diffuses on a *derived* innovation scale, not a threshold)
+  would close it. The shipped filter takes the capture side; the residual
+  regime-dependent overshoot is characterised in `0031`.
 - **Eliminate `forget` from the AR(1) shape (finding 16).** There is one residual
   free parameter — the bank's weight persistence — but it governs the drift rate
   of `(φ, s)`, the slowest and least consequential channel (on the flat ridge).
@@ -562,8 +611,9 @@ spacing lesson (`ode-filter/0047`).
   [`0027`](0027_ridge_theory.py) ridge theory: identified-but-sloppy, block is the class ·
   [`0028`](0028_result_bank.py) shipped: WalkingBank (no numbers, just the class) ·
   [`0029`](0029_forget_the_last_knob.py) the last knob (forget) and where it lives ·
-  [`0030`](0030_stiff_wall_gain.py) stiff-wall gain (steady observability).
+  [`0030`](0030_stiff_wall_gain.py) stiff-wall gain (steady observability; EMA, superseded) ·
+  [`0031`](0031_derived_walk_loop.py) derived walk loop: critical damping K*=(1−φ)/4, zero free params.
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`, `0028-forget-the-last-knob`, `0029-stiff-wall-gain`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`, `0028-forget-the-last-knob`, `0029-stiff-wall-gain`, `0030-derived-walk-loop`.
