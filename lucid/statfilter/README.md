@@ -149,6 +149,47 @@ log-likelihood. `nodes` (odd) is the window's node count — a resolution, since
 window *walks* for anything beyond its span. `reset(level=None, scale=0.0)` clears
 state and seeds the window centre.
 
+## `WalkingBank` — not even `(phi, s)`, just the class
+
+`WalkingFilter` still asks for the pair `(phi, s)`. Those two live on a **sloppy
+ridge** the data identifies only weakly, and tracking is nearly flat along it — so
+the right move is not to pick a point but to run a **bank** of walkers over a grid
+of `(phi, s)` and average them by online Bayesian model weighting. The evidence
+concentrates weight onto the ridge the data supports; the flat, sloppy direction
+is integrated out. The caller commits only to the model **class** (a stationary
+AR(1) log-scale) and a broad grid **range** — both shape assumptions, no fitted
+numbers.
+
+```python
+from statfilter import WalkingBank
+
+f = WalkingBank(Q=1.0, s2=1.0)     # no (phi, s) — just the class and a default box
+r = f.filter(x)
+r.mean                             # model-averaged level
+r.process_scale                    # model-averaged process log-scale
+r.phi_hat, r.s_hat                 # what the data learned about (phi, s), per step
+r.n_eff                            # how many models still carry weight
+```
+
+Measured on a process whose scale shifts regime, `WalkingBank` (given *no* `(phi,
+s)`) tracks at level-RMSE **0.86**, matching a single `WalkingFilter` *told the
+true* `(phi, s)` (0.86) — it pays essentially nothing for not being told; see
+`../../research/adaptive-grid/figures/0027-walking-bank.png`. The learned
+`phi_hat, s_hat` settle onto the ridge (not necessarily the exact truth-point —
+the data cannot separate them, and it does not need to), and `n_eff` sheds from
+the full grid onto a handful.
+
+### `WalkingBank(Q, s2, phis=None, ss=None, nodes=7, forget=1.0)`
+
+`phis, ss` default to a broad dead-zone-free box (persistence 0.70–0.95, swing
+0.20–0.80); widen freely, since the data down-weights the unsupported corners.
+`forget` in `(0, 1]` is weight persistence: `1.0` is exact Bayesian averaging
+(weights concentrate onto the ridge and stay); below 1 pulls them back toward
+uniform each step so the bank can re-select if `(phi, s)` themselves drift — a
+mild `0.99` suits open-ended streams. Same `filter` / `update` / `loglik_of` /
+`reset` surface as `WalkingFilter`; results carry `mean, var, innovation,
+process_scale, n_eff, phi_hat, s_hat` (plus `loglik`).
+
 ## Honest limits
 
 Measured on a nine-probe battery against a constant-gain Kalman filter whose

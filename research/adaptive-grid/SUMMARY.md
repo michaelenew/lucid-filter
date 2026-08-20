@@ -399,6 +399,20 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     in the least consequential direction and integrated out, and it shrinks to a
     point as n grows on its own.
 
+15. **Shipped as `statfilter.WalkingBank`: the ridge-average made a filter**
+    ([`0028`](0028_result_bank.py), figure `0027-walking-bank.png`). Finding 14's
+    construction is now a class: a bank of `WalkingFilter`s over a `(φ, s)` grid,
+    combined by online Bayesian model averaging (weight `w_i ∝ w_i^forget·p_i(x)`).
+    The caller supplies only `Q, s2` and the class (a broad grid box) — **no
+    `(φ, s)` number**. The data pours weight onto the ridge and averages the sloppy
+    direction; `phi_hat, s_hat` report what it learned, `n_eff` how many models
+    remain. Measured on a regime-shifting scale, the bank (told nothing) tracks at
+    level-RMSE **0.86 = the oracle single filter told the true `(φ, s)`** (0.86);
+    `phi_hat, s_hat` settle onto the ridge and `n_eff` sheds from 15 to ~2. The
+    `forget < 1` option keeps the bank re-selectable if `(φ, s)` drift. This is the
+    end state: the only input left is the model *class* — a shape assumption, not a
+    number.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -449,8 +463,9 @@ spacing lesson (`ode-filter/0047`).
   [`0024`](0024_gap_theory.py) theory of the gap (KL zone, resolution, hexagonal) ·
   [`0025`](0025_result_walking_vs_fit.py) headline result: walking vs fit ·
   [`0026`](0026_grid_the_nuisance.py) grid the nuisance (φ,s) ·
-  [`0027`](0027_ridge_theory.py) ridge theory: identified-but-sloppy, block is the class.
+  [`0027`](0027_ridge_theory.py) ridge theory: identified-but-sloppy, block is the class ·
+  [`0028`](0028_result_bank.py) shipped: WalkingBank (no numbers, just the class).
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`.
