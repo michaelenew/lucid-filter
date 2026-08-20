@@ -548,6 +548,33 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     in-span amplitudes is the separate finding-18 gain/observability trade, not the
     force nonlinearity.
 
+20. **How much the stiffening nonlinearity actually costs — a stress battery with
+    an oracle upper bound** ([`0034`](0034_stress_battery.py), figure
+    `0033-stress-battery`). The oracle is the shipped filter in every respect
+    (grid, level filter, drift variance, cap) *except* the walk step is fed the
+    **true** offset `lam_true − mu` — a perfect force-linearization on uncorrupted
+    inputs, so `shipped − oracle` is exactly the cost of the nonlinearity with
+    everything else fixed. Across a punishing battery (extreme up/down jumps,
+    staircase, fast square-wave, slow/resonant/fast sinusoids, out-of-class AR(2)):
+
+    | regime | shipped−oracle RMSE gap |
+    |---|---|
+    | jumps / staircase | **24–31%** |
+    | oscillations / fast-switching | **8–13%** |
+
+    Two clear verdicts. **(a) It is not marginal** — unlike `forget`, the
+    nonlinearity leaves a real ~10–30% on the table, concentrated on transients
+    (the smaller oscillation gaps are because *both* arms are bandwidth-limited
+    there, so the nonlinearity is a minor part of a large shared error). **(b) It
+    is the offset ESTIMATION, not reach**: the capped and uncapped oracles are
+    within ~1% everywhere, so the cap costs only a few transient steps of RMSE.
+    This redirects the scale-space/expansion thread (findings 19 Open) — grid
+    *reach* is the wrong lever for RMSE; a better derived *offset estimator* on
+    uncorrupted inputs is the right one. But no such estimator has been realised
+    (finding 19: grid transforms corrupt; the dilation/scale-adaptation regresses
+    moderate precision). So the stiffening nonlinearity is a **live practical
+    target with an open realization**, not a theory-only revisit.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -556,15 +583,19 @@ spacing lesson (`ode-filter/0047`).
 
 ## Open
 
-- **Realise the derived linearization with an expanding grid (finding 19).** The
-  linearizing coordinate `e = log(I/I₀) = −log(1−g/I)` is exact but unusable on a
-  fixed finite grid, which corrupts `(g, I)` once the offset leaves the window.
-  The theoretically clean route is a grid that expands/hops on edge-saturation to
-  keep the offset in-span, so the derived transform always sees uncorrupted
-  inputs; then a constant `K*=(1−φ)/4` is critically damped at *all* amplitudes.
-  This is the adaptive-grid thesis (the very first probes) applied to the walk
-  loop; needs a derived expansion trigger and ratio (not a threshold), then a
-  before/after stress battery vs the shipped fixed-grid filter.
+- **A better derived offset estimator on uncorrupted inputs (findings 19–20).**
+  The linearizing coordinate `e = log(I/I₀) = −log(1−g/I)` is exact but unusable on
+  a fixed finite grid, which corrupts `(g, I)` once the offset leaves the window.
+  Finding 20 shows this is worth ~10–30% RMSE (biggest on jumps) and that it is an
+  *estimation*, not a reach, problem (capped ≈ uncapped oracle) — so grid *reach*
+  (expansion/hopping, the dilation-score scale-adaptation) is the wrong lever, and
+  it regressed moderate precision besides. The right target is an offset estimator
+  that stays uncorrupted at large offset — e.g. a grid whose *resolution* follows
+  the posterior only when the posterior genuinely leaves the span (strict
+  edge-saturation gating, still untested), or a direct log-variance-ratio estimate
+  that does not route through the saturating grid Newton step. Needs a derived
+  trigger/ratio (not a threshold), then re-run the `0034` battery to see how much
+  of the oracle gap a *realisable* estimator recovers.
 - **Uniform damping vs deep-quiet capture across the 84× observability swing
   (finding 18).** A fixed `q_mu` is critically damped only at the characteristic
   regime; a constant gain `K*` (`q_mu ∝ 1/I`) is uniformly damped but cannot
@@ -657,9 +688,10 @@ spacing lesson (`ode-filter/0047`).
   [`0030`](0030_stiff_wall_gain.py) stiff-wall gain (steady observability; EMA, superseded) ·
   [`0031`](0031_derived_walk_loop.py) derived walk loop: critical damping K*=(1−φ)/4, zero free params ·
   [`0032`](0032_linearize_the_wall.py) force/observability map, linearizing-coordinate search ·
-  [`0033`](0033_the_linearizing_coordinate.py) the linearizing coordinate is exact but grid-corrupted (finding 19).
+  [`0033`](0033_the_linearizing_coordinate.py) the linearizing coordinate is exact but grid-corrupted (finding 19) ·
+  [`0034`](0034_stress_battery.py) stress battery vs oracle: the nonlinearity costs 8–31% RMSE, it's estimation not reach (finding 20).
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
   `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`, `0028-forget-the-last-knob`, `0029-stiff-wall-gain`, `0030-derived-walk-loop`,
-  `0031-linearize-the-wall`, `0032-linearizing-coordinate`.
+  `0031-linearize-the-wall`, `0032-linearizing-coordinate`, `0033-stress-battery`.
