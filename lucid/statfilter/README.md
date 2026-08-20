@@ -179,16 +179,20 @@ true* `(phi, s)` (0.86) — it pays essentially nothing for not being told; see
 the data cannot separate them, and it does not need to), and `n_eff` sheds from
 the full grid onto a handful.
 
-### `WalkingBank(Q, s2, phis=None, ss=None, nodes=7, forget=1.0)`
+### `WalkingBank(Q, s2, phis=None, ss=None, nodes=7, forget=0.999)`
 
 `phis, ss` default to a broad dead-zone-free box (persistence 0.70–0.95, swing
 0.20–0.80); widen freely, since the data down-weights the unsupported corners.
-`forget` in `(0, 1]` is weight persistence: `1.0` is exact Bayesian averaging
-(weights concentrate onto the ridge and stay); below 1 pulls them back toward
-uniform each step so the bank can re-select if `(phi, s)` themselves drift — a
-mild `0.99` suits open-ended streams. Same `filter` / `update` / `loglik_of` /
-`reset` surface as `WalkingFilter`; results carry `mean, var, innovation,
-process_scale, n_eff, phi_hat, s_hat` (plus `loglik`).
+`forget` in `(0, 1]` is weight persistence — **the one residual free parameter**,
+and it governs the slowest, least consequential channel there is: the drift rate
+of `(phi, s)`, which is both the slowest-varying quantity and the one on the flat
+identification ridge. `1.0` is exact Bayesian averaging, which concentrates onto
+the ridge and then *freezes*; the default `0.999` is near-but-not-1 (a ~1000-step
+memory) so the bank still concentrates yet can re-select if the process `(phi, s)`
+drift. Tracking is identical for any `forget` in `[0.99, 1.0]` on both static and
+shifted scales, so a value near 1 costs nothing measurable. Same `filter` /
+`update` / `loglik_of` / `reset` surface as `WalkingFilter`; results carry `mean,
+var, innovation, process_scale, n_eff, phi_hat, s_hat` (plus `loglik`).
 
 ## Honest limits
 

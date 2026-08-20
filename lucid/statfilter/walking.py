@@ -327,14 +327,22 @@ class WalkingBank:
     nodes : int
         Window nodes per walker (a resolution; see :class:`WalkingFilter`).
     forget : float
-        Weight persistence in ``(0, 1]``.  ``1.0`` is exact Bayesian averaging
-        (weights concentrate onto the ridge and stay there -- correct when the
-        process AR(1) is fixed).  Below 1 the weights are continually pulled back
-        toward uniform, keeping the bank able to re-select if ``(phi, s)`` drift;
-        a mild ``0.99`` is a reasonable default for open-ended streams.
+        Weight persistence in ``(0, 1]``; the ONE residual free parameter, and it
+        governs the slowest, least consequential channel in the model -- the drift
+        rate of the class pair ``(phi, s)``, which is both the slowest-varying
+        quantity and the one on the flat identification ridge, so its exact value
+        barely reaches the estimate (theory finding 16).  ``1.0`` is exact
+        Bayesian averaging: weights concentrate onto the ridge and then *freeze*
+        (a large sustained shift still re-selects, but only stickily).  The
+        default ``0.999`` is near-but-not-1: a ~1000-step memory that still
+        concentrates on the ridge yet keeps the bank able to re-select if the
+        process ``(phi, s)`` themselves drift.  Measured, ``forget`` anywhere in
+        ``[0.99, 1.0]`` gives identical tracking on both static and shifted scales
+        -- so a value near 1 will not cost a measurable amount against the
+        (unknown) optimum.  Set ``1.0`` for the clean-Bayes / static-class case.
     """
 
-    def __init__(self, Q, s2, phis=None, ss=None, nodes=7, forget=1.0):
+    def __init__(self, Q, s2, phis=None, ss=None, nodes=7, forget=0.999):
         if not 0.0 < forget <= 1.0:
             raise ValueError("forget must lie in (0, 1]")
         phis = (0.70, 0.85, 0.95) if phis is None else tuple(float(p) for p in phis)

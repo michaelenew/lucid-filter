@@ -408,10 +408,44 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     direction; `phi_hat, s_hat` report what it learned, `n_eff` how many models
     remain. Measured on a regime-shifting scale, the bank (told nothing) tracks at
     level-RMSE **0.86 = the oracle single filter told the true `(φ, s)`** (0.86);
-    `phi_hat, s_hat` settle onto the ridge and `n_eff` sheds from 15 to ~2. The
-    `forget < 1` option keeps the bank re-selectable if `(φ, s)` drift. This is the
+    `phi_hat, s_hat` settle onto the ridge and `n_eff` sheds from 15 to a handful.
+    The `forget < 1` option keeps the bank re-selectable if `(φ, s)` drift. This is the
     end state: the only input left is the model *class* — a shape assumption, not a
     number.
+
+16. **The last knob is `forget`, and it lives in the least consequential channel**
+    ([`0029`](0029_forget_the_last_knob.py), figure `0028-forget-the-last-knob.png`).
+    The bank's model averaging has one residual free parameter: the weight
+    persistence `forget`. Under pure Bayes (`forget = 1`) the weights concentrate
+    onto the ridge and then **freeze** — a large sustained shift in the process
+    `(φ, s)` still re-selects, but stickily, so `phi_hat, s_hat` lock on a long
+    static run. `forget < 1` keeps them alive.
+
+    So there *is* a free parameter — but it has been pushed to the slowest,
+    least-impactful channel that exists, and this is (I believe provably)
+    load-bearing:
+    - it governs the drift rate of `(φ, s)`, which are the **slowest-varying**
+      quantities in the model (class properties, not the state);
+    - and `(φ, s)` sit on the **flat identification ridge** (finding 14), so their
+      value barely reaches the estimate.
+
+    Both legs are measured. Through an `s: 0.25 → 0.70` mid-stream shift, the
+    new-regime tracking is **identical** across `forget ∈ {1.0, 0.999, 0.99}` and
+    even for a single filter **frozen at the stale `s = 0.25`** (level-RMSE 0.826
+    vs 0.827 for the correct-`s` filter; scale within 5%) — because the μ-walk
+    tracks regardless and the ridge is flat. And static level-RMSE is flat across
+    `forget ∈ [0.95, 1.0]` (0.8002–0.8007), while post-shift re-selection peaks at
+    **`forget = 0.999`** (Δŝ 0.153, vs 0.087 for the sticky 1.0 and 0.019 for the
+    never-concentrating 0.95). The default is therefore set to **`0.999`**: a
+    ~1000-step memory that concentrates on the ridge yet stays re-selectable, at
+    no measurable tracking cost against the (unknown) optimum.
+
+    **This knob can be eliminated without violating the no-zero-parameters proof.**
+    The proof's irreducible commitment is the AR(1) *shape*; deriving the `(φ, s)`
+    drift rate *from that shape* (rather than setting `forget` by hand) leans only
+    on the assumption already made, so it adds nothing. Finding that optimal
+    derivation is a theory task (see Open); practically `forget ≈ 0.999` will not
+    differ measurably from it.
 
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
@@ -421,17 +455,45 @@ spacing lesson (`ode-filter/0047`).
 
 ## Open
 
-- **The defensibly-optimal ranging** (from 7). Drive `μ` by the exact/natural
-  marginal-likelihood gradient (efficient, un-suppressed) and/or linearise the
-  force via the far-field log-distance, giving a uniform α-β / steady-state-Kalman
-  tracker whose min-variance gains come from `I` and the drift variance. Measure
-  `I` across regimes to check the gains are truly knob-free. This subsumes the
-  hand-set `η`, `β`, `τ`, `eta_floor`.
+- **Eliminate `forget` from the AR(1) shape (finding 16).** There is one residual
+  free parameter — the bank's weight persistence — but it governs the drift rate
+  of `(φ, s)`, the slowest and least consequential channel (on the flat ridge).
+  It can be removed *without violating the no-zero-parameters proof*, because the
+  irreducible commitment is the AR(1) *shape*, and deriving the `(φ, s)` drift
+  rate from that shape leans only on the assumption already made. The task is to
+  find the optimal such derivation (e.g. a second-level walk/keep-alive on the
+  model weights, self-calibrated like `q_mu = r*/I` was one level down). Practical
+  payoff is near zero (`forget ≈ 0.999` already tracks at the optimum within
+  measurement); the value is theoretical closure.
+- **Restart the optimality-proof thread on the clean `forget = 1` object.** Pure
+  Bayesian model averaging over the `(φ, s)` grid (finding 15) is theoretically
+  clean — a well-posed marginal likelihood, no forgetting heuristic. It is now a
+  tidy enough object to carry the log-loss optimality argument (`optimality-proof/`)
+  through end to end: the bank is Bayes-optimal for the class given the grid, and
+  the WalkingFilter inside each cell is the online-ML tracker (finding 7).
+- **The node positions are Gauss–Hermite by inheritance, and that is the wrong
+  criterion.** GH nodes (`statfilter/core.py::_chain`, and the `odefilter`
+  members) are the roots optimal for *integrating a smooth function against a
+  Gaussian weight* — a quadrature-accuracy objective. The adaptive-grid work
+  established that for *representing / resolving* a log-scale the right criterion
+  is uniform spacing at the dead-zone threshold (finding 11), whose 2-D form is
+  the triangular/hexagonal lattice (the thinnest covering) after Fisher-whitening
+  (finding 11-iii). GH clusters at the centre (over-resolved) and thins at the
+  tails (dead zones for off-centre truths) — a mismatch to what these grids are
+  for. **Re-examine the node spacing in the existing shipped members** (`_chain`
+  and the odefilter grids): a uniform-at-δ (or whitened-hexagonal, jointly)
+  discretisation should be dead-zone-free at equal or lower node count. Caveat to
+  weigh: GH is genuinely appropriate for the *stationary marginal-likelihood
+  integral* `AdaptiveFilter` computes, so the change trades quadrature accuracy of
+  that integral for resolvability across the range, and will move the fit surface
+  — measure both before switching.
 - **The two-channel move**, honouring the covered-channel constraint from 4
-  (a channel driven off-grid corrupts the others' move direction).
+  (a channel driven off-grid corrupts the others' move direction); and the bank
+  extended to the joint plane (whitened-hexagonal grid).
 - **A moving truth beyond a ramp** (oscillating, jumping) and the lag it costs.
-- **Where it ships.** Online augmentation of the filter, or an aid to `fit()`'s
-  start — priced against simply raising the order.
+- *(Resolved)* Defensibly-optimal ranging (findings 10–13, shipped as
+  `WalkingFilter`); where it ships (findings 12, 15 — `WalkingFilter`,
+  `WalkingBank`).
 
 ## Files
 
@@ -464,8 +526,9 @@ spacing lesson (`ode-filter/0047`).
   [`0025`](0025_result_walking_vs_fit.py) headline result: walking vs fit ·
   [`0026`](0026_grid_the_nuisance.py) grid the nuisance (φ,s) ·
   [`0027`](0027_ridge_theory.py) ridge theory: identified-but-sloppy, block is the class ·
-  [`0028`](0028_result_bank.py) shipped: WalkingBank (no numbers, just the class).
+  [`0028`](0028_result_bank.py) shipped: WalkingBank (no numbers, just the class) ·
+  [`0029`](0029_forget_the_last_knob.py) the last knob (forget) and where it lives.
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`, `0028-forget-the-last-knob`.
