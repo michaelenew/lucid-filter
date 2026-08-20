@@ -6,6 +6,16 @@ observed with noise. A strict extension of
 with `p = 1` and `alpha = 1` the two models are identical, and the test suite
 checks that they agree to 1e-8 on the same data.
 
+**When to use.** Reach for `odefilter` when the process has dynamics —
+oscillates, drifts, decays — and especially when those **dynamics can change
+unpredictably** (a drone manoeuvring, a plant switching modes): the dynamics
+coefficient `alpha` is fit once from a representative history *and then tracked*
+online. Like `statfilter` it commits to a stationary class via one `fit()`, so
+it is at its best where you have good sample data; if the regime will leave what
+the fit saw, `statfilter.WalkingFilter` trades the ODE model for unbounded,
+fit-free scale tracking. The two-series **offset channel** (below) adds the
+lead/lag between two sensors reading the same latent process.
+
 **Status: candidate.** It fits, it reduces to the parent, and it beats the
 parent's forecasts on ODE data (numbers in
 [`../../exploration/0027`](../../research/ode-filter/0027_the_candidate_filter.md)).

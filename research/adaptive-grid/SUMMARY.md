@@ -599,6 +599,22 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     reach and the quiet-gain collapse, both realization/gain issues rather than a
     cost of the force shape itself.
 
+21. **Dead zones removed from the static-family members: GH → uniform grid**
+    ([`0035`](0035_uniform_grid_deadzones.py), figure `0034-uniform-grid-deadzones`).
+    `AdaptiveFilter` (statfilter) and `OdeFilter` (odefilter) shared one
+    Gauss-Hermite log-scale grid (`lam = s·z`); `offset.py` has no such grid (its
+    `tau` axis is already uniform). GH optimises quadrature accuracy of a smooth
+    integrand — the wrong criterion for *representing* a log-scale — and its
+    non-uniform nodes leave an edge gap above the `1.5 s` limit (`1.73 s` at order
+    3, `1.50 s` at the default order 5) while over-resolving the centre. Both
+    members now use the uniform grid at `1.5 s` that `walking.py` already uses.
+    Profiled (order 5): max gap `1.501 → 1.500 s`, span `2.86 → 3.00 s`; the
+    marginal-likelihood integration is ~1.3× less accurate than GH (its design
+    strength) but tiny in absolute terms (`6.3e-4 → 7.9e-4` nats/pt); the
+    output shift is `0.031` nats RMS on the process scale and off-centre shrinkage
+    bias is marginally *lower*. **fit() is unaffected** — all 13 slow fit-tests
+    pass unchanged. Shipped in both `core.py` members; closes the GH-node Open.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -649,28 +665,10 @@ spacing lesson (`ode-filter/0047`).
   tidy enough object to carry the log-loss optimality argument (`optimality-proof/`)
   through end to end: the bank is Bayes-optimal for the class given the grid, and
   the WalkingFilter inside each cell is the online-ML tracker (finding 7).
-- **The node positions are Gauss–Hermite by inheritance, and that is the wrong
-  criterion.** GH nodes (`statfilter/core.py::_chain`, and the `odefilter`
-  members) are the roots optimal for *integrating a smooth function against a
-  Gaussian weight* — a quadrature-accuracy objective. The adaptive-grid work
-  established that for *representing / resolving* a log-scale the right criterion
-  is uniform spacing at the dead-zone threshold (finding 11), whose 2-D form is
-  the triangular/hexagonal lattice (the thinnest covering) after Fisher-whitening
-  (finding 11-iii). GH clusters at the centre (over-resolved) and thins at the
-  tails (dead zones for off-centre truths) — a mismatch to what these grids are
-  for. **Re-examine the node spacing in the existing shipped members** (`_chain`
-  and the odefilter grids): a uniform-at-δ (or whitened-hexagonal, jointly)
-  discretisation should be dead-zone-free at equal or lower node count. (Both the
-  legacy and the walking members run the *same kind* of per-step marginal-
-  likelihood integral `Z = Σ_i π_i·N(x; m, S_i)`; the walking members already do
-  it on a uniform-at-δ grid, so this open is about the legacy GH members only.)
-  Note GH's optimality is for the *expected* Gaussian-weighted integral, which is
-  the wrong objective: the dead zone is a *specific-realisation* failure — when a
-  run's log-scale sits persistently in GH's sparse tail the coverage collapses —
-  and GH's quadrature guarantee says nothing about that worst case. So the case
-  for uniform is stronger than a naive "accuracy vs coverage" trade suggests; the
-  thing to measure before switching is whether the fitted loglik surface moves,
-  not whether GH's quadrature accuracy is worth keeping.
+- **The node positions were Gauss–Hermite by inheritance — RESOLVED (finding 21).**
+  `statfilter/core.py::_chain` and the identical `odefilter` grids now use uniform
+  spacing at `1.5 s`, dead-zone-free at every order; the measured cost (fit()
+  unaffected, tiny loglik-integration give-back) is in finding 21.
 - **The two-channel move**, honouring the covered-channel constraint from 4
   (a channel driven off-grid corrupts the others' move direction); and the bank
   extended to the joint plane (whitened-hexagonal grid).
@@ -716,9 +714,11 @@ spacing lesson (`ode-filter/0047`).
   [`0031`](0031_derived_walk_loop.py) derived walk loop: critical damping K*=(1−φ)/4, zero free params ·
   [`0032`](0032_linearize_the_wall.py) force/observability map, linearizing-coordinate search ·
   [`0033`](0033_the_linearizing_coordinate.py) the linearizing coordinate is exact but grid-corrupted (finding 19) ·
-  [`0034`](0034_stress_battery.py) stress battery + oracle-vs-oracle: stepping linearly beats the Newton response (up-jump reach; quiet win is a gain-collapse confound) (finding 20).
+  [`0034`](0034_stress_battery.py) stress battery + oracle-vs-oracle: stepping linearly beats the Newton response (up-jump reach; quiet win is a gain-collapse confound) (finding 20) ·
+  [`0035`](0035_uniform_grid_deadzones.py) dead zones removed: GH → uniform grid for the static-family members (finding 21).
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
   `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`, `0028-forget-the-last-knob`, `0029-stiff-wall-gain`, `0030-derived-walk-loop`,
-  `0031-linearize-the-wall`, `0032-linearizing-coordinate`, `0033-stress-battery`.
+  `0031-linearize-the-wall`, `0032-linearizing-coordinate`, `0033-stress-battery`,
+  `0034-uniform-grid-deadzones`.

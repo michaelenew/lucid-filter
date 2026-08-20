@@ -4,6 +4,13 @@ An adaptive local-level filter that tracks a drifting quantity through noise,
 learns both noise scales from the data, and reports *why* it moved — with no
 tuning parameters, no thresholds, and no changepoint detection.
 
+**When to use.** `AdaptiveFilter` fits a stationary class once from a
+representative history and then streams — the right tool where you have good
+sample data and the regime is stable (industrial processes, sensor monitoring).
+If the regime will move outside anything a one-time `fit()` saw, or you have no
+history to fit, use `WalkingFilter` (below), which walks the scale online with
+unbounded reach and no fit.
+
 ```python
 from statfilter import AdaptiveFilter
 

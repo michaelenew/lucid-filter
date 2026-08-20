@@ -28,9 +28,10 @@ the log is what keeps them separated from s_P and s_M; centring the multiplier
 so that E[exp(lam)] = 1 instead makes log Q and s^2/2 exactly confounded and the
 fit runs away along that ridge.
 
-Inference is an exact forward recursion over a Gauss-Hermite quadrature grid on
-the joint log-scale, with the level posterior collapsed to a single Gaussian per
-step (GPB1).  That collapse is the one approximation in the method.
+Inference is an exact forward recursion over a uniform quadrature grid on the
+joint log-scale (nodes spaced at the resolution limit ``1.5 s`` so there is no
+dead zone -- see ``_chain``), with the level posterior collapsed to a single
+Gaussian per step (GPB1).  That collapse is the one approximation in the method.
 
 Two conservation laws hold per step, by construction rather than by rule:
 
