@@ -270,6 +270,58 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     r=0.083, τ≈3.5) lands **past** that rollover — the capped, reversion-limited
     walk never reaches it, so critical damping (the more conservative point) binds.
 
+11. **Theory of the gap — the last constant, in three parts**
+    ([`0024`](0024_gap_theory.py)).
+
+    **(i) The light-up zone is the scale-family KL, in log-variance.** The per-step
+    cost of representing a truth by a node is the KL between two zero-mean
+    Gaussians, a function only of `x = ln(v_true/v_node)`:
+    `D(x) = ½(eˣ − 1 − x)` — verified against the measured single-node cost at
+    **corr 0.9997**. It is the shelf-with-a-cliff (finding 1) exactly: a linear
+    **shelf** for x<0 (node too loud, mild) and an exponential **cliff** for x>0
+    (node too quiet, overconfident). Its curvature `D''(0)=½` is **constant**, so
+    **log-variance is the Fisher-flat coordinate** — equal spacing = equal
+    information. The math selects log; it is not a modelling choice. (Sharpening:
+    the exactly-flat coordinate is `y = ln S` for total predictive variance S; the
+    map from the process log-scale has `dy/dλ = SNR/(1+SNR)`, so the metric
+    `g(λ)=½(SNR/(1+SNR))²` collapses where the process sinks below measurement
+    noise — the observability curve of finding 7 — and uniform-in-`y` stops
+    gridding the unobservable band automatically.)
+
+    **(ii) The gap is a statistical resolution limit (Sparrow).** Adjacent nodes a
+    gap `g` apart are distinguishable per observation by the symmetric predictive
+    KL `D(g)+D(−g) = cosh(g) − 1 ≈ g²/2`. The filter localises the log-scale no
+    tighter than its steady posterior width, which is **measured to equal `s`**
+    (the stationary in-frame std) and is **independent of φ** (0.30 across
+    φ=0.80→0.97 — the reversion caps it; a floated `√(2(1−φ))` law was **wrong**
+    and is dropped). So nodes closer than ~s are mutually **unresolvable** (dense,
+    wasted); nodes past ~2s leave a gap the filter cannot bridge (the dead zone).
+    The principled gap is the coarsest that stays unresolvable — **`gap ≈ 1.5 s`**,
+    nodes at ~⅔ of a posterior-σ, safely below the ~2s dead zone. `s` is the
+    log-scale's own stationary std (vol-of-vol amplitude), a **class parameter**,
+    so the gap is *determined by the process model*, not tuned.
+
+    **(iii) Peak-to-peak → hexagonal, for a coupled plane.** Minimising worst-case
+    coverage at fixed node count = the thinnest lattice covering. On the joint
+    (process × measurement) plane a single observation identifies only
+    `ln S = ln(q·eᵃ + r·eᵇ)` — one combination — so the per-observation Fisher
+    metric is **rank-1** (strong along total loudness, weak along the
+    process/measurement split, which only the autocorrelation resolves, finding 4).
+    Whiten by it; in the isotropic whitened plane the **hexagonal (A₂) lattice** is
+    the thinnest covering — worst-case gap **12.3% smaller** than the square tensor
+    grid at equal node count (30% fewer nodes at equal gap). So the peak-to-peak →
+    hexagon intuition is correct **for the coupled case**; but channel separation
+    (finding 4) factors the plane into 1-D grids per channel (uniform-in-`y` each),
+    exponentially cheaper — so hexagonal is the answer only if one grids jointly.
+
+    **Parameter budget (capstone).** The regress bottoms out at the log-scale
+    process's own AR(1) pair **`(φ, s)`** — persistence and stationary std. Given
+    them, everything is determined: `gap = 1.5 s`, `mu_cap = gap`, `q_mu` = critical
+    damping (finding 10); grid bounds are a compute/latency budget (finding 9),
+    `Q` is self-corrected by the walk-out, `P0` is a washed-out transient. Zero free
+    tuning parameters; the two survivors are the class model itself (Proposition 1),
+    not knobs.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -316,8 +368,9 @@ spacing lesson (`ode-filter/0047`).
   [`0020`](0020_dimensionless_tradeoff.py) config-invariant tradeoff (r=q_mu·I) ·
   [`0021`](0021_optimal_gridding.py) optimal uniform gridding ·
   [`0022`](0022_unbounded_reach.py) unbounded reach (overshoot + hunting) ·
-  [`0023`](0023_critically_damped_walkout.py) critically-damped dense walk-out.
+  [`0023`](0023_critically_damped_walkout.py) critically-damped dense walk-out ·
+  [`0024`](0024_gap_theory.py) theory of the gap (KL zone, resolution, hexagonal).
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`.
