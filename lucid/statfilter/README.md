@@ -93,6 +93,62 @@ corresponding `s` is above zero.** The persistence of a scale that does not vary
 is undefined, so a scattered `phi` on clean data is the correct non-answer, not a
 failure. Check `s` before reading `phi`.
 
+## A second filter: `WalkingFilter` — learn the scale *online*, no fit
+
+`AdaptiveFilter` learns its six numbers **once**, from a whole series, by maximum
+likelihood, and then runs with them frozen. `WalkingFilter` learns the changing
+part **as it streams**: it carries a small, fine quadrature window over the
+process log-scale and lets that window *walk* to wherever the scale actually is.
+It is the only filter here that learns and walks most of its own settings rather
+than being told them.
+
+```python
+from statfilter import WalkingFilter
+
+f = WalkingFilter(Q=1.0, s2=1.0, phi=0.9, s=0.30)   # only the class pair (phi, s)
+r = f.filter(x)
+r.mean                 # tracked level
+r.process_scale        # process log-scale, tracked step by step — no fit()
+```
+
+Everything else the filter needs is **derived or learned online**, which is what
+sets it apart:
+
+| what | `AdaptiveFilter` | `WalkingFilter` |
+|---|---|---|
+| noise-scale level | fit offline, then frozen | **walked online**, unbounded reach |
+| step gain | from fitted `Q, s2` | **read off the grid** each step (Fisher info `I`) |
+| drift variance `q_mu` | — | **`r*/I`**, the critical-damping point (`r*=3.5e-4`) |
+| grid spacing | `order` (resolution) | **`1.5 s`**, the resolution limit |
+| what you supply | six numbers via `fit(x)` | **two**: `phi, s` (+ base `Q, s2`) |
+
+The two remaining numbers `(phi, s)` are not a tuning knob — they are the model
+of the process itself (how sticky the volatility is, and how far it swings). A
+filter that assumes *nothing* about how fast volatility can move cannot separate a
+real regime change from a run of noise, so that pair is irreducible; the point of
+`WalkingFilter` is that it is the *only* thing left to supply. See
+`../../research/adaptive-grid/` for the derivation of every "derived" row above,
+and `../../research/adaptive-grid/figures/0024-walking-vs-fit.png` for the result:
+on data that shifts to a new volatility regime, a fit made on the earlier history
+and run forward (the realistic deployment) tracks the new regime at RMSE ≈ 3.6,
+while `WalkingFilter` tracks it at ≈ 1.0 — matching an oracle fit that was allowed
+to see the future, with no `fit()` at all.
+
+**Scope.** `WalkingFilter` is a single (process) channel: it adapts the process
+noise scale and holds the measurement scale `s2` fixed. Use `AdaptiveFilter` when
+you have a representative history to fit and both channels matter; use
+`WalkingFilter` to stream with no training pass, or when the regime will move
+outside anything a one-time fit saw.
+
+### `WalkingFilter(Q, s2, phi, s, nodes=7)` · `.filter` / `.update` / `.loglik_of`
+
+`filter(x) -> WalkResult` (arrays: `mean, var, innovation, process_scale,
+scale_step, info`, plus `loglik`); `update(x) -> WalkStep` streams one step
+(`NaN` = missing, propagated not corrected); `loglik_of(x)` returns the marginal
+log-likelihood. `nodes` (odd) is the window's node count — a resolution, since the
+window *walks* for anything beyond its span. `reset(level=None, scale=0.0)` clears
+state and seeds the window centre.
+
 ## Honest limits
 
 Measured on a nine-probe battery against a constant-gain Kalman filter whose

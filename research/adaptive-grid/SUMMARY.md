@@ -322,6 +322,25 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     tuning parameters; the two survivors are the class model itself (Proposition 1),
     not knobs.
 
+12. **Shipped as `statfilter.WalkingFilter`, with the headline result**
+    ([`0025`](0025_result_walking_vs_fit.py), figure `0024-walking-vs-fit.png`).
+    The whole programme is packaged as a filter that takes only the class pair
+    `(phi, s)` (plus base `Q, s2`) and derives/learns the rest online: window
+    position (the walk), step gain (`I` off the grid), drift variance
+    (`q_mu = r*/I`, verified to match a fixed critical-damping `q_mu`), spacing
+    (`1.5 s`), cap (`= gap`). It is the only filter in the package that *learns
+    and walks* its settings rather than fitting them once. The result runs the
+    exact deployment the programme was built for — fit on the history you have,
+    then stream into a regime it never saw: a frozen `AdaptiveFilter.fit()` on the
+    quiet first half tracks the new loud regime at level-RMSE **3.6** (it committed
+    `s_P≈0` and cannot inflate), while `WalkingFilter` tracks it at **1.0**,
+    matching an *oracle* fit allowed to see the whole series (0.96) — with no
+    `fit()` and in ~70 ms. Online adaptation buys what a one-time fit structurally
+    cannot: survival past the edge of its training regime. (Scope: single process
+    channel; the reversion floor leaves the online scale ~0.2 nat low in loud
+    regimes, so the oracle still wins the *scale* RMSE, 0.39 vs 0.72 — the level
+    tracking, what a filter is for, is at parity.)
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
