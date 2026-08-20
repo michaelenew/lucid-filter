@@ -385,21 +385,33 @@ class FilterResult:
 
 
 # ------------------------------------------------------------------- the grid
-def _gauss_hermite(n: int):
-    z, w = np.polynomial.hermite_e.hermegauss(n)
+_GAP_FACTOR = 1.5   # node spacing = 1.5 * s: the resolution limit, no dead zone
+                    # (research/adaptive-grid finding 11).  Uniform, not Gauss-
+                    # Hermite -- GH optimises quadrature accuracy, the wrong
+                    # criterion for representing a log-scale; its non-uniform nodes
+                    # over-resolve the centre and leave an edge gap > 1.5 s.
+
+
+def _uniform_grid(n: int):
+    """Centred uniform node offsets (units of s) and the stationary weights."""
+    z = np.arange(n, dtype=float) - (n - 1) / 2.0
+    w = np.exp(-0.5 * (_GAP_FACTOR * z) ** 2)
     return z, w / w.sum()
 
 
 def _chain(phi: float, s: float, n: int):
-    """Quadrature grid for a stationary AR(1) log-scale, and its kernel."""
-    z, w = _gauss_hermite(n)
-    lam = s * z
+    """Quadrature grid for a stationary AR(1) log-scale, and its kernel.
+
+    Nodes are uniform at the resolution spacing ``1.5 s`` (finding 11); weights are
+    the stationary density and the transition is the exact AR(1) Gaussian kernel.
+    """
+    z, w = _uniform_grid(n)
+    lam = (_GAP_FACTOR * s) * z
     if not s > 0.0 or s * s <= 0.0:
         return np.zeros(n), w, np.tile(w, (n, 1))
     nu = max(s * s * (1.0 - phi * phi), 1e-12)
-    ex = (-0.5 * (lam[None, :] - phi * lam[:, None]) ** 2 / nu
-          + 0.5 * lam[None, :] ** 2 / (s * s))
-    T = w[None, :] * np.exp(np.clip(ex, -700.0, 700.0))
+    ex = -0.5 * (lam[None, :] - phi * lam[:, None]) ** 2 / nu
+    T = np.exp(np.clip(ex, -700.0, 700.0))
     T /= T.sum(1, keepdims=True)
     return lam, w, T
 
@@ -440,12 +452,11 @@ _LOG_S_FLOOR = math.log(1e-6)           # s >= 1e-6
 
 def _chain_batch(phi: np.ndarray, s: np.ndarray, n: int):
     """:func:`_chain` for a batch of (phi, s); returns (B, n) lam, (B, n) w, (B, n, n) T."""
-    z, w = _gauss_hermite(n)
-    lam = s[:, None] * z
+    z, w = _uniform_grid(n)
+    lam = s[:, None] * (_GAP_FACTOR * z)
     nu = np.maximum(s * s * (1.0 - phi * phi), 1e-12)[:, None, None]
-    ex = (-0.5 * (lam[:, None, :] - phi[:, None, None] * lam[:, :, None]) ** 2 / nu
-          + 0.5 * lam[:, None, :] ** 2 / (s * s)[:, None, None])
-    T = w * np.exp(np.clip(ex, -700.0, 700.0))
+    ex = -0.5 * (lam[:, None, :] - phi[:, None, None] * lam[:, :, None]) ** 2 / nu
+    T = np.exp(np.clip(ex, -700.0, 700.0))
     T /= T.sum(2, keepdims=True)
     return lam, np.broadcast_to(w, lam.shape), T
 

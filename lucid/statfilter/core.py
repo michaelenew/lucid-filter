@@ -213,30 +213,46 @@ class FilterResult:
 
 
 # ------------------------------------------------------------------- the grid
-def _gauss_hermite(n: int):
-    """Nodes and normalised weights for a standard normal."""
-    z, w = np.polynomial.hermite_e.hermegauss(n)
+_GAP_FACTOR = 1.5   # node spacing = 1.5 * s: the resolution limit, no dead zone
+                    # (research/adaptive-grid finding 11).  Uniform spacing, not
+                    # Gauss-Hermite -- GH optimises quadrature accuracy of a smooth
+                    # integrand, the wrong criterion for *representing* a log-scale;
+                    # its non-uniform nodes over-resolve the centre and leave an
+                    # edge gap > 1.5 s (1.73 s at order 3, 1.50 s at order 5).
+
+
+def _uniform_grid(n: int):
+    """Centred uniform node offsets (in units of s) and the stationary weights.
+
+    Nodes sit at ``1.5 * s * z`` with ``z`` a centred integer ladder, so the
+    spacing is exactly the resolution limit ``1.5 s`` and the span is
+    ``+-(n-1)/2 * 1.5 s`` of the stationary law.  The weights are the stationary
+    normal density on those nodes -- independent of ``s`` because the grid scales
+    with ``s`` -- so this is the discrete stationary law of the AR(1) log-scale.
+    """
+    z = np.arange(n, dtype=float) - (n - 1) / 2.0
+    w = np.exp(-0.5 * (_GAP_FACTOR * z) ** 2)
     return z, w / w.sum()
 
 
 def _chain(phi: float, s: float, n: int):
     """Quadrature grid for a stationary AR(1) log-scale, and its transition matrix.
 
-    Nodes are the Gauss-Hermite abscissae of the stationary law; the transition
-    is the exact Gaussian kernel evaluated on those nodes and reweighted by the
-    stationary density.  The only choice is n, which is a resolution.
+    Nodes are **uniform at the resolution spacing** ``1.5 s`` (finding 11: the
+    dead-zone-free spacing); the weights are the stationary density on those nodes
+    and the transition is the exact AR(1) Gaussian kernel, row-normalised.  The
+    only choice is ``n``, a resolution (span ``+-(n-1)/2 * 1.5 s``).
     """
-    z, w = _gauss_hermite(n)
-    lam = s * z
+    z, w = _uniform_grid(n)
+    lam = (_GAP_FACTOR * s) * z
     # s * s underflows to 0.0 for s below about 1e-162, and the unconstrained
     # search in fit_ does reach there, so guard on the square rather than on s
-    # itself -- otherwise the 1/(s*s) below produces nan and poisons the fit.
+    # itself -- otherwise the 1/nu below produces nan and poisons the fit.
     if not s > 0.0 or s * s <= 0.0:
         return np.zeros(n), w, np.tile(w, (n, 1))
     nu = max(s * s * (1.0 - phi * phi), 1e-12)
-    ex = (-0.5 * (lam[None, :] - phi * lam[:, None]) ** 2 / nu
-          + 0.5 * lam[None, :] ** 2 / (s * s))
-    T = w[None, :] * np.exp(np.clip(ex, -700.0, 700.0))
+    ex = -0.5 * (lam[None, :] - phi * lam[:, None]) ** 2 / nu
+    T = np.exp(np.clip(ex, -700.0, 700.0))
     T /= T.sum(1, keepdims=True)
     return lam, w, T
 
@@ -263,12 +279,11 @@ _LOG_S_FLOOR = math.log(1e-6)           # s >= 1e-6
 
 def _chain_batch(phi: np.ndarray, s: np.ndarray, n: int):
     """:func:`_chain` for a batch of (phi, s); returns (B, n) lam and (B, n, n) T."""
-    z, w = _gauss_hermite(n)
-    lam = s[:, None] * z
+    z, w = _uniform_grid(n)
+    lam = s[:, None] * (_GAP_FACTOR * z)
     nu = np.maximum(s * s * (1.0 - phi * phi), 1e-12)[:, None, None]
-    ex = (-0.5 * (lam[:, None, :] - phi[:, None, None] * lam[:, :, None]) ** 2 / nu
-          + 0.5 * lam[:, None, :] ** 2 / (s * s)[:, None, None])
-    T = w * np.exp(np.clip(ex, -700.0, 700.0))
+    ex = -0.5 * (lam[:, None, :] - phi[:, None, None] * lam[:, :, None]) ** 2 / nu
+    T = np.exp(np.clip(ex, -700.0, 700.0))
     T /= T.sum(2, keepdims=True)
     return lam, np.broadcast_to(w, lam.shape), T
 
