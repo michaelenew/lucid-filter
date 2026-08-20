@@ -514,6 +514,40 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     residual regime-dependent damping is the honest fingerprint of the stiff wall,
     not a tunable knob. Closing that trade with zero parameters is an Open.
 
+19. **The linearizing coordinate is derived and exact — and a finite grid cannot
+    realise it** ([`0032`](0032_linearize_the_wall.py) map,
+    [`0033`](0033_the_linearizing_coordinate.py) theory, figures
+    `0031-linearize-the-wall`, `0032-linearizing-coordinate`). To remove the
+    stiffening well's amplitude-dependent damping (0010 panel c) with a *derived*
+    (not fitted) force-linearization: for the scale family the score is
+    `g(e)=½(eᵉ−1)` and the Fisher `I(e)=½eᵉ`, so the offset is recovered exactly by
+    **`e = log(I/I₀) = −log(1 − g/I)`** — two identities, verified to machine zero,
+    with no free constant. Stepping `μ` by `γ·e` makes the force `de/dt=−γe` linear
+    at every amplitude, so finding-18's `K*=(1−φ)/4` critical damping would hold
+    *globally*, not just at the reference regime. Neither the raw score (explodes
+    loud) nor the natural gradient `g/I=1−e⁻ᵉ` (saturates loud, explodes quiet) is
+    the offset; only these transforms are.
+    **The obstacle is the grid, and it is fundamental, not a tuning failure.** The
+    identities take the *ideal* `(g, I)`. A finite window of half-span `H` supplies
+    them only while `|e| ≤ H`; beyond, every node reports the wrong variance, the
+    prefactors collapse, and the measured `g/I` stops obeying `1−e⁻ᵉ` — it
+    *overshoots* the ideal ceiling of 1 (measured `~66` at `e=+5`). Feeding that
+    into `−log(1−g/I)` clips at the pole and emits huge steps; applied in the
+    walking filter it blows the loud side up (mid-stream overshoot 21%→130%,
+    tracking 0.48→1.25). Every empirical transform tried (`asinh(g/I_char)`,
+    `asinh(g/info)`, soft-threshold blends) failed the same way — because they fit
+    scale factors to corrupted inputs, exactly the non-defensible move to avoid.
+    **Consequence:** the amplitude-dependent damping *inside* the window span is
+    already ~removed (the shipped Newton step `g/info` matches the exact coordinate
+    to first order at `e=0`, and empirically stays ~linear, R²≈0.97, for `|e|≲2`);
+    *beyond* the span it is a grid-**reach** problem, not a force-shape one, and no
+    transform of grid quantities can fix it. The theoretically clean cure is to
+    keep the offset inside the span — an expanding/hopping grid (the adaptive-grid
+    thesis) so the derived transform always sees uncorrupted `(g, I)` — recorded as
+    an Open. The residual overshoot the shipped filter still shows at *moderate*
+    in-span amplitudes is the separate finding-18 gain/observability trade, not the
+    force nonlinearity.
+
 **Prior art:** the dead zone is new here. Related but distinct: the GPB1 ridge
 `Q·e^{s_P²/2}=const` (fitted-surface flatness from covariance collapse,
 `oracle-gap/0004–0005`), the quadrature-order thread (independently "order 5
@@ -522,6 +556,15 @@ spacing lesson (`ode-filter/0047`).
 
 ## Open
 
+- **Realise the derived linearization with an expanding grid (finding 19).** The
+  linearizing coordinate `e = log(I/I₀) = −log(1−g/I)` is exact but unusable on a
+  fixed finite grid, which corrupts `(g, I)` once the offset leaves the window.
+  The theoretically clean route is a grid that expands/hops on edge-saturation to
+  keep the offset in-span, so the derived transform always sees uncorrupted
+  inputs; then a constant `K*=(1−φ)/4` is critically damped at *all* amplitudes.
+  This is the adaptive-grid thesis (the very first probes) applied to the walk
+  loop; needs a derived expansion trigger and ratio (not a threshold), then a
+  before/after stress battery vs the shipped fixed-grid filter.
 - **Uniform damping vs deep-quiet capture across the 84× observability swing
   (finding 18).** A fixed `q_mu` is critically damped only at the characteristic
   regime; a constant gain `K*` (`q_mu ∝ 1/I`) is uniformly damped but cannot
@@ -612,8 +655,11 @@ spacing lesson (`ode-filter/0047`).
   [`0028`](0028_result_bank.py) shipped: WalkingBank (no numbers, just the class) ·
   [`0029`](0029_forget_the_last_knob.py) the last knob (forget) and where it lives ·
   [`0030`](0030_stiff_wall_gain.py) stiff-wall gain (steady observability; EMA, superseded) ·
-  [`0031`](0031_derived_walk_loop.py) derived walk loop: critical damping K*=(1−φ)/4, zero free params.
+  [`0031`](0031_derived_walk_loop.py) derived walk loop: critical damping K*=(1−φ)/4, zero free params ·
+  [`0032`](0032_linearize_the_wall.py) force/observability map, linearizing-coordinate search ·
+  [`0033`](0033_the_linearizing_coordinate.py) the linearizing coordinate is exact but grid-corrupted (finding 19).
 - `figures/` — `0001-what-lights-up`, `0002-between-nodes`, `0003-the-bells`,
   `0004-resolution-criterion`, `0005-exact-vs-local`, `0006-measurement-and-plane`,
   `0007-the-move`, `0008-online-convergence`, `0009-settling`,
-  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`, `0028-forget-the-last-knob`, `0029-stiff-wall-gain`, `0030-derived-walk-loop`.
+  `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`, `0028-forget-the-last-knob`, `0029-stiff-wall-gain`, `0030-derived-walk-loop`,
+  `0031-linearize-the-wall`, `0032-linearizing-coordinate`.
