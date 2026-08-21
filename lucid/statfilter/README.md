@@ -100,6 +100,71 @@ corresponding `s` is above zero.** The persistence of a scale that does not vary
 is undefined, so a scattered `phi` on clean data is the correct non-answer, not a
 failure. Check `s` before reading `phi`.
 
+## Multivariate state and a supplied measurement matrix: `VectorFilter`
+
+`AdaptiveFilter` is the scalar case — a 1-D level, observed directly. `VectorFilter`
+is the same filter with an **n-vector state**, an **m-vector observation**, and a
+**supplied measurement matrix `H` (m×n)**:
+
+```
+theta_t = theta_{t-1} + w_t     w_t ~ N(0, Q0 * exp(lamP_t))     Q0  n×n
+y_t     = H theta_t   + v_t     v_t ~ N(0, R0 * exp(lamM_t))     R0  m×m
+```
+
+`H` is **structural** — the observation model you built (which linear combinations
+of the state each sensor reads), exactly like `OdeFilter`'s `linearized_dynamics`.
+So `fit()` still infers everything noise-related: the **full-symmetric** base
+covariances `Q0, R0` and the four scale numbers `phi_P, phi_M, s_P, s_M`. *Give the
+filter what you know (how the sensors read the state), it infers what you don't
+(the live noise).*
+
+```python
+from statfilter import VectorFilter
+import numpy as np
+
+H = np.array([[1., 0., 0.],          # sensor 1 reads component 0
+              [0., 1., -1.]])        # sensor 2 reads component 1 minus component 2
+f = VectorFilter.fit(Y, H)           # Y is (T, m); learns Q0, R0 (full symmetric) + scales
+r = f.filter(Y)
+r.mean                               # (T, n) tracked state
+r.var                                # (T, n, n) its covariance
+r.share_prior, r.share_process, r.share_measurement   # still sum to 1, per step
+```
+
+**What generalises, and what doesn't.** The noise-deduction machinery is
+*unchanged* — the same `order**2` quadrature grid, the same scalar scale channels,
+the same four mode coordinates. Only two things lift to matrices:
+
+- **The Kalman node** becomes the standard matrix update (`S = H(P+Qg)Hᵀ + Rg`,
+  `K = (P+Qg)Hᵀ S⁻¹`), with the grid mixture collapsed to one Gaussian per step
+  (multivariate GPB1).
+- **The amplitude conservation law** becomes a trace decomposition:
+  `S = H P Hᵀ + H Qg Hᵀ + Rg` (three pieces summing to `S`), and
+  `share_• = tr(S⁻¹ · piece)/m`, which sums to 1 and reduces to the scalar
+  `P/S, Qg/S, Rg/S` at `m=1`.
+
+At **n = m = 1, H = [[1]]** every formula collapses to `AdaptiveFilter`; the test
+suite pins the agreement to 1e-10.
+
+**When to use it.** A state with genuine structure read through a known linear
+sensor model — a small mechanical assembly with a few load cells, a chemical bath
+with cross-coupled probes, any place you know how the measurements map to the
+underlying quantities but not how noisy the environment will be. It recovers the
+full cross-correlated `Q0, R0` through a mixing `H` (to sampling error, not bias)
+and correctly finds *which* channel is live: on data with a real process-scale
+channel and clean sensors it fits `s_P ≈ 0.5, s_M ≈ 0` and beats the best
+homoscedastic model on held-out likelihood.
+
+**Scope and the one open.** The **scale channels are scalar** — one per matrix,
+`Q0·exp(lamP)` and `R0·exp(lamM)` — an overall magnitude that breathes over a
+*fixed* correlation shape. This is what keeps the grid at `order**2` states.
+Per-component scale deduction ("*which* sensor is hot right now", a different scale
+per observation channel) is genuinely richer, but a separate scale per channel
+makes the tensor-product grid `order**(#channels)` and needs a factorised or
+walking representation instead — a recorded open, not a knob here. Partially
+missing observations (some sensors present, some `NaN` in the same step) are also
+not handled yet; an all-`NaN` row is a clean gap (propagate, do not correct).
+
 ## A second filter: `WalkingFilter` — learn the scale *online*, no fit
 
 `AdaptiveFilter` learns its six numbers **once**, from a whole series, by maximum
