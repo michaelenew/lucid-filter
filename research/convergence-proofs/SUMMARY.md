@@ -121,6 +121,38 @@ The p-state extension; verified numerically (probe ~4 s, fixed/frozen params).
   one level up; its `g`-posterior forgets its init at `|λ₂(T_A)|` (0.464 at
   φ_A=.5,s_A=.15). Brief, by the Theorem-1 argument.
 
+### Shape vs parameters — what "no free parameters" actually costs ([`0005`](0005_shape_vs_parameters.py))
+
+The capstone of the no-free-parameter thesis: separate the **shape's** contribution
+(committing to the stationary AR(1) log-scale class) from the **parameters'** (knowing
+φ, s). Log-loss is the currency; both arms use the *exact* dense-grid class filter so
+the difference is the pure parameter cost (a Bayes factor), not any filter
+suboptimality.
+
+- **The shape sets the whole floor.** The params-known predictive log-loss is
+  **1.91 nats/step** — an `O(T)` cost fixed by the class (the AR(1) log-scale entropy
+  rate at the true params).
+- **The parameters are nearly free.** Committing only to the shape (Bayes-averaging
+  over a (φ,s) grid containing the truth, forget=1) costs a **total regret < 1 nat
+  over 4000 steps** — per-step `1.6e-4` nats, a fraction `8.5e-5` of the total
+  log-loss, and *sublinear* (per-step regret falls ~1/t). Over the whole run,
+  knowing (φ, s) vs committing only to the shape is worth **less than one nat**.
+- **The ridge makes it even cheaper.** The (φ, s) Fisher information is sloppy
+  (~5:1 eigenvalue ratio, finding 14): one direction is barely identified — and
+  barely matters — so the regret saturates near `log(~2 effective ridge members)`,
+  far below `log(20)` grid points or the naïve two-parameter `(2/2)ln T`. The precise
+  continuum `d_eff` is not pinned by a fixed grid, but it is `≪ 2`.
+- **Aside (walking mode).** With the *shipped* walking filter (not the exact filter),
+  the regret goes **negative** (−7.8 nats): the bank *beats* the true-(φ,s) walking
+  filter by selecting a better-*predicting* member, i.e. parameter freedom
+  compensates the walking filter's own suboptimality (finding 18). A real
+  walking-mode fact, distinct from the clean shape-vs-params decomposition.
+
+**Reading:** the shape assumption does essentially all the work; the parameters add a
+vanishing, sub-nat regret, and the sloppy ridge shrinks even that. "No free
+parameters, only shape" is within a fraction of a nat of knowing the parameters —
+the price of the whole no-free-parameter stance is negligible.
+
 ## Open / next
 
 - **Walking — DONE** (0001 convergence + walk-state floor; 0002 full-estimate DARE
