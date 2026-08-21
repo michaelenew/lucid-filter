@@ -669,6 +669,17 @@ spacing lesson (`ode-filter/0047`).
   `statfilter/core.py::_chain` and the identical `odefilter` grids now use uniform
   spacing at `1.5 s`, dead-zone-free at every order; the measured cost (fit()
   unaffected, tiny loglik-integration give-back) is in finding 21.
+- **A GH/uniform hybrid grid may beat either alone (theory only, immaterial).**
+  Finding 21 picked uniform for dead-zone-freedom; GH remains the better quadrature
+  for the per-step marginal-likelihood integral (its design objective). Neither is
+  optimal for *both* objectives at once — representation/coverage (wants uniform at
+  the resolution limit) and integration accuracy (wants GH-like weighting / a
+  denser core). A hybrid — e.g. uniform node *placement* with a GH-style weight
+  correction, or a dense core spliced to uniform wings — could plausibly dominate
+  both. Finding the genuinely optimal grid is a theory-completeness question and is
+  **mostly immaterial to filter performance** (finding 21 measured the whole
+  GH↔uniform gap at ~1e-4 nats/pt with fit() unaffected), so it sits with `forget`
+  and the nonlinearity as theory-only.
 - **The two-channel move**, honouring the covered-channel constraint from 4
   (a channel driven off-grid corrupts the others' move direction); and the bank
   extended to the joint plane (whitened-hexagonal grid).
