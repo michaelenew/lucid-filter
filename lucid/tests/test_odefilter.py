@@ -607,60 +607,73 @@ def test_fit_finds_the_dynamics_channel_when_the_dynamics_stop():
     assert d[n + 100:].mean() < d[100:n].mean()    # and uses it where it should
 
 
-# ------------------------------------------- supplied-dynamics (robotics) mode
-def test_supplied_constant_F_matches_normal():
-    """A supplied filter fed a CONSTANT F = companion(alpha) reproduces the normal
-    OdeFilter with that alpha (s_A = 0) to machine precision -- fixed and adaptive
-    noise.  This is the supplied-mode analogue of the reduces-to-parent check."""
+# ---------------------------- supplied-dynamics via a linearized_dynamics callable
+def _const_dyn(alpha):
+    F = _companion(alpha)
+    return lambda state: F
+
+
+def test_constant_callable_matches_normal_filter():
+    """A constant linearized_dynamics (state -> companion(alpha)) reproduces the
+    normal OdeFilter with that alpha (s_A = 0) to machine precision -- fixed and
+    adaptive noise.  Supplying the dynamics strictly generalises fixing them."""
     rng = np.random.default_rng(0)
     alpha = (1.6, -0.7)
     _, y = ar(300, alpha, 1.0, 1.0, rng)
-    Fs = np.broadcast_to(_companion(alpha), (y.size, 2, 2))
     for sP in (0.0, 0.35):
-        pr = Params(alpha=alpha, Q=1.0, s2=1.0, phi_P=0.9, phi_M=0.9, s_P=sP, s_M=0.0)
-        Ln = OdeFilter(pr).loglik(y)
-        Ls = OdeFilter.supplied(2, Q=1.0, s2=1.0, phi_P=0.9, s_P=sP,
-                                phi_M=0.9, s_M=0.0).loglik(y, Fs=Fs)
+        Ln = OdeFilter(Params(alpha=alpha, Q=1.0, s2=1.0, phi_P=0.9, phi_M=0.9,
+                              s_P=sP, s_M=0.0)).loglik(y)
+        placeholder = Params(alpha=(0.0, 0.0), Q=1.0, s2=1.0, phi_P=0.9, phi_M=0.9,
+                             s_P=sP, s_M=0.0)
+        Ls = OdeFilter(placeholder, linearized_dynamics=_const_dyn(alpha)).loglik(y)
         assert abs(Ln - Ls) < 1e-9
 
 
-def test_supplied_requires_and_validates_F():
-    f = OdeFilter.supplied(2)
+def test_callable_validates_its_output():
+    f = OdeFilter(Params(alpha=(0.0, 0.0), Q=1.0, s2=1.0),
+                  linearized_dynamics=lambda s: np.eye(3))   # wrong shape
     with pytest.raises(ValueError):
-        f.update(0.5)                       # supplied mode: F required each step
-    with pytest.raises(ValueError):
-        f.filter(np.zeros(5))               # batch: Fs required
-    with pytest.raises(ValueError):
-        f.update(0.5, F=np.eye(3))          # wrong shape
+        f.update(0.5)
 
 
-def test_supplied_ltv_runs_and_streams():
+def test_state_dependent_callable_runs_and_streams():
     rng = np.random.default_rng(2)
     _, y = ar(200, (1.5, -0.6), 1.0, 1.0, rng)
-    Fs = np.array([_companion([1.5 + 0.1 * np.sin(t / 20), -0.6]) for t in range(y.size)])
-    r = OdeFilter.supplied(2, s_P=0.3).filter(y, Fs=Fs)
+    dyn = lambda s: _companion([1.5 + 0.05 * np.tanh(s[0]), -0.6])   # state-dependent
+    r = OdeFilter(Params(alpha=(0.0, 0.0), Q=1.0, s2=1.0, s_P=0.3),
+                  linearized_dynamics=dyn).filter(y)
     assert np.all(np.isfinite(r.mean))
-    f = OdeFilter.supplied(2, s_P=0.3).reset()
-    stream = np.array([f.update(v, Fs[i]).mean for i, v in enumerate(y)])
+    f = OdeFilter(Params(alpha=(0.0, 0.0), Q=1.0, s2=1.0, s_P=0.3),
+                  linearized_dynamics=dyn).reset()
+    stream = np.array([f.update(v).mean for v in y])
     assert np.allclose(stream, r.mean, atol=1e-9)
 
 
-def test_fit_supplied_recovers_noise():
+def test_fit_with_linearized_dynamics_infers_noise():
+    """fit(..., linearized_dynamics=fn) learns the NOISE class with the dynamics
+    given by the callable -- not fitted.  Recovers known Q, s2 under a
+    state-dependent transition and carries the callable."""
     rng = np.random.default_rng(1)
     T = 1200
-    Fs = np.array([_companion([1.5 + 0.15 * np.sin(t / 40), -0.6]) for t in range(T)])
+    dyn = lambda s: _companion([1.5 + 0.05 * np.tanh(0.3 * s[0]), -0.6])
     x = np.zeros(T); st = np.zeros(2)
     for t in range(T):
-        st = Fs[t] @ st
+        st = dyn(st) @ st
         st[0] += rng.standard_normal() * math.sqrt(0.8)
         x[t] = st[0] + rng.standard_normal() * math.sqrt(1.3)
-    f = OdeFilter.fit_supplied(x, Fs, p=2, scales=False)
-    assert 0.5 < f.params.Q < 1.2 and 1.0 < f.params.s2 < 1.7
-    assert f._supplied
-    assert f.loglik(x, Fs=Fs) >= OdeFilter.supplied(2, Q=0.8, s2=1.3).loglik(x, Fs=Fs) - 1e-6
+    f = OdeFilter.fit(x, p=2, scales=False, linearized_dynamics=dyn)
+    assert 0.4 < f.params.Q < 1.3 and 0.9 < f.params.s2 < 1.8
+    assert f.linearized_dynamics is dyn
+    true = OdeFilter(Params(alpha=(0.0, 0.0), Q=0.8, s2=1.3), linearized_dynamics=dyn)
+    assert f.loglik(x) >= true.loglik(x) - 1e-6
 
 
-def test_supplied_roundtrips_through_dict():
-    f = OdeFilter.supplied(2, Q=1.1, s2=0.9, s_P=0.3)
-    g = OdeFilter.from_dict(f.to_dict())
-    assert g._supplied and g.params.Q == f.params.Q and g.params.s_P == f.params.s_P
+def test_noise_params_roundtrip_callable_reattached():
+    f = OdeFilter(Params(alpha=(0.0, 0.0), Q=1.1, s2=0.9, s_P=0.3),
+                  linearized_dynamics=_const_dyn((1.6, -0.7)))
+    g = OdeFilter.from_dict(f.to_dict())            # callable not serialised
+    assert g.params.Q == f.params.Q and g.params.s_P == f.params.s_P
+    assert g.linearized_dynamics is None            # re-attach after load
+    g.linearized_dynamics = _const_dyn((1.6, -0.7))
+    rng = np.random.default_rng(5); _, y = ar(100, (1.6, -0.7), 1.0, 1.0, rng)
+    assert np.allclose(f.filter(y).mean, g.filter(y).mean)

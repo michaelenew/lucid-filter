@@ -69,35 +69,41 @@ of genuine predictive power. `f.derivatives()` returns the posterior in
 `(x, dx, d2x)` coordinates — a fixed involutive integer change of basis, so
 nothing is created or lost.
 
-### Supplied dynamics, one step at a time (robotics)
+### Supplied dynamics (robotics): give the model, infer the noise
 
-When the dynamics are **time-varying and known** — a control loop that
-re-linearises around the operating point each step, so the `p×p` transition
-changes every tick — supply it rather than fit it. Pass the companion matrix `F`
-to every `update` (or a length-`T` sequence to `filter`); the dynamics channel is
-off, and only the noise scales are the model's own, adaptive as always.
+When you **know the dynamics** — you built the robot — but not the noise (a
+product of the live environment, and drifting), give the filter what you know and
+let it infer the rest. Pass a single callable to `fit`:
 
 ```python
 from odefilter import OdeFilter
 
-# no fit: give the noise levels directly (s_P/s_M > 0 for adaptive noise)
-f = OdeFilter.supplied(p=2, Q=1e-3, s2=0.04, s_P=0.3)
-f.reset()
-for y_t in stream:
-    F_t = linearize(state)         # your p×p companion transition this step
-    step = f.update(y_t, F_t)      # F is REQUIRED every step in this mode
+def linearized_dynamics(state):     # state: p-vector estimate; returns p×p transition
+    return jacobian_of_your_model(state)     # re-linearised at the operating point
 
-# or learn the noise class once from a run whose dynamics you logged:
-f = OdeFilter.fit_supplied(y, Fs, p=2)   # Fs: (T, p, p); fits (Q, s2, phi_P, s_P, ...)
-r = f.filter(y, Fs=Fs)
+# fit() learns ONLY the noise class (Q, s2, phi_P, s_P, phi_M, s_M) from a
+# representative run; the dynamics are the callable's, not fitted or ranged
+f = OdeFilter.fit(y, p=2, linearized_dynamics=linearized_dynamics)
+
+f.reset()                           # then stream -- no per-step dynamics argument
+for y_t in sensor_stream:
+    step = f.update(y_t)            # F_t = linearized_dynamics(state estimate), internally
 ```
 
-`F` is companion-form (its first row is the recurrence coefficients); the
-observation reads the first state component and process noise enters it, so a
-general `p×p` transition is accepted but is filtered under that noise/observation
-structure. With a *constant* `F = companion(alpha)` this reduces exactly (to
-machine precision) to `OdeFilter(Params(alpha=…))` — supplying the dynamics is a
-strict generalisation of fixing them.
+Each step the transition is `linearized_dynamics(x̂)` at the running state estimate
+(EKF-style), so the dynamics channel is off and `alpha` is not fitted — the noise
+scales remain the only inferred, adaptive part. This is the point of the design:
+**you supply what you know (the dynamics), the filter infers what you don't (the
+live noise).** The callable is not serialised by `to_dict`; re-attach it
+(`f.linearized_dynamics = …`) after `from_dict`.
+
+The filter is scalar-observed (state = the signal and its `p−1` lags, observation
+reads component 0, process noise enters it), so the callable returns a `p×p`
+companion transition. A *constant* callable returning `companion(alpha)` reduces
+exactly (machine precision) to `OdeFilter(Params(alpha=…))` — supplying the
+dynamics strictly generalises fixing them. (A genuinely multivariate state /
+observation model, and detecting *drift from the nominal dynamics* as a
+failure/shutoff signal, are recorded as open extensions.)
 
 ## What to read from it
 
@@ -228,3 +234,17 @@ measured to be real; none is yet measured to be worth its cost. For the
 offset channel: diffusion/kinetic `(tau, taudot)` kernels (`0050` — worth ~5
 millinats/point to forecast consumers, `0056`), the tube grid's "is it a pure
 delay?" verdict (`0048`), and the `(mu, tau)` derivative axis (`0043`).
+
+For supplied dynamics (`linearized_dynamics`):
+
+- **Drift detection from the nominal model.** With the dynamics fixed to the
+  supplied model, sustained structure in the innovations that the nominal cannot
+  explain means the *dynamics themselves* have departed — a bearing worn, a load
+  shifted, an actuator degraded. Detecting that departure is a potentially very
+  valuable failure/shutoff signal for industrial robotics. The filter already
+  accumulates a `whiteness` diagnostic; turning it into a calibrated
+  dynamics-drift alarm against the supplied nominal is the open.
+- **Multivariate state / observation.** The filter is scalar-observed (companion
+  state, observes component 0). A genuine multi-dimensional state with a general
+  observation map — the full EKF/robotics setting — is a core redesign, not a
+  constructor parameter.

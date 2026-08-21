@@ -36,7 +36,7 @@ deploying to something small.
 | filter | model | fit? | reach for it when |
 |---|---|---|---|
 | [`statfilter.AdaptiveFilter`](statfilter/README.md) | unbiased random walk observed with noise | once, offline | you have representative history and the regime is stable — **industrial processes, sensor monitoring** — where a one-time `fit()` captures the operating range |
-| [`odefilter.OdeFilter`](odefilter/README.md) | process locally a linear ODE (oscillates, drifts, decays) | once, offline (or **dynamics supplied per step**) | the **dynamics** themselves can change unpredictably — a **drone** manoeuvring, a plant changing modes; `alpha` is fit once *and then tracked*, **or** the `p×p` transition is handed in every step (`OdeFilter.supplied`, for a control loop that re-linearises each tick) |
+| [`odefilter.OdeFilter`](odefilter/README.md) | process locally a linear ODE (oscillates, drifts, decays) | once, offline | the **dynamics** themselves can change unpredictably — a **drone** manoeuvring, a plant changing modes; `alpha` is fit once *and then tracked*, **or** you hand `fit` a `linearized_dynamics(state)` callable (you know the model — a control loop re-linearising each tick) and only the noise is inferred |
 | [`odefilter`](odefilter/README.md) offset channel | two series reading one latent at a lead/lag `tau` | once, offline | you have two sensors on the same process and need the (fractional, moving) delay between them |
 | [`statfilter.WalkingFilter` / `WalkingBank`](statfilter/README.md) | random walk with the noise scale **walked online** | **no `fit()`** | you have no representative history, or the regime will move **outside anything a one-time fit saw** — the scale is unbounded and tracked step by step |
 
