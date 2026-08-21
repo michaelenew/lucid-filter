@@ -44,6 +44,15 @@ too fast needs.  `Step.dynamics` reports the posterior mean of g.
 With s_A = 0 the channel collapses to a single node and the recursion is
 bit-for-bit what it was before the channel existed.
 
+For TIME-VARYING known dynamics -- a robotics loop re-linearising around the
+operating point each step -- pass a ``linearized_dynamics`` callable
+(``state -> p x p`` transition) to ``fit`` or the constructor.  The dynamics are
+then the caller's, evaluated at the running state estimate each step (EKF-style);
+``alpha`` and the dynamics channel are not fitted, and only the NOISE class is
+inferred -- give the filter what you know (the dynamics), it infers what you don't
+(the live noise).  A constant callable returning ``companion(alpha)`` reduces to
+fixing ``alpha`` exactly.
+
 Two diagnostics come out for free, and they are orthogonal by construction
 (measured in exploration/0025):
 
@@ -825,7 +834,7 @@ class OdeFilter:
     """
 
     def __init__(self, params: Params | None = None, order: int = 5,
-                 order_A: int = 3):
+                 order_A: int = 3, linearized_dynamics=None):
         if order < 3:
             raise ValueError("order must be at least 3")
         if order_A < 3:
@@ -834,6 +843,11 @@ class OdeFilter:
         self.order = int(order)
         self.order_A = int(order_A)
         self._built = None
+        # supplied-dynamics mode: a callable state -> (p x p) transition, evaluated
+        # at the running state estimate each step (EKF-style).  The dynamics are then
+        # KNOWN, not fitted or ranged; only the noise scales are inferred.  None keeps
+        # the ordinary fit-and-track-alpha behaviour.
+        self.linearized_dynamics = linearized_dynamics
         self.reset()
 
     def __repr__(self) -> str:
@@ -846,6 +860,8 @@ class OdeFilter:
     def to_dict(self) -> dict:
         if self.params is None:
             raise ValueError("filter is not fitted")
+        # the linearized_dynamics callable is not serialisable; re-attach it after
+        # from_dict (the fitted NOISE class is what persists).
         return {"params": self.params.to_dict(), "order": self.order,
                 "order_A": self.order_A}
 
@@ -856,6 +872,45 @@ class OdeFilter:
         # with strictly more of the evidence
         return cls(Params.from_dict(d["params"]), order=int(d.get("order", 5)),
                    order_A=int(d.get("order_A", 3)))
+
+    # ------------------------------------------- supplied-dynamics (noise-only) fit
+    @classmethod
+    def _fit_noise_only(cls, y, linearized_dynamics, p: int, order: int,
+                        scales: bool, max_iter: int) -> "OdeFilter":
+        """Learn only the NOISE class; the dynamics come from the callable.
+
+        The transition each step is ``linearized_dynamics(state_estimate)`` (EKF-style),
+        so ``alpha`` and the dynamics channel are not fitted.  A plain local
+        optimisation of the exact filter likelihood over ``(Q, s2)`` and, when
+        ``scales``, the AR(1) log-scale class ``(phi_P, s_P, phi_M, s_M)`` -- simpler
+        than the batched :meth:`fit`; near ``s = 0`` the spread estimate is ill-posed
+        (Fisher information vanishes at zero spread), so read a small fitted ``s`` as
+        cheap insurance, not a finding.
+        """
+        from scipy.optimize import minimize
+        y = np.asarray(y, dtype=float)
+        p = int(p)
+        v0 = max(float(np.var(np.diff(y))), 1e-3)
+
+        def build(v):
+            params = Params(alpha=tuple([0.0] * p), Q=math.exp(v[0]), s2=math.exp(v[1]),
+                            phi_P=_expit(v[2]), phi_M=_expit(v[3]),
+                            s_P=(math.exp(v[4]) if scales else 0.0),
+                            s_M=(math.exp(v[5]) if scales else 0.0), phi_A=0.0, s_A=0.0)
+            return cls(params, order=order, linearized_dynamics=linearized_dynamics)
+
+        def neg(v):
+            try:
+                L = build(v).loglik(y)
+            except _Numerical:
+                return 1e18
+            return -L if np.isfinite(L) else 1e18
+
+        start = np.array([math.log(0.5 * v0), math.log(0.5 * v0),
+                          _logit(0.9), _logit(0.9), math.log(0.3), math.log(0.3)])
+        res = minimize(neg, start, method="Nelder-Mead",
+                       options={"maxiter": max_iter, "xatol": 1e-3, "fatol": 1e-3})
+        return build(res.x)
 
     # ------------------------------------------------------------------ grid
     def _build(self):
@@ -905,12 +960,18 @@ class OdeFilter:
         self._nw = 0
         return self
 
-    def update(self, y: float) -> Step:
-        """Absorb one observation.  NaN is treated as missing."""
+    def update(self, y: float, F=None) -> Step:
+        """Absorb one observation.  NaN is treated as missing.
+
+        When the filter carries a ``linearized_dynamics`` callable, the ``p x p``
+        transition for this step is computed from it at the current state estimate
+        (no per-step argument needed).  ``F`` is an optional low-level override that
+        forces the transition for this one step; normally leave it None.
+        """
         if self.params is None:
             raise ValueError("filter is not fitted; call fit() or pass params")
-        g = self._build()
         p = self.params.p
+        g = self._build()
         if self._pi is None:
             self._pi = g["pi0"].copy()
             y0 = float(y) if np.isfinite(y) else 0.0
@@ -919,9 +980,19 @@ class OdeFilter:
             self._P = np.tile(np.eye(p) * float(g["Rg"].max()
                                                 + g["Qg"].max()) * p,
                               (G, 1, 1))
-        return self._update_imm(y, g, p)
+        if F is None and self.linearized_dynamics is not None:
+            # EKF-style: linearise around the current collapsed state estimate.
+            xhat = self._pi @ self._m
+            F = self.linearized_dynamics(xhat)
+        if F is not None:
+            F = np.asarray(F, dtype=float)
+            if F.shape != (p, p):
+                raise ValueError(f"transition must have shape ({p}, {p}), got {F.shape}")
+            if not np.all(np.isfinite(F)):
+                raise ValueError("transition must be finite")
+        return self._update_imm(y, g, p, F)
 
-    def _update_imm(self, y: float, g: dict, p: int) -> Step:
+    def _update_imm(self, y: float, g: dict, p: int, F=None) -> Step:
         """One step of the recursion: per-node covariances, standard IMM.
 
         Each node keeps its own (m, P), mixed across nodes by the kernel
@@ -940,7 +1011,9 @@ class OdeFilter:
         P0 = (np.einsum("ij,ixz->jxz", mu, self._P)
               + np.einsum("ij,ijx,ijz->jxz", mu, dmix, dmix))
 
-        Fg = Fs[Aidx]                                  # (G, p, p)
+        # supplied dynamics: one F for every node this step; else the fitted/
+        # tracked companion per dynamics-channel node.
+        Fg = np.broadcast_to(F, (Qg.size, p, p)) if F is not None else Fs[Aidx]
         mp = np.einsum("gxz,gz->gx", Fg, m0)
         Aj = np.einsum("gxw,gwv,gzv->gxz", Fg, P0, Fg)
         a00 = Aj[:, 0, 0].copy()                       # prior part, pre-Q
@@ -1061,17 +1134,25 @@ class OdeFilter:
         return D @ m, D @ P @ D.T
 
     # ----------------------------------------------------------------- batch
-    def loglik(self, y) -> float:
-        return self._run(np.asarray(y, dtype=float), want=False)
+    def loglik(self, y, Fs=None) -> float:
+        return self._run(np.asarray(y, dtype=float), want=False, Fs=Fs)
 
-    def filter(self, y) -> FilterResult:
-        return self._run(np.asarray(y, dtype=float), want=True)
+    def filter(self, y, Fs=None) -> FilterResult:
+        """Batch run.  When the filter carries a ``linearized_dynamics`` callable the
+        per-step transition is taken from it automatically; ``Fs`` (length-T sequence
+        of ``p x p`` transitions) is an optional low-level override."""
+        return self._run(np.asarray(y, dtype=float), want=True, Fs=Fs)
 
-    def _run(self, y: np.ndarray, want: bool):
+    def _run(self, y: np.ndarray, want: bool, Fs=None):
         if self.params is None:
             raise ValueError("filter is not fitted; call fit() or pass params")
         if y.ndim != 1 or y.size == 0:
             raise ValueError("y must be a non-empty 1-D array")
+        if Fs is not None:
+            Fs = np.asarray(Fs, dtype=float)
+            if Fs.shape != (y.size, self.params.p, self.params.p):
+                raise ValueError(f"Fs must have shape ({y.size}, {self.params.p}, "
+                                 f"{self.params.p}), got {Fs.shape}")
         saved = (self._pi, self._m, self._P, self._prev_lamP, self._prev_lamM,
                  self._loglik, self._e_prev, self._ee, self._e2, self._nw)
         try:
@@ -1079,8 +1160,8 @@ class OdeFilter:
             if not want:
                 total = 0.0
                 try:
-                    for v in y:
-                        total += self.update(v).loglik
+                    for i, v in enumerate(y):
+                        total += self.update(v, None if Fs is None else Fs[i]).loglik
                 except _Numerical:
                     return -np.inf
                 return total
@@ -1094,7 +1175,7 @@ class OdeFilter:
             sc = np.empty((n, p, p))
             total = 0.0
             for i, v in enumerate(y):
-                st = self.update(v)
+                st = self.update(v, None if Fs is None else Fs[i])
                 for c in cols:
                     out[c][i] = getattr(st, c)
                 # collapse the per-node mixture for reporting only
@@ -1113,8 +1194,19 @@ class OdeFilter:
     @classmethod
     def fit(cls, y, p: int = 3, order: int = 5, max_iter: int = 400,
             scales: bool = True, dynamics: bool = True,
-            order_A: int = 3, unit_roots: int = 0) -> "OdeFilter":
+            order_A: int = 3, unit_roots: int = 0,
+            linearized_dynamics=None) -> "OdeFilter":
         """Learn every parameter from a series and return a fitted filter.
+
+        ``linearized_dynamics`` — a callable ``state -> (p x p)`` transition — turns
+        this into supplied-dynamics mode: the dynamics are KNOWN (the caller's model,
+        linearised at the running state estimate each step, EKF-style), so ``alpha``
+        and the dynamics channel are NOT fitted; only the noise class is learned (the
+        whole point of this workstream: the user supplies what they know, the dynamics,
+        and the filter infers what they don't, the live noise).  ``p`` must then be
+        given to match the callable's matrix size; ``dynamics``/``unit_roots`` are
+        ignored.  The returned filter carries the callable — call ``update``/``filter``
+        with no per-step dynamics argument.
 
         ``p`` is the order of the recurrence: 3 is a second-order ODE plus a
         constant offset, which is the class this filter targets.  ``p`` is a
@@ -1152,6 +1244,9 @@ class OdeFilter:
         vanishes at zero spread), so small fitted s_P values should be read
         as "cheap insurance", not as findings (oracle-gap/0009).
         """
+        if linearized_dynamics is not None:
+            return cls._fit_noise_only(y, linearized_dynamics, p=p, order=order,
+                                       scales=scales, max_iter=max_iter)
         f = cls(order=order, order_A=order_A)
         f.fit_(y, p=p, max_iter=max_iter, scales=scales, dynamics=dynamics,
                unit_roots=unit_roots)

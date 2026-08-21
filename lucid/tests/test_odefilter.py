@@ -16,7 +16,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from odefilter import OdeFilter, Params, difference_matrix          # noqa: E402
-from odefilter.core import _iv_alpha, _moment_noises, _pin_maps     # noqa: E402
+from odefilter.core import (_iv_alpha, _moment_noises, _pin_maps,   # noqa: E402
+                            _companion)
 
 PARENT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))), "..", "random-walk-filter", "output")
@@ -604,3 +605,75 @@ def test_fit_finds_the_dynamics_channel_when_the_dynamics_stop():
     assert f.params.s_A > 0.05                     # it finds a live channel
     d = f.filter(y).dynamics
     assert d[n + 100:].mean() < d[100:n].mean()    # and uses it where it should
+
+
+# ---------------------------- supplied-dynamics via a linearized_dynamics callable
+def _const_dyn(alpha):
+    F = _companion(alpha)
+    return lambda state: F
+
+
+def test_constant_callable_matches_normal_filter():
+    """A constant linearized_dynamics (state -> companion(alpha)) reproduces the
+    normal OdeFilter with that alpha (s_A = 0) to machine precision -- fixed and
+    adaptive noise.  Supplying the dynamics strictly generalises fixing them."""
+    rng = np.random.default_rng(0)
+    alpha = (1.6, -0.7)
+    _, y = ar(300, alpha, 1.0, 1.0, rng)
+    for sP in (0.0, 0.35):
+        Ln = OdeFilter(Params(alpha=alpha, Q=1.0, s2=1.0, phi_P=0.9, phi_M=0.9,
+                              s_P=sP, s_M=0.0)).loglik(y)
+        placeholder = Params(alpha=(0.0, 0.0), Q=1.0, s2=1.0, phi_P=0.9, phi_M=0.9,
+                             s_P=sP, s_M=0.0)
+        Ls = OdeFilter(placeholder, linearized_dynamics=_const_dyn(alpha)).loglik(y)
+        assert abs(Ln - Ls) < 1e-9
+
+
+def test_callable_validates_its_output():
+    f = OdeFilter(Params(alpha=(0.0, 0.0), Q=1.0, s2=1.0),
+                  linearized_dynamics=lambda s: np.eye(3))   # wrong shape
+    with pytest.raises(ValueError):
+        f.update(0.5)
+
+
+def test_state_dependent_callable_runs_and_streams():
+    rng = np.random.default_rng(2)
+    _, y = ar(200, (1.5, -0.6), 1.0, 1.0, rng)
+    dyn = lambda s: _companion([1.5 + 0.05 * np.tanh(s[0]), -0.6])   # state-dependent
+    r = OdeFilter(Params(alpha=(0.0, 0.0), Q=1.0, s2=1.0, s_P=0.3),
+                  linearized_dynamics=dyn).filter(y)
+    assert np.all(np.isfinite(r.mean))
+    f = OdeFilter(Params(alpha=(0.0, 0.0), Q=1.0, s2=1.0, s_P=0.3),
+                  linearized_dynamics=dyn).reset()
+    stream = np.array([f.update(v).mean for v in y])
+    assert np.allclose(stream, r.mean, atol=1e-9)
+
+
+def test_fit_with_linearized_dynamics_infers_noise():
+    """fit(..., linearized_dynamics=fn) learns the NOISE class with the dynamics
+    given by the callable -- not fitted.  Recovers known Q, s2 under a
+    state-dependent transition and carries the callable."""
+    rng = np.random.default_rng(1)
+    T = 1200
+    dyn = lambda s: _companion([1.5 + 0.05 * np.tanh(0.3 * s[0]), -0.6])
+    x = np.zeros(T); st = np.zeros(2)
+    for t in range(T):
+        st = dyn(st) @ st
+        st[0] += rng.standard_normal() * math.sqrt(0.8)
+        x[t] = st[0] + rng.standard_normal() * math.sqrt(1.3)
+    f = OdeFilter.fit(x, p=2, scales=False, linearized_dynamics=dyn)
+    assert 0.4 < f.params.Q < 1.3 and 0.9 < f.params.s2 < 1.8
+    assert f.linearized_dynamics is dyn
+    true = OdeFilter(Params(alpha=(0.0, 0.0), Q=0.8, s2=1.3), linearized_dynamics=dyn)
+    assert f.loglik(x) >= true.loglik(x) - 1e-6
+
+
+def test_noise_params_roundtrip_callable_reattached():
+    f = OdeFilter(Params(alpha=(0.0, 0.0), Q=1.1, s2=0.9, s_P=0.3),
+                  linearized_dynamics=_const_dyn((1.6, -0.7)))
+    g = OdeFilter.from_dict(f.to_dict())            # callable not serialised
+    assert g.params.Q == f.params.Q and g.params.s_P == f.params.s_P
+    assert g.linearized_dynamics is None            # re-attach after load
+    g.linearized_dynamics = _const_dyn((1.6, -0.7))
+    rng = np.random.default_rng(5); _, y = ar(100, (1.6, -0.7), 1.0, 1.0, rng)
+    assert np.allclose(f.filter(y).mean, g.filter(y).mean)
