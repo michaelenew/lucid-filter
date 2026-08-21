@@ -1,5 +1,8 @@
 """OdeFilter: asymptotic convergence and steady-state error bounds.
 
+AI-GENERATED, NOT PEER-REVIEWED -- produced by an AI system, not independently
+verified or peer-reviewed; treat the theorems and results here as provisional.
+
 `OdeFilter` is `statfilter.AdaptiveFilter` with two things added: the scalar
 level becomes a p-state companion-form Kalman filter on the ODE's lag vector,
 and a third grid channel (`alpha`, the dynamics) sits alongside the two noise

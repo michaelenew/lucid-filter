@@ -1,5 +1,8 @@
 """Shape vs parameters: the theoretical best achievable with NO free parameters.
 
+AI-GENERATED, NOT PEER-REVIEWED -- produced by an AI system, not independently
+verified or peer-reviewed; treat the theorems and results here as provisional.
+
 Not what an oracle (knowing lam_t or the exact (phi,s)) can do, but what the best
 filter committing ONLY to the shape -- the stationary AR(1) log-scale class -- and
 to no fitted numbers can do, versus knowing (phi,s).  Log-loss is the currency

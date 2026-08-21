@@ -1,5 +1,8 @@
 # Theorem A — the Gaussian shape is exactly least favourable
 
+> **AI-generated, not peer-reviewed** — this proof was produced by an AI system and
+> has not been independently verified or peer-reviewed. Treat it as provisional.
+
 **Status: proved.** Elementary, and complete as it stands. It settles one of the
 three layers of the optimality question (see
 [`../SUMMARY.md`](../SUMMARY.md)) and it is the precise replacement for the

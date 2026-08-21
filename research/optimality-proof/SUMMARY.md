@@ -1,5 +1,9 @@
 # Current state
 
+> **AI-generated, not peer-reviewed** — the proofs, theorems, and results in this
+> workstream were produced by an AI system and have not been independently verified
+> or peer-reviewed. Treat them as provisional.
+
 An attempt to prove that the adaptive filter in
 [`../random-walk-filter/`](../random-walk-filter/SUMMARY.md) is
 optimal, and to locate precisely where the proof fails.

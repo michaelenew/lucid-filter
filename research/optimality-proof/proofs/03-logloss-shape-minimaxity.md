@@ -1,5 +1,8 @@
 # Theorem A′ — layer 1 under code length: the same saddle, the same three lines
 
+> **AI-generated, not peer-reviewed** — this proof was produced by an AI system and
+> has not been independently verified or peer-reviewed. Treat it as provisional.
+
 **Status: proved.** This removes the seam recorded in
 [`../SUMMARY.md`](../SUMMARY.md) since `0012`/`0024` — that layer 1 was a
 squared-error argument while layer 2 was a log-loss argument, "not yet one

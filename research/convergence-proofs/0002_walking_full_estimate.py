@@ -1,5 +1,8 @@
 """Walking filter: the full-estimate tracking-MSE floor, and the realised efficiency.
 
+AI-GENERATED, NOT PEER-REVIEWED -- produced by an AI system, not independently
+verified or peer-reviewed; treat the theorems and results here as provisional.
+
 0001 gave the walk loop's geometric convergence (rate (1+phi)/2) and the walk-state
 estimation floor (1-phi)/(4I) on the coarse centre mu.  This is the bound on the
 REPORTED estimate lam_hat = mu + E_pi[lam], tracking the moving AR(1) log-scale.

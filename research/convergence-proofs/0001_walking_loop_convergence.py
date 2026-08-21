@@ -1,5 +1,8 @@
 """Walking filter: asymptotic convergence and the steady-state error floor.
 
+AI-GENERATED, NOT PEER-REVIEWED -- produced by an AI system, not independently
+verified or peer-reviewed; treat the theorems and results here as provisional.
+
 The walking filter's scale tracker is the finding-18 loop: the window centre mu
 integrates the grid-shift score, the grid state relaxes at ~phi per step, and the
 drift variance is fixed so the mu-Kalman settles to the critically-damped gain

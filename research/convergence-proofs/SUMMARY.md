@@ -1,5 +1,9 @@
 # Convergence proofs and error bounds
 
+> **AI-generated, not peer-reviewed** — the proofs, theorems, and results in this
+> workstream were produced by an AI system and have not been independently verified
+> or peer-reviewed. Treat them as provisional.
+
 Asymptotic convergence and steady-state error bounds for the three filters
 (`walking`, `stat`, `ode`). The notion is asymptotic + steady-state (consistency
 of the online estimate, geometric contraction of the loop/posterior, a

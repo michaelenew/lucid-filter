@@ -1,5 +1,8 @@
 """AdaptiveFilter: scale-posterior contraction and the level error floor.
 
+AI-GENERATED, NOT PEER-REVIEWED -- produced by an AI system, not independently
+verified or peer-reviewed; treat the theorems and results here as provisional.
+
 The fitted filter freezes six numbers and runs online.  Its two moving parts admit
 separate, mostly-closed-form asymptotics: the scale channels are finite-state HMMs
 whose posteriors CONTRACT (they forget their init), and the level -- given a scale --
