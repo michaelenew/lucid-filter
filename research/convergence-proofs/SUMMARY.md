@@ -86,6 +86,41 @@ Three results, all verified (probe runs in 0.2 s):
   the between-mode spread there vs 0.2% in steady state), so the floor is
   approximate at that step.
 
+### odefilter (OdeFilter) ([`0004`](0004_ode_bounds.py))
+
+The p-state extension; verified numerically (probe ~4 s, fixed/frozen params).
+
+- **Theorem 1 (grid contraction, ×3 channels).** Each channel kernel `_chain(φ,s,n)`
+  is strictly positive → primitive → the marginal chain forgets its init at
+  `|λ₂(T)|` (verified: 0.4997 at φ=.5,s=.3; 0.992 at φ=.9,s=.5). The
+  observation-conditioned posterior forgets too (Le Gland–Mevel) and empirically
+  *faster*. **Open:** the tight a-priori posterior rate — the Birkhoff/Hilbert
+  contraction coefficient computes to `τ=1` (vacuous) here, so only the marginal
+  `|λ₂|` and the empirical posterior rate are in hand, not a clean closed-form
+  posterior bound. Same high-φ numerical caveat as stat (kernel underflows,
+  `|λ₂|→1` at φ=.98,s=.8).
+- **Theorem 2 (state steady-state covariance = stabilising DARE).** The
+  companion-form Kalman error covariance solves the DARE; observability +
+  controllability give a unique stabilising PSD solution for **every** `alpha`.
+  Verified `state_cov → DARE` to ~1e-16 for stable (p=3), unit-root (p=2), and
+  explosive (scalar `a=1.2`) systems. **Corrected boundary (my prompt's framing was
+  wrong, fixed honestly):** an explosive/unit-root ODE still has a *finite filter
+  error covariance* — the Kalman tracks the exploding state. The genuine
+  instability boundary is the process's own unconditional variance (Lyapunov
+  `Σ = FΣFᵀ + Qw`), finite iff spectral-radius(F) < 1 — a statement about the
+  *signal*, not the *estimator*. **Caveat:** explosive `alpha` is outside the
+  shipped filter's operating range — the ideal error covariance is finite, but the
+  `s=0` recursion's redundant nodes amplify roundoff by `|root|²/step` and `alpha_at`
+  clips into the disc, so the finite-error result is a property of the *ideal*
+  filter (via the Riccati iteration), not the shipped code.
+- **Theorem 3 (reduction to parent at p=1, α=1).** The DARE collapses to the stat
+  local-level Riccati `P⁻=(Qg+√(Qg²+4Qg s2))/2`, matching the formula, `Params.gain`,
+  and the filter `P⁺` to ~1e-16 — the covariance-level face of the suite's 1e-8
+  parent-agreement check.
+- **Theorem 4 (dynamics channel).** The `alpha` channel is the same `_chain` kernel
+  one level up; its `g`-posterior forgets its init at `|λ₂(T_A)|` (0.464 at
+  φ_A=.5,s_A=.15). Brief, by the Theorem-1 argument.
+
 ## Open / next
 
 - **Walking — DONE** (0001 convergence + walk-state floor; 0002 full-estimate DARE
@@ -94,8 +129,14 @@ Three results, all verified (probe runs in 0.2 s):
 - **stat — DONE** (0003: geometric-ergodicity SLEM `|λ₂(T)|`, exact level Riccati
   `P⁺=K·s2`, CR floor on the homoscedastic face; high-φ mixing inflation and GPB1
   caveats carried).
-- **ode (OdeFilter).** The same for the p-state ODE recursion, plus the dynamics
-  channel `alpha`; reduces to `stat` at `p=1, alpha=1` (the test suite already
-  asserts 1e-8 agreement, a useful cross-check for the bounds too).
+- **ode — DONE** (0004: grid contraction ×3 channels, state DARE = stabilising
+  solution verified for stable/unit-root/explosive, p=1 reduction to the parent
+  Riccati; the "unstable" boundary corrected to the signal's Lyapunov variance).
+- **Remaining opens** (scoped out of this pass, small): the tight *closed-form*
+  posterior forgetting rate for stat/ode (the Birkhoff coefficient is vacuous, so
+  only `|λ₂|` + empirical posterior rate are in hand); the exact H₂ closed form for
+  the walking efficiency ratio (measured, not closed); the high-φ mixing inflation
+  from the frozen `1.5 s` spacing (a discretization property of the uniform grid,
+  tied to the hybrid-grid open in `../adaptive-grid/`).
 - Connect to the log-loss optimality thread (`../optimality-proof/`): convergence
   + CR floor is the per-step-regret side of the same story.
