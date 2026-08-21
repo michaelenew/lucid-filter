@@ -29,20 +29,36 @@ precision:
 
 Caveat carried honestly: Theorem 2 bounds the **coarse walk centre** `μ`, not the
 reported estimate `μ + E_π[λ]`. The full estimate additionally resolves the fast
-within-window AR(1) fluctuation, so its tracking MSE is *not* `floor + lag` — it
-sits below the walk-state floor at small `s` (grid resolution dominates) and near
-it at large `s` (lag against the moving target dominates); measured same-order in
-`0001`. (First-pass framing this as `floor + lag` was wrong — the negative "lag
-share" it produced was the tell.)
+within-window AR(1) fluctuation, so its tracking MSE is *not* `floor + lag`.
+(First-pass framing this as `floor + lag` was wrong — the negative "lag share" it
+produced was the tell.)
+
+- **Theorem 3 (full-estimate tracking-MSE floor)** ([`0002`](0002_walking_full_estimate.py)).
+  The reported estimate tracks the AR(1) log-scale (pole φ, innovation
+  `σ²_η = s²(1−φ²)`) at per-step Fisher precision `I`. The minimum steady-state MSE
+  of any filter is the scalar AR(1)-Kalman DARE, with the closed form
+  `P* = P⁻R/(P⁻+R)`, `P⁻ = (−b + √(b² + 4σ²_η R))/2`, `b = R(1−φ²) − σ²_η`, `R=1/I`
+  (verified == iterated DARE to 1e-16). The per-step info ceiling is `I = ½` (a
+  directly-observed Gaussian scale); the *process* scale is seen only through the
+  level innovations, so the operating `I_op < ½` (~0.07–0.09 measured).
+  **Realised efficiency (honest):** the walk uses the critically-damped gain
+  `K*=(1−φ)/4`, not the s-matched Kalman-optimal gain, so its MSE is a bounded
+  constant factor above `P*` — measured 4.9× (s=0.20), 2.7× (0.30), 1.8× (0.45),
+  1.4× (0.60) at φ=0.9. The gap widens at small `s` because (i) the fixed gain
+  under-averages slow drift and (ii) the `1.5 s` grid spacing (the dead-zone limit)
+  is coarse for *resolving* fine fluctuation. Both are the robustness/zero-parameter
+  choices; the walking filter's edge is unbounded reach and regime shifts
+  (finding 12), not efficiency on clean stationary data — which is what this floor
+  measures. The update *direction* is Fisher-efficient (natural gradient = Fisher
+  scoring); only the gain choice opens the gap. So the walking result is
+  **consistency with a finite, characterised efficiency loss**, not asymptotic
+  efficiency.
 
 ## Open / next
 
-- **0002 — the full-estimate bound (walking).** Combine the walk-state floor with
-  the grid's within-window resolution and the lag against the moving AR(1) target
-  (the H₂ norm of `1 − H(z)` against the AR(1) spectrum, `H` the closed loop).
-  Then a consistency statement: the online scale estimate tracks `λ_t` with the
-  bounded steady MSE, and the per-step correction is Fisher-efficient
-  (natural-gradient = Fisher scoring).
+- **Walking — DONE** (0001 convergence + walk-state floor; 0002 full-estimate DARE
+  floor + efficiency). Optional refinement: the exact H₂ closed form for the
+  efficiency ratio (currently measured, not in closed form).
 - **stat (AdaptiveFilter).** Contraction of the fitted-class log-scale posterior
   (the grid HMM is geometrically ergodic under the AR(1) transition), the level
   Kalman's steady-state variance given the scale, and the Cramér–Rao floor on the
