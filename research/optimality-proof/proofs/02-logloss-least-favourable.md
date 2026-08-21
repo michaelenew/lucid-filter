@@ -1,5 +1,8 @@
 # Theorem C — the Gaussian AR(1) log-scale is exactly least favourable under log-loss
 
+> **AI-generated, not peer-reviewed** — this proof was produced by an AI system and
+> has not been independently verified or peer-reviewed. Treat it as provisional.
+
 **Status: proved, and standard.** This is the moment-constrained
 maximum-entropy / minimax-redundancy correspondence (Topsøe; Csiszár)
 specialised to the two-moment case that defines the filter's class. It is

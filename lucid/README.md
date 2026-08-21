@@ -31,17 +31,29 @@ pip install -e '.[fit]'      # from this directory
 and streaming a fitted filter need numpy alone, which matters if you are
 deploying to something small.
 
-## The two filters
+## The filters, and when to use each
 
-| module | model | status |
-|---|---|---|
-| [`statfilter`](statfilter/README.md) | unbiased random walk observed with noise | **delivered** |
-| [`odefilter`](odefilter/README.md) | process locally described by a linear ODE, plus the two-series offset channel | **candidate** |
+| filter | model | fit? | reach for it when |
+|---|---|---|---|
+| [`statfilter.AdaptiveFilter`](statfilter/README.md) | unbiased random walk observed with noise | once, offline | you have representative history and the regime is stable — **industrial processes, sensor monitoring** — where a one-time `fit()` captures the operating range |
+| [`odefilter.OdeFilter`](odefilter/README.md) | process locally a linear ODE (oscillates, drifts, decays) | once, offline | the **dynamics** themselves can change unpredictably — a **drone** manoeuvring, a plant changing modes; `alpha` is fit once *and then tracked* |
+| [`odefilter`](odefilter/README.md) offset channel | two series reading one latent at a lead/lag `tau` | once, offline | you have two sensors on the same process and need the (fractional, moving) delay between them |
+| [`statfilter.WalkingFilter` / `WalkingBank`](statfilter/README.md) | random walk with the noise scale **walked online** | **no `fit()`** | you have no representative history, or the regime will move **outside anything a one-time fit saw** — the scale is unbounded and tracked step by step |
 
-`odefilter` is a strict extension of `statfilter`: at `p=1, alpha=1` the two
-models are identical, and the test suite asserts they agree to 1e-8 on the same
-data. Start with `statfilter` if your process has no dynamics to speak of;
-reach for `odefilter` when it oscillates, drifts, or decays.
+The three fit-based filters commit to a **stationary family** once (`fit()` fixes
+the *class* — how fast each scale may move and roughly how big — not the operating
+point) and are the right tool where you have good sample data. `odefilter` is a
+strict extension of `statfilter`: at `p=1, alpha=1` the two models are identical
+and the test suite asserts they agree to 1e-8. Start with `statfilter` if your
+process has no dynamics to speak of; reach for `odefilter` when it oscillates,
+drifts, or decays.
+
+`WalkingFilter` is the exception: it carries a fine quadrature window over the
+process log-scale and lets that window *walk* to wherever the scale is, with
+unbounded reach and no training pass. Its walk is derived end-to-end from the
+class pair `(phi, s)` — no tuned constants. (Footnote for a later thread: because
+the walk learns the operating scale online, it is a **candidate to replace
+`fit()`** for the static filters above, not just a filter in its own right.)
 
 ## Quickstart
 
