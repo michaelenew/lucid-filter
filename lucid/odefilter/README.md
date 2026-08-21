@@ -69,6 +69,36 @@ of genuine predictive power. `f.derivatives()` returns the posterior in
 `(x, dx, d2x)` coordinates — a fixed involutive integer change of basis, so
 nothing is created or lost.
 
+### Supplied dynamics, one step at a time (robotics)
+
+When the dynamics are **time-varying and known** — a control loop that
+re-linearises around the operating point each step, so the `p×p` transition
+changes every tick — supply it rather than fit it. Pass the companion matrix `F`
+to every `update` (or a length-`T` sequence to `filter`); the dynamics channel is
+off, and only the noise scales are the model's own, adaptive as always.
+
+```python
+from odefilter import OdeFilter
+
+# no fit: give the noise levels directly (s_P/s_M > 0 for adaptive noise)
+f = OdeFilter.supplied(p=2, Q=1e-3, s2=0.04, s_P=0.3)
+f.reset()
+for y_t in stream:
+    F_t = linearize(state)         # your p×p companion transition this step
+    step = f.update(y_t, F_t)      # F is REQUIRED every step in this mode
+
+# or learn the noise class once from a run whose dynamics you logged:
+f = OdeFilter.fit_supplied(y, Fs, p=2)   # Fs: (T, p, p); fits (Q, s2, phi_P, s_P, ...)
+r = f.filter(y, Fs=Fs)
+```
+
+`F` is companion-form (its first row is the recurrence coefficients); the
+observation reads the first state component and process noise enters it, so a
+general `p×p` transition is accepted but is filtered under that noise/observation
+structure. With a *constant* `F = companion(alpha)` this reduces exactly (to
+machine precision) to `OdeFilter(Params(alpha=…))` — supplying the dynamics is a
+strict generalisation of fixing them.
+
 ## What to read from it
 
 - **`predict(h)`** is where `alpha` earns its keep. Tracking error is nearly

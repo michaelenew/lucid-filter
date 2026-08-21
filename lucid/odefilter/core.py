@@ -44,6 +44,12 @@ too fast needs.  `Step.dynamics` reports the posterior mean of g.
 With s_A = 0 the channel collapses to a single node and the recursion is
 bit-for-bit what it was before the channel existed.
 
+For TIME-VARYING known dynamics -- a robotics loop re-linearising around the
+operating point each step -- the dynamics can instead be SUPPLIED per step rather
+than fitted or tracked: see ``OdeFilter.supplied`` / ``OdeFilter.fit_supplied`` and
+the ``F`` argument to ``update``/``filter``.  A constant supplied
+``F = companion(alpha)`` reduces to fixing ``alpha`` exactly.
+
 Two diagnostics come out for free, and they are orthogonal by construction
 (measured in exploration/0025):
 
@@ -834,6 +840,7 @@ class OdeFilter:
         self.order = int(order)
         self.order_A = int(order_A)
         self._built = None
+        self._supplied = False   # supplied-dynamics mode: caller passes F each update
         self.reset()
 
     def __repr__(self) -> str:
@@ -847,15 +854,94 @@ class OdeFilter:
         if self.params is None:
             raise ValueError("filter is not fitted")
         return {"params": self.params.to_dict(), "order": self.order,
-                "order_A": self.order_A}
+                "order_A": self.order_A, "supplied": self._supplied}
 
     @classmethod
     def from_dict(cls, d: dict) -> "OdeFilter":
         # a stored "collapse" key from the two-recursion era is ignored: the
         # parameters mean the same thing and this recursion evaluates them
         # with strictly more of the evidence
-        return cls(Params.from_dict(d["params"]), order=int(d.get("order", 5)),
-                   order_A=int(d.get("order_A", 3)))
+        f = cls(Params.from_dict(d["params"]), order=int(d.get("order", 5)),
+                order_A=int(d.get("order_A", 3)))
+        f._supplied = bool(d.get("supplied", False))
+        return f
+
+    # -------------------------------------------------- supplied-dynamics mode
+    @classmethod
+    def supplied(cls, p: int, Q: float = 1.0, s2: float = 1.0,
+                 phi_P: float = 0.0, s_P: float = 0.0,
+                 phi_M: float = 0.0, s_M: float = 0.0, order: int = 5):
+        """A filter whose dynamics are SUPPLIED per step, not fitted or tracked.
+
+        For time-varying systems -- e.g. a robotics loop that re-linearises around
+        the operating point each step -- pass the ``p x p`` companion transition
+        ``F`` to every :meth:`update` (or a length-``T`` sequence to :meth:`filter`).
+        The dynamics channel is off (``s_A = 0``); only the noise scales are the
+        model's own.  Supply them directly here: ``Q, s2`` (median process and
+        measurement variance) and, for adaptive noise, the AR(1) log-scale class
+        ``(phi_P, s_P)`` / ``(phi_M, s_M)`` (leave the ``s`` at 0 for fixed noise).
+        No ``fit()`` is required; to instead LEARN the noise class from a run whose
+        dynamics you know, use :meth:`fit` with its ``dynamics=`` sequence.
+
+        The observation reads the first state component and process noise enters it
+        (the companion convention), so ``F`` should be a companion matrix; a general
+        ``p x p`` transition is accepted but is filtered under that noise/observation
+        structure.
+        """
+        p = int(p)
+        if p < 1:
+            raise ValueError("p must be at least 1")
+        params = Params(alpha=tuple([0.0] * p), Q=float(Q), s2=float(s2),
+                        phi_P=float(phi_P), phi_M=float(phi_M),
+                        s_P=float(s_P), s_M=float(s_M), phi_A=0.0, s_A=0.0)
+        f = cls(params, order=order)
+        f._supplied = True
+        return f
+
+    @classmethod
+    def fit_supplied(cls, y, Fs, p: int | None = None, order: int = 5,
+                     scales: bool = True, max_iter: int = 300) -> "OdeFilter":
+        """Learn the NOISE-scale class under a supplied per-step dynamics sequence.
+
+        The dynamics are given (``Fs``: a length-T sequence of ``p x p`` transitions,
+        as passed to :meth:`filter`), not fitted; only ``(Q, s2)`` and, when
+        ``scales=True``, the AR(1) log-scale class ``(phi_P, s_P, phi_M, s_M)`` are
+        learned by maximum marginal likelihood.  Returns a supplied-dynamics filter --
+        feed ``F`` to :meth:`update` (or ``Fs`` to :meth:`filter`) thereafter.  This
+        is a plain local optimisation of the exact filter likelihood, simpler than
+        the full :meth:`fit`; near ``s = 0`` the spread estimate is ill-posed (the
+        Fisher information vanishes at zero spread), so read a small fitted ``s`` as
+        cheap insurance, not a finding.
+        """
+        from scipy.optimize import minimize
+        y = np.asarray(y, dtype=float)
+        Fs = np.asarray(Fs, dtype=float)
+        if Fs.ndim != 3 or Fs.shape[1] != Fs.shape[2] or Fs.shape[0] != y.size:
+            raise ValueError("Fs must have shape (len(y), p, p)")
+        p = int(Fs.shape[1]) if p is None else int(p)
+        if Fs.shape[1] != p:
+            raise ValueError(f"Fs matrices must be {p} x {p}")
+        v0 = max(float(np.var(np.diff(y))), 1e-3)      # a scale for Q, s2 starts
+
+        def build(v):
+            return cls.supplied(
+                p, Q=math.exp(v[0]), s2=math.exp(v[1]),
+                phi_P=_expit(v[2]), s_P=(math.exp(v[4]) if scales else 0.0),
+                phi_M=_expit(v[3]), s_M=(math.exp(v[5]) if scales else 0.0),
+                order=order)
+
+        def neg(v):
+            try:
+                L = build(v).loglik(y, Fs=Fs)
+            except _Numerical:
+                return 1e18
+            return -L if np.isfinite(L) else 1e18
+
+        start = np.array([math.log(0.5 * v0), math.log(0.5 * v0),
+                          _logit(0.9), _logit(0.9), math.log(0.3), math.log(0.3)])
+        res = minimize(neg, start, method="Nelder-Mead",
+                       options={"maxiter": max_iter, "xatol": 1e-3, "fatol": 1e-3})
+        return build(res.x)
 
     # ------------------------------------------------------------------ grid
     def _build(self):
@@ -905,12 +991,26 @@ class OdeFilter:
         self._nw = 0
         return self
 
-    def update(self, y: float) -> Step:
-        """Absorb one observation.  NaN is treated as missing."""
+    def update(self, y: float, F=None) -> Step:
+        """Absorb one observation.  NaN is treated as missing.
+
+        ``F`` is the ``p x p`` state-transition (companion) matrix for this step.
+        In supplied-dynamics mode (see :meth:`supplied`) it is REQUIRED every step;
+        otherwise it is optional and, when given, overrides the fitted/tracked
+        dynamics for this one step.
+        """
         if self.params is None:
             raise ValueError("filter is not fitted; call fit() or pass params")
-        g = self._build()
         p = self.params.p
+        if F is None and self._supplied:
+            raise ValueError("supplied-dynamics mode requires F on every update()")
+        if F is not None:
+            F = np.asarray(F, dtype=float)
+            if F.shape != (p, p):
+                raise ValueError(f"F must have shape ({p}, {p}), got {F.shape}")
+            if not np.all(np.isfinite(F)):
+                raise ValueError("F must be finite")
+        g = self._build()
         if self._pi is None:
             self._pi = g["pi0"].copy()
             y0 = float(y) if np.isfinite(y) else 0.0
@@ -919,9 +1019,9 @@ class OdeFilter:
             self._P = np.tile(np.eye(p) * float(g["Rg"].max()
                                                 + g["Qg"].max()) * p,
                               (G, 1, 1))
-        return self._update_imm(y, g, p)
+        return self._update_imm(y, g, p, F)
 
-    def _update_imm(self, y: float, g: dict, p: int) -> Step:
+    def _update_imm(self, y: float, g: dict, p: int, F=None) -> Step:
         """One step of the recursion: per-node covariances, standard IMM.
 
         Each node keeps its own (m, P), mixed across nodes by the kernel
@@ -940,7 +1040,9 @@ class OdeFilter:
         P0 = (np.einsum("ij,ixz->jxz", mu, self._P)
               + np.einsum("ij,ijx,ijz->jxz", mu, dmix, dmix))
 
-        Fg = Fs[Aidx]                                  # (G, p, p)
+        # supplied dynamics: one F for every node this step; else the fitted/
+        # tracked companion per dynamics-channel node.
+        Fg = np.broadcast_to(F, (Qg.size, p, p)) if F is not None else Fs[Aidx]
         mp = np.einsum("gxz,gz->gx", Fg, m0)
         Aj = np.einsum("gxw,gwv,gzv->gxz", Fg, P0, Fg)
         a00 = Aj[:, 0, 0].copy()                       # prior part, pre-Q
@@ -1061,17 +1163,26 @@ class OdeFilter:
         return D @ m, D @ P @ D.T
 
     # ----------------------------------------------------------------- batch
-    def loglik(self, y) -> float:
-        return self._run(np.asarray(y, dtype=float), want=False)
+    def loglik(self, y, Fs=None) -> float:
+        return self._run(np.asarray(y, dtype=float), want=False, Fs=Fs)
 
-    def filter(self, y) -> FilterResult:
-        return self._run(np.asarray(y, dtype=float), want=True)
+    def filter(self, y, Fs=None) -> FilterResult:
+        """Batch run.  ``Fs`` (length-T sequence of ``p x p`` transitions) supplies
+        the per-step dynamics -- required in supplied-dynamics mode."""
+        return self._run(np.asarray(y, dtype=float), want=True, Fs=Fs)
 
-    def _run(self, y: np.ndarray, want: bool):
+    def _run(self, y: np.ndarray, want: bool, Fs=None):
         if self.params is None:
             raise ValueError("filter is not fitted; call fit() or pass params")
         if y.ndim != 1 or y.size == 0:
             raise ValueError("y must be a non-empty 1-D array")
+        if Fs is None and self._supplied:
+            raise ValueError("supplied-dynamics mode requires Fs (one F per step)")
+        if Fs is not None:
+            Fs = np.asarray(Fs, dtype=float)
+            if Fs.shape != (y.size, self.params.p, self.params.p):
+                raise ValueError(f"Fs must have shape ({y.size}, {self.params.p}, "
+                                 f"{self.params.p}), got {Fs.shape}")
         saved = (self._pi, self._m, self._P, self._prev_lamP, self._prev_lamM,
                  self._loglik, self._e_prev, self._ee, self._e2, self._nw)
         try:
@@ -1079,8 +1190,8 @@ class OdeFilter:
             if not want:
                 total = 0.0
                 try:
-                    for v in y:
-                        total += self.update(v).loglik
+                    for i, v in enumerate(y):
+                        total += self.update(v, None if Fs is None else Fs[i]).loglik
                 except _Numerical:
                     return -np.inf
                 return total
@@ -1094,7 +1205,7 @@ class OdeFilter:
             sc = np.empty((n, p, p))
             total = 0.0
             for i, v in enumerate(y):
-                st = self.update(v)
+                st = self.update(v, None if Fs is None else Fs[i])
                 for c in cols:
                     out[c][i] = getattr(st, c)
                 # collapse the per-node mixture for reporting only

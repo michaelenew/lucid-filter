@@ -16,7 +16,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from odefilter import OdeFilter, Params, difference_matrix          # noqa: E402
-from odefilter.core import _iv_alpha, _moment_noises, _pin_maps     # noqa: E402
+from odefilter.core import (_iv_alpha, _moment_noises, _pin_maps,   # noqa: E402
+                            _companion)
 
 PARENT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))), "..", "random-walk-filter", "output")
@@ -604,3 +605,62 @@ def test_fit_finds_the_dynamics_channel_when_the_dynamics_stop():
     assert f.params.s_A > 0.05                     # it finds a live channel
     d = f.filter(y).dynamics
     assert d[n + 100:].mean() < d[100:n].mean()    # and uses it where it should
+
+
+# ------------------------------------------- supplied-dynamics (robotics) mode
+def test_supplied_constant_F_matches_normal():
+    """A supplied filter fed a CONSTANT F = companion(alpha) reproduces the normal
+    OdeFilter with that alpha (s_A = 0) to machine precision -- fixed and adaptive
+    noise.  This is the supplied-mode analogue of the reduces-to-parent check."""
+    rng = np.random.default_rng(0)
+    alpha = (1.6, -0.7)
+    _, y = ar(300, alpha, 1.0, 1.0, rng)
+    Fs = np.broadcast_to(_companion(alpha), (y.size, 2, 2))
+    for sP in (0.0, 0.35):
+        pr = Params(alpha=alpha, Q=1.0, s2=1.0, phi_P=0.9, phi_M=0.9, s_P=sP, s_M=0.0)
+        Ln = OdeFilter(pr).loglik(y)
+        Ls = OdeFilter.supplied(2, Q=1.0, s2=1.0, phi_P=0.9, s_P=sP,
+                                phi_M=0.9, s_M=0.0).loglik(y, Fs=Fs)
+        assert abs(Ln - Ls) < 1e-9
+
+
+def test_supplied_requires_and_validates_F():
+    f = OdeFilter.supplied(2)
+    with pytest.raises(ValueError):
+        f.update(0.5)                       # supplied mode: F required each step
+    with pytest.raises(ValueError):
+        f.filter(np.zeros(5))               # batch: Fs required
+    with pytest.raises(ValueError):
+        f.update(0.5, F=np.eye(3))          # wrong shape
+
+
+def test_supplied_ltv_runs_and_streams():
+    rng = np.random.default_rng(2)
+    _, y = ar(200, (1.5, -0.6), 1.0, 1.0, rng)
+    Fs = np.array([_companion([1.5 + 0.1 * np.sin(t / 20), -0.6]) for t in range(y.size)])
+    r = OdeFilter.supplied(2, s_P=0.3).filter(y, Fs=Fs)
+    assert np.all(np.isfinite(r.mean))
+    f = OdeFilter.supplied(2, s_P=0.3).reset()
+    stream = np.array([f.update(v, Fs[i]).mean for i, v in enumerate(y)])
+    assert np.allclose(stream, r.mean, atol=1e-9)
+
+
+def test_fit_supplied_recovers_noise():
+    rng = np.random.default_rng(1)
+    T = 1200
+    Fs = np.array([_companion([1.5 + 0.15 * np.sin(t / 40), -0.6]) for t in range(T)])
+    x = np.zeros(T); st = np.zeros(2)
+    for t in range(T):
+        st = Fs[t] @ st
+        st[0] += rng.standard_normal() * math.sqrt(0.8)
+        x[t] = st[0] + rng.standard_normal() * math.sqrt(1.3)
+    f = OdeFilter.fit_supplied(x, Fs, p=2, scales=False)
+    assert 0.5 < f.params.Q < 1.2 and 1.0 < f.params.s2 < 1.7
+    assert f._supplied
+    assert f.loglik(x, Fs=Fs) >= OdeFilter.supplied(2, Q=0.8, s2=1.3).loglik(x, Fs=Fs) - 1e-6
+
+
+def test_supplied_roundtrips_through_dict():
+    f = OdeFilter.supplied(2, Q=1.1, s2=0.9, s_P=0.3)
+    g = OdeFilter.from_dict(f.to_dict())
+    assert g._supplied and g.params.Q == f.params.Q and g.params.s_P == f.params.s_P
