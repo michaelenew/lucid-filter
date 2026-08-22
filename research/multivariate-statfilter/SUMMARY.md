@@ -101,13 +101,33 @@ The exact tensor grid (`order**D`) is **theory-only** (the reference); the
   time** (the multivariate lift of the scalar finding-18 μ-loop), not step per
   sample.
 
-### Next build
+### The walker works — diagonal, linear in D (0005)
 
-A **D-dim Kalman walk on `psi`** with accumulated Fisher: diagonal-accumulated
-first (per-axis, derived gain `K*=(1-phi)/4`, shared observation + simplex
-gradient), promote to the one process↔measurement block if the 7–14% leakage bites;
-plus a Laplace marginal (accumulated curvature) for the shares near truth.
-Benchmark against the exact grid throughout.
+The **D-dim Kalman walk on `psi`** validated against the exact grid, using the
+scalar walking filter's actual loop lifted analytically:
+- **expected** Fisher `F_kl = 0.5 tr(S⁻¹ dS_k S⁻¹ dS_l)` (deterministic given S —
+  the stable, accumulable curvature; the single-sample observed Hessian of 0004 is
+  the wrong instrument and diverges),
+- an **unbounded** μ-walk (no reversion), so a sustained shift is reached, not
+  pulled back,
+- the finding-18 critically-damped gain `K*=(1-φ)/4` via fixed `q_mu`.
+
+On the per-sensor case it isolates the hot sensor (`eta_1 → 1.6`, others ~0),
+tracks the grid trajectory (corr > 0.95 on the sensors), and its unbounded reach
+**beats** the span-capped grid. **Diagonal ≈ block** (corr 0.991 vs 0.988): the
+~0.2 process↔measurement coupling does not need the full-Fisher step here, so the
+practical walker is **diagonal and linear in D**. This is the outcome that unblocks
+a production walking multivariate filter.
+
+### Next build (production)
+
+A `WalkingVectorFilter`: the diagonal accumulated-expected-Fisher μ-walk over
+`psi = (process eigenmodes ⊕ sensors)`, state KF at the running estimate, benchmarked
+against the exact grid. Open production items: **n>1 process eigenmode axes** (only
+the scalar `xi` tested in 0005); the **shares/saturation marginal** outputs from the
+walk (a local Laplace/accumulated curvature, not a single-sample one); a **real H**
+beyond `[[1],[1]]`; and whether to GPB1-mix a small window per axis to remove the
+point-estimate biases (quiet `eta_1 ≈ 0.17`, hot `xi ≈ -0.18`).
 
 ## Open items
 
