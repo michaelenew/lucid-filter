@@ -133,8 +133,8 @@ def steady_fisher():
         Smat = H @ Ppred @ H.T + np.diag(RHO)
         K = Ppred @ H.T @ np.linalg.inv(Smat)
         P = Ppred - K @ H @ Ppred
-    inf, _, _, _, _ = score_fisher(np.zeros(D), np.zeros(N), P, np.zeros(M))
-    return inf
+    _, info, _, _, _ = score_fisher(np.zeros(D), np.zeros(N), P, np.zeros(M))
+    return info
 
 
 def walk(Y):

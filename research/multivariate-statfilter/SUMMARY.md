@@ -131,22 +131,34 @@ At n=2 (correlated PD Q, mixing H) 0005's result does **not** carry over:
    immaterial. So **spectral truncation is necessary, not just efficient**: walk only
    the significant eigenmodes (the Fisher/λ spectrum names them — the concrete
    "compose Q-eigenbasis with Fisher spectrum").
-2. **The unbounded walk is the wrong recursion for a scale.** It drifts — on *static*
-   data (ψ=0) the sensor scales run to −7. 0005 lifted the `WalkingFilter` loop,
-   whose μ is an **unbounded random walk** (right for an unbounded regime shift); but
-   `statfilter`'s scales are **stationary AR(1)** reverting to 0 — the prior the exact
-   grid carries, and why the grid is unbiased. An unbounded walk integrates
-   transient/coupling bias; a stationary-AR(1) one does not. (0004 reverting = stable
-   but under-reaches; 0005 unbounded = reaches but drifts.)
+2. **The unbounded walk drifts under coupling.** On *static* data (ψ=0) the unbounded
+   walk drifts off 0. (A bug — `steady_fisher` returned score not info → negative
+   `q_mu` — made this a *catastrophic* μ→−50; 0007 fixes it and the drift is milder
+   but real.) The drift is from **channel coupling + the point-estimate state KF**:
+   the *scalar* `WalkingFilter` uses the same unbounded walk and does **not** drift,
+   because a single direct-observation axis has no coupling.
+
+### The two walks bracket the grid (0007, post bug-fix)
+
+| | static ψ=0 | sustained regime (grid ≈0.94) |
+|---|---|---|
+| **stationary AR(1) walk** | stable (~0) ✓ | **under-reaches** (0.33) — AR(1) prior caps the gain |
+| **unbounded walk** | **drifts** (−1.6) ✗ | reaches (1.3–1.9) but leaks |
+
+Neither alone matches the exact grid, which does both. Both failures trace to running
+the **state KF at a single scale point estimate**: the unbounded drift is a
+coupling bias the grid's GPB1 mixing cancels; the stationary under-reach is the prior
+cap the grid's joint evidence overcomes. Spectral truncation confirmed (weak
+eigenmode `I_char` 0.01 vs strong 0.19).
 
 ### Next build
 
-Not a one-line lift of `WalkingFilter`. A `WalkingVectorFilter` needs: (a) **spectral
-truncation** to the identifiable eigenmodes; (b) a **stationary-AR(1)** scale
-recursion — mean-reverting *and* tracking, the finding-18 analogue for a *stationary*
-(not walking) scale — probably with a small per-axis **GPB1 window** (the grid's
-stabiliser) rather than a bare point estimate; (c) the **shares/saturation marginal**
-from that window. Benchmark against the exact grid throughout.
+A `WalkingVectorFilter` is **not** a one-line lift of `WalkingFilter`. Next probe: a
+**windowed / GPB1 walker** — carry a small per-axis window (not a point) and collapse
+the state KF over it, as the scalar filter does — to test whether that closes the
+bracket (the grid's reach without the drift) at linear-in-D cost. Then spectral
+truncation to identifiable eigenmodes, the shares/saturation marginal from the
+window, and benchmarking against the exact grid throughout.
 
 ## Open items
 

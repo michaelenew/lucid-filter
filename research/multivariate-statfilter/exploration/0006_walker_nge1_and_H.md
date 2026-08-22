@@ -1,5 +1,13 @@
 # 0006 — n>1 process eigenmodes + mixing H: two real obstacles
 
+> **Correction (see 0007).** The catastrophic divergence reported below (μ→−50) was
+> largely a bug: `steady_fisher` returned the *score* instead of *info*, giving a
+> negative `I_char` and a negative `q_mu`. With that fixed, the unbounded walker does
+> not blow up — but it *does* still drift on static data (from coupling + the
+> point-estimate state KF), so obstacle 2's substance stands; only its severity was
+> the bug. Finding 1 (spectral identifiability) is unaffected. 0007 has the clean
+> post-fix comparison.
+
 Extends 0005 (which was the *easy* case: scalar state, per-sensor measurement
 scales) to the genuinely multivariate process: n=2, m=2, correlated PD Q0 (two
 eigenmodes), diagonal R0, a mixing H. Two findings, both important.
