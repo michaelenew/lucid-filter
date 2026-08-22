@@ -83,7 +83,7 @@ the Q-eigenbasis with the Fisher spectrum. The scale vector is
 The exact tensor grid (`order**D`) is **theory-only** (the reference); the
 **practical filter is walking-only** — the tensor grid is exponential in D.
 
-### Findings so far (exploration/0003, 0004)
+### Findings so far (exploration/0003–0006)
 
 - **0003 (Fisher geometry).** In `psi` coordinates the scale-Fisher is nearly
   diagonal *within* blocks — process eigenmodes decouple from each other, sensors
@@ -119,15 +119,34 @@ tracks the grid trajectory (corr > 0.95 on the sensors), and its unbounded reach
 practical walker is **diagonal and linear in D**. This is the outcome that unblocks
 a production walking multivariate filter.
 
-### Next build (production)
+Caveat: 0005 was the *easy* case (scalar state, per-sensor measurement scales).
 
-A `WalkingVectorFilter`: the diagonal accumulated-expected-Fisher μ-walk over
-`psi = (process eigenmodes ⊕ sensors)`, state KF at the running estimate, benchmarked
-against the exact grid. Open production items: **n>1 process eigenmode axes** (only
-the scalar `xi` tested in 0005); the **shares/saturation marginal** outputs from the
-walk (a local Laplace/accumulated curvature, not a single-sample one); a **real H**
-beyond `[[1],[1]]`; and whether to GPB1-mix a small window per axis to remove the
-point-estimate biases (quiet `eta_1 ≈ 0.17`, hot `xi ≈ -0.18`).
+### n>1 process eigenmodes reveal two real obstacles (0006)
+
+At n=2 (correlated PD Q, mixing H) 0005's result does **not** carry over:
+
+1. **Process-eigenmode identifiability is spectral.** The exact grid recovers a hot
+   *strong* eigenmode (λ=1.6) at 0.95 and a hot sensor at 0.94, but a hot *weak*
+   eigenmode (λ=0.4) only at 0.12. A weak mode's scale is unidentifiable — and
+   immaterial. So **spectral truncation is necessary, not just efficient**: walk only
+   the significant eigenmodes (the Fisher/λ spectrum names them — the concrete
+   "compose Q-eigenbasis with Fisher spectrum").
+2. **The unbounded walk is the wrong recursion for a scale.** It drifts — on *static*
+   data (ψ=0) the sensor scales run to −7. 0005 lifted the `WalkingFilter` loop,
+   whose μ is an **unbounded random walk** (right for an unbounded regime shift); but
+   `statfilter`'s scales are **stationary AR(1)** reverting to 0 — the prior the exact
+   grid carries, and why the grid is unbiased. An unbounded walk integrates
+   transient/coupling bias; a stationary-AR(1) one does not. (0004 reverting = stable
+   but under-reaches; 0005 unbounded = reaches but drifts.)
+
+### Next build
+
+Not a one-line lift of `WalkingFilter`. A `WalkingVectorFilter` needs: (a) **spectral
+truncation** to the identifiable eigenmodes; (b) a **stationary-AR(1)** scale
+recursion — mean-reverting *and* tracking, the finding-18 analogue for a *stationary*
+(not walking) scale — probably with a small per-axis **GPB1 window** (the grid's
+stabiliser) rather than a bare point estimate; (c) the **shares/saturation marginal**
+from that window. Benchmark against the exact grid throughout.
 
 ## Open items
 
