@@ -71,13 +71,55 @@ per-component deduction breaks the exact-grid method. See the open below.
   (`phi_P` lands at ~0.84; persistence is weakly identified, as the scalar core
   already documents.)
 
+## Per-component deduction — the design (in progress)
+
+The chosen direction (user, 2026-08): **per-component** scale deduction, with
+measurement **R diagonal** (each sensor an independent channel; full-R an open),
+process **Q symmetric PD** decomposed in its **eigenbasis with V fixed** (open:
+profile / eliminate / learn V), and grid/walk resolution allocated by **composing**
+the Q-eigenbasis with the Fisher spectrum. The scale vector is
+`psi = (xi_1..xi_n [process eigenmodes], eta_1..eta_m [sensors])`, D = n+m.
+
+The exact tensor grid (`order**D`) is **theory-only** (the reference); the
+**practical filter is walking-only** — the tensor grid is exponential in D.
+
+### Findings so far (exploration/0003, 0004)
+
+- **0003 (Fisher geometry).** In `psi` coordinates the scale-Fisher is nearly
+  diagonal *within* blocks — process eigenmodes decouple from each other, sensors
+  decouple from each other (validates the eigenbasis + diagonal-R coordinates by
+  the data, not just the PD-free argument). The **one real cross-term is
+  process↔measurement** (~0.2, the scalar `s_P`/`s_M` confound lifted); total
+  off-diagonal 7–14%. Effective DOF ≈ full at n=m=2 (cond 4–7); **spectral
+  truncation is a large-n effect** (strong Q correlation already collapses the weak
+  mode's Fisher — open large-n probe).
+- **0004 (walker vs grid, per-sensor case).** The exact grid does per-sensor
+  deduction correctly (isolates the hot sensor). A **single-sample simplex step is
+  the wrong instrument** — a per-observation Hessian is too noisy, so a
+  natural-gradient step diverges; a diagonal per-axis step tracks *direction* but
+  under-reaches and leaks. Both say the walker must **accumulate the Fisher over
+  time** (the multivariate lift of the scalar finding-18 μ-loop), not step per
+  sample.
+
+### Next build
+
+A **D-dim Kalman walk on `psi`** with accumulated Fisher: diagonal-accumulated
+first (per-axis, derived gain `K*=(1-phi)/4`, shared observation + simplex
+gradient), promote to the one process↔measurement block if the 7–14% leakage bites;
+plus a Laplace marginal (accumulated curvature) for the shares near truth.
+Benchmark against the exact grid throughout.
+
 ## Open items
 
-- **Per-component scale deduction** ("*which* sensor is hot right now"): a separate
-  log-scale channel per observation (or state) component. Genuinely richer than the
-  scalar-per-matrix cut here, but `order**(#channels)` grid states — needs a
-  factorised / mean-field or walking-window representation, not a bigger
-  tensor-product grid. The most valuable extension; deferred as a design problem.
+- **Learn / eliminate V** — fixed process-noise eigenvectors is the starting
+  commitment; profile whether the directions rotate in practice, then learn or drop.
+- **Full (non-diagonal) R** — the measurement-noise-is-per-sensor default is a
+  modelling choice; the correlated-sensor branch (shared amplifier, common-mode) is
+  an open to explore.
+- **Large-n spectral truncation** — quantify how many process eigenmodes carry
+  real Fisher as n grows (0003 shows the weak modes collapsing under correlation).
+- **`R` diagonal vs full in the shipped `VectorFilter` (#6)** — #6 currently fits
+  full-symmetric R0; the per-component work assumes diagonal. Reconcile at merge.
 - **Partial missingness.** Only an all-`NaN` row is handled (clean gap: propagate,
   don't correct). Some-sensors-present rows need per-step sub-selection of `H`, `R`.
 - **Fit speed.** No batched-over-parameter-vectors kernel yet (the scalar core's
