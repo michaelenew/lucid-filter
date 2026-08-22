@@ -41,6 +41,7 @@ drawn by hand.
 | [`optimality-proof/`](optimality-proof/SUMMARY.md) | An attempt to prove the parent optimal, and a precise account of where it fails. The *class* of processes turned out to be the hard part, and defining it correctly is the main result. Theorems in [`proofs/`](optimality-proof/proofs). |
 | [`oracle-gap/`](oracle-gap/SUMMARY.md) | How far the filter sits from an oracle handed the true noise schedule, decomposed line by line: 96.3% causal ceiling, with the remaining 3.7% irreducible detection lag. Found and fixed the covariance collapse that flattened the likelihood along a ridge. |
 | [`fractional-filter/`](fractional-filter/SUMMARY.md) | In progress. Making the integer model order continuous, so the last categorical axis becomes a coordinate with an error bar. |
+| [`multivariate-statfilter/`](multivariate-statfilter/SUMMARY.md) | The vector generalisation of the parent: n-vector state, m-vector observation, a *supplied* measurement matrix `H`. The noise-deduction machinery is unchanged (same grid, scalar scale channels); only the Kalman node and the conservation law lift to matrices — the latter as a trace decomposition. Shipped as `statfilter.VectorFilter`. |
 
 ## If you are looking for something specific
 
