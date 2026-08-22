@@ -151,14 +151,35 @@ coupling bias the grid's GPB1 mixing cancels; the stationary under-reach is the 
 cap the grid's joint evidence overcomes. Spectral truncation confirmed (weak
 eigenmode `I_char` 0.01 vs strong 0.19).
 
+### The windowed / GPB1 walker closes the bracket — walking-only is viable (0008)
+
+The walker carries a scale posterior `(mu, Sigma)` and uses **2D+1 sigma points**
+(linear in D): place them, **run the state KF at each** (mixing it over the scale
+window — kills the coupling drift), reweight by likelihood, moment-match to update the
+scale (a 2D+1-particle GPB1), collapse the state over the same weights.
+
+- **Support-width thesis confirmed:** reach needs support spanning the truth — even the
+  *grid* under-reaches with a narrow span (order 3 → 0.53, order 5 → 0.94 for truth 1.4).
+- **The under-reach was `q`-tuning, not fundamental:** with a large enough window-growth
+  `q` the windowed walker **reaches the true 1.4 and tracks the grid at corr 0.99** at
+  linear cost (q: 0.02→corr 0.22, 0.3→0.90, 1.0→0.99).
+
+So walking-only multivariate per-component deduction **works**. Two residual,
+well-defined items: (1) **reach vs stability is a `q` trade-off** (the finding-18
+tension) — the right `q` is a critical-damping choice to be *derived* (the scalar
+`q_mu`≈0.01 is the under-reaching corner, so the windowed loop's `q` is a different,
+larger derived constant); (2) **residual cross-axis leakage** from the ~0.2
+process↔measurement coupling that diagonal sigma-points don't fully de-mix (fix: a
+joint sigma set in that one 2-block, or bound it).
+
 ### Next build
 
-A `WalkingVectorFilter` is **not** a one-line lift of `WalkingFilter`. Next probe: a
-**windowed / GPB1 walker** — carry a small per-axis window (not a point) and collapse
-the state KF over it, as the scalar filter does — to test whether that closes the
-bracket (the grid's reach without the drift) at linear-in-D cost. Then spectral
-truncation to identifiable eigenmodes, the shares/saturation marginal from the
-window, and benchmarking against the exact grid throughout.
+`WalkingVectorFilter`, with a validated mechanism: sigma-point windowed walk over
+`psi = (significant process eigenmodes ⊕ sensors)`, state KF mixed over the window.
+Before production: **derive `q`** (the finding-18 analogue for this windowed loop),
+handle/bound the one coupling block, wire the **shares/saturation marginal** from the
+sigma-point posterior (the weighted `S`-decomposition), and reduce to scalar
+`WalkingFilter`/`AdaptiveFilter` limits. Benchmark against the exact grid throughout.
 
 ## Open items
 
