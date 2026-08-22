@@ -33,7 +33,17 @@ negative of the workstream so far. The kick control
 $\hat s_P \in [0.3, 0.9]$ into kick-free homoscedastic windows, while
 GPB1-ML stares at three 6-SD kicks and reports a dead-flat model on one
 seed and $s_P=1.47$ on another. Fisher information in a spread parameter
-vanishes at zero spread; the plug-in is the defect, not the search. This
+vanishes at zero spread; the plug-in is the defect, not the search. **A candidate cure is recorded in
+[`0010`](0010_the_square_chart.py)** (contributed from the
+quantum-mechanics sibling program, AI-generated, unverified in this
+harness): the family depends on $s_P$ only through $s_P^2$ near the
+boundary, so the defect is the *chart* — in $\tau=s_P^2$ the Fisher
+information is finite and flat at the boundary ($I(\tau)\to c/4$,
+measured $0.399$ on the one-step toy with analytic scores), and the
+boundary estimate becomes the standard well-posed one-sided case (no
+sign ambiguity; MLE demo included). Untested here: the full GPB1/IMM
+likelihood in $\tau$, and whether the $+0.0055$ nats/pt plug-in price
+survives the chart change on the kick control. This
 lands on `0039`'s item 0a from the opposite direction, with the prices now
 measured: the ill-posed small-positive estimate costs +0.0055 ± 0.0009
 nats/pt (16× under the 0.0921 exposure); the boundary zero it replaces
