@@ -171,6 +171,31 @@ positives by construction. Design-blocked (stated, not run): the
 horizon spectrum — no principled acceleration↔filter-protocol map
 yet.
 
+## The coupling derived; the tangle; the hot boundary (0019–0021)
+
+[`0019`](0019_the_derived_coupling.md) — **the campaign capstone**:
+filter-gravity's last posited piece derived. Ratio records (freeze
+lemma) + pinned masslessness + locality make the online learning
+operator the graph Laplacian, so the response to a persistent source
+is its Green function: **α = 1.00 in 3D**, exact tent in 1D. Three
+discoveries en route: mass sources through the *temporal* ratio
+channel (spatial bias is satisfiable — no tail); a well needs an
+open boundary (a closed box lifts the whole field: flux-to-infinity
+sustains potentials, and 3D transience selects the dimension
+dynamically); and **no FDT** — white vacuum, Coulomb response:
+gravity is a response phenomenon, reconciling Newton with the
+measured short-ranged vacuum correlations. Control: sum records
+give a zone-corner massless mode (staggered anti-binding) — the
+record structure selects the massless momentum.
+[`0020`](0020_the_cross_spectral.md) — F5 run: a parameter carried
+only in the cross-spectral phase is tracked at 8× below blind while
+every marginal is provably silent; monogamy = positive-definiteness,
+e^{−2I(1;2)} + e^{−2I(1;3)} ≥ 1 exact.
+[`0021`](0021_the_hot_boundary.md) — the horizon front unblocked at
+the wedge tier: the half-web posterior is boost-thermal at β = 2π to
+1e−4 (π and 4π decisively rejected): **the horizon is hot for the
+half-web observer**. Still blocked: the accelerated-node protocol.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
