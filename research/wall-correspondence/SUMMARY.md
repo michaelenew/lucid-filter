@@ -6,7 +6,14 @@
 > structural hypotheses until this repository's own harness has scored
 > them.
 
-A workstream seed; one correspondence row now verified on both sides
+A workstream seed; the homomorphism is now proved on the free and
+cycle tiers with the failure located
+(see [`0002`](0002_the_homomorphism.md): a Kalman predict step and
+their ledger chain are one polar transfer semigroup on different
+groups; their RG blocking is a predict/update cycle; their running
+coupling is the residue of noncommutative state-space curvature —
+β = 0 on ℝ, < 1e−6 on U(1), 0.127τ² on SU(2)); and one
+correspondence row verified on both sides
 — see [`0001`](0001_the_pinned_root_row.md): this repository's
 *a climbing bias is a pinned root* (ode-filter 0041) is the sibling's
 masslessness theorem, with the prequential-floor epistemology ported
