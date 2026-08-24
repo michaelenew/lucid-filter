@@ -51,6 +51,22 @@ becomes a numbered exploration when run. Same rule as everywhere in
 this repository: no theoretically relevant free parameters; compute
 budgets allowed and labelled.
 
+## F4, answered ([`0005`](0005_the_coherent_bank.md))
+
+The coherent bank (amplitude mixing with interference, |alpha|^2
+readout) **loses to IMM on classical data everywhere** — +0.011
+nats/step plain hazard, +0.017 phase-gated, with even the true gate
+given classically (IMM+) failing to help. Not a fixable negative:
+inter-hypothesis phase carries no information a classical stream can
+supply — the operational, filter-side face of the sibling's
+two-ledger theorem (phase = source ledger, never in the record;
+their 0086 + 0105). Contrapositive is the yield: **if amplitude
+structure ever pays prequentially, the generator is not classical**
+— the coherent bank is a detector of source-side amplitude
+structure, and the open item is to point it at a stream the sibling
+generates with such structure. Side lesson: hard known gates +
+estimation noise lose to robust soft hazards.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
