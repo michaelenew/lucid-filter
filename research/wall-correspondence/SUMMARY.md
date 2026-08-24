@@ -108,6 +108,32 @@ meaning: their causal layer (arrival order of boundary data) is
 empty on abelian tiers and physical exactly at nonabelianness — the
 filter's causality becomes load-bearing, not mismatched.
 
+## Gravity in the filter (0010–0011)
+
+The initiative's new front, built to specification and measured.
+[`0010`](0010_gravity_in_the_filter.md): gravity's local laws —
+**mass is absorption** (a node with information advantage I
+transmits e^{−2I} of incident influence, exactly; finite memory
+bounds mass; only conserved/rigid nodes grow horizons); **trust
+wells delay and bend influence** (Shapiro +483 steps, lensing:
+influence routes around, 2× faster than through); **the equivalence
+principle in exact form** — response = q·Var(posterior)
+identically, shape-blind (the naive matched-prior version was 13%
+wrong: it is a tangent-space theorem, as in GR).
+[`0011`](0011_the_trust_field.md): the 4D corollary — a 3-lattice
+bank with a pinned shared trust field has Newton's 1/r as its Green
+function (α = 1.02; logarithmic in 2D, linear in 1D: **the bank's
+dimension selects the potential, and demanding Newton demands
+3+1**); the record-tier field is diffusive (front ~t^0.52): statics
+and screening right, no radiation — **gravitational waves are
+predicted to be source-tier (phase) physics**, the same
+record/source split as 0005–0006; and the field-level mass is
+exactly the node-level saturating law with G₀₀ as the coupling.
+Payoff delivered to the sibling: the Gauss requirement (boundary =
+enclosed trust, exactly) settles their 4D surface-ordering question
+(their 0109) — lawful orderings constructed, provably gauge-
+equivalent; unlawful ones fake mass and are out.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
