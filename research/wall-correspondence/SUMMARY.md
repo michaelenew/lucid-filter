@@ -12,8 +12,13 @@ cycle tiers with the failure located
 their ledger chain are one polar transfer semigroup on different
 groups; their RG blocking is a predict/update cycle; their running
 coupling is the residue of noncommutative state-space curvature —
-β = 0 on ℝ, < 1e−6 on U(1), 0.127τ² on SU(2)); and one
-correspondence row verified on both sides
+β = 0 on ℝ, < 1e−6 on U(1), 0.127τ² on SU(2)); one correspondence row verified on both
+sides, and the first experiment run
+([`0003`](0003_regime_hazard.md): regime-hazard vs AR(1) at matched
+second-order structure — right closure wins both ways, +0.003 nats/pt
+penalty each direction, sector count learnable from below, exact
+sector structure beats quantized-continuum resolution, and sector
+posteriors stay mixed even when sectors are real)
 — see [`0001`](0001_the_pinned_root_row.md): this repository's
 *a climbing bias is a pinned root* (ode-filter 0041) is the sibling's
 masslessness theorem, with the prequential-floor epistemology ported
