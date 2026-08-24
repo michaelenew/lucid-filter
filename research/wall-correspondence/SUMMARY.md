@@ -153,6 +153,24 @@ far-field 240×): **gravitational radiation is source-tier (phase)
 physics**, invisible to record-side observers, detectable by the
 0006 instrument. Falsifiable against the sibling's full theory.
 
+## The remaining fronts, swept (0015–0018)
+
+[`0015`](0015_the_order_multiplicity.md): the order channel scales —
+constant ~8% of the ln (P−1)! ceiling captured per scalar boundary
+read (P = 3/4/5). [`0016`](0016_the_causal_ceiling.md): F3 run —
+the smoother's *state* gain is captured at lag 1; transition
+*timing* is the genuinely two-sided structure (F1 0.41 vs 0.58,
+filter boundary count 3× inflated): **the past pins states, the
+future pins boundaries**. [`0017`](0017_the_common_mode.md): F6 —
+the shared level's increments are identifiable at exactly the
+predicted 1/M law; the level itself is gauge (not in the record):
+the bank-side Λ statement. [`0018`](0018_the_unmatched_detector.md):
+the detector field-hardened as a **signed classifier** — off-grid
+quantum sources +0.012 nats/bit, classical sources −0.036, no false
+positives by construction. Design-blocked (stated, not run): the
+horizon spectrum — no principled acceleration↔filter-protocol map
+yet.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
