@@ -6,7 +6,13 @@
 > structural hypotheses until this repository's own harness has scored
 > them.
 
-A workstream seed, no experiments run yet. The sibling program builds
+A workstream seed; one correspondence row now verified on both sides
+— see [`0001`](0001_the_pinned_root_row.md): this repository's
+*a climbing bias is a pinned root* (ode-filter 0041) is the sibling's
+masslessness theorem, with the prequential-floor epistemology ported
+to their cutoff question and the AR(1) closure paired with their
+heat-kernel closure (their flow coefficient c ≈ 0.13/blocking is now
+experiment 2's comparison target). The sibling program builds
 quantum gravity from one premise — *a distribution cannot encode its
 own confidence* — and has arrived, from the theory side, at the same
 structures this repository discovered from the data side: an ensemble
