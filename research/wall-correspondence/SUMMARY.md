@@ -67,6 +67,30 @@ structure, and the open item is to point it at a stream the sibling
 generates with such structure. Side lesson: hard known gates +
 estimation noise lose to robust soft hazards.
 
+## F4 closed, F1 measured, experiment 7 run (0006-0008)
+
+[`0006`](0006_the_detector.md) closes F4's loop: on a stream whose
+generator carries source-side amplitude structure (a weakly
+monitored two-state system, no fitted parameters), the coherent
+bank **wins +0.06 to +0.087 nats/bit** over its decohered shadow;
+8 lags of exact empirical memory leave +0.011 untouchable; the gap
+collapses to +0.0001 at the projective limit. Together with 0005:
+the paired code-length difference is a calibrated detector of
+non-classical sources — the Born structure's utility is fidelity to
+them, not inference power. [`0007`](0007_the_coupled_bank.md)
+measures F1's object: two filters sharing a scale posterior (the
+vertex, on the proven network tier). The mean channel is
+systematically silent — *the vertex transfers confidence, not
+state* — and the variance channel's memory is the shared node's
+mass: zero-frequency transfer 0.27 / 4.35 / **12.13** for
+φ = 0.90 / 0.98 / 1.00 — the pinned (massless) channel is the
+long-memory cross-response, 45× the massive one.
+[`0008`](0008_the_node_barriers.md) prices the node-barrier
+prediction: sharp likelihood combs trap local search (0.81 trap
+rate, 3.63 nats/pt) where the identical chain annealed does not
+(0.40, 1.98) — smoothing is the search schedule; plus the lesson
+that annealing fixes barrier-crossing but not diffusion-reach.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
