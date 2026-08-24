@@ -19,6 +19,16 @@ second-order structure — right closure wins both ways, +0.003 nats/pt
 penalty each direction, sector count learnable from below, exact
 sector structure beats quantized-continuum resolution, and sector
 posteriors stay mixed even when sectors are real)
+— and the first *imported measurement* recorded
+([`0004`](0004_the_physical_trust_channel.md): the sibling's lattice
+MC has measured the physical trust-channel parameters — s_P ≈ 0.013,
+φ ≈ 0.05, range ~1 step, a plateau across their coupling flow —
+so the walking filter's (φ_P, s_P) now has a theory-fixed target;
+their marginal is Gaussian at every coupling, so regime structure
+must be sought in scale *correlation*, not marginal kurtosis; and
+their "amplitude nodes fracture local search, smoothing anneals it"
+becomes a proposed prequential experiment: sharp vs tempered
+hypothesis banks under identical local model-search)
 — see [`0001`](0001_the_pinned_root_row.md): this repository's
 *a climbing bias is a pinned root* (ode-filter 0041) is the sibling's
 masslessness theorem, with the prequential-floor epistemology ported
@@ -78,6 +88,11 @@ Gaussianization — the same CLT.
    cross-information budget across stream pairs.
 6. **The common mode** (their cosmological budget). What residual of
    a slow shared level survives (1−B)^ν differencing across a bank.
+7. **Nodes as search barriers** (their ergodicity finding, 0004). A
+   hypothesis bank with exact-zero-likelihood members vs the same
+   bank tempered, under identical local model-search, scored
+   prequentially. Their prediction: the sharp bank traps and pays;
+   smoothing anneals. Cheap and self-contained.
 
 ## Priority
 
