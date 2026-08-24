@@ -91,6 +91,23 @@ rate, 3.63 nats/pt) where the identical chain annealed does not
 (0.40, 1.98) — smoothing is the search schedule; plus the lesson
 that annealing fixes barrier-crossing but not diffusion-reach.
 
+## The order channel ([`0009`](0009_the_order_channel.md))
+
+The sibling's last isomorphism tier (their 0108) lands here as a new
+theorem about filters: **for nonabelian innovations composed into a
+summary, arrival order is part of the message.** Cyclic orders
+collapse (the summary's class is conjugation-invariant), so three
+innovations carry exactly a parity bit, on the commutator. Verified
+as a prequential gap: order-aware minus order-blind = 0.017 to
+0.089 nats/triple over their coupling range, always above the
+hard-decision bound, and *exactly zero* on the circle — no abelian
+filter can see this channel, ever. Twin instrument to the 0006
+detector: measurable order-information in composed summaries
+certifies nonabelian structure in a stream's source. Physics-side
+meaning: their causal layer (arrival order of boundary data) is
+empty on abelian tiers and physical exactly at nonabelianness — the
+filter's causality becomes load-bearing, not mismatched.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
