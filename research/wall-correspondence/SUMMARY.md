@@ -134,6 +134,25 @@ enclosed trust, exactly) settles their 4D surface-ordering question
 (their 0109) — lawful orderings constructed, provably gauge-
 equivalent; unlawful ones fake mass and are out.
 
+## The force law, the coupling's source, the radiative ledger (0012–0014)
+
+[`0012`](0012_the_force_law.md): **attraction is a code gradient** —
+C(r) = a − b/r^1.04, force attractive inverse-square, the learnable
+source location walks to merger: bodies fall because falling
+compresses the record; universal attraction = positivity of
+information. [`0013`](0013_the_coupling_source.md): the trust
+field's coupling — same-level link-sharing is *explaining-away*
+(anti-gravitational, measured); the gravitational sign comes from
+the flow's shared coarse variables; obstruction located exactly:
+strict hierarchies are ultrametric, and the Euclidean 1/r needs
+level weights ~2^{−ℓ} — does the sibling's measured β-flow supply
+them? [`0014`](0014_the_radiative_ledger.md): the Hertz experiment —
+record tier screens (exponential, skin depth 1.32), source tier
+radiates (r^−1.02, ballistic front t^1.06 vs diffusive t^0.44,
+far-field 240×): **gravitational radiation is source-tier (phase)
+physics**, invisible to record-side observers, detectable by the
+0006 instrument. Falsifiable against the sibling's full theory.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
