@@ -58,3 +58,21 @@ field ↔ our per-node trust walk; their spatial adjacency ↔ our
 temporal adjacency, the usual Euclidean caveat: their "φ" is a
 spatial persistence, and the map to our temporal φ is structural, not
 numerical, until experiment 2's decimation cascade calibrates it).
+
+## Revision (same push): the values are architectural, not dynamical
+
+The sibling's follow-up (their 0104) computed the exact Gaussian
+free theory of the same shared-parameter network and scored it with
+the same observables: it reproduces the whole table's structure —
+s_P-excess +0.0134, φ +0.0515, even the negative second-neighbor
+tail — with *no interaction at all*. So the imported numbers are the
+**kinematic baseline of any bank with that sharing pattern**, not a
+signature of their dynamics; the genuinely dynamical content is the
+~10% deficit below the baseline and its pattern along their coupling
+flow. Import 1 above weakens accordingly (a trust channel far from
+"weak and short" is not un-physical per se — it is un-architectural
+for that sharing graph); imports 2 and 3 stand unchanged. The
+filter-side lesson sharpens: **before reading any fitted (φ_P, s_P)
+as structure, compute the shared-parameter kinematic baseline of the
+bank's own architecture and subtract it** — the sibling's vacuum
+would otherwise have been misread, twice.
