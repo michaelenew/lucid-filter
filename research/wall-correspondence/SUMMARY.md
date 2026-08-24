@@ -196,6 +196,28 @@ the wedge tier: the half-web posterior is boost-thermal at β = 2π to
 1e−4 (π and 4π decisively rejected): **the horizon is hot for the
 half-web observer**. Still blocked: the accelerated-node protocol.
 
+## The nonlinear completion ([`0022`](0022_the_nonlinear_completion.md))
+
+Newton → Einstein in filter space. The field's own gradients carry
+code, code is information, information is mass — so the trust field
+sources itself: ∇²λ = −ρ + β|∇λ|². **The self-coupling is forced**:
+binding two sources must change their far-field mass by exactly the
+information change (γ = 2 from 0010's mass law, ΔC = −m²G from
+0012), and the field equation gives ΔM/ΔC = 2β identically — so
+**β = 1**, no new constant. The completion **linearizes exactly**
+under ψ = e^{−βλ} (∇²ψ = βρψ; residual 0.0032 → 0.0004 as the
+source smooths — the identity is continuum-exact), giving the
+Schwarzschild form λ = −ln(1 − MG(r)) with a horizon where the trust
+field ceases to exist. And **mass ≤ capacitance**: saturation gives
+M → C = 1ᵀG⁻¹1 to 4 digits, which for a ball is 4πR — so
+ψ(surface) = 0 exactly: *a body can gravitate at most until its own
+surface becomes a horizon*, while a point source's capacitance is a
+lattice constant (its horizon is sub-lattice — an unresolvable web
+cannot hide anything). Ported: the horizon's temperature is
+T = 2/M — Hawking's scaling from β = 1 alone — and the first law
+against their area law fixes a bridge factor that their standing
+κ-normalization debt must supply (their 0114).
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
