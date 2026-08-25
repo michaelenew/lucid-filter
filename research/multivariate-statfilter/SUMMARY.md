@@ -71,7 +71,21 @@ per-component deduction breaks the exact-grid method. See the open below.
   (`phi_P` lands at ~0.84; persistence is weakly identified, as the scalar core
   already documents.)
 
-## Per-component deduction — the design (in progress)
+## Per-component deduction
+
+**Shipped: `statfilter.WalkingVectorFilter`** (statfilter 1.5.0) — the dense
+walking grid over spectrally-truncated axes, validated below. A log-scale per
+process eigenmode and per sensor, walked online (finding-18 loop per axis), state
+GPB1-collapsed over the joint per-component grid, axes below the Fisher-identifiability
+floor frozen. No `order`/`nodes` knob (dense at 1.5 s over a fixed span). Reaches a
+sustained per-component regime and stays stable on static data; the exact grid is the
+reference. **Honest residual:** the process↔measurement coupling (~0.2) is not fully
+de-mixed by the per-axis walk, so a hot mode leaks a little into a sensor and a
+weakly-identified axis can overshoot / show a ~0.2-nat static offset. Removing it (a
+joint walk in the one coupling block) and deriving the grid resolution in force
+(cf. the grid-optimality open in `adaptive-grid/`) are the remaining opens.
+
+### The design (the arc below)
 
 The chosen direction (user, 2026-08): **per-component** scale deduction, with
 measurement **R diagonal** (each sensor an independent channel; full-R an open),

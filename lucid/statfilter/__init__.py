@@ -27,16 +27,28 @@ base covariances and the noise scales.  At n = m = 1, H = [[1]] it is exactly
     f = VectorFilter.fit(Y, H)          # Y is (T, m); H (m, n) supplied
     r = f.filter(Y)                     # r.mean (T, n), r.var (T, n, n)
 
-See ``statfilter.core`` / ``statfilter.walking`` / ``statfilter.vector`` for the
-models and ``theory/`` for their derivations.
+To track the noise scale of **each component** online -- a log-scale per process
+eigenmode and per sensor, walked with no fit, so you learn *which* component's
+noise is up -- use ``WalkingVectorFilter`` (a theory testbed; see its README
+section for the honest coupling residual):
+
+    from statfilter import WalkingVectorFilter
+
+    f = WalkingVectorFilter(Q0, R0, H)      # base process cov, per-sensor R0, supplied H
+    r = f.filter(Y)                         # r.process_scale (T, n), r.measurement_scale (T, m)
+
+See ``statfilter.core`` / ``statfilter.walking`` / ``statfilter.vector`` /
+``statfilter.walkingvector`` for the models and ``theory/`` for their derivations.
 """
 from .core import AdaptiveFilter, FilterResult, Params, Step
 from .walking import (WalkingFilter, WalkResult, WalkStep,
                       WalkingBank, BankStep, BankResult)
 from .vector import VectorFilter, VecParams, VecStep, VecFilterResult
+from .walkingvector import WalkingVectorFilter, WalkVecStep, WalkVecResult
 
 __all__ = ["AdaptiveFilter", "FilterResult", "Params", "Step",
            "WalkingFilter", "WalkResult", "WalkStep",
            "WalkingBank", "BankStep", "BankResult",
-           "VectorFilter", "VecParams", "VecStep", "VecFilterResult"]
-__version__ = "1.4.0"
+           "VectorFilter", "VecParams", "VecStep", "VecFilterResult",
+           "WalkingVectorFilter", "WalkVecStep", "WalkVecResult"]
+__version__ = "1.5.0"
