@@ -337,6 +337,21 @@ generator ⟹ continuous time. *A count-generated record is one you
 can always ask "what happened in between"* — the founding premise
 read backwards.
 
+## The two phases ([`0031`](0031_two_phases.md))
+
+A conflation this workstream had been carrying, separated inside one
+generator. **The factorisation phase is gauge even dynamically**:
+re-phasing each Kraus operator changes the amplitude at every step
+and leaves the record *bitwise identical* (code differs 1.1e−16,
+detector advantage 0.06136 vs 0.06136). **The relative phase is
+physical**: a phase *between* interfering components moves the
+record (10–19% of bits) and the measurable advantage. So the source
+ledger's observable content is **not a field attached to the
+weight** — all factorisations agree on everything — it is the
+relative phase between alternatives that later **compose**, the same
+structure the order channel (0009) measures. *The source ledger is a
+statement about composition, not about a field.*
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
