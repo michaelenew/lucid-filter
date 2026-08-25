@@ -521,6 +521,41 @@ physics is ξ/a → ∞, and a theory with a fixed coupling and no dial
 gets that only by accident or by asymptotic freedom. Their 0115
 measures it: **ξ/a ~ 10¹⁷ on one branch, ~10³ on the other.**
 
+## The continuous observable ([`0037`](0037_the_continuous_observable.md))
+
+0036 made state and time continuous; what stayed discrete was the
+**observation**. Making it continuous — an arbitrary kernel against
+the field — paid off immediately, because the sibling's 0129 failed
+for want of exactly one.
+
+**The fully continuous filter**: the discrete recursion converges to
+Kalman–Bucy at first order in dt, so continuous observation is a
+*limit*, not a redefinition.
+
+**Which kernel**: in d = 4 with ξ = 4 and white UV noise, smearing at
+w ~ r/2 gives **62× the signal-to-noise** of a local readout. But
+each w is a **different observable** — the value moves by far more
+than its error across the range — so the kernel buys *statistics*,
+and comparisons must be at matched w against a matched baseline.
+
+**A kernel can forge the answer.** On a field isotropic by
+construction, a cubic kernel manufactures +0.1556 ± 0.0036. A radial
+Gaussian manufactures +0.0204 ± 0.0006 — **33σ from zero**. I wrote
+"a radial kernel injects none" before measuring; false. It makes the
+artefact small instead of dominant, and **a kinematic baseline must
+be subtracted either way.**
+
+> **An observable is a choice of observation kernel**, made by
+> maximising information about the mode of interest *subject to not
+> contaminating it*. Physics calls the first half "improving the
+> overlap" and leaves the second half implicit — and the second half
+> is where the errors live.
+
+**Ported and confirmed** (their 0130): the smeared operator took
+their anisotropy measurement from 0.1σ to **49σ**. It also caught
+them computing the baseline at the wrong volume. The statistical
+obstruction is solved; a finite-volume one replaced it.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
