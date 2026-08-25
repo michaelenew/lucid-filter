@@ -81,6 +81,15 @@ This is a foundational re-frame (it changes what the class *is*, cf.
 `optimality-proof/` which formalises the current Gaussian-AR(1) class), not an
 increment to the shipped filter.
 
+Support from `wall-correspondence/` (correspondences to validate on our harness): a
+recursive filter needs a *stationary* record, and a **count**-generated stationary
+record always **embeds in continuous time** — a PSD transfer operator has a real
+generator (`wall-correspondence/0028, 0030`). The KDE-of-observations here is exactly
+count-generated, so the learned stationary law is embeddable/consistent by
+construction; and the KDE's bandwidth-narrowing is an **annealing** schedule
+(`0008`: smoothing is the search schedule, sharp likelihood combs trap local search) —
+one instrument for the shape-learning search.
+
 ## Layout
 
 - `output/` — the deliverable: the `statfilter` package, its tests, and

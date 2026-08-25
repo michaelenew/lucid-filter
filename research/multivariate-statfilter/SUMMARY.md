@@ -237,3 +237,78 @@ sigma-point posterior (the weighted `S`-decomposition), and reduce to scalar
 - **Carry `H` into `odefilter`.** The eventual target: a supplied measurement map
   on the ODE filter, the multivariate analogue of the `linearized_dynamics`
   callable. This workstream fixes the noise machinery first.
+
+## Opens imported from `wall-correspondence/`
+
+The sibling `wall-correspondence/` workstream (a filter↔QM/gravity correspondence)
+independently reconstructs the multivariate noise covariance as a gauge theory, and
+its structure maps directly onto this per-component filter. These are *correspondences
+to validate on our own harness* (that workstream is AI-generated, not peer-reviewed),
+each a concrete attack on an open above.
+
+- **Our `(V, λ)` split IS the gauge decomposition — validates walking the eigenvalues,
+  and reframes "learn V"** (`wall-correspondence/0026, 0029`). A precision/covariance
+  matrix's DOF split **1 (scale/trace) + 5 (shear/traceless) + 3 (frame/rotation)**;
+  the **gauge-invariant content is exactly the eigenvalues** — which is what we walk
+  (independent confirmation that per-eigenmode scale tracking is the right object). The
+  **frame `V` is the connection** (a gauge field), an *independent* object — so "fixed
+  V" = fixing the gauge, and "learn V" is giving the connection its own dynamics.
+
+- **Learn `V` with a derived, no-free-parameter dynamics** (`0027`). The frame is not a
+  postulated field but an **inferred nuisance** read from noisy frame-comparison
+  records; its class law is the **heat kernel** at `τ = Pσ²/2` and its stiffness is
+  `1/g² = record precision` (nothing chosen). This is a concrete recipe for the
+  *learn/eliminate V* open — a Gaussian (record-ledger) prior on the frame's holonomy,
+  learned online, rather than an ad-hoc rotation search. Caveat carried: what this
+  cannot supply is the Born square (source-ledger), so a purely-record learned V is the
+  right first cut.
+
+- **A rotating (learned) frame is nonabelian → update order carries information**
+  (`0009`). Our fixed-`V` filter is abelian (the eigenmode updates commute). If `V` is
+  learned and rotates, the per-mode updates no longer commute and **arrival order is
+  part of the message** (measured 0.017–0.089 nats/triple there, exactly zero on the
+  abelian circle). So a learned-`V` walker must respect update order — a named
+  structure to build in, not a bug to discover.
+
+- **Grid the covariance in the Fisher–Rao (affine-invariant) coordinate**
+  (`0029`). The natural record between precisions is the **matrix log-ratio**
+  `log(P^{−1/2} Q P^{−1/2})`, invariant under congruence — the Fisher–Rao metric, and
+  the trust field is a harmonic map into `GL(n)/O(n)`. Our grid is currently a product
+  of *raw per-axis* log-scales; regridding in this affine-invariant coordinate is the
+  principled geometry, connects to the **grid-optimality open** (`adaptive-grid/`), and
+  is a candidate explanation for the process↔measurement coupling being a coordinate
+  artifact of the raw parameterisation.
+
+- **The coupling is a cross-spectral / vertex channel with a monogamy budget**
+  (`0007, 0020, 0024`). A shared scale posterior (the vertex) transfers **confidence,
+  not state** (mean channel silent, variance channel is the propagator) — the
+  filter-side reading of our process↔measurement coupling. A parameter carried only in
+  the cross-spectrum is trackable while every marginal is silent (0020, 8× below
+  blind), and the **monogamy inequality `e^{−2I(1;2)} + e^{−2I(1;3)} ≥ 1`** (0024, a
+  positive-definiteness/correlation-geometry statement, *not* an amplitude sharing law)
+  bounds how much a hot mode can be shared across sensors — a candidate *derived* bound
+  on the coupling "leak", i.e. track the coupling as a channel rather than fight it.
+
+- **The correlated-sensor (full-R) branch has a derived identifiability law** (`0017`).
+  `M` sensors sharing a common-mode noise: the level's increments are identifiable at
+  exactly **1/M**, the level itself is **gauge** (not in the record). This is the
+  principled treatment of the full-`R` open — a shared common mode plus per-sensor
+  diagonal residuals, with a known 1/M detectability floor.
+
+- **Non-exponential representation candidate: the sigma-model field** (`0029`). The
+  tensor completion represents the whole covariance as a field (1+5+3) with
+  first-order gradient-flow dynamics; whether that field representation is more compact
+  than our tensor-product grid — a sub-exponential per-component filter — is worth a
+  probe against the **scale open**. Related: discreteness gives a **capacity/greybody
+  floor** `λ_max = ln N` (`0022, 0023`), a candidate derivation for the `_SPAN_S`
+  coverage budget and a cross-check on the truncation floor.
+
+- **Stationarity ⇒ a generator ⇒ the shape-learning attack is well-posed**
+  (`0028, 0030`). A recursive filter needs a *stationary* record (0028); and a
+  count-generated stationary record **always embeds in continuous time** — a PSD
+  transfer operator has a real generator (0030). The class-**shape** open (learn the
+  stationary law online by a running KDE of observations — a *count*-generated law,
+  `random-walk-filter/SUMMARY` open 2) is therefore embeddable/consistent by
+  construction; and the KDE's narrowing schedule is an **annealing** schedule (`0008`:
+  smoothing is the search schedule, sharp combs trap local search) — one instrument
+  for both the shape-learning and grid-resolution questions.
