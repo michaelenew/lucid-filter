@@ -307,14 +307,15 @@ How it works (all derived, no `order`/`nodes` knob):
   joint grid (exponential in the *active* axis count) small. Derivation + validation:
   `research/multivariate-statfilter/0010`.
 
-**This is a testbed filter, with an honest residual.** `statfilter` is a theory
-testbed; this isolates the per-component deduction mechanism, not production scale (the
-grid is exponential in the active-axis count — a handful of modes + sensors). The exact
-grid is the reference; the walk adds unbounded reach at the cost of a **residual
-process↔measurement coupling bias** — a hot mode leaks a little into a sensor and
-vice-versa (~0.2), and a weakly-identified axis can overshoot or show a small (~0.2 nat)
-static offset. Removing it (a joint walk in the one coupling block) and deriving the
-grid resolution in force are recorded opens; see
+**This is a testbed filter** (`statfilter` is a theory testbed; the grid is
+exponential in the active-axis count — a handful of modes + sensors). Measured against
+the exact grid over 6 seeds, the walk is **faithful**: when a strong process mode is
+hot the sensor reads ~0.26 and the exact grid also reads ~0.31 there — with a mixing
+`H`, process and measurement noise are genuinely partly confounded, so that is the
+*true* posterior coupling, not a walk defect; a clean sensor stays clean when another
+is hot. The only walk artifact is a **~0.1-nat static drift on the strong axis**
+(bounded — the unbounded walk's small bias). Shaving that, and deriving the grid
+resolution in force, are recorded opens; see
 [`../../research/multivariate-statfilter/SUMMARY.md`](../../research/multivariate-statfilter/SUMMARY.md).
 
 ## Honest limits

@@ -42,15 +42,15 @@ diagonal: a sensor's inherent noise has no reason to correlate with another's
     -- a function of the class ``(phi, s)`` and the coverage budget only.  This also
     keeps the joint grid ``nodes**(#active axes)`` small.
 
-**Scope / honest limits (a testbed filter).** ``statfilter`` is a theory testbed;
-this filter's value is isolating the per-component noise-deduction mechanism, not
-production scale.  The joint grid is exponential in the number of *active* axes, so
-this is for a handful of significant modes + sensors.  The exact grid is the
-reference; the walk adds unbounded reach at the cost of a **residual coupling bias**
--- the process<->measurement cross-term (~0.2, research/0003) that the per-axis walk
-does not fully de-mix, so a hot mode leaks a little into a sensor and vice-versa,
-and static data shows a small (~0.1-0.2 nat) scale offset.  Removing it (a joint
-walk in the one coupling block) is a recorded open.  See
+**Scope / limits (a testbed filter).** ``statfilter`` is a theory testbed; this
+filter's value is isolating the per-component noise-deduction mechanism, not
+production scale (the joint grid is exponential in the *active*-axis count -- a
+handful of significant modes + sensors).  Measured against the exact grid over 6
+seeds, the walk is faithful: when a strong process mode is hot the sensor reads ~0.26
+and the exact grid *also* reads ~0.31 there -- with a mixing ``H`` process and
+measurement noise are genuinely partly confounded, so that is the *true* posterior
+coupling, not a walk defect (a clean sensor stays clean when another is hot).  The
+only walk artifact is a ~0.1-nat static drift on the strong axis (bounded).  See
 ``research/multivariate-statfilter/SUMMARY.md``.
 """
 from __future__ import annotations

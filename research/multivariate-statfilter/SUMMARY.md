@@ -90,15 +90,22 @@ exceeds its window `(SPAN_S·s)²` and delocalises. A pure function of the class
 `adaptive-grid/`). `_SPAN_S = 3.0` is a coverage budget — **open: derive/justify it,
 though because the grid walks it is not expected to matter to performance.**
 
-**Honest residual (coupling):** the process↔measurement coupling (~0.2, a *measured*
-Fisher cross-term, not a parameter) is not fully de-mixed by the per-axis walk, so a
-hot mode leaks a little into a sensor and a weakly-identified axis can overshoot /
-show a ~0.2-nat static offset. The exact grid de-mixes it correctly by construction —
-the leak is introduced by the *walk*. **The obvious fix fails (0010-adjacent probe):**
-a joint expected-Fisher natural-gradient step (`offset = F⁻¹·grad`) is *unstable* and
-worse — the marginalised Fisher is a poor conditioner, same failure as the
-single-sample natural gradient (0004/0008). So the coupling block is a genuine open,
-not a one-step fix; recorded, not built.
+**Residual, measured on the shipped filter (6 seeds):** the walk is **faithful to the
+reference grid**. When a strong process mode is hot, the sensor reads ~0.26 — but the
+exact grid *also* reads ~0.31 there: with a mixing `H`, process and measurement noise
+are genuinely partly confounded, so that is the *true* posterior coupling, not a walk
+defect. A clean sensor stays clean when another is hot (eta1 ≈ −0.09 while eta2 → 1.38).
+The only actual walk artifact is a **~0.1-nat static drift** on the strong axis
+(bounded; the unbounded walk's small bias, cf. the scalar `WalkingFilter`'s ~1.00
+static ratio). Earlier alarming leak numbers (~0.5) were a **buggy standalone probe**,
+not the filter.
+
+So there is no coupling *bug* to fix — the walk already matches the correct (grid)
+answer. Two fix attempts that push *away* from it and fail are recorded as dead ends:
+a joint expected-Fisher natural-gradient step (`offset = F⁻¹·grad`) is unstable (a poor
+conditioner, like 0004/0008), and a "follow the grid marginal" walk does not improve
+the residual. **Open (minor):** shave the ~0.1 static drift on strong axes (a slight
+unbounded-walk bias).
 
 ### The design (the arc below)
 
