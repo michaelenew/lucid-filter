@@ -320,6 +320,23 @@ there were two. Bonus: a matrix record splits 1 (scale) + 5 (shear)
 record and **G·g² is a pure number** (3 in this normalisation) —
 the first quantitative link between them, conditional on isotropy.
 
+## Time needs a generator ([`0030`](0030_time_needs_a_generator.md))
+
+The filter side of the sibling's reflection-positivity result
+(their 0123), manufactured deliberately. **RP is the embedding
+problem**: a transfer operator is PSD iff it is exp(−H) for a real
+generator — iff the discrete dynamics embeds in a continuous-time
+flow. An operator with a negative eigenvalue has no real logarithm,
+so its dynamics exists at integer steps *and at no time in between*
+(demonstrated on the two-state chain: persistent embeds, generator
+computed and verified; anti-persistent provably does not). The same
+k = 0 / k = π split that 0019 found selecting gravity appears here
+in the time direction (flagged as parallel, not identity). **The
+port**: counting ⟹ nonnegative coefficients ⟹ positive transfer ⟹ a
+generator ⟹ continuous time. *A count-generated record is one you
+can always ask "what happened in between"* — the founding premise
+read backwards.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
