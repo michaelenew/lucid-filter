@@ -376,6 +376,63 @@ observable content is interference specifically** — the order
 channel is a record-ledger phenomenon that merely requires
 nonabelian structure.
 
+## Why complex ([`0034`](0034_why_complex.md))
+
+The composition rule, closed — and the sibling's measurement of the
+number 0032 predicted.
+
+**The premise is already proved.** Concatenating segments *adds*
+both the code length (their 0095: the action IS a prequential code
+length) and the phase (the source ledger's additivity). One object
+carries both, so composition must be associative, unital and
+**norm-multiplicative — moduli multiply because code lengths add**.
+That is Frobenius's hypothesis, and its answer is the trichotomy
+**ℝ, ℂ, ℍ** (verified: each satisfies the constraints to ~1e−28; a
+40-restart search at n = 3 finds nothing, floor 2.4e+1). The one
+property separating them is commutativity.
+
+**The filter measures which one, and both exclusions were already
+in 0033.**
+
+| | mechanism | cost | verdict |
+|---|---|---|---|
+| ℝ | unit group {±1} is discrete ⇒ a continuous additive phase is constant ⇒ best predictor is a constant, and that constant *is* the incoherent model (E_δ[p_coh] = (a₁²+a₂²)/(a₁+a₂)², exact to 1e−9) | **0.302 nats/trial** | excluded |
+| ℍ | unit group S³ is nonabelian ⇒ two influences composed in either order interfere differently against a reference | **0.019 nats/trial** of order leaking into the interference channel; record has exactly 0 | excluded |
+| ℂ | commutative, continuous phase | leak 1.8e−15 (machine zero) | survives |
+
+A sub-result: the ℍ leak vanishes *identically* against a real
+reference, because Re(ab) = Re(ba) — it is visible only through a
+reference carrying a phase of its own.
+
+> **Amplitudes compose by complex multiplication because the record
+> carries two additive ledgers, turns its phase continuously, and
+> shows no order in the channel where the phases meet.** Every
+> clause is a measurement this program already made; none is a
+> postulate about Hilbert space.
+
+**Corollary — where S³ belongs.** The S³ this filter adopted for
+noncommutativity (0089) is a **record-ledger** structure, where 0009
+and 0033 put it. Putting it in the *amplitude* would forge the
+0.019 nats/trial order signal the record does not have. The two
+channels of 0033 are not merely independent: they are
+*algebraically constrained to be different structures*.
+
+**What is left of the source ledger** is one step — why alternatives
+are **summed** (the linearity of marginalising unresolved paths),
+which 0034 assumed rather than measured.
+
+**And the sibling measured p** (their 0125). Integrating out a
+massless lattice scalar in the trust background w = e^{2λ} gives
+**p = 0.15493 per field** against 0032's target of 0.0154: the
+formula G = 1/(4πp) is off by **20×**, and in the unexpected
+direction — the gravity channel is too *stiff*. Two things came back
+with it. The induced quadratic form is PSD with kernel exactly the
+constants, so **0019's massless mode is a theorem on their side, not
+an assumption**. And the gap is field-count independent
+(G_ent/G_ind = πp/α = 20.11 for any N), so it is a pure number, not
+a bookkeeping error. That number is now the entire open content of
+direct G.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
