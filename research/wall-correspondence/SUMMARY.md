@@ -300,6 +300,26 @@ insisting on a time-invariant model has exactly two options in
 1+1D — and one of them is hot: **the Unruh temperature is the price
 of the second option.**
 
+## The tensor sigma model ([`0029`](0029_the_sigma_model.md))
+
+Deriving the tensor dynamics from the learning rule: the natural
+record between precisions is the **matrix log-ratio**, whose norm is
+invariant under common congruence (8e−15) — the Fisher–Rao metric —
+so the trust field is a map into GL(3)/O(3) and its dynamics is a
+**harmonic map flow**. The tensor completion is a *sigma model*,
+derived rather than posited. Its linearisation contains the scalar
+theory exactly (the **trace sector is** the scalar trust field —
+its response is the Coulomb tent, residual 0.000), with 5 traceless
+components as new content. Decisively: the record tier is
+first-order gradient flow, so every tensor component **diffuses**
+(t^0.50) — there is *no wave sector on the record side*, so mode
+counting is a source-tier question and "derive the tensor field
+equations" **reduces to** the Born question. One obstruction where
+there were two. Bonus: a matrix record splits 1 (scale) + 5 (shear)
++ 3 (frame), so gravity's coupling and the gauge coupling share one
+record and **G·g² is a pure number** (3 in this normalisation) —
+the first quantitative link between them, conditional on isotropy.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
