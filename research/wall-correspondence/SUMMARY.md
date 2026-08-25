@@ -477,6 +477,50 @@ carries third-order interference the record lacks.
 What remains in the program is no longer a postulate — it is a
 **number**: the factor 20 between the two routes to G (their 0125).
 
+## The continuous filter ([`0036`](0036_the_continuous_filter.md))
+
+The sibling's last open conjunct is **continuity**, and by the
+isomorphism programme this is where to solve it first: replace a
+discrete transition **matrix** with a continuous transition
+**integral transform**, keep the inputs discrete.
+
+**Half of it was already done and not labelled as continuity.**
+0030's embedding result — a record's dynamics embeds in continuous
+time iff T = exp(−H) — *is* the time direction being continuous
+underneath.
+
+**And 0030 has a gap.** A real H is not enough for a *history*: −H
+must also be a rate matrix. Of 789 random 3-state records passing
+0030's test, only **251 (31.8%)** have one. A counterexample
+reproduces T to 7e−16 yet its half-step exp(Q/2) carries a negative
+entry (−0.055) — there is no distribution for "what happened
+halfway". So **counting buys the generator, not yet the history**,
+and their "counting buys time" should carry the same asterisk.
+
+**The state direction**: discretising an OU record at spacing h with
+dt = h²/2, the transition transform's generator converges to
+(σ²/2)∂² − θx∂ (error 0.0438 → 0.0022), and at a fixed physical step
+the kernel is local (weight within k sites: 0.52, 0.92, 0.9998 for
+k = 2, 5, 10). The limit is a field theory, not a nonlocal one.
+
+**The criterion — and the measurement corrected the expectation.** I
+expected a bad refinement to diverge. It does not: holding the
+dynamics fixed in *grid* units converges perfectly well, to **white
+noise**. Both regimes converge, to different limits, with a gap of
+**0.888 nats/observation**.
+
+> **The continuum limit exists iff the prequential code length per
+> unit physical time converges to a NONTRIVIAL limit under
+> refinement.** Renormalisability as an operational statement, in
+> the program's own currency, needing no continuum manifold — only a
+> sequence of discrete models and a score.
+
+Triviality, not blow-up, is the real failure mode — which is exactly
+the lattice's failure mode off criticality. What it demands of the
+physics is ξ/a → ∞, and a theory with a fixed coupling and no dial
+gets that only by accident or by asymptotic freedom. Their 0115
+measures it: **ξ/a ~ 10¹⁷ on one branch, ~10³ on the other.**
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
