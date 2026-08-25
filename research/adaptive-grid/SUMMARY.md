@@ -733,3 +733,28 @@ spacing lesson (`ode-filter/0047`).
   `0010-likelihood-gradient-flow`, `0011-surrogate-vs-optimal`, `0012-self-calibrating`, `0013-q-mu-sweep`, `0014-q-mu-settling-horizon`, `0015-step-size-dependence`, `0016-observability-units`, `0017-grid-span`, `0018-blowup-vs-coverage`, `0019-dimensionless-tradeoff`, `0020-optimal-gridding`, `0021-unbounded-reach`, `0022-critically-damped-walkout`, `0023-gap-theory`, `0024-walking-vs-fit`, `0025-grid-the-nuisance`, `0026-ridge-theory`, `0027-walking-bank`, `0028-forget-the-last-knob`, `0029-stiff-wall-gain`, `0030-derived-walk-loop`,
   `0031-linearize-the-wall`, `0032-linearizing-coordinate`, `0033-stress-battery`,
   `0034-uniform-grid-deadzones`.
+
+## Open: the grid is *justified*, not proven optimal
+
+We have never run a probe for **what node spacing is optimal**, or **what
+resolution the current choice actually buys**. Two facts we are currently living
+with, unprobed:
+
+- **GH vs dense tiling is a split decision, unmeasured in force.** Gauss–Hermite is
+  better for the *marginal integral*; the dense triangular tiling is more efficient
+  for *coverage* (and dead-zone-free — why we switched, finding 21/35). The
+  GH-vs-dense probe measured a **~2× error in the marginal** under the dense grid
+  that appeared to have **no material effect on filter performance**, so we left it.
+  That "seemed immaterial" was never quantified across regimes.
+- **Sparrow (the resolution criterion behind `gap = 1.5 s`) was adopted because it is
+  cheap and *justifiable* — a principled way to avoid a free parameter — not because
+  it is proven correct here.** Optical two-point-resolution criteria (Sparrow,
+  Rayleigh) are borrowed by analogy; that they transfer to *this* marginal-likelihood
+  representation problem is an assumption, not a result.
+
+**To do, in force (not the current by-analogy assumption):** derive/measure the
+optimal spacing and the resolution actually delivered for this problem — spacing vs
+tracking error and marginal fidelity across regimes, GH vs dense head-to-head on
+*filter* loss (not just the integral), and whether a GH/dense hybrid beats either.
+The grid spacing is a compute budget, but the *criterion that sets it* should be
+earned rather than borrowed.
