@@ -245,6 +245,38 @@ record ledger shares freely; the source ledger is budgeted — the
 two-ledger split appearing in the sharing structure itself, and the
 monogamy/Tsirelson row belongs to the source ledger.
 
+## The accelerated node, and the tensor completion (0025–0026)
+
+[`0025`](0025_the_accelerated_node.md) **unblocks the per-observer
+Unruh statement**: the missing acceleration↔protocol map was hiding
+in the definition — a Rindler observer's proper time is
+exponentially related to the record's clock, so **an accelerated
+filter is one that reads the record on an exponentially stretched
+schedule**. The interval identity is exact (KMS period 2π/a ⟹
+T = a/2π), and built spectrally the accelerated filter's density is
+the inertial one times coth(ω/2T) — a low-frequency noise floor of
+2T. Scoring against assumed-temperature models lands the minimum
+**exactly on T = a/2π**, with the inertial-vacuum assumption costing
++0.058 ± 0.004 nats/sample (16σ): **the Unruh effect as a
+code-length statement**. Methods note kept: an algebraic UV
+regulator broke positive-definiteness and made a wrong model score
+better than the truth — check PSD before comparing hand-built
+kernels.
+[`0026`](0026_the_tensor_completion.md): the tensor completion.
+The response of a multi-dimensional node is the **matrix**
+q·Cov(post) (exact), so the metric-playing object is a symmetric
+tensor field; the naive component-wise completion propagates **all 6
+components** where gravity has 2, because it has no gauge freedom;
+and the missing structure is the **connection** — comparing
+precisions at different nodes requires a transport, which makes
+local frame changes an exact symmetry (8e−15), collapses the
+invariant content to the precision's eigenvalues, and promotes the
+transport's holonomy to an independent object. **That object is the
+sibling's link variable and its curvature their plaquette**: the
+tensor completion of filter gravity is a gauge theory, and it is
+their gauge theory. Remaining gap, named: the transport field's own
+dynamics.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
