@@ -277,6 +277,29 @@ tensor completion of filter gravity is a gauge theory, and it is
 their gauge theory. Remaining gap, named: the transport field's own
 dynamics.
 
+## The transport dynamics, and why the schedule (0027–0028)
+
+[`0027`](0027_the_transport_dynamics.md) closes 0026's named gap:
+the transport is not a postulated field but an **inferred nuisance
+parameter**, so its action is the code length of frame-comparison
+records. Noisy records make the loop holonomy Brownian on the group,
+whose class law is the **heat kernel** at τ = Pσ²/2 (verified to
+~0.3%), and the induced plaquette action φ²/τ makes **1/g² = the
+record precision** — the gauge coupling is not chosen. What record
+noise *cannot* give is the **Born square**: |A|² has 5 exact zeros
+(the nodes that fracture ergodicity in their 0113) while a heat
+kernel is strictly positive, a convolution of positive densities.
+Record ledger → the connection's Gaussian dynamics; source ledger →
+its nodes. The same two-ledger boundary, met from a third direction.
+[`0028`](0028_why_the_schedule.md) closes 0025's residue with the
+most filter-native argument available: **a recursive filter needs a
+stationary record**, stationarity holds exactly on symmetry orbits
+(measured defect 8e−16 inertial, 1e−13 boost, 0.37 generic), and the
+boost orbit *is* the exponentially stretched schedule. A filter
+insisting on a time-invariant model has exactly two options in
+1+1D — and one of them is hot: **the Unruh temperature is the price
+of the second option.**
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
