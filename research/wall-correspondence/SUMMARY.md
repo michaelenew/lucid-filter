@@ -433,6 +433,50 @@ an assumption**. And the gap is field-count independent
 a bookkeeping error. That number is now the entire open content of
 direct G.
 
+## Why summed ([`0035`](0035_why_summed.md))
+
+The source ledger's last clause, closed — and the honest finding is
+that the *obvious* argument does not work.
+
+**The structural axioms do not pin addition.** Prepending a common
+segment forces ℂ-homogeneity; the record forces commutativity,
+associativity and an identity. The power family (aⁿ+bⁿ)^{1/n}
+satisfies **every one, for every n** (residuals ≤ 4e−15). What kills
+it is 0034's algebra: on ℂ the family is multivalued — continued
+around its branch point, √(1+t²) returns with monodromy **−1.000
+exactly**. Only n = 1 is single-valued. (That no *more exotic*
+solution exists is not established.)
+
+**The operational separator is I₃, and it is an experiment.** A
+three-alternative record, all seven configurations, 400k trials
+each: **I₃ = +0.00124 ± 0.00130 — 0.95σ from zero**, against a
+degree-3 rule's prediction **31σ away**. The triple-slit
+measurement, run in the filter.
+
+**And I₃ = 0 is the square.** Sorkin's decoherence functional,
+reconstructed from the **single and pair records only**: Hermitian
+to 0.0e+00, rank 1 to sampling error (2.6e−3 against ~4e−4 noise)
+and rank 1 *exactly* with the noise removed (4.9e−17) — so
+D_ij = z̄_i z_j and P = |Σz|². It predicts the triple record
+(0.057688 vs 0.058928 observed). There is no independent three-way
+content to encode.
+
+The sibling then closed the degree by elimination (their 0126): the
+band budget gives B = 11, a degree-d weight needs d | (B−1) = 10,
+and of {1,2,5,10} only d = 2 survives — d = 1 has no interference at
+all (0033's 0.302 nats), d = 5 makes the weight negative, d = 10
+carries third-order interference the record lacks.
+
+> **The source ledger is closed.** Its content is *interference*
+> (0033), composed by *complex multiplication* because two ledgers
+> add and the record is order-blind (0034), and *summed* over
+> alternatives because the budget makes the weight a square
+> (0035 + their 0126). Not one clause is a postulate about Hilbert
+> space.
+
+What remains in the program is no longer a postulate — it is a
+**number**: the factor 20 between the two routes to G (their 0125).
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
