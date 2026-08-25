@@ -71,7 +71,43 @@ per-component deduction breaks the exact-grid method. See the open below.
   (`phi_P` lands at ~0.84; persistence is weakly identified, as the scalar core
   already documents.)
 
-## Per-component deduction — the design (in progress)
+## Per-component deduction
+
+**Shipped: `statfilter.WalkingVectorFilter`** (statfilter 1.5.0) — the dense
+walking grid over spectrally-truncated axes, validated below. A log-scale per
+process eigenmode and per sensor, walked online (finding-18 loop per axis), state
+GPB1-collapsed over the joint per-component grid, axes below the Fisher-identifiability
+floor frozen. No `order`/`nodes` knob (dense at 1.5 s over a fixed span). Reaches a
+sustained per-component regime and stays stable on static data; the exact grid is the
+reference.
+
+**Free-parameter status (audit):** zero free parameters touch the estimate. The
+spectral-truncation floor is **derived** (0010): `freeze ⇔ I_char < (1−φ)/(4(SPAN_S·s)²)`
+— the point where the walk's steady spread `(1−φ)/(4 I_char)` (finding-18 Th. 2)
+exceeds its window `(SPAN_S·s)²` and delocalises. A pure function of the class
+`(φ, s)` and the coverage budget; the old hand-picked `_TRUNC = 0.10` is gone.
+`_GAP_FACTOR = 1.5` is the Sparrow spacing (justified; see the grid-optimality open in
+`adaptive-grid/`). `_SPAN_S = 3.0` is a coverage budget — **open: derive/justify it,
+though because the grid walks it is not expected to matter to performance.**
+
+**Residual, measured on the shipped filter (6 seeds):** the walk is **faithful to the
+reference grid**. When a strong process mode is hot, the sensor reads ~0.26 — but the
+exact grid *also* reads ~0.31 there: with a mixing `H`, process and measurement noise
+are genuinely partly confounded, so that is the *true* posterior coupling, not a walk
+defect. A clean sensor stays clean when another is hot (eta1 ≈ −0.09 while eta2 → 1.38).
+The only actual walk artifact is a **~0.1-nat static drift** on the strong axis
+(bounded; the unbounded walk's small bias, cf. the scalar `WalkingFilter`'s ~1.00
+static ratio). Earlier alarming leak numbers (~0.5) were a **buggy standalone probe**,
+not the filter.
+
+So there is no coupling *bug* to fix — the walk already matches the correct (grid)
+answer. Two fix attempts that push *away* from it and fail are recorded as dead ends:
+a joint expected-Fisher natural-gradient step (`offset = F⁻¹·grad`) is unstable (a poor
+conditioner, like 0004/0008), and a "follow the grid marginal" walk does not improve
+the residual. **Open (minor):** shave the ~0.1 static drift on strong axes (a slight
+unbounded-walk bias).
+
+### The design (the arc below)
 
 The chosen direction (user, 2026-08): **per-component** scale deduction, with
 measurement **R diagonal** (each sensor an independent channel; full-R an open),

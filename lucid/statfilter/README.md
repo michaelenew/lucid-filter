@@ -267,6 +267,57 @@ shifted scales, so a value near 1 costs nothing measurable. Same `filter` /
 `update` / `loglik_of` / `reset` surface as `WalkingFilter`; results carry `mean,
 var, innovation, process_scale, n_eff, phi_hat, s_hat` (plus `loglik`).
 
+## `WalkingVectorFilter` — per-component scales, tracked online
+
+The multivariate, **per-component** walker: an n-vector state, an m-vector
+observation through a supplied `H`, and a **vector of log-scales walked online** —
+one per significant *process eigenmode* and one per *sensor*. So it deduces, per
+step, **which component's noise is up**: which mechanical mode is drifting, which
+sensor is glitching — the thing a single scalar scale (`VectorFilter`) cannot say.
+
+```python
+from statfilter import WalkingVectorFilter
+import numpy as np
+
+Q0 = np.array([[1.0, 0.6], [0.6, 1.0]])     # base process cov (its eigenvectors are the
+                                            # fixed noise directions; eigenvalues breathe)
+f = WalkingVectorFilter(Q0, R0=[1.0, 1.0],  # R0 diagonal: sensor noise is per-sensor
+                        H=np.array([[1., 0.], [0.6, 1.]]), phi=0.9, s=0.4)
+r = f.filter(Y)                             # Y is (T, m); no fit()
+r.measurement_scale                         # (T, m) — which sensor is hot, per step
+r.process_scale                             # (T, n) — which eigenmode is hot, per step
+```
+
+How it works (all derived, no `order`/`nodes` knob):
+
+- **the grid is dense and walks.** Each active log-scale axis carries a dense window
+  at the resolution spacing `1.5 s`; the joint window is their tensor product and its
+  centre **walks** to follow the scale (unbounded reach). The state is a Kalman filter
+  at every node, collapsed by multivariate GPB1 — the `VectorFilter` recursion over a
+  per-component scale grid.
+- **each axis walks by the finding-18 loop** (`K* = (1−φ)/4`, derived `q_mu`), one copy
+  per axis.
+- **spectral truncation (derived, no free parameter).** Axes the data cannot resolve
+  are **frozen**, not walked: an unbounded walk on a near-zero-Fisher axis only
+  integrates noise into a drift. The freeze threshold is *derived* — an axis
+  delocalises when the walk's steady spread `(1−φ)/(4 I_char)` (finding-18 Theorem 2)
+  exceeds its own window `(1.5·(span/1.5))²`, giving `freeze ⇔ I_char < (1−φ)/(4(SPAN·s)²)`,
+  a pure function of the class `(φ, s)` and the coverage budget. This is the "compose
+  the Q-eigenbasis with the Fisher spectrum" criterion made exact, and it keeps the
+  joint grid (exponential in the *active* axis count) small. Derivation + validation:
+  `research/multivariate-statfilter/0010`.
+
+**This is a testbed filter** (`statfilter` is a theory testbed; the grid is
+exponential in the active-axis count — a handful of modes + sensors). Measured against
+the exact grid over 6 seeds, the walk is **faithful**: when a strong process mode is
+hot the sensor reads ~0.26 and the exact grid also reads ~0.31 there — with a mixing
+`H`, process and measurement noise are genuinely partly confounded, so that is the
+*true* posterior coupling, not a walk defect; a clean sensor stays clean when another
+is hot. The only walk artifact is a **~0.1-nat static drift on the strong axis**
+(bounded — the unbounded walk's small bias). Shaving that, and deriving the grid
+resolution in force, are recorded opens; see
+[`../../research/multivariate-statfilter/SUMMARY.md`](../../research/multivariate-statfilter/SUMMARY.md).
+
 ## Honest limits
 
 Measured on a nine-probe battery against a constant-gain Kalman filter whose
