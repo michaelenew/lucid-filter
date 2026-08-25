@@ -72,11 +72,26 @@ the state estimate. (Caveat: the adaptation's state value grows with how far the
 strays from the base — the scalar headline result was a *large* out-of-fit regime
 shift, RMSE 1.0 vs 3.6; this test's shift is moderate.)
 
-## Upshot for robotics practicality
+## Corrected upshot: per-component is load-bearing for state, and scaling matters
 
-- **State tracking is cheap and near-solved**: a non-adaptive KF, or the shipped
-  2-channel `VectorFilter` walked online (`order²`, constant in the axes, coupling-
-  faithful), tracks the state to within a few % — practical now.
-- **Per-component *diagnostic* (hot-sensor detection) is the part that needs the joint
-  grid**; the faithful sub-exponential path there is the **adaptive/sparse grid**, not
-  factoring. This is the real "make it fast" target for the diagnostic feature.
+The "adaptation barely helps state" reading held only for *moderate* shifts. Across
+magnitudes (hot band, seeds):
+
+| shift | proc-hot walker/non-adapt | sensor-hot walker/non-adapt |
+|---|---|---|
+| ×e^1.4 | 0.76 / 0.79 (×1.04) | 0.96 / 1.02 (×1.06) |
+| ×e^5 | 0.76 / 2.45 (**×3.2**) | 2.21 / 5.25 (**×2.4**) |
+
+And **per-component vs the cheap 2-channel** (global process × global measurement),
+one sensor hot at ×e^5: **2.38 vs 6.24 — per-component tracks the state 2.6× better**,
+because the global channel over-inflates *every* sensor when one degrades, over-trusting
+the failing sensor onto the clean ones. (Process-mode hot: ×1.15 — process is more
+shared, so the gap is smaller there.)
+
+So per-component **is** load-bearing for the core robotics deliverable (state tracking
+under a heterogeneous sensor failure — the motivating case), not just the diagnostic.
+The scaling problem is real and must be solved *faithfully*. Since factoring loses the
+coupling (above), the path is the **adaptive / sparse grid**: instantiate only the
+high-weight nodes of the *same joint grid* — exact where it matters, and sub-exponential
+in practice because the scale posterior concentrates on a small blob once converged (it
+only broadens during a transition). That is the make-it-fast target.
