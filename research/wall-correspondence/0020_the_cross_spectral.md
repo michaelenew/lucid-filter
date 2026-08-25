@@ -16,7 +16,16 @@
   (0.9997). Sharing with one partner caps sharing with another: the
   filter-side CKW, exact in the Gaussian tier.
 
-Open: the non-Gaussian budget (does the bound tighten toward
-Tsirelson-like values under amplitude structure? — the bridge to
-their P4→Tsirelson debt); tangle detection as an instrument
-(third sibling to 0006/0009).
+## Revision ([`0024`](0024_the_monogamy_ledger.md))
+
+The second bullet's name was wrong. The Gaussian budget is *not*
+"the filter-side CKW": classical information is not monogamous at
+all (three identical streams share perfectly and drive the budget to
+zero). The inequality is exactly positive-definiteness of the
+correlation matrix — correlation geometry, not sharing. Genuine
+monogamy lives in the **amplitude/source ledger**, where CKW does
+hold (verified in 0024). The measurement stands; the interpretation
+is corrected.
+
+Open: tangle detection as an instrument (third sibling to
+0006/0009).

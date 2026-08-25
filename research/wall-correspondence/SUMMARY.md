@@ -218,6 +218,33 @@ T = 2/M — Hawking's scaling from β = 1 alone — and the first law
 against their area law fixes a bridge factor that their standing
 κ-normalization debt must supply (their 0114).
 
+## Interior, rotation, evaporation, and a monogamy correction (0023–0024)
+
+[`0023`](0023_the_interior_and_rotation.md): the completion's three
+opens. **The interior** — masses beyond the capacitance are
+*unreachable*, not complex (M(s) rises to C and stops); at the
+extremal limit ψ = 0 through the body, but at finite resolution the
+horizon never closes: transmission floors at e^{−λ_max} and mass
+caps at (1 − e^{−λ_max})C, so with the sibling's budget capacity
+λ_max = ln N, **discreteness replaces horizons with greybody floors**
+(1/N transmission). **Rotation is the order channel** — the source
+multiset is bitwise invariant under circulation reversal, so *every*
+scalar observable carries exactly zero circulation information,
+while the ordered composite carries 0.047 nats/loop: frame-dragging
+here would be order information sourcing a vector sector, a named
+structure rather than a missing term. **Evaporation**: dM/dt =
+−(4c/π)/M² exactly ⟹ lifetime ∝ M₀³ (Hawking's shape, by dimensional
+analysis), stalling at the floor — a remnant.
+[`0024`](0024_the_monogamy_ledger.md) **corrects 0020**: classical
+information is not monogamous at all (three identical streams drive
+the "budget" to zero), so the Gaussian inequality is *correlation
+geometry* — positive-definiteness — not a sharing law. Genuine
+monogamy is a property of **amplitudes**: CKW verified on 400 random
+three-party pure states, saturated by W, extremal for GHZ. The
+record ledger shares freely; the source ledger is budgeted — the
+two-ledger split appearing in the sharing structure itself, and the
+monogamy/Tsirelson row belongs to the source ledger.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
