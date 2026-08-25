@@ -34,11 +34,13 @@ diagonal: a sensor's inherent noise has no reason to correlate with another's
     integrates the per-axis grid-shift score with the critically-damped gain
     ``K* = (1-phi)/4`` and derived drift variance ``q_mu`` -- the ``WalkingFilter``
     loop, one copy per axis.
-  * **spectral truncation.**  Process eigenmodes whose eigenvalue is below a small
-    fraction of the largest are *frozen* (not walked): their scale is
-    unidentifiable (they carry almost no variance) and walking them only
-    integrates noise (research/multivariate-statfilter/0006).  This also keeps the
-    joint grid ``nodes**(#active axes)`` small.
+  * **spectral truncation, derived (no free parameter).**  An axis the data cannot
+    resolve is *frozen*: an unbounded walk on a near-zero-Fisher axis integrates
+    noise into a drift.  The freeze threshold is derived (0010) -- the walk
+    delocalises when its steady spread ``(1-phi)/(4 I_char)`` (finding-18 Th. 2)
+    exceeds its window ``(SPAN_S s)^2``, so ``freeze <=> I_char < (1-phi)/(4 (SPAN_S s)^2)``
+    -- a function of the class ``(phi, s)`` and the coverage budget only.  This also
+    keeps the joint grid ``nodes**(#active axes)`` small.
 
 **Scope / honest limits (a testbed filter).** ``statfilter`` is a theory testbed;
 this filter's value is isolating the per-component noise-deduction mechanism, not
@@ -64,7 +66,6 @@ _LOG2PI = math.log(2.0 * math.pi)
 _GAP_FACTOR = 1.5           # gap = 1.5 s: resolution (Sparrow) spacing (finding 11)
 _SPAN_S = 3.0               # window half-span in units of s (support budget; derives node count)
 _RIDGE = 1e-4               # Fisher stabiliser before dividing
-_TRUNC = 0.10              # freeze axes whose steady Fisher < _TRUNC * max (identifiability floor)
 
 
 # --------------------------------------------------------------------- results
@@ -152,13 +153,17 @@ class WalkingVectorFilter:
         # finding-18 walk loop, one copy per axis (parameter-free)
         self._Kstar = (1.0 - self.phi) / 4.0
         self._Ichar = self._steady_fisher()             # (D,) per-axis steady Fisher
-        # SPECTRAL TRUNCATION on the Fisher spectrum (compose Q-eigenbasis with the
-        # identifiability floor): an axis the data cannot resolve is FROZEN, because
-        # an unbounded walk on a near-zero-Fisher axis integrates noise into a drift
-        # (research/multivariate-statfilter/0006, 0009).  This is the identifiability
-        # criterion, not the eigenvalue -- a modest-eigenvalue mode seen only weakly
-        # through H is still unidentifiable.
-        self.active = self._Ichar >= _TRUNC * self._Ichar.max()
+        # SPECTRAL TRUNCATION -- derived, not tuned.  An axis is FROZEN when its walk
+        # cannot stay localised in its own window: an unbounded walk on a near-zero-
+        # Fisher axis delocalises and drifts (research 0006/0009).  Finding 18's
+        # Theorem 2 gives the walk's steady posterior variance exactly as
+        # (1-phi)/(4 I_char); the window half-span is _SPAN_S*s.  The walk drifts
+        # precisely when the former exceeds the latter squared, so
+        #     freeze  <=>  I_char < (1 - phi) / (4 (_SPAN_S s)^2).
+        # A pure function of the class (phi, s) and the coverage budget _SPAN_S -- no
+        # free parameter.  Derivation + delocalisation onset: research 0010.
+        self._Ifloor = (1.0 - self.phi) / (4.0 * (_SPAN_S * self.s) ** 2)
+        self.active = self._Ichar >= self._Ifloor
         with np.errstate(divide="ignore"):
             self._qmu = self._Kstar ** 2 / (self._Ichar * (1.0 - self._Kstar))
         self._build_window()

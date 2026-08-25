@@ -79,11 +79,26 @@ process eigenmode and per sensor, walked online (finding-18 loop per axis), stat
 GPB1-collapsed over the joint per-component grid, axes below the Fisher-identifiability
 floor frozen. No `order`/`nodes` knob (dense at 1.5 s over a fixed span). Reaches a
 sustained per-component regime and stays stable on static data; the exact grid is the
-reference. **Honest residual:** the process↔measurement coupling (~0.2) is not fully
-de-mixed by the per-axis walk, so a hot mode leaks a little into a sensor and a
-weakly-identified axis can overshoot / show a ~0.2-nat static offset. Removing it (a
-joint walk in the one coupling block) and deriving the grid resolution in force
-(cf. the grid-optimality open in `adaptive-grid/`) are the remaining opens.
+reference.
+
+**Free-parameter status (audit):** zero free parameters touch the estimate. The
+spectral-truncation floor is **derived** (0010): `freeze ⇔ I_char < (1−φ)/(4(SPAN_S·s)²)`
+— the point where the walk's steady spread `(1−φ)/(4 I_char)` (finding-18 Th. 2)
+exceeds its window `(SPAN_S·s)²` and delocalises. A pure function of the class
+`(φ, s)` and the coverage budget; the old hand-picked `_TRUNC = 0.10` is gone.
+`_GAP_FACTOR = 1.5` is the Sparrow spacing (justified; see the grid-optimality open in
+`adaptive-grid/`). `_SPAN_S = 3.0` is a coverage budget — **open: derive/justify it,
+though because the grid walks it is not expected to matter to performance.**
+
+**Honest residual (coupling):** the process↔measurement coupling (~0.2, a *measured*
+Fisher cross-term, not a parameter) is not fully de-mixed by the per-axis walk, so a
+hot mode leaks a little into a sensor and a weakly-identified axis can overshoot /
+show a ~0.2-nat static offset. The exact grid de-mixes it correctly by construction —
+the leak is introduced by the *walk*. **The obvious fix fails (0010-adjacent probe):**
+a joint expected-Fisher natural-gradient step (`offset = F⁻¹·grad`) is *unstable* and
+worse — the marginalised Fisher is a poor conditioner, same failure as the
+single-sample natural gradient (0004/0008). So the coupling block is a genuine open,
+not a one-step fix; recorded, not built.
 
 ### The design (the arc below)
 

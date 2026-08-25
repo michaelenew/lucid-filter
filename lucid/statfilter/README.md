@@ -297,12 +297,15 @@ How it works (all derived, no `order`/`nodes` knob):
   per-component scale grid.
 - **each axis walks by the finding-18 loop** (`K* = (1−φ)/4`, derived `q_mu`), one copy
   per axis.
-- **spectral truncation.** Axes the data cannot resolve — process eigenmodes whose
-  *steady Fisher information* is below a small fraction of the largest — are **frozen**,
-  not walked: their scale is unidentifiable, and an unbounded walk on a near-zero-Fisher
-  axis only integrates noise into a drift. This is the "compose the Q-eigenbasis with
-  the Fisher spectrum" criterion, and it also keeps the joint grid (exponential in the
-  number of *active* axes) small.
+- **spectral truncation (derived, no free parameter).** Axes the data cannot resolve
+  are **frozen**, not walked: an unbounded walk on a near-zero-Fisher axis only
+  integrates noise into a drift. The freeze threshold is *derived* — an axis
+  delocalises when the walk's steady spread `(1−φ)/(4 I_char)` (finding-18 Theorem 2)
+  exceeds its own window `(1.5·(span/1.5))²`, giving `freeze ⇔ I_char < (1−φ)/(4(SPAN·s)²)`,
+  a pure function of the class `(φ, s)` and the coverage budget. This is the "compose
+  the Q-eigenbasis with the Fisher spectrum" criterion made exact, and it keeps the
+  joint grid (exponential in the *active* axis count) small. Derivation + validation:
+  `research/multivariate-statfilter/0010`.
 
 **This is a testbed filter, with an honest residual.** `statfilter` is a theory
 testbed; this isolates the per-component deduction mechanism, not production scale (the
