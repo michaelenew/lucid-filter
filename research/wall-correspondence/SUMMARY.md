@@ -352,6 +352,30 @@ relative phase between alternatives that later **compose**, the same
 structure the order channel (0009) measures. *The source ledger is a
 statement about composition, not about a field.*
 
+## The matter coupling and the two channels (0032–0033)
+
+[`0032`](0032_the_matter_coupling.md): **the stress tensor is the
+Fisher information matrix.** Its trace is exactly the scalar mass
+source 0010/0019 have used (verified identically); its traceless
+part is anisotropic stress the scalar theory cannot carry — *the
+mass we have been using is the trace of a tensor we had not written
+down*. **Conservation is information continuity** (drift 0.0e+00,
+per-node change = net flux to 3.6e−15) — that is ∇·T = 0. And with
+the learning operator of 0019, **G_Newton = 1/(4πp)** with p the
+record precision: the matter coupling is closed as a formula, and it
+turns direct G into one measurement — the sibling's G = 5.165 a²
+*requires* p = 0.0154 for the gravity-carrying channel, ~865× softer
+than the plaquette weight.
+[`0033`](0033_two_channels.md) **corrects 0031**: composition has
+two independent layers. Record A (classical nonabelian) carries
+0.0545 nats/triple of order information and no interference; record
+B (quantum abelian) carries 0.3020 nats/trial of interference and
+*exactly zero* order information (swapping paths is bitwise
+identical). Each fires one detector. **The source ledger's
+observable content is interference specifically** — the order
+channel is a record-ledger phenomenon that merely requires
+nonabelian structure.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
