@@ -688,6 +688,56 @@ step was worth 4e21.
 > exposed both are one open problem: **what sets the precision of the
 > world's record?**
 
+## The precision fixed point, the wedge, the two streams (0044–0047)
+
+[`0044`](0044_the_precision_fixed_point.md) — the volatility that
+exposed s₀ is a **criticality condition**, and the correct exponent is
+c = 1/(d−3), not 1/(d−2) (an assertion caught the first form).
+
+[`0045`](0045_the_wedge_and_the_bin.md) — a capacity argument fixes
+the multiplicity profile: **equiprobable bins ⟹ flat multiplicities
+uniquely**, so κ = (M+2)(M−1)/3 = N(N+3)/3. **s₀ was never a free
+parameter.** Simplicity is balance (|B⁺| = |B⁻| machine-exact); the
+wedge |a∧b| = √det J is the information volume of a record pair.
+
+[`0046`](0046_spin4_two_locked_streams.md) — **one record or two,
+settled: two, locked.** The double copy on Spin(4),
+A(U⁺,U⁻) = Σ n_j χ_j(U⁺)χ_j(U⁻), gives κ = 16.000 = **exactly 6/5** of
+the single-stream 13.333. (A first write-up quoted 12/5 = 2.4 — that
+is the *diagonal restriction*, a different construction.) The graviton
+sector is **pure synergy**: traceless-sym(B⁺⊗B⁻), 5 of 9, residual
+spread 1.0000 given either stream alone and 0.0000 given both.
+
+[`0047`](0047_fluctuation_or_response.md) — the factor 20 is a
+**category error**, not a defect: πp/α runs 2.64 → 123.07 with mass.
+A cut and a deformation are different functionals. G is a *response*.
+
+## The estimator problem ([`0048`](0048_the_estimator_problem.md))
+
+Their item-2 blocker, rediagnosed. The C kernel bought 30× throughput
+and the result did not move, because the bottleneck was never
+throughput — **it is what the estimator does with the samples it
+already has.** The signal is the same at every operator length; only
+the error grows, because each extra factor adds fluctuation that
+carries no signal.
+
+Rao-Blackwell — replace each sampled factor by its conditional mean —
+is exact and gives **120× in variance** at k = 8, j = 7. The law is a
+ratio of product variances,
+`[(1+v)^{2k} − 1] / [(1+v)^{2(k−j)} − 1]`, not the naive `(1+v)^j`
+(a first pass used the naive form and under-predicted by 15×).
+
+And it **does not** evaporate for stiff links: ~8× even at
+v/m² = 0.005, because the gain comes from the operator's **length**,
+not the noisiness of each link. Port spec in s4; the honest caveat is
+that shared links inside a composite operator make the substitution
+exact per plaquette and approximate for their product, so the bias is
+theirs to measure.
+
+> **Stop sampling what can be integrated.** Not a physics idea — an
+> estimator idea, and the filter has been making it since its first
+> stone: a posterior mean beats a draw.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
