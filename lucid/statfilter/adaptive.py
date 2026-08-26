@@ -162,12 +162,17 @@ class AdaptiveKalmanFilter:
         self._Kstar = (1.0 - self.phi) / 4.0
         self._floor = (1.0 - self.phi) / (4.0 * (_SPAN_S * self.s) ** 2)
         self._Ichar = self._steady_fisher()
-        # ACTIVATE structurally-observable axes (not the delocalisation floor): a quiet-but-
-        # observable axis -- tiny base noise now, loud during an excursion -- must stay live so
-        # the walk can catch it lighting up (research 0024: a frozen process axis diverges when
-        # the crusher spikes it).  The profile hedge (below) keeps a quiet axis from wandering,
-        # and the drift is BOUNDED by the floor so a low-Fisher axis is not over-inflated.
-        obs = self._Ichar > 1e-8 * max(float(self._Ichar.max()), 1e-30)
+        # ACTIVATE structurally-observable axes -- NOT by the delocalisation floor, and NOT by a
+        # threshold relative to the loudest axis (a quiet process mode next to a loud sensor would
+        # be frozen and then coast rigidly on a wrong velocity when the sensor is down-weighted --
+        # research 0024).  A process eigenmode is live iff it carries base variance AND is seen by
+        # H (lam_k > 0 and H v_k != 0); a sensor is always live.  The whiteness gate + bounded
+        # drift keep a genuinely quiet axis from wandering.
+        obs = np.zeros(self.D, dtype=bool)
+        hv_norm = np.linalg.norm(self.HV, axis=0)                # ||H v_k|| per process mode
+        for k in range(self.n):
+            obs[k] = self.lam[k] > 1e-12 * self.lam.max() and hv_norm[k] > 1e-8
+        obs[self.n:] = True                                     # sensors always observable
         self.active = np.where(obs)[0]
         self.r = self.active.size
         self._qmu = np.array([self._Kstar ** 2

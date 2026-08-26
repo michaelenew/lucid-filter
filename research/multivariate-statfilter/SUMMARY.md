@@ -217,8 +217,50 @@ handle/bound the one coupling block, wire the **shares/saturation marginal** fro
 sigma-point posterior (the weighted `S`-decomposition), and reduce to scalar
 `WalkingFilter`/`AdaptiveFilter` limits. Benchmark against the exact grid throughout.
 
+## Production filter: `AdaptiveKalmanFilter` (statfilter 1.6.0)
+
+The robotics-ready member ([`lucid/statfilter/adaptive.py`](../../lucid/statfilter/adaptive.py)):
+supplied (linearised) dynamics `F` and measurement `H`, per-component noise learned online at
+polynomial cost. Two capabilities the testbed filters lacked, both driven by the industrial-
+crusher case (a robotic arm beside a crusher that bursts process AND sensor noise when it runs):
+
+- **General transition `F` — the derivative / kinematic mode** (research 0024). Every earlier
+  probe used a local-level random walk (`F = I`): no velocity state, nothing to coast on when a
+  sensor burst hits. A robotic arm has momentum (`x' = v`). A kinematic model is **~10–40×**
+  better on position RMSE than a *fixed* random walk. (An *adaptive* random walk partly hides
+  the deficiency by cranking `Q`, so the gap over an adaptive local-level is milder ~1.2× — but
+  the kinematic model is smoother and yields velocity + calibrated uncertainty.)
+  `AdaptiveKalmanFilter.kinematic(n_dof, order, dt, …)` builds the position/velocity(/accel) `F`.
+
+- **Whiteness-gated noise adaptation — breaks the Q-vs-R confound** (research 0024/0025). A
+  single innovation is explained equally by more process OR more sensor noise, so a per-step
+  likelihood walk cannot separate them; it picks the stiffer (sensor) axis, down-weights a good
+  sensor to zero, goes open-loop and **diverges**. The innovation *sequence* separates them
+  (Mehra 1970): process noise makes the filter lag → lag-1 innovation autocorrelation; sensor
+  noise inflates the variance but stays white. So each process scale whitens its own lag-1
+  correlation and each sensor scale matches the white residual variance, gated above the 2σ EMA
+  significance `2√β`. Crusher result: static parity (no false alarm), sensor-hot **1.4×**,
+  process-hot **2.2×**, no divergence.
+
+The per-component *diagnostic* de-mix (which sensor / which mode is hot) under a mixing `H` is
+solved separately by the **Fisher-eigenbasis walk** (research 0018–0023): the full scale Fisher
+diagonalises the coupling a mixing `H` induces (process↔measurement *and* sensor↔sensor), so an
+assumed-density walk in its eigenbasis is faithful at polynomial cost (~`D^1.7`) with a
+dimension-stable false-alarm floor. It is not yet unified into the production state filter.
+
 ## Open items
 
+- **Simultaneous process+sensor burst (`AdaptiveKalmanFilter`).** When both spike together the
+  innovations are only partly correlated, so the whiteness gate splits the excess imperfectly —
+  state RMSE is ~parity (a few % worse) with a well-tuned fixed filter, where the oracle is ~10%
+  better. A full multivariate Mehra solve (joint `Q,R` from the autocorrelation sequence) is the
+  planned upgrade.
+- **Unify the diagnostic de-mix into the production filter.** The Fisher-eigenbasis walk
+  (0018–0023) gives the faithful which-sensor/which-mode attribution; run it *within* each
+  whiteness-gated block so the production filter reports per-component diagnostics too.
+- **Adaptation timescale / lag.** A burst is caught over `~1/β` steps; very brief bursts are
+  under-corrected. `β` and the process-drive rate are labeled responsiveness budgets — derive
+  them from the class `(φ, s)` where possible.
 - **Learn / eliminate V** — fixed process-noise eigenvectors is the starting
   commitment; profile whether the directions rotate in practice, then learn or drop.
 - **Full (non-diagonal) R** — the measurement-noise-is-per-sensor default is a
