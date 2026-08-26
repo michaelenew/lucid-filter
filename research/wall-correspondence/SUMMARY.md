@@ -556,6 +556,36 @@ their anisotropy measurement from 0.1σ to **49σ**. It also caught
 them computing the baseline at the wrong volume. The statistical
 obstruction is solved; a finite-volume one replaced it.
 
+## The acceptance criterion ([`0038`](0038_the_acceptance_criterion.md))
+
+The program's own prequential principle, turned on its own practice.
+A prequential score requires the model committed *before* the data;
+**an acceptance criterion is part of the model**, so choosing it
+after seeing the spread is fitting on the test set. Measured rather
+than asserted:
+
+| | false positive (no common exponent) | power at σ = 0.4 |
+|---|---|---|
+| mean-based test (`\|mean − 2\| < 0.8`) | **0.512** | 1.000 |
+| per-item consistency test | **0.005** | 0.933 |
+
+**A factor 99 in false positives.** The sibling's 0121 used the
+mean-based test and it passed on exponents of −0.36, 1.02, 4.15,
+4.98.
+
+And the power table gives the design constraint: the honest test
+keeps its power only while per-item scatter stays below ~0.5, so
+**size the measurement first** — past that the run is wasted before
+it starts, which is knowable in advance.
+
+**Applied immediately, it caught a mis-diagnosis.** Their 0132
+blamed the L = 20 failure on lever arm; the statistical slope errors
+were ±0.06, ±0.68, ±0.49 against a spread of −0.36 to 4.98, and one
+slope is **3.31 ± 0.06 — significantly not 2**. The spread was
+*systematic*, so more lever arm cannot fix it, and the follow-up
+run's purpose changes from "buy precision" to "decide whether these
+per-pair slopes are finite-volume or physical."
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
