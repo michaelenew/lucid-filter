@@ -1,8 +1,8 @@
 """Render the crusher-watch animation to a GIF for the README.
 
 Data is the real AdaptiveKalmanFilter output (see exploration/crusher_anim.json, produced by
-the 2-DOF crusher scenario).  Two panels: the robot cell (true arm + three tip estimates +
-the crusher, which shakes while it runs) and an oscilloscope of tip error with the crusher
+the 2-DOF crusher scenario).  Two panels: the robot cell (the solid arm + three tip estimates,
+with a text banner for the crusher state) and an oscilloscope of tip error with the crusher
 window shaded.  The story: when the crusher fires and swamps the encoders, the raw and
 fixed-noise estimates jitter while the adaptive estimate stays locked on the truth.
 """
@@ -71,45 +71,48 @@ flag = fig.text(0.985, 0.92, "", ha="right", va="center", fontsize=9, weight="bo
                 family="monospace")
 
 # ---- robot-cell axes set up ONCE (no per-frame cla / aspect reflow) ----
-XL, YL = (-0.8, 2.15), (-0.45, 1.95)
+XL, YL = (-0.85, 2.0), (-0.5, 1.95)
 axc.set_aspect("equal", adjustable="box"); axc.set_xlim(*XL); axc.set_ylim(*YL); axc.axis("off")
 axc.text(XL[0], YL[1], "ROBOT CELL  ·  tip tracking", color=MUT, fontsize=9, va="top")
-# static crusher (colour toggles with state; position fixed)
-CX, CY, CW, CH = 1.6, 0.0, 0.42, 1.35
+# full-panel warning wash (amber while the crusher runs)
 warn_bg = plt.Rectangle((XL[0], YL[0]), XL[1] - XL[0], YL[1] - YL[0], color=C_WARN, alpha=0, lw=0, zorder=0)
-crush = plt.Rectangle((CX - CW / 2, CY), CW, CH, facecolor=PANEL, edgecolor=LINE, lw=2, zorder=2)
-axc.add_patch(warn_bg); axc.add_patch(crush)
-teeth = []
-for k in range(5):
-    tx = CX - CW / 2 + (k + .5) * CW / 5
-    (poly,) = axc.fill([tx - CW / 12, tx + CW / 12, tx], [CY + CH, CY + CH, CY + CH - .13],
-                       color="#4d5a68", zorder=3)
-    teeth.append(poly)
-axc.text(CX, CY - 0.16, "CRUSHER", ha="center", color=MUT, fontsize=8)
-axc.plot(0, 0, "o", color=LINE, ms=10, zorder=2)
-(arm_true,) = axc.plot([], [], color=C_TRUE, lw=6, alpha=.85, solid_capstyle="round",
-                       ls=(0, (1, 2)), zorder=4)
-(trail_f,) = axc.plot([], [], color=C_FILT, lw=1.6, alpha=.35, zorder=5)
-(trail_a,) = axc.plot([], [], color=C_ASSUMED, lw=1.4, alpha=.22, zorder=5)
-(m_true,) = axc.plot([], [], "o", color=C_TRUE, ms=4, zorder=6)
-(m_raw,) = axc.plot([], [], marker="+", color=C_RAW, ms=9, mew=2, ls="", zorder=7)
-(m_as,) = axc.plot([], [], marker="o", mfc="none", mec=C_ASSUMED, ms=9, mew=2.2, ls="", zorder=7)
-(m_fi,) = axc.plot([], [], marker="o", color=C_FILT, ms=8, ls="", zorder=8)
-(m_halo,) = axc.plot([], [], marker="o", mfc="none", mec=C_FILT, ms=15, mew=1.5, alpha=.35, ls="", zorder=8)
+axc.add_patch(warn_bg)
+# status banner (text only -- no crusher drawing)
+banner = axc.text(0.60, -0.36, "", ha="center", va="center", fontsize=11, weight="bold",
+                  family="monospace", color=MUT)
+# the arm: SOLID two-link linkage with round joints
+axc.plot(0, 0, "o", color=INK, ms=12, zorder=5, mec=LINE, mew=1.5)          # base
+(arm_true,) = axc.plot([], [], color="#c3d0de", lw=8, solid_capstyle="round", zorder=4)
+(m_elbow,) = axc.plot([], [], "o", color="#c3d0de", ms=9, zorder=6)
+(m_true,) = axc.plot([], [], "o", color=INK, ms=6, zorder=6)                 # true tip
+# estimate trails + markers (where each method THINKS the tip is)
+(trail_f,) = axc.plot([], [], color=C_FILT, lw=1.6, alpha=.35, zorder=7)
+(trail_a,) = axc.plot([], [], color=C_ASSUMED, lw=1.4, alpha=.22, zorder=7)
+(m_raw,) = axc.plot([], [], marker="+", color=C_RAW, ms=11, mew=2, ls="", zorder=8)
+(m_as,) = axc.plot([], [], marker="o", mfc="none", mec=C_ASSUMED, ms=11, mew=2.4, ls="", zorder=8)
+(m_fi,) = axc.plot([], [], marker="o", color=C_FILT, ms=9, ls="", zorder=9)
+(m_halo,) = axc.plot([], [], marker="o", mfc="none", mec=C_FILT, ms=17, mew=1.5, alpha=.4, ls="", zorder=9)
 
-STEP = 4
+STEP = 3                               # longer, smooth enough for the jitter
 frames = list(range(0, T, STEP))
+FLASH = 22                             # frames a transition callout stays up
 
 
 def draw(i):
     on = onA <= i < onB
     warn_bg.set_alpha(0.08 if on else 0.0)
-    crush.set_edgecolor(C_WARN if on else LINE)
-    for poly in teeth:
-        poly.set_color(C_WARN if on else "#4d5a68")
+    # text status / transition callouts (no crusher graphic)
+    if onA <= i < onA + FLASH:
+        banner.set_text("⚠  INDUSTRIAL CRUSHER ON — noisy regime starts"); banner.set_color(C_WARN)
+    elif onB <= i < onB + FLASH:
+        banner.set_text("✓  CRUSHER OFF — noise subsides"); banner.set_color(C_FILT)
+    elif on:
+        banner.set_text("● crusher running — encoders swamped ×250"); banner.set_color(C_WARN)
+    else:
+        banner.set_text("○ crusher off — clean regime"); banner.set_color(MUT)
     (e, t) = fk(true[i])
     arm_true.set_data([0, e[0], t[0]], [0, e[1], t[1]])
-    m_true.set_data([t[0]], [t[1]])
+    m_elbow.set_data([e[0]], [e[1]]); m_true.set_data([t[0]], [t[1]])
     lo = max(0, i - 40)
     ft = np.array([fk(filt[k])[1] for k in range(lo, i + 1)])
     at = np.array([fk(assumed[k])[1] for k in range(lo, i + 1)])
@@ -132,7 +135,7 @@ for i in frames:
     draw(i)
     fig.canvas.draw()
     buf = np.asarray(fig.canvas.buffer_rgba())
-    imgs.append(Image.fromarray(buf).convert("P", palette=Image.ADAPTIVE, colors=128))
-imgs[0].save(OUT, save_all=True, append_images=imgs[1:], duration=50, loop=0,
+    imgs.append(Image.fromarray(buf).convert("P", palette=Image.ADAPTIVE, colors=64))
+imgs[0].save(OUT, save_all=True, append_images=imgs[1:], duration=75, loop=0,
              disposal=2, optimize=True)
 print("wrote", os.path.relpath(OUT), "-", os.path.getsize(OUT) // 1024, "KB,", len(frames), "frames")
