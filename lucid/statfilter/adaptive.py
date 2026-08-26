@@ -16,12 +16,21 @@ Model (n-vector state, m-vector observation)::
 
 Two things distinguish it from :class:`WalkingVectorFilter` (the exponential testbed):
 
-* **General dynamics ``F``.**  A robotic arm has momentum -- position and velocity are not
-  free of each other (``x' = v``).  With the local-level default ``F = I`` there is nothing to
-  *coast on* when a sensor-noise burst hits; a kinematic ``F`` rides through it on velocity.
-  In the crusher regime (arm beside an industrial crusher; process AND sensor noise burst when
-  it runs) a kinematic model is 10-40x better on position RMSE than the random walk
-  (research 0024).  Use :meth:`kinematic` to build a position/velocity(/acceleration) ``F``.
+* **General dynamics ``F`` + the derivative mode.**  A robotic arm has momentum -- position,
+  velocity and acceleration are *coupled* by the integrator (``x' = v``), not free axes.  With
+  the local-level default ``F = I`` there is nothing to *coast on* when a sensor-noise burst
+  hits; a kinematic ``F`` rides through it on velocity, and 10-40x better on position RMSE than
+  the random walk in the crusher regime (research 0024).  :meth:`kinematic` builds the
+  position/velocity(/acceleration) model; it fuses whatever you measure -- encoder (position),
+  gyro/tacho (velocity), accelerometer/IMU (acceleration), or several at once -- into all the
+  derivatives, and :meth:`derivatives` reads them back per DOF.
+
+* **Known forcing / control input ``B u``.**  Without it the estimate *lags* while the state is
+  being driven (a commanded arm trajectory): a constant-velocity model can't anticipate the
+  commanded acceleration.  Supply ``B`` and pass ``u`` each step -- the prediction becomes
+  ``F theta + B u`` -- and the lag collapses (velocity RMSE ~3x+ smaller; the state is tracked
+  to the sensor floor even mid-swing).  ``kinematic(..., control=True)`` wires ``u`` to the
+  per-DOF commanded top derivative.
 
 * **Whiteness-gated noise adaptation (breaks the Q-vs-R confound).**  A single innovation is
   explained equally by more process noise *or* more sensor noise, so a per-step likelihood walk
@@ -128,7 +137,7 @@ class AdaptiveKalmanFilter:
         spacing (``gap = 1.5 s``).
     """
 
-    def __init__(self, Q0, R0=None, H=None, F=None, phi: float = 0.9, s: float = 0.3):
+    def __init__(self, Q0, R0=None, H=None, F=None, B=None, phi: float = 0.9, s: float = 0.3):
         Q0 = np.atleast_2d(np.asarray(Q0, dtype=float))
         n = Q0.shape[0]
         if Q0.shape != (n, n) or not np.allclose(Q0, Q0.T, atol=1e-10):
@@ -149,13 +158,19 @@ class AdaptiveKalmanFilter:
         F = np.eye(n) if F is None else np.atleast_2d(np.asarray(F, dtype=float))
         if F.shape != (n, n):
             raise ValueError(f"F must have shape ({n}, {n}), got {F.shape}")
+        if B is not None:
+            B = np.atleast_2d(np.asarray(B, dtype=float))
+            if B.shape[0] != n:
+                raise ValueError(f"B must have {n} rows (state dim), got {B.shape}")
         if not 0.0 <= phi < 1.0:
             raise ValueError("phi must lie in [0, 1)")
         if not s > 0.0:
             raise ValueError("s must be positive (it sets the grid spacing)")
 
         self.n, self.m, self.D = n, m, n + m
-        self.V, self.lam, self.rho, self.H, self.F = V, lam, rho, H, F
+        self.V, self.lam, self.rho, self.H, self.F, self.B = V, lam, rho, H, F, B
+        self.p = 0 if B is None else B.shape[1]           # control-input dimension
+        self.n_dof = self.order = None                    # set by kinematic()
         self.HV = H @ V                                   # (m, n)
         self.phi, self.s = float(phi), float(s)
         self.gap = _GAP_FACTOR * self.s
@@ -185,37 +200,50 @@ class AdaptiveKalmanFilter:
     @classmethod
     def kinematic(cls, n_dof: int, order: int = 2, dt: float = 1.0,
                   process_var=1e-3, meas_var=1.0, phi: float = 0.9, s: float = 0.3,
-                  measured=("pos",)):
+                  measured=("pos",), control: bool = False):
         """Build a per-DOF kinematic filter (the derivative mode).
 
-        ``order`` = number of derivatives tracked per DOF: 2 = (position, velocity),
-        3 = (position, velocity, acceleration).  ``F`` is the constant-``order`` motion model
-        (a Taylor integrator, ``dt`` step); process noise enters through the top derivative and
-        propagates down (the standard continuous-white-noise-acceleration ``Q``).  The encoder
-        measures position of each DOF (``measured=("pos",)``); pass e.g. ``("pos", "vel")`` to
-        also measure velocity.
+        ``order`` = number of derivatives tracked per DOF: 1 = position (random walk),
+        2 = (position, velocity), 3 = (position, velocity, acceleration).  ``F`` is the
+        constant-``order`` motion model (a Taylor integrator, ``dt`` step); process noise enters
+        through the top derivative and propagates down (the standard continuous-white-noise
+        model).  Because position, velocity and acceleration are *coupled* by the integrator
+        (``x' = v``, not free axes), the filter fuses whatever you measure into all of them --
+        so an encoder pins position *and* sharpens the velocity/acceleration estimates.
 
-        State layout is DOF-major: ``[x0, x0', ..., x1, x1', ...]``.
+        ``measured`` names which derivative each sensor reads, per DOF: ``("pos",)`` for encoders,
+        ``("acc",)`` for accelerometers/IMUs, ``("pos", "acc")`` to fuse both, ``("vel",)`` for a
+        tachometer/gyro.  Read the estimated derivatives back with :meth:`derivatives`.
+
+        ``control=True`` adds a known-forcing input ``B`` (see :meth:`update`): the per-DOF
+        commanded *top derivative* (acceleration for ``order=2``, jerk for ``order=3``), which
+        removes the lag while the arm is driven along a commanded trajectory.
+
+        State layout is DOF-major: ``[x0, x0', x0'', ..., x1, x1', ...]``.
         """
         if order < 1:
             raise ValueError("order must be >= 1")
-        # single-DOF blocks
         Fb = np.eye(order)
         for i in range(order):
             for j in range(i + 1, order):
                 Fb[i, j] = dt ** (j - i) / math.factorial(j - i)
-        g = np.array([dt ** (order - i) / math.factorial(order - i) for i in range(order)])  # noise gain
+        g = np.array([dt ** (order - i) / math.factorial(order - i) for i in range(order)])  # integrator gain
         Qb = process_var * np.outer(g, g) + 1e-12 * np.eye(order)
         F = np.kron(np.eye(n_dof), Fb)
         Q0 = np.kron(np.eye(n_dof), Qb)
+        B = np.kron(np.eye(n_dof), g[:, None]) if control else None   # commanded top-derivative
         idx = {"pos": 0, "vel": 1, "acc": 2}
         rows = []
         for d in range(n_dof):
             for name in measured:
+                if idx[name] >= order:
+                    raise ValueError(f"measured '{name}' needs order > {idx[name]} (order={order})")
                 e = np.zeros(order * n_dof); e[d * order + idx[name]] = 1.0; rows.append(e)
         H = np.array(rows)
         R0 = np.full(len(rows), float(meas_var))
-        return cls(Q0, R0=R0, H=H, F=F, phi=phi, s=s)
+        f = cls(Q0, R0=R0, H=H, F=F, B=B, phi=phi, s=s)
+        f.n_dof, f.order = n_dof, order
+        return f
 
     def __repr__(self) -> str:
         return (f"AdaptiveKalmanFilter(n={self.n}, m={self.m}, active={self.r}/{self.D}, "
@@ -263,12 +291,24 @@ class AdaptiveKalmanFilter:
         self.loglik = 0.0
         return self
 
-    def update(self, y) -> AdaptiveStep:
-        """Absorb one observation: predict with F, walk the noise scales, correct the state."""
+    def update(self, y, u=None) -> AdaptiveStep:
+        """Absorb one observation: predict with F (+ known forcing B u), walk the noise scales,
+        correct the state.  ``u`` is the control / known-forcing input this step (length ``p``);
+        supplying it removes the lag while the state is being driven (e.g. a commanded arm
+        trajectory).  Required iff the filter was built with ``B``."""
         n, m, H, F = self.n, self.m, self.H, self.F
         y = np.atleast_1d(np.asarray(y, dtype=float))
         if y.shape != (m,):
             raise ValueError(f"observation must have shape ({m},), got {y.shape}")
+        if self.B is not None:
+            if u is None:
+                raise ValueError(f"this filter has control input; pass u (length {self.p})")
+            u = np.atleast_1d(np.asarray(u, dtype=float))
+            if u.shape != (self.p,):
+                raise ValueError(f"u must have shape ({self.p},), got {u.shape}")
+        elif u is not None:
+            raise ValueError("filter has no B; do not pass u")
+        bu = (self.B @ u) if self.B is not None else 0.0
         if self._m is None:
             self._m = (np.linalg.lstsq(H, y, rcond=None)[0]
                        if np.all(np.isfinite(y)) else np.zeros(n))
@@ -276,7 +316,7 @@ class AdaptiveKalmanFilter:
             self._P = np.eye(n) * (self.lam.max() + self.rho.max()) * n
 
         Ppost = self._P                                    # posterior covariance from last step
-        mpred = F @ self._m
+        mpred = F @ self._m + bu                           # known forcing enters the prediction
         Pp = F @ Ppost @ F.T + self._Q_of(self.mu[:n])
         e = y - H @ mpred
 
@@ -334,27 +374,48 @@ class AdaptiveKalmanFilter:
         return AdaptiveStep(m_new.copy(), P_new.copy(), e.copy(), ll,
                             self.mu[:n].copy(), self.mu[n:].copy())
 
+    def derivatives(self, mean):
+        """Reshape a kinematic-model state (or state trajectory) into per-DOF derivatives.
+
+        Returns an array whose last two axes are ``(n_dof, order)`` -- e.g. ``[..., d, 0]`` is
+        position of DOF ``d``, ``[..., d, 1]`` its velocity, ``[..., d, 2]`` its acceleration.
+        Only defined for filters built with :meth:`kinematic`.
+        """
+        if self.n_dof is None:
+            raise ValueError("derivatives() is only defined for a kinematic() filter")
+        mean = np.asarray(mean, dtype=float)
+        return mean.reshape(mean.shape[:-1] + (self.n_dof, self.order))
+
     # ---------------------------------------------------------------------- batch
-    def loglik_of(self, Y) -> float:
-        return self._run(np.asarray(Y, dtype=float), want=False)
+    def loglik_of(self, Y, U=None) -> float:
+        return self._run(np.asarray(Y, dtype=float), U, want=False)
 
-    def filter(self, Y) -> AdaptiveResult:
-        return self._run(np.asarray(Y, dtype=float), want=True)
+    def filter(self, Y, U=None) -> AdaptiveResult:
+        """Filter a batch.  ``U`` (T, p) is the control / known-forcing sequence, required iff
+        the filter was built with ``B``."""
+        return self._run(np.asarray(Y, dtype=float), U, want=True)
 
-    def _run(self, Y, want):
+    def _run(self, Y, U, want):
         Y = np.atleast_2d(Y)
         if Y.ndim != 2 or Y.shape[0] == 0 or Y.shape[1] != self.m:
             raise ValueError(f"Y must be (T, {self.m})")
+        if self.B is not None:
+            if U is None:
+                raise ValueError(f"this filter has control input; pass U of shape ({Y.shape[0]}, {self.p})")
+            U = np.atleast_2d(np.asarray(U, dtype=float))
+            if U.shape != (Y.shape[0], self.p):
+                raise ValueError(f"U must be ({Y.shape[0]}, {self.p}), got {U.shape}")
         saved = (self._m, self._P, self.mu.copy(), self._Pmu.copy(), self.loglik)
         try:
             self.reset()
+            us = (None for _ in range(Y.shape[0])) if U is None else iter(U)
             if not want:
-                return sum(self.update(row).loglik for row in Y)
+                return sum(self.update(row, next(us)).loglik for row in Y)
             T, n, m = Y.shape[0], self.n, self.m
             mean = np.empty((T, n)); var = np.empty((T, n, n)); inn = np.empty((T, m))
             ps = np.empty((T, n)); ms = np.empty((T, m)); total = 0.0
             for i, row in enumerate(Y):
-                st = self.update(row)
+                st = self.update(row, next(us))
                 mean[i] = st.mean; var[i] = st.var; inn[i] = st.innovation
                 ps[i] = st.process_scale; ms[i] = st.measurement_scale; total += st.loglik
             return AdaptiveResult(mean=mean, var=var, innovation=inn,

@@ -242,6 +242,18 @@ crusher case (a robotic arm beside a crusher that bursts process AND sensor nois
   significance `2√β`. Crusher result: static parity (no false alarm), sensor-hot **1.4×**,
   process-hot **2.2×**, no divergence.
 
+Two further capabilities close the robotics gaps found while building the animation:
+
+- **The derivative mode is first-class.** Position/velocity/acceleration are *coupled* by the
+  integrator (`x' = v`); `kinematic(n_dof, order, …)` builds the model, fuses encoders, gyros
+  **and accelerometers** (`measured=("pos","acc")`) into all the derivatives, and
+  `derivatives()` reads them back per DOF.
+- **Known forcing `B·u`.** The filter was lagging while the arm was *driven* — a constant-
+  velocity model can't anticipate a commanded acceleration. Adding a control input
+  (prediction `Fθ + B·u`, `kinematic(..., control=True)`, pass `U` to `filter`) collapses the
+  lag: on a commanded sinusoidal reach the velocity RMSE drops from 0.53 → 0.005 (position
+  0.248 → 0.005), i.e. tracked to the sensor floor mid-swing instead of lagging ~2×.
+
 The per-component *diagnostic* de-mix (which sensor / which mode is hot) under a mixing `H` is
 solved separately by the **Fisher-eigenbasis walk** (research 0018–0023): the full scale Fisher
 diagonalises the coupling a mixing `H` induces (process↔measurement *and* sensor↔sensor), so an

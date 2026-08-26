@@ -108,6 +108,50 @@ def test_crusher_no_divergence_and_helps(q_on, r_on):
         assert ad_rmse < na_rmse
 
 
+def test_known_forcing_removes_lag():
+    """A moving state driven by a known input: with the forcing supplied, the estimate must not
+    lag -- position AND velocity RMSE collapse versus running without it (research: control input)."""
+    T, dt = 300, 0.05; rng = np.random.default_rng(0); t = np.arange(T) * dt
+    F = np.array([[1.0, dt], [0.0, 1.0]]); G = np.array([[0.5 * dt * dt], [dt]]); H = np.array([[1.0, 0.0]])
+    acmd = 1.2 * np.sin(2 * np.pi * t / (T * dt))          # known commanded acceleration
+    x = np.zeros(2); X = np.zeros((T, 2)); Y = np.zeros((T, 1))
+    for k in range(T):
+        x = F @ x + (G * acmd[k]).ravel(); X[k] = x; Y[k] = H @ x + 0.02 * rng.standard_normal()
+    Q0 = 1e-4 * (G @ G.T) + 1e-9 * np.eye(2); R0 = [0.02 ** 2 * 4]
+    no_f = AdaptiveKalmanFilter(Q0, R0=R0, H=H, F=F, s=0.5).filter(Y).mean
+    fc = AdaptiveKalmanFilter(Q0, R0=R0, H=H, F=F, B=G, s=0.5)
+    with_f = fc.filter(Y, U=acmd[:, None]).mean
+    vel_no = np.sqrt(((no_f[:, 1] - X[:, 1]) ** 2).mean())
+    vel_yes = np.sqrt(((with_f[:, 1] - X[:, 1]) ** 2).mean())
+    assert vel_yes < 0.3 * vel_no                         # forcing sharply cuts the velocity lag
+    assert np.sqrt(((with_f[:, 0] - X[:, 0]) ** 2).mean()) < 0.05
+
+
+def test_control_input_contract():
+    G = np.array([[0.005], [0.1]]); H = np.array([[1.0, 0.0]]); F = np.array([[1.0, 0.1], [0.0, 1.0]])
+    f = AdaptiveKalmanFilter(1e-4 * (G @ G.T) + 1e-9 * np.eye(2), R0=[1.0], H=H, F=F, B=G)
+    with pytest.raises(ValueError):
+        f.update(np.zeros(1))                             # missing required u
+    with pytest.raises(ValueError):
+        f.filter(np.zeros((5, 1)))                        # missing required U
+    g = AdaptiveKalmanFilter(np.eye(1), R0=[1.0])         # no B
+    with pytest.raises(ValueError):
+        g.update(np.zeros(1), u=np.zeros(1))              # u passed but no B
+
+
+def test_kinematic_derivatives_and_accelerometer():
+    f = AdaptiveKalmanFilter.kinematic(n_dof=2, order=3, dt=0.05, measured=("pos",), control=True)
+    assert f.n == 6 and f.m == 2 and f.p == 2 and f.n_dof == 2 and f.order == 3
+    r = f.filter(np.zeros((40, 2)), U=np.zeros((40, 2)))
+    D = f.derivatives(r.mean)
+    assert D.shape == (40, 2, 3)                          # (T, n_dof, [pos, vel, acc])
+    # accelerometer fusion: a sensor may read the 2nd derivative
+    fa = AdaptiveKalmanFilter.kinematic(n_dof=1, order=3, dt=0.05, measured=("pos", "acc"))
+    assert fa.m == 2 and np.all(np.isfinite(fa.filter(np.zeros((30, 2))).mean))
+    with pytest.raises(ValueError):
+        AdaptiveKalmanFilter.kinematic(n_dof=1, order=2, measured=("acc",))  # needs order > 2
+
+
 def test_derivative_mode_beats_nonadaptive_random_walk():
     """The kinematic model must vastly beat a NON-adaptive local-level (F=I) filter on a
     momentum system -- the honest "before" baseline (a fixed random walk can't track a ramp).
