@@ -38,14 +38,20 @@ Two things distinguish it from :class:`WalkingVectorFilter` (the exponential tes
   diverges (research 0024).  The innovation *sequence* separates them (Mehra 1970): process
   noise makes the filter LAG -> positive lag-1 innovation autocorrelation; sensor noise inflates
   the innovation variance but stays WHITE.  So each active scale walks by the finding-18 loop on
-  its analytic residual score, **gated**: a process axis may only *raise* when the innovations
-  are lag-correlated, a sensor axis only when ITS OWN channel is white (either may always
-  *lower*).  The gate is **per-sensor** (research 0027): process noise on a state a sensor reads
-  directly -- e.g. an accelerometer on the jerk-driven acceleration -- shows as lag-correlation
-  in that channel, and a per-sensor gate stops it masquerading as that sensor's noise where a
-  pooled gate would average it away.  The gate turns on above ``2 sqrt(beta)`` -- the 2-sigma
-  significance of the innovation-correlation EMA, tied to the adaptation timescale, not a
-  separate knob.  Cost per step is ``O(r m^2)`` -- polynomial, no grid.
+  its analytic residual score, with the sensor axis absorbing only its **derived share** of the
+  residual.  The share is not a tuned gate: chasing the oracle across the sensor<->process
+  continuum (research 0032) gives the process fraction of a channel's innovation variance as
+  ``c/S + rho1`` (``c/S = (H Pp H^T)/S`` the nominal state share, ``rho1`` the lag-1 autocorr), so
+  the sensor's fraction of the residual ``C0 - c`` is ``1 - rho1 (S/R)`` -- one smooth line whose
+  two arms are its limits (``rho1 = R/S`` all-process, ``rho1 <= 0`` all-sensor), the transition
+  WIDTH the channel's own ``R/S``, no threshold and no ramp.  The gate is **per-sensor** (research
+  0027): process noise on a state a sensor reads directly -- an accelerometer on the jerk-driven
+  acceleration -- shows as lag-correlation in that channel, and a per-sensor share stops it
+  masquerading as that sensor's noise where a pooled gate would average it away.  ``rho1`` is a
+  noisy EMA, so it is **denoised** by a non-negative garrote at its own ``2 sqrt(beta)`` (the
+  2-sigma EMA noise floor, a labeled budget tied to the adaptation timescale) -- continuous and
+  unbiased for a significant correlation, zero below the floor so a failing sensor still sheds
+  fully.  Cost per step is ``O(r m^2)`` -- polynomial, no grid.
 
 * **Robust measurement update, derived (the hot regimes).**  The expensive extreme is a failing
   *absolute* reference: when a bad potentiometer degrades further, position observability
@@ -62,22 +68,25 @@ Two things distinguish it from :class:`WalkingVectorFilter` (the exponential tes
 
 **No theoretically relevant free parameters.**  The spectral floor is derived
 (``(1-phi)/(4 (SPAN_S s)^2)``); the walk gain ``K* = (1-phi)/4`` and drift ``q_mu`` are the
-finding-18 loop; the grid spacing is the Sparrow limit ``1.5 s``; the gate threshold is the
-2-sigma EMA significance.  ``SPAN_S`` and ``_BETA`` (the adaptation timescale) are *labeled
+finding-18 loop; the grid spacing is the Sparrow limit ``1.5 s``; the sensor share is the derived
+``1 - rho1 (S/R)`` (research 0032) with ``rho1`` garrote-denoised at its 2-sigma EMA noise floor.
+``SPAN_S`` and ``_BETA`` (the adaptation timescale) are *labeled
 budgets* -- they trade responsiveness for smoothness, they do not move the fixed point.  The
 robust measurement update is fully derived (the heavy-tail from the scale swing ``s``, no cutoff).
 
 Open items / known warts (see ``research/multivariate-statfilter/SUMMARY.md``):
 
-* **The fast shed is still empirical, and the BOTH regime.**  The persistent-scale *shed* that
-  keeps the walked scale current (so the derived robust MAP does not over-fire) still uses an
-  outlier-rate boost and a hard whiteness floor -- the last non-derived pieces.  And when a
-  *dynamic* sensor is noisy AND a process disturbance is active at once, the channel is only
-  partly white, so the smooth whiteness lets the robust MAP fire partially and over-reject it
-  (BOTH ~1.7x oracle).  Distinguishing "sensor failing" from "noisy-but-useful under process" is
-  the collinear confound; the whiteness discriminant during fast reaction is inherently a
-  decision, and an **observability-weighted gate** (protect robustly only sensors whose loss
-  collapses observability) is the planned way to make it both smooth and confound-safe.
+* **BOTH is observability-limited, not a fixable leak (research 0033).**  When a *dynamic* sensor
+  is noisy AND a process disturbance is active at once, the process is *masked*: the only sensor
+  that reads it directly is drowned by its own noise (its lag-1 correlation dilutes to ~0), so the
+  jerk is nearly unobservable.  Freezing ``Q`` at oracle closes BOTH (~1.1x); the achievable floor
+  for *inferring* the masked ``Q`` (oracle-R) is ~3x oracle, and the adaptive already sits below it
+  -- the distance to the *full* oracle is the oracle discounting an unobservable jerk, so the
+  full-oracle ratio overstates BOTH.  No smooth-transition arm is missing here; the binding
+  constraint is observability.  The *sensor share* is now derived (0032, above); the still-empirical
+  pieces are the robust-MAP whiteness gate (kept -- the derived share does not fit the instantaneous
+  first-sample role) and the fast persistent *shed* (an outlier-rate boost and a hard whiteness
+  floor).  A cross-sensor **observability-weighted** gate is the planned way to retire those.
 
 * **Collinear process/sensor modes (measured, research 0027).**  When a sensor reads the very
   state the process noise enters (an accelerometer on the jerk-driven acceleration), the two
@@ -420,13 +429,18 @@ class AdaptiveKalmanFilter:
                 #                                                        elapsed disturbance decays out
             else:                                                      # sensor: match the WHITE residual variance
                 i = k - n
-                # PER-SENSOR whiteness gate (research 0027): sensor i absorbs excess only if ITS
-                # OWN channel is white.  Process noise on a state a sensor measures directly shows
-                # as lag-correlation IN THAT CHANNEL (e.g. an accelerometer on the jerk-driven
-                # acceleration); an aggregate gate would average it away with the other, whiter
-                # channels and let process masquerade as this sensor's noise.
+                # PER-SENSOR whiteness gate (research 0027/0032): sensor i absorbs the residual only
+                # to the extent its OWN channel is white.  DERIVED width (0032): the sensor's fraction
+                # of the residual is 1 - rho1*(S/R) -- the process share of the innovation variance is
+                # c/S + rho1, and the residual C0 - c is net of c, so its process fraction is
+                # rho1/(R/S).  wg reaches 0 exactly when the residual is fully process-explained
+                # (rho1 = R/S), a per-channel width, replacing the global 2*thr ramp.  thr = 2 sqrt
+                # (beta) is the 2-sigma lag-1 EMA noise floor (a labeled budget): below it the
+                # correlation is insignificant, so a failing sensor still sheds fully.
                 rho1_i = dC1[i] / (dC0[i] + 1e-12)
-                wg = float(np.clip(1.0 - (rho1_i - thr) / thr, 0.0, 1.0))
+                SRi = Sdiag[i] / (self.rho[i] * math.exp(min(max(self.mu[k], -60.0), 60.0)) + 1e-12)
+                rho1_hat = (rho1_i - thr * thr / rho1_i) if rho1_i > thr else 0.0   # garrote denoise
+                wg = float(np.clip(1.0 - rho1_hat * SRi, 0.0, 1.0))
                 resid = float(self._C0[i, i] - HPHt[i, i])
                 target = math.log(max(resid, 1e-8) / self.rho[i])
                 step = target - self.mu[k]

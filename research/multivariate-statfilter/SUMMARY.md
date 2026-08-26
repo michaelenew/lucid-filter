@@ -320,9 +320,19 @@ that.** See `exploration/0029_reprofile.md`.
   Q at oracle closes BOTH (1.11×) while freezing R does nothing (2.54×), and the adaptive already
   matches the achievable floor (oracle-R). The full-oracle ratio overstates BOTH by the
   unobservable-Q term the oracle discounts. So the transition law is the model for the *observable*
-  continuum; BOTH is pinned by observability, not attribution. Integrating the law (retiring the
-  empirical whiteness `thr`) — validated against SENSOR/pot-hot/process+pot, not disturbing the
-  pinned BOTH — is the pending filter change.
+  continuum; BOTH is pinned by observability, not attribution.
+  **Update (research 0034): the derived gate is SHIPPED.** High-seed paired profiling (40 seeds;
+  the 4-seed point estimates were noise — process+pot is 1.41±0.10, not 1.15) settled the
+  realization: the sensor absorbs its derived share `1 − ρ₁·(S/R)` of the residual, with `ρ₁`
+  denoised by a **non-negative garrote** at its 2√β EMA noise floor (`ρ̂₁ = ρ₁ − thr²/ρ₁`) —
+  continuous (no step/if-else), unbiased for significant correlation, zero below the floor so a
+  failing sensor still sheds. The empirical ramp-width `thr` is retired for the derived per-channel
+  width `R/S`. Vs the old gate it is *better* on the reducible sensor-failure regimes (pot-hot,
+  SENSOR both −2.3σ), neutral on process+pot/PROCESS; the +3.4σ on BOTH is a floor artefact (the
+  achievable oracle-R floor for the masked Q is ~3.04×, and the adaptive sits below it). The garrote
+  regresses the robust-MAP gate (different, instantaneous role) so the MAP keeps its whiteness gate.
+  Remaining non-derived pieces: the MAP whiteness gate and the fast shed — the planned
+  observability-weighted (cross-sensor) build.
 - **Collinear process/sensor modes — the confound, measured (research 0027).** When a sensor
   reads the state the process noise enters (accelerometer on the jerk-driven acceleration), the
   two scale axes are **collinear** in innovation space (exact scale-Fisher correlation
