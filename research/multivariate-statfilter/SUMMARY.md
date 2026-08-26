@@ -276,11 +276,19 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
 
 ## Open items
 
-- **Simultaneous process+sensor burst (`AdaptiveKalmanFilter`).** When both spike together the
-  innovations are only partly correlated, so the whiteness gate splits the excess imperfectly —
-  state RMSE is ~parity (a few % worse) with a well-tuned fixed filter, where the oracle is ~10%
-  better. A full multivariate Mehra solve (joint `Q,R` from the autocorrelation sequence) is the
-  planned upgrade.
+- **Collinear process/sensor modes — the confound, measured (research 0027).** When a sensor
+  reads the state the process noise enters (accelerometer on the jerk-driven acceleration), the
+  two scale axes are **collinear** in innovation space (exact scale-Fisher correlation
+  `|C| = 1.0`; the potentiometer, reading `θ`, is orthogonal at `0.0`). Process noise is still
+  temporally separable there — it shows as **+0.65 lag-1 autocorrelation in the accel channel** —
+  so a **per-sensor** whiteness gate (now shipped) keyed to each channel's own correlation cuts
+  the onset misattribution `1.29 → 0.76` nats with no state cost. The residual: once the process
+  scale adapts and whitens the channel, the collinear modes are single-step indistinguishable
+  and the sensor scale drifts partway up — the genuine floor, needing a joint Mehra solve
+  (`Q,R` from the full autocorrelation sequence). The *state* cost of the collinearity is small
+  (collinear modes only need their total, which the filter gets, gap 1.24×); the expensive
+  regime is **observability loss** (process while the absolute sensor degrades, gap 3.72×), a
+  different problem, not this confound.
 - **Unify the diagnostic de-mix into the production filter.** The Fisher-eigenbasis walk
   (0018–0023) gives the faithful which-sensor/which-mode attribution; run it *within* each
   whiteness-gated block so the production filter reports per-component diagnostics too.

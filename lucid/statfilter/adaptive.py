@@ -39,10 +39,13 @@ Two things distinguish it from :class:`WalkingVectorFilter` (the exponential tes
   noise makes the filter LAG -> positive lag-1 innovation autocorrelation; sensor noise inflates
   the innovation variance but stays WHITE.  So each active scale walks by the finding-18 loop on
   its analytic residual score, **gated**: a process axis may only *raise* when the innovations
-  are lag-correlated, a sensor axis only when they are white (either may always *lower*).  The
-  gate turns on above ``2 sqrt(beta)`` -- the 2-sigma significance of the innovation-correlation
-  EMA -- so it is tied to the adaptation timescale, not a separate knob.  Cost per step is
-  ``O(r m^2)`` -- polynomial, no grid.
+  are lag-correlated, a sensor axis only when ITS OWN channel is white (either may always
+  *lower*).  The gate is **per-sensor** (research 0027): process noise on a state a sensor reads
+  directly -- e.g. an accelerometer on the jerk-driven acceleration -- shows as lag-correlation
+  in that channel, and a per-sensor gate stops it masquerading as that sensor's noise where a
+  pooled gate would average it away.  The gate turns on above ``2 sqrt(beta)`` -- the 2-sigma
+  significance of the innovation-correlation EMA, tied to the adaptation timescale, not a
+  separate knob.  Cost per step is ``O(r m^2)`` -- polynomial, no grid.
 
 **No theoretically relevant free parameters.**  The spectral floor is derived
 (``(1-phi)/(4 (SPAN_S s)^2)``); the walk gain ``K* = (1-phi)/4`` and drift ``q_mu`` are the
@@ -52,12 +55,17 @@ budgets* -- they trade responsiveness for smoothness, they do not move the fixed
 
 Open items / known warts (see ``research/multivariate-statfilter/SUMMARY.md``):
 
-* **Simultaneous process+sensor burst.**  When process AND sensor noise spike together (the
-  crusher "both" regime) the innovations are only partly correlated, so the gate splits the
-  excess imperfectly; state RMSE is ~parity with (a few % worse than) a well-tuned fixed filter,
-  where the oracle is ~10% better.  The pure process-hot and sensor-hot bursts are handled well
-  (research 0025).  A full multivariate Mehra solve (joint ``Q,R`` from the autocorrelation
-  sequence) is the planned upgrade.
+* **Collinear process/sensor modes (measured, research 0027).**  When a sensor reads the very
+  state the process noise enters (an accelerometer on the jerk-driven acceleration), the two
+  scale axes are *collinear* in innovation space -- the exact scale-Fisher correlation is
+  ``|C| = 1.0`` -- so at steady state, after the process scale adapts and whitens the channel,
+  they are single-step indistinguishable and the sensor scale drifts partway up on the whitened
+  residual.  The per-sensor gate removes most of the onset misattribution (leak 1.29 -> 0.76
+  nats); the steady-state residual needs a joint Mehra solve (``Q,R`` from the full
+  autocorrelation sequence) and is the planned upgrade.  Note the *state* cost of this
+  collinearity is small (collinear modes only need their total right, which the filter gets);
+  the genuinely expensive regime is **observability loss** -- process disturbance while the
+  *absolute* sensor degrades -- which is a different problem, not this confound.
 * **Per-component diagnostic de-mix.**  The Fisher-eigenbasis walk (research 0018-0023,
   ``WalkingVectorFilter`` lineage) gives a faithful *which-sensor / which-mode* attribution
   under a mixing ``H`` at a dimension-stable false-alarm floor; it is not yet unified into this
@@ -345,8 +353,7 @@ class AdaptiveKalmanFilter:
         HPHt = H @ Pp @ H.T
         C1s = 0.5 * (self._C1 + self._C1.T)
         thr = 2.0 * math.sqrt(_BETA)                                    # 2-sigma significance of the EMA
-        rho1 = float(np.trace(C1s)) / (float(np.trace(self._C0)) + 1e-12)
-        white_gate = float(np.clip(1.0 - (rho1 - thr) / thr, 0.0, 1.0))  # 1 white, 0 correlated
+        dC0 = np.diag(self._C0); dC1 = np.diag(C1s)
 
         for a, k in enumerate(self.active):
             if k < n:                                                  # process eigenmode: whiten its lag-1 corr
@@ -359,9 +366,16 @@ class AdaptiveKalmanFilter:
                 #                                                        elapsed disturbance decays out
             else:                                                      # sensor: match the WHITE residual variance
                 i = k - n
+                # PER-SENSOR whiteness gate (research 0027): sensor i absorbs excess only if ITS
+                # OWN channel is white.  Process noise on a state a sensor measures directly shows
+                # as lag-correlation IN THAT CHANNEL (e.g. an accelerometer on the jerk-driven
+                # acceleration); an aggregate gate would average it away with the other, whiter
+                # channels and let process masquerade as this sensor's noise.
+                rho1_i = dC1[i] / (dC0[i] + 1e-12)
+                wg = float(np.clip(1.0 - (rho1_i - thr) / thr, 0.0, 1.0))
                 resid = float(self._C0[i, i] - HPHt[i, i])
                 target = math.log(max(resid, 1e-8) / self.rho[i])
-                self.mu[k] += float(np.clip(self._Kstar * white_gate * (target - self.mu[k]),
+                self.mu[k] += float(np.clip(self._Kstar * wg * (target - self.mu[k]),
                                             -self.gap, self.gap))
         self.mu[:n] = np.clip(self.mu[:n], -8.0, 20.0)
         self.mu[n:] = np.clip(self.mu[n:], -8.0, 20.0)
