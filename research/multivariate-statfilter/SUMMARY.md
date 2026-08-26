@@ -308,6 +308,31 @@ that.** See `exploration/0029_reprofile.md`.
   fast shed still uses a hard whiteness floor. Both are the collinear confound during fast
   reaction — a decisive white-vs-correlated call — best resolved by the **observability-weighted
   gate** (protect robustly only sensors whose loss collapses observability), the planned build.
+  **Update (research 0032/0033): the in-between transition is derived, and the BOTH residual is
+  reframed as irreducible.** Chasing the oracle across the sensor↔process continuum: the process
+  share of a channel's innovation excess is `f_proc = clip(c/S + ρ₁, 0, 1)` (`c/S` = the nominal
+  process share, the *same* quantity as the robust MAP's `1−c/S`; ρ₁ the lag-1 tilt) — a single
+  smooth line whose two limits are the two arms (all-sensor at ρ₁=−c/S, all-process at ρ₁=R/S), no
+  threshold, validated to mean |err| 0.04 (0032). The whiteness gate's error was mapping ρ₁=0 →
+  "all sensor" when the truth at ρ₁=0 is the nominal split `c/S`. **BOTH is not a fixable leak**
+  (0033): when a *dynamic* sensor is noisy AND process is active, the process is masked (its accel
+  lag-1 corr dilutes +0.71→0 under the sensor's own noise) and genuinely **unobservable**; freezing
+  Q at oracle closes BOTH (1.11×) while freezing R does nothing (2.54×), and the adaptive already
+  matches the achievable floor (oracle-R). The full-oracle ratio overstates BOTH by the
+  unobservable-Q term the oracle discounts. So the transition law is the model for the *observable*
+  continuum; BOTH is pinned by observability, not attribution.
+  **Update (research 0034): the derived gate is SHIPPED.** High-seed paired profiling (40 seeds;
+  the 4-seed point estimates were noise — process+pot is 1.41±0.10, not 1.15) settled the
+  realization: the sensor absorbs its derived share `1 − ρ₁·(S/R)` of the residual, with `ρ₁`
+  denoised by a **non-negative garrote** at its 2√β EMA noise floor (`ρ̂₁ = ρ₁ − thr²/ρ₁`) —
+  continuous (no step/if-else), unbiased for significant correlation, zero below the floor so a
+  failing sensor still sheds. The empirical ramp-width `thr` is retired for the derived per-channel
+  width `R/S`. Vs the old gate it is *better* on the reducible sensor-failure regimes (pot-hot,
+  SENSOR both −2.3σ), neutral on process+pot/PROCESS; the +3.4σ on BOTH is a floor artefact (the
+  achievable oracle-R floor for the masked Q is ~3.04×, and the adaptive sits below it). The garrote
+  regresses the robust-MAP gate (different, instantaneous role) so the MAP keeps its whiteness gate.
+  Remaining non-derived pieces: the MAP whiteness gate and the fast shed — the planned
+  observability-weighted (cross-sensor) build.
 - **Collinear process/sensor modes — the confound, measured (research 0027).** When a sensor
   reads the state the process noise enters (accelerometer on the jerk-driven acceleration), the
   two scale axes are **collinear** in innovation space (exact scale-Fisher correlation
