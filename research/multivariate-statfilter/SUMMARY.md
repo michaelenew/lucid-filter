@@ -288,10 +288,17 @@ and its expensive facet is **not** the collinear confound (cheap for state, 1.14
 observability is fragile, and the filter briefly trusts a sensor it should discard. **Promote
 that.** See `exploration/0029_reprofile.md`.
 
-- **[PROMOTED] Adaptation lag on a degrading absolute sensor.** The dominant realistic-regime
-  cost (1.86×): when the bad potentiometer worsens, position observability collapses (the
-  accelerometer only integrates to a drifting position) and the filter lags in shedding it. Fix:
-  faster / observability-weighted adaptation of the absolute sensor's noise scale.
+- **[SOLVED, research 0030] Adaptation lag on a degrading absolute sensor.** Was the dominant
+  realistic-regime cost. Two additions shed a failing absolute reference fast: an **instantaneous
+  robust gate** (inflate a sensor's `R` for the current correction when its normalised innovation
+  is a large outlier on a *clearly white* channel — protects the state at the first corrupted
+  sample) and an **outlier-boosted raise-rate** (ramp the scale in a few steps, not ~1/K*), both
+  fired only above a whiteness floor so a process disturbance never triggers them. Result: the
+  failing-absolute-sensor regimes drop **to the online floor** — pot-hot and process+pot (the old
+  3.72×) both **~0.94× oracle**, from 1.98× — and the sensor-burst / recovery phases improve too.
+  Residual tradeoff: the BOTH phase (a *dynamic* sensor noisy while process is active) costs ~11%
+  more (partly-white channel → occasional over-rejection); an observability-weighted gate is the
+  refinement.
 - **Collinear process/sensor modes — the confound, measured (research 0027).** When a sensor
   reads the state the process noise enters (accelerometer on the jerk-driven acceleration), the
   two scale axes are **collinear** in innovation space (exact scale-Fisher correlation

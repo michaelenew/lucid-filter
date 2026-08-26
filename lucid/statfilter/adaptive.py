@@ -47,13 +47,36 @@ Two things distinguish it from :class:`WalkingVectorFilter` (the exponential tes
   significance of the innovation-correlation EMA, tied to the adaptation timescale, not a
   separate knob.  Cost per step is ``O(r m^2)`` -- polynomial, no grid.
 
+* **Robust outlier shedding (the hot regimes).**  The expensive extreme is a failing *absolute*
+  reference: when a bad potentiometer degrades further, position observability collapses (an
+  accelerometer only integrates to a *drifting* position), and the slow scale walk trusts the
+  failing sensor for its first ~1/K* steps -- a spike the drifting state then carries (research
+  0029/0030, adaptive-vs-oracle 1.98x).  Two additions shed it fast: an **instantaneous robust
+  gate** inflates a sensor's ``R`` for the current correction when its normalised innovation is a
+  large outlier on a *clearly white* channel (a sensor failure, not a partly-correlated process
+  disturbance), protecting the state at the first corrupted sample; and an **outlier-boosted
+  raise-rate** ramps that sensor's scale in a few steps rather than ~1/K*.  Both fire only above
+  the whiteness floor, so a process disturbance never triggers them.  Result: the failing-
+  absolute-sensor regimes drop to the online floor (pot-hot and process+pot **~0.94x** oracle,
+  from 1.98x), and the sensor-burst / recovery phases also improve.
+
 **No theoretically relevant free parameters.**  The spectral floor is derived
 (``(1-phi)/(4 (SPAN_S s)^2)``); the walk gain ``K* = (1-phi)/4`` and drift ``q_mu`` are the
 finding-18 loop; the grid spacing is the Sparrow limit ``1.5 s``; the gate threshold is the
 2-sigma EMA significance.  ``SPAN_S`` and ``_BETA`` (the adaptation timescale) are *labeled
-budgets* -- they trade responsiveness for smoothness, they do not move the fixed point.
+budgets* -- they trade responsiveness for smoothness, they do not move the fixed point.  The
+robustness thresholds are labeled too: ``_ROBUST_CHI`` is a 4-sigma outlier cutoff, ``_WHITE_MIN``
+the whiteness confidence to call a large innovation a sensor failure, ``_SHED`` the shed rate.
 
 Open items / known warts (see ``research/multivariate-statfilter/SUMMARY.md``):
+
+* **BOTH-regime tradeoff (research 0030).**  When a *dynamic* sensor (accelerometer) is noisy AND
+  a process disturbance is active at once, its channel is only partly white, so the robust gate
+  occasionally over-rejects it -- that phase costs ~11% more than before the shedding was added
+  (1.43 -> 1.59x oracle), the price of solving the far larger absolute-sensor regime (1.98 ->
+  0.94x).  Distinguishing "sensor failing" from "noisy-but-useful under process" on a
+  process-coupled sensor is the collinear confound again; an observability-weighted gate (protect
+  only sensors whose loss collapses observability) is the planned refinement.
 
 * **Collinear process/sensor modes (measured, research 0027).**  When a sensor reads the very
   state the process noise enters (an accelerometer on the jerk-driven acceleration), the two
@@ -91,6 +114,10 @@ _SPAN_S = 3.0               # spectral-truncation coverage budget (half-span in 
 _BETA = 0.02               # innovation-statistics EMA rate (labeled adaptation-timescale budget)
 _Q_DRIVE = 0.2             # process-scale whitening rate (labeled adaptation-rate budget)
 _Q_REVERT = 0.008          # process-scale reversion to baseline (an elapsed disturbance decays out)
+_SHED = 0.05               # outlier-shedding boost: raise a sensor scale fast on a big white outlier
+_ROBUST_CHI = 16.0         # per-step robust gate: inflate R above a 4-sigma white innovation outlier
+_WHITE_MIN = 0.90          # both fire only when a channel is CLEARLY white (a sensor failure, not
+#                            a partly-correlated process disturbance -- protects a noisy accel in BOTH)
 _RIDGE = 1e-9
 
 
@@ -354,6 +381,7 @@ class AdaptiveKalmanFilter:
         C1s = 0.5 * (self._C1 + self._C1.T)
         thr = 2.0 * math.sqrt(_BETA)                                    # 2-sigma significance of the EMA
         dC0 = np.diag(self._C0); dC1 = np.diag(C1s)
+        Sdiag = np.diag(HPHt) + self.rho * np.exp(np.clip(self.mu[n:], -60, 60))   # predicted innov var
 
         for a, k in enumerate(self.active):
             if k < n:                                                  # process eigenmode: whiten its lag-1 corr
@@ -375,13 +403,37 @@ class AdaptiveKalmanFilter:
                 wg = float(np.clip(1.0 - (rho1_i - thr) / thr, 0.0, 1.0))
                 resid = float(self._C0[i, i] - HPHt[i, i])
                 target = math.log(max(resid, 1e-8) / self.rho[i])
-                self.mu[k] += float(np.clip(self._Kstar * wg * (target - self.mu[k]),
-                                            -self.gap, self.gap))
+                step = target - self.mu[k]
+                rate = self._Kstar
+                if step > 0.0 and wg > _WHITE_MIN:                      # SHEDDING a failing sensor:
+                    # accelerate when this step's innovation is a large outlier on a CLEARLY white
+                    # channel -- shed a failing absolute reference in a few steps, not ~1/K*
+                    # (research 0030); the whiteness floor keeps a (partly-correlated) process
+                    # disturbance from triggering it.
+                    nis = e[i] ** 2 / (Sdiag[i] + 1e-12)
+                    rate = min(1.0, self._Kstar * (1.0 + _SHED * max(nis - 4.0, 0.0)))
+                self.mu[k] += float(np.clip(rate * wg * step, -self.gap, self.gap))
         self.mu[:n] = np.clip(self.mu[:n], -8.0, 20.0)
         self.mu[n:] = np.clip(self.mu[n:], -8.0, 20.0)
         # rebuild the state prior at the walked scale
         Pp = F @ Ppost @ F.T + self._Q_of(self.mu[:n])
-        S = H @ Pp @ H.T + self._R_of(self.mu[n:]) + _RIDGE * np.eye(m)
+        Rw = self._R_of(self.mu[n:])
+        # ---- instantaneous robust gate (research 0030): protect the STATE from a white outlier
+        # at the FIRST corrupted sample, before the scale has ramped.  A large per-sensor
+        # normalised innovation e_i^2/S_ii, on a channel that is white (wg~1, so not a process
+        # disturbance), inflates that sensor's R for THIS correction -- so a failing absolute
+        # reference can't inject a spike the drifting state then carries.  Dormant in normal
+        # regimes (nis~1 -> factor 1).
+        Hpp = H @ Pp @ H.T; Svar = np.diag(Hpp) + np.diag(Rw)
+        nis = e ** 2 / (Svar + 1e-12)
+        for a, k in enumerate(self.active):
+            if k >= n:
+                i = k - n
+                rho1_i = dC1[i] / (dC0[i] + 1e-12)
+                wgi = float(np.clip(1.0 - (rho1_i - thr) / thr, 0.0, 1.0))
+                if wgi > _WHITE_MIN:                                  # inflate R only on a CLEARLY
+                    Rw[i, i] *= 1.0 + max(nis[i] - _ROBUST_CHI, 0.0)  # white outlier (sensor failure)
+        S = Hpp + Rw + _RIDGE * np.eye(m)
         Si = np.linalg.inv(S)
 
         # ---- state correction (general-F Kalman) ----
