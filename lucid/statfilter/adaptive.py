@@ -82,6 +82,7 @@ _GAP_FACTOR = 1.5           # gap = 1.5 s: resolution (Sparrow) spacing (finding
 _SPAN_S = 3.0               # spectral-truncation coverage budget (half-span in units of s)
 _BETA = 0.02               # innovation-statistics EMA rate (labeled adaptation-timescale budget)
 _Q_DRIVE = 0.2             # process-scale whitening rate (labeled adaptation-rate budget)
+_Q_REVERT = 0.008          # process-scale reversion to baseline (an elapsed disturbance decays out)
 _RIDGE = 1e-9
 
 
@@ -214,6 +215,9 @@ class AdaptiveKalmanFilter:
         ``measured`` names which derivative each sensor reads, per DOF: ``("pos",)`` for encoders,
         ``("acc",)`` for accelerometers/IMUs, ``("pos", "acc")`` to fuse both, ``("vel",)`` for a
         tachometer/gyro.  Read the estimated derivatives back with :meth:`derivatives`.
+        ``meas_var`` is the base variance of each sensor -- a scalar for all, or a dict keyed by
+        the ``measured`` name (e.g. ``{"pos": 0.08**2, "acc": 0.01**2}`` for a bad potentiometer
+        fused with a good accelerometer).  The filter learns the live noise from here.
 
         ``control=True`` adds a known-forcing input ``B`` (see :meth:`update`): the per-DOF
         commanded *top derivative* (acceleration for ``order=2``, jerk for ``order=3``), which
@@ -233,14 +237,15 @@ class AdaptiveKalmanFilter:
         Q0 = np.kron(np.eye(n_dof), Qb)
         B = np.kron(np.eye(n_dof), g[:, None]) if control else None   # commanded top-derivative
         idx = {"pos": 0, "vel": 1, "acc": 2}
-        rows = []
+        rows = []; rvar = []
         for d in range(n_dof):
             for name in measured:
                 if idx[name] >= order:
                     raise ValueError(f"measured '{name}' needs order > {idx[name]} (order={order})")
                 e = np.zeros(order * n_dof); e[d * order + idx[name]] = 1.0; rows.append(e)
+                rvar.append(meas_var[name] if isinstance(meas_var, dict) else meas_var)
         H = np.array(rows)
-        R0 = np.full(len(rows), float(meas_var))
+        R0 = np.array(rvar, dtype=float)
         f = cls(Q0, R0=R0, H=H, F=F, B=B, phi=phi, s=s)
         f.n_dof, f.order = n_dof, order
         return f
@@ -348,8 +353,10 @@ class AdaptiveKalmanFilter:
                 hv = self.HV[:, k]
                 c0k = float(hv @ self._C0 @ hv) + 1e-12
                 sig = float(hv @ C1s @ hv) / c0k                       # lag-1 autocorr in mode k's direction
-                drive = np.sign(sig) * max(abs(sig) - thr, 0.0)        # act only when significant
-                self.mu[k] += float(np.clip(_Q_DRIVE * drive, -self.gap, self.gap))
+                excess = max(abs(sig) - thr, 0.0)
+                self.mu[k] += float(np.clip(_Q_DRIVE * np.sign(sig) * excess, -self.gap, self.gap))
+                self.mu[k] *= (1.0 - _Q_REVERT)                        # mild reversion to baseline so an
+                #                                                        elapsed disturbance decays out
             else:                                                      # sensor: match the WHITE residual variance
                 i = k - n
                 resid = float(self._C0[i, i] - HPHt[i, i])

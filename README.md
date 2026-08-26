@@ -361,11 +361,23 @@ of which the earlier local-level filters had:
   estimate. Through the crusher burst above the adaptive tip estimate is **1.87×**
   tighter than the fixed-noise filter, with no false alarm when the crusher is idle.
 
-The per-component *diagnostic* (which sensor, which dynamics mode is degrading) under
-a mixing `H` is solved separately in the Fisher eigenbasis
-([`research/multivariate-statfilter/`](research/multivariate-statfilter/SUMMARY.md));
-the remaining known limit (simultaneous process+sensor bursts) is recorded there and
-in the module docstring.
+**A harder, more realistic case** — a 5-DOF arm in 3D with a *really bad* potentiometer
+and a *good* accelerometer per joint (IMU-style fusion), driven along a commanded
+trajectory, with noise arriving in phases (sensor → process → both):
+
+![a 5-DOF arm tracked through phased sensor/process/both noise; the learned scales light up to show which noise is hot, the raw potentiometer jitters wildly and the adaptive estimate stays locked](research/multivariate-statfilter/figures/arm5dof-adaptive.gif)
+
+The filter fuses the bad absolute sensor (σ≈0.06 rad) with the good dynamic one down to
+**0.006–0.015 rad** joint-angle RMSE — 4–6× tighter than the raw pot, beating a
+fixed-noise filter in every phase and *recovering faster* after each burst — and its
+learned per-component scales **diagnose which noise is hot** (the amber bars: accelerometers
+during the sensor phase, process during the disturbance, both together), while the
+constant-noise potentiometer stays flat. No divergence. Details:
+[`research/multivariate-statfilter/`](research/multivariate-statfilter/SUMMARY.md).
+
+The per-component *diagnostic* under a mixing `H` is solved separately in the Fisher
+eigenbasis (same workstream); the remaining known limit (simultaneous process+sensor
+bursts) is recorded there and in the module docstring.
 
 ### `OffsetFilter` — two series, one clock
 [`lucid/odefilter/offset.py`](lucid/odefilter/offset.py)

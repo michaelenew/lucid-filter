@@ -152,6 +152,15 @@ def test_kinematic_derivatives_and_accelerometer():
         AdaptiveKalmanFilter.kinematic(n_dof=1, order=2, measured=("acc",))  # needs order > 2
 
 
+def test_per_sensor_meas_var():
+    """meas_var may be a dict keyed by measured name (bad pot + good accelerometer)."""
+    f = AdaptiveKalmanFilter.kinematic(n_dof=2, order=3, dt=0.02, measured=("pos", "acc"),
+                                       meas_var={"pos": 0.06 ** 2, "acc": 0.01 ** 2})
+    # sensor order is DOF-major then measured-order: [d0-pos, d0-acc, d1-pos, d1-acc]
+    assert np.allclose(f.rho[0::2], 0.06 ** 2) and np.allclose(f.rho[1::2], 0.01 ** 2)
+    assert np.all(np.isfinite(f.filter(np.zeros((20, 4))).mean))
+
+
 def test_derivative_mode_beats_nonadaptive_random_walk():
     """The kinematic model must vastly beat a NON-adaptive local-level (F=I) filter on a
     momentum system -- the honest "before" baseline (a fixed random walk can't track a ramp).

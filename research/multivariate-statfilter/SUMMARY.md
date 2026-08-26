@@ -254,6 +254,20 @@ Two further capabilities close the robotics gaps found while building the animat
   lag: on a commanded sinusoidal reach the velocity RMSE drops from 0.53 → 0.005 (position
   0.248 → 0.005), i.e. tracked to the sensor floor mid-swing instead of lagging ~2×.
 
+**The hard realistic case (research 0026): a 5-DOF arm in 3D, IMU-style fusion, phased noise.**
+Each joint carries a *really bad* potentiometer (angle, σ≈0.06 rad) and a *good* accelerometer
+(angular acceleration — the main dynamic feedback); the arm is driven along a commanded
+trajectory (known forcing); noise arrives in phases — **sensor** (accelerometers swamped) →
+**process** (disturbance torque) → **both**. Over 4 seeds the adaptive filter fuses the bad
+absolute sensor with the good dynamic one down to **0.006–0.015 rad** joint-angle RMSE (raw pot
+≈0.06), beating a fixed-noise filter in every phase (SENSOR 1.19×, PROCESS 2.44×, BOTH 1.20×,
+and 1.5–2.6× in the calm *recovery* after each burst — it recovers faster) and approaching the
+oracle told the exact schedule, with **no divergence**. And the learned per-component scales
+correctly diagnose *which* noise is hot in each phase — accelerometer-sensor during SENSOR,
+process-jerk during PROCESS, both during BOTH — while the constant-noise potentiometer stays
+flat. A small `_Q_REVERT` reversion decays an elapsed disturbance's belief back to baseline
+(so the diagnostic doesn't linger). See `figures/arm5dof-adaptive.gif`.
+
 The per-component *diagnostic* de-mix (which sensor / which mode is hot) under a mixing `H` is
 solved separately by the **Fisher-eigenbasis walk** (research 0018–0023): the full scale Fisher
 diagonalises the coupling a mixing `H` induces (process↔measurement *and* sensor↔sensor), so an

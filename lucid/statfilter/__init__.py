@@ -65,4 +65,4 @@ __all__ = ["AdaptiveFilter", "FilterResult", "Params", "Step",
            "VectorFilter", "VecParams", "VecStep", "VecFilterResult",
            "WalkingVectorFilter", "WalkVecStep", "WalkVecResult",
            "AdaptiveKalmanFilter", "AdaptiveStep", "AdaptiveResult"]
-__version__ = "1.6.0"
+__version__ = "1.7.0"
