@@ -775,6 +775,24 @@ rescales β, and the free energy is not linear in β. So item 3 is not
 "insert an operator we already have"; it is **put matter on the
 lattice**.
 
+## The PSD obstruction ([`0050`](0050_the_psd_obstruction.md))
+
+Their item 6 failed, algebraically rather than numerically: with B a
+projector, the induced action is `Γ⁽²⁾[A] = ‖(1−B)AB‖²_F ≥ 0` for every
+symmetric A including the conformal mode, while linearised
+Einstein-Hilbert needs that mode to carry the opposite sign. γ ≈ −1
+across two source conventions and two volumes — **zero light bending**.
+A sum of PSD forms is PSD, so no field content fixes it.
+
+This puts a question back to us. 0010 measured lensing here and 0011
+measured Newton's 1/r (α = 1.02). A 1/r Green function does **not**
+distinguish spin-2 from scalar — scalar gravity gets Newton right and
+died at bending. And 0010's Shapiro delay does not discriminate either,
+since a conformally flat metric leaves null geodesics alone but still
+delays propagation. So: **is our lensing deflection of null rays, or
+routing through a varying refractive index?** Score the two models in
+nats on the existing data. Our 1/r was real and it was not enough.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
