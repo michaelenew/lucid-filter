@@ -738,6 +738,32 @@ theirs to measure.
 > estimator idea, and the filter has been making it since its first
 > stone: a posterior mean beats a draw.
 
+## The static projection ([`0049`](0049_the_static_projection.md))
+
+Their items 3 and 4. Filter 0011/0012 already carry the 1/r here, so
+the open part is engineering, and it is two things.
+
+**Which projection.** One exactly massless 4D field gives three
+different laws: static (sum over the time separation) fits A/r^n + C
+with **n = 1.020**; equal-time gives 1.860; zero spatial momentum does
+not decay at all — nearly linear. "Read the 1/r" means the **static**
+projection. Their 0++ fell 11x from d=0 to d=1 at zero spatial
+momentum, which an elementary massless channel cannot do, so the
+plaquette is not the channel that carries the 1/r.
+
+**How precise.** Pre-registered criterion (0038's lesson): call
+massless when the best Yukawa beats pure 1/r by < 2 nats. At 30%
+relative error the test calls a genuinely screened m = 0.5 channel
+massless **86.5%** of the time; at 3% it never does. They need ~3% at
+r = 1..4, which is what their 24x estimator is for.
+
+**And the scope correction.** The masslessness in their 0125 comes
+from a uniform λ shifting ln det by exactly a constant — a property of
+**matter's** determinant. A uniform λ on the gauge weight just
+rescales β, and the free energy is not linear in β. So item 3 is not
+"insert an operator we already have"; it is **put matter on the
+lattice**.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
