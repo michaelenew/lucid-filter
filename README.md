@@ -93,7 +93,7 @@ research/    the iceberg   — every probe, proof and figure behind it
 alone and never read another word. See [its README](lucid/README.md) for the
 API.
 
-**[`research/`](research/README.md) is why any of it is true.** Five
+**[`research/`](research/README.md) is why any of it is true.** Six
 workstreams, each a `SUMMARY.md` that is kept falsifiable and the numbered
 probes that produced it:
 
@@ -101,6 +101,7 @@ probes that produced it:
 |---|---|
 | [`random-walk-filter/`](research/random-walk-filter/SUMMARY.md) | **delivered** — `statfilter`, a tuning-free filter for an unbiased random walk observed with noise |
 | [`ode-filter/`](research/ode-filter/SUMMARY.md) | **candidate shipped** — `odefilter`, the same idea for processes locally described by a linear ODE, plus the offset channel for the lead/lag between two series |
+| [`multivariate-statfilter/`](research/multivariate-statfilter/SUMMARY.md) | **delivered** — `AdaptiveKalmanFilter`, a supplied-dynamics/supplied-`H` vector filter that learns per-component process and sensor noise online (the robotics/derivative mode) |
 | [`optimality-proof/`](research/optimality-proof/SUMMARY.md) | one layer proved, one measured, one open — where "optimal" does and does not hold, and why the *class* of processes was the hard part |
 | [`oracle-gap/`](research/oracle-gap/SUMMARY.md) | how far the filter is from an oracle told the noise schedule exactly, decomposed line by line — and the repair that closed most of it |
 | [`fractional-filter/`](research/fractional-filter/SUMMARY.md) | **in progress** — model order made continuous: $\nu$ is learnable from both sides with an error bar, recovers the parent at $\hat\nu\approx1$, and one coordinate beats $p$ free ones at fractional orders |
@@ -315,6 +316,47 @@ horizon over which dynamics affect a forecast, and therefore the number of steps
 of genuine predictive power you have. `f.derivatives()` returns the posterior in
 $(x,\dot x,\ddot x)$ coordinates via a fixed involutive integer change of basis,
 so nothing is created or lost.
+
+### `AdaptiveKalmanFilter` — supplied dynamics, learned noise
+[`lucid/statfilter/adaptive.py`](lucid/statfilter/adaptive.py)
+
+![a robotic arm holds station beside an industrial crusher; when the crusher fires and swamps the encoders, the raw and fixed-noise estimates jitter while the adaptive filter stays locked on the true tip](research/multivariate-statfilter/figures/crusher-adaptive.gif)
+
+The multivariate, robotics-ready member. You supply the (linearised) dynamics `F`
+and the measurement matrix `H`; it learns the per-component process and sensor
+noise **online**, at polynomial cost in the number of active noise axes — no
+exponential grid.
+
+```python
+from statfilter import AdaptiveKalmanFilter
+f = AdaptiveKalmanFilter.kinematic(n_dof=2, order=2, dt=0.04)  # (position, velocity) per joint
+r = f.filter(Y)              # r.mean (T, n); r.measurement_scale (T, m): which sensor is noisy
+```
+
+The animation above is real filter output. A robotic arm holds station beside an
+industrial crusher; when the crusher fires it **swamps the joint encoders** (×250).
+Three estimates of the arm's tip race the truth — the raw encoder, a fixed-noise
+filter that never learns, and the adaptive filter. Two things make it work, both
+of which the earlier local-level filters lacked:
+
+- **A general transition `F` — the derivative mode.** A robotic arm has momentum
+  (`x' = v`); a random walk (`F = I`) has nothing to *coast on* when a sensor burst
+  hits. A kinematic model is **~10–40×** better on position RMSE than a fixed random
+  walk. `kinematic()` builds the position/velocity(/acceleration) `F` for you.
+- **Whiteness-gated noise learning.** A single innovation is explained equally by
+  more process *or* more sensor noise, so a one-step filter cannot separate them and
+  will down-weight a good sensor to zero and diverge. The innovation *sequence* can
+  (Mehra 1970): process noise makes the filter lag (autocorrelated errors), sensor
+  noise stays white. Each process scale whitens its own lag-1 correlation; each
+  sensor scale matches the white residual — gated at the 2σ significance of the
+  estimate. Through the crusher burst above the adaptive tip estimate is **1.87×**
+  tighter than the fixed-noise filter, with no false alarm when the crusher is idle.
+
+The per-component *diagnostic* (which sensor, which dynamics mode is degrading) under
+a mixing `H` is solved separately in the Fisher eigenbasis
+([`research/multivariate-statfilter/`](research/multivariate-statfilter/SUMMARY.md));
+the known limits (simultaneous process+sensor bursts, no control input yet) are
+recorded there and in the module docstring.
 
 ### `OffsetFilter` — two series, one clock
 [`lucid/odefilter/offset.py`](lucid/odefilter/offset.py)
