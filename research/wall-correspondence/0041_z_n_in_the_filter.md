@@ -77,6 +77,15 @@ vocabulary.
 
 ## 4. The ladder is 0034's complexity requirement, read arithmetically
 
+> **Corrected by their 0136.** What follows is a **Z_N-tier**
+> result. At the SU(2) tier every level passes — nonnegative,
+> reflection positive, band 2M−1, no exceptions — so neither
+> obstruction below constrains the continuous theory. I originally
+> described this section as "the ladder recovered with no geometry."
+> That was true and beside the point: the geometry was removed and
+> the toy was kept. §1 and §2 above are continuum-native; §3 and §4
+> are not.
+
 0034 proved the amplitude algebra must be **ℂ**. Over a finite ring
 that means √−1 has to *exist* there: x² ≡ −1 (mod N) solvable.
 
@@ -85,8 +94,10 @@ Combined with §3:
 > **5, 13, 17, 25, 29, 37, …**
 
 — the sibling's admissible ladder, exactly, recovered from the
-**source ledger**, with no Hodge star, no signature argument and no
-geometry anywhere.
+**source ledger**, with no Hodge star and no signature argument.
+But also with no continuum: this reproduces the *toy's* ladder, and
+their 0136 shows the toy's ladder is not a constraint on the
+continuous theory.
 
 So on this side the two obstructions read: a level must be able to
 **count coincidences in whole numbers**, and it must be able to
