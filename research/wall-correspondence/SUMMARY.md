@@ -633,6 +633,34 @@ reclassification their 0127 called a retreat. "Why this N" becomes
 **"why this record precision"**, which lives where this side has
 instruments. Nothing here predicts 5.
 
+## Λ in the filter ([`0042`](0042_lambda_in_the_filter.md))
+
+Their only observational route rested on a mod-N mechanism their own
+audit showed to be a toy. The filter has the pieces to re-base it.
+
+**The level is gauge, the winding is not.** A global shift leaves a
+difference record *bitwise* unchanged (<1e−12 at shifts of 0.5, 3,
+100), so the absolute level carries zero Fisher information. But
+unwrap the phase record around a closed loop and the total turn comes
+back as an exact integer — **8/8**, at σ = 0.05 and 0.15.
+
+**Quantisation needs compactness, not discreteness.** On a closed
+loop, single-valuedness permits a circle-valued field 2πℤ sectors
+(measured: −1, +1, −1, −3, 0, −2) and a line-valued field exactly
+{0}. Nothing in the construction is discrete.
+
+> **Λ·V ∈ (2π/q)·ℤ**, q the charge the record winds under. The Z_N
+> formula is the q = N case. In the continuum q is the gauge group's
+> **centre** — Z₂ for SU(2) — not the lattice level. The
+> quantisation ports; the identification of its quantum with the
+> level does not, moving the prediction by a factor 2.5.
+
+**And it makes one premise load-bearing and explicit:** the integer
+exists *because the loop closes*. On an open arena there is no
+winding, and their 0080 §3 already measured that a free arena does
+not prefer Λ = 0. **Whether the universe is closed** is now the
+single assumption their falsifiable line rests on.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
