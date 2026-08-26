@@ -586,6 +586,53 @@ slope is **3.31 ± 0.06 — significantly not 2**. The spread was
 run's purpose changes from "buy precision" to "decide whether these
 per-pair slopes are finite-volume or physical."
 
+## Z_N in the filter ([`0041`](0041_z_n_in_the_filter.md))
+
+The sibling's level N is the alphabet size of a *geometric* record.
+Nothing in that description is geometric except the nouns, and every
+ingredient needed to build Z_N is already proved here.
+
+**Cyclic is forced.** Compose two resolvable phases; the filter can
+only represent the result if it is itself resolvable, else it rounds
+and loses what it paid to resolve. Evenly spaced sets are closed
+**exactly** (loss 0.000000 at N = 5, 8, 13); every unevenly spaced
+set of the same size leaks (~0.21). And a finite subset of the
+circle closed under addition **is** a finite subgroup, which **is
+Z_N**.
+
+**N is the phase channel's capacity, exponentiated.** I(θ;y)/ln N is
+1.000 while the level fits inside the record's resolution and
+collapses above it; N\* runs 21, 8, 5, 3 as σ runs 0.05 → 0.50. So
+**N = exp(I)** — the dictionary has carried "innovation capacity =
+ln N" since 0100 as an *identification*, and it is not one. It is
+what N **is**.
+
+**Even N die on coincidence counting.** The amplitude is a count, so
+its autocorrelation counts coincidences, and the ledger demands a
+profile. Summing it gives (Σc)² = N², so **Σc = N exactly** — the
+total number of frames a level carries *is* the level. Exhaustive
+search: no even level admits one; every odd level does. At N = 2 the
+failure is one equation, **2c₀c₁ = 1** — half a coincidence.
+
+**And the ladder is 0034's complexity requirement, read
+arithmetically.** 0034 proved the amplitude algebra must be ℂ; over
+a finite ring that needs √−1 ∈ Z_N, i.e. x² ≡ −1 mod N. With the
+parity constraint that gives **5, 13, 17, 25, 29, 37, …** — their
+admissible ladder exactly, recovered from the source ledger with no
+Hodge star and no geometry.
+
+> Their two obstructions read, on this side: a level must **count
+> coincidences in whole numbers**, and must be able to **hold a
+> phase**. Their Lorentzian congruence is the second one wearing a
+> metric.
+
+**For their requirement (D):** this relocates rather than answers.
+If N is a channel capacity, it is set by how precisely the world is
+recorded — a *mechanism* for the "world's data, not the law's"
+reclassification their 0127 called a retreat. "Why this N" becomes
+**"why this record precision"**, which lives where this side has
+instruments. Nothing here predicts 5.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
