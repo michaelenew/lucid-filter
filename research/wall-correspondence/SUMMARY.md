@@ -661,6 +661,33 @@ winding, and their 0080 §3 already measured that a free arena does
 not prefer Λ = 0. **Whether the universe is closed** is now the
 single assumption their falsifiable line rests on.
 
+## The Casimir coupling ([`0043`](0043_the_casimir_coupling.md))
+
+Their 0139's volatility — ξ/a swinging 10¹² across a free bin scale —
+turned out to be pointing at a single scalar.
+
+**κ = (8/3)⟨j(j+1)⟩**, dimension-weighted, exactly. Verified against
+the numeric second derivative on six profiles. The profile's shape,
+peak and width are all invisible to the coupling: **s₀ does not
+perturb the amplitude, it moves its mean Casimir.**
+
+**And the Casimir is a forgetting rate here** — the heat kernel
+decays χ_j as exp(−τ j(j+1)), measured flat across sectors to 25%. So
+**κ is a record precision**, closing a loop with 0032's G = 1/(4πp).
+
+**Spin(4) vs SU(2) is one record versus two.** Fusing the self-dual
+and anti-self-dual records gives χ_n² = χ₁+χ₃+…+χ_{2n−1}, raising κ
+by ~2.4×. The number of records fused into one amplitude is
+*exponentially* consequential — which is why their unrecorded group
+step was worth 4e21.
+
+> **Three roads, one question.** N = exp(phase-channel capacity)
+> (0041); s₀ = range/exp(frame-magnitude capacity) (here); their
+> requirement (D) = "why this record precision". The last free
+> parameter, the last underived constant, and the volatility that
+> exposed both are one open problem: **what sets the precision of the
+> world's record?**
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified
