@@ -331,8 +331,20 @@ that.** See `exploration/0029_reprofile.md`.
   SENSOR both −2.3σ), neutral on process+pot/PROCESS; the +3.4σ on BOTH is a floor artefact (the
   achievable oracle-R floor for the masked Q is ~3.04×, and the adaptive sits below it). The garrote
   regresses the robust-MAP gate (different, instantaneous role) so the MAP keeps its whiteness gate.
-  Remaining non-derived pieces: the MAP whiteness gate and the fast shed — the planned
-  observability-weighted (cross-sensor) build.
+  **Update (research 0035): the empirical-parameter pass.** Two more constants are now derived: the
+  outlier-shed floor `nis - 4` is the 2σ point of `χ²₁` (`1 + 2√2 ≈ 3.83`, exact, neutral), and the
+  process-walk gain `_Q_DRIVE = 0.2` is the **Newton whitening rate `K*/b_k`** — the process mode
+  whitens its lag-1 correlation at the sensor walk's own rate `K*`, scaled by the steady-state
+  sensitivity `b_k = −∂sig/∂μ` (from a construction-time DARE + closed-loop Lyapunov + Mehra lag-1;
+  `_whiten_gain`). For this rig `K*/b = 0.227`, i.e. 0.2 *was* the Newton gain — the derivation
+  replaces the magic number with the per-mode formula (SOR-capped at `1/4`). Sensitivity sweeps
+  (0034) showed an over-relaxation optimum at ~0.8 on BOTH, but that is SOR acceleration, not the
+  derived rate, so it is left out. **Still measured (the confound-coupled residual):** the fast shed
+  `_SHED`/`_WHITE_MIN` (a genuine onset-safety-vs-speed balance — the whiteness gate lags at a
+  process onset, so a fast shed misfires) and the process-forgetting `_Q_REVERT` (a labeled
+  timescale). These are the cross-sensor **observability-weighted** build. The robust-MAP whiteness
+  gate is built entirely from the derived `thr` (a detection ramp at the noise scale) — no measured
+  constant.
 - **Collinear process/sensor modes — the confound, measured (research 0027).** When a sensor
   reads the state the process noise enters (accelerometer on the jerk-driven acceleration), the
   two scale axes are **collinear** in innovation space (exact scale-Fisher correlation

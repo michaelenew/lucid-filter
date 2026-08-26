@@ -67,12 +67,16 @@ Two things distinguish it from :class:`WalkingVectorFilter` (the exponential tes
   regimes drop to the online floor (pot-hot **1.03x**, process+pot **1.15x** oracle, from 1.98x).
 
 **No theoretically relevant free parameters.**  The spectral floor is derived
-(``(1-phi)/(4 (SPAN_S s)^2)``); the walk gain ``K* = (1-phi)/4`` and drift ``q_mu`` are the
+(``(1-phi)/(4 (SPAN_S s)^2)``); the sensor walk gain ``K* = (1-phi)/4`` and drift ``q_mu`` are the
 finding-18 loop; the grid spacing is the Sparrow limit ``1.5 s``; the sensor share is the derived
-``1 - rho1 (S/R)`` (research 0032) with ``rho1`` garrote-denoised at its 2-sigma EMA noise floor.
-``SPAN_S`` and ``_BETA`` (the adaptation timescale) are *labeled
-budgets* -- they trade responsiveness for smoothness, they do not move the fixed point.  The
-robust measurement update is fully derived (the heavy-tail from the scale swing ``s``, no cutoff).
+``1 - rho1 (S/R)`` (research 0032) with ``rho1`` garrote-denoised at its 2-sigma EMA noise floor;
+the process-walk gain is the derived Newton whitening rate ``K*/b_k`` (research 0035, ``_whiten_
+gain``); the outlier-shed floor is the 2-sigma point of ``chi^2_1`` (``1 + 2 sqrt2``).  ``SPAN_S``
+and ``_BETA`` (the adaptation timescale) are *labeled budgets* -- they trade responsiveness for
+smoothness, they do not move the fixed point.  The robust measurement update is fully derived (the
+heavy-tail from the scale swing ``s``, no cutoff).  Remaining measured constants are the fast-shed
+speed/floor (``_SHED``, ``_WHITE_MIN``) and the process-scale forgetting ``_Q_REVERT`` -- the
+confound-coupled pieces the planned observability-weighted build is meant to retire.
 
 Open items / known warts (see ``research/multivariate-statfilter/SUMMARY.md``):
 
@@ -122,9 +126,10 @@ _LOG2PI = math.log(2.0 * math.pi)
 _GAP_FACTOR = 1.5           # gap = 1.5 s: resolution (Sparrow) spacing (finding 11)
 _SPAN_S = 3.0               # spectral-truncation coverage budget (half-span in units of s)
 _BETA = 0.02               # innovation-statistics EMA rate (labeled adaptation-timescale budget)
-_Q_DRIVE = 0.2             # process-scale whitening rate (labeled adaptation-rate budget)
-_Q_REVERT = 0.008          # process-scale reversion to baseline (an elapsed disturbance decays out)
+_Q_REVERT = 0.016          # process-scale reversion to baseline (an elapsed disturbance decays out)
 _SHED = 0.05               # outlier-shedding boost: raise a sensor scale fast on a big white outlier
+_CHI1_2SIG = 1.0 + 2.0 * math.sqrt(2.0)   # 2-sigma point of chi^2_1 (mean 1, std sqrt2): the derived
+#                                          significant-outlier floor for nis = e^2/S (was 4.0)
 _WHITE_MIN = 0.90          # both fire only when a channel is CLEARLY white (a sensor failure, not
 #                            a partly-correlated process disturbance -- protects a noisy accel in BOTH)
 _RIDGE = 1e-9
@@ -222,6 +227,7 @@ class AdaptiveKalmanFilter:
         self._Kstar = (1.0 - self.phi) / 4.0
         self._floor = (1.0 - self.phi) / (4.0 * (_SPAN_S * self.s) ** 2)
         self._Ichar = self._steady_fisher()
+        self._qgain = self._whiten_gain()                 # derived per-mode whitening gain (0035)
         # ACTIVATE structurally-observable axes -- NOT by the delocalisation floor, and NOT by a
         # threshold relative to the loudest axis (a quiet process mode next to a loud sensor would
         # be frozen and then coast rigidly on a wrong velocity when the sensor is down-weighted --
@@ -354,6 +360,52 @@ class AdaptiveKalmanFilter:
         return np.array([0.5 * np.trace(Si @ self._dS(z, k) @ Si @ self._dS(z, k))
                          for k in range(self.D)]) + 1e-12
 
+    def _gain_for(self, Q, R0):
+        """Steady-state Kalman gain the filter uses when it ASSUMES process cov Q."""
+        H, F, n = self.H, self.F, self.n
+        P = np.eye(n) * (self.lam.max() + self.rho.max())
+        for _ in range(500):
+            Pp = F @ P @ F.T + Q
+            K = Pp @ H.T @ np.linalg.inv(H @ Pp @ H.T + R0)
+            P = Pp - K @ H @ Pp
+        Pp = F @ P @ F.T + Q
+        return Pp @ H.T @ np.linalg.inv(H @ Pp @ H.T + R0)
+
+    def _whiten_gain(self) -> np.ndarray:
+        """Per process eigenmode, the DERIVED whitening gain K*/b_k (research 0035) that replaces
+        the empirical _Q_DRIVE.  b_k = -d sig_k/d mu_k is the steady-state sensitivity of the mode's
+        lag-1 innovation autocorrelation to its OWN assumed log-scale: with the gain from the assumed
+        scale but the true process cov Q0, the actual a-priori error cov M solves the closed-loop
+        Lyapunov M = A M A^T + F K R K^T F^T + Q0 (A = F(I-KH)), the lag-1 innovation autocovariance
+        is the Mehra C1 = H A M H^T - H F K R (zero at the optimum), and sig_k its mode-direction
+        autocorrelation.  Then the process walk whitens at the SAME Newton rate K* as the sensor
+        walk: mu += (K*/b_k) sign(sig)(|sig| - thr).  A finite difference in mu_k about the optimum."""
+        H, F, n, m = self.H, self.F, self.n, self.m
+        R0 = self._R_of(np.zeros(m)); Q0 = self._Q_of(np.zeros(n)); I = np.eye(n)
+        d = 0.5
+        B_MIN = 4.0 * self._Kstar          # cap the Newton gain at K*/B_MIN = 1/4: a mode that barely
+        #                                    whitens (small b) is not over-relaxed past the SOR limit
+        g = np.zeros(n)                     # default: structurally unobservable modes stay frozen
+
+        def sig_k(mu_k, k):
+            mu = np.zeros(n); mu[k] = mu_k
+            K = self._gain_for(self._Q_of(mu), R0)
+            A = F @ (I - K @ H); W = F @ K @ R0 @ K.T @ F.T + Q0
+            M = I.copy()
+            for _ in range(2000):
+                M = A @ M @ A.T + W
+            C1 = H @ A @ M @ H.T - H @ F @ K @ R0
+            hv = self.HV[:, k]
+            num = float(hv @ (0.5 * (C1 + C1.T)) @ hv)
+            return num / (float(hv @ (H @ M @ H.T + R0) @ hv) + 1e-12)
+
+        for k in range(n):
+            if self.lam[k] <= 1e-9 * self.lam.max() or np.linalg.norm(self.HV[:, k]) < 1e-8:
+                continue                                   # structurally unobservable -> frozen
+            b = -(sig_k(d, k) - sig_k(-d, k)) / (2.0 * d)
+            g[k] = self._Kstar / max(b, B_MIN)             # Newton whitening gain, SOR-capped
+        return g
+
     # ------------------------------------------------------------------- streaming
     def reset(self, mean=None, scale=None) -> "AdaptiveKalmanFilter":
         self._m = None if mean is None else np.asarray(mean, float)
@@ -424,7 +476,11 @@ class AdaptiveKalmanFilter:
                 c0k = float(hv @ self._C0 @ hv) + 1e-12
                 sig = float(hv @ C1s @ hv) / c0k                       # lag-1 autocorr in mode k's direction
                 excess = max(abs(sig) - thr, 0.0)
-                self.mu[k] += float(np.clip(_Q_DRIVE * np.sign(sig) * excess, -self.gap, self.gap))
+                # DERIVED whitening gain K*/b_k (research 0035): the process mode whitens its lag-1
+                # correlation at the SAME Newton rate K* as the sensor walk, scaled by the mode's
+                # steady-state sensitivity b_k = -d sig/d mu.  Replaces the empirical _Q_DRIVE.
+                self.mu[k] += float(np.clip(self._qgain[k] * np.sign(sig) * excess,
+                                            -self.gap, self.gap))
                 self.mu[k] *= (1.0 - _Q_REVERT)                        # mild reversion to baseline so an
                 #                                                        elapsed disturbance decays out
             else:                                                      # sensor: match the WHITE residual variance
@@ -451,7 +507,7 @@ class AdaptiveKalmanFilter:
                     # (research 0030); the whiteness floor keeps a (partly-correlated) process
                     # disturbance from triggering it.
                     nis = e[i] ** 2 / (Sdiag[i] + 1e-12)
-                    rate = min(1.0, self._Kstar * (1.0 + _SHED * max(nis - 4.0, 0.0)))
+                    rate = min(1.0, self._Kstar * (1.0 + _SHED * max(nis - _CHI1_2SIG, 0.0)))
                 self.mu[k] += float(np.clip(rate * wg * step, -self.gap, self.gap))
         self.mu[:n] = np.clip(self.mu[:n], -8.0, 20.0)
         self.mu[n:] = np.clip(self.mu[n:], -8.0, 20.0)
