@@ -296,9 +296,18 @@ that.** See `exploration/0029_reprofile.md`.
   fired only above a whiteness floor so a process disturbance never triggers them. Result: the
   failing-absolute-sensor regimes drop **to the online floor** — pot-hot and process+pot (the old
   3.72×) both **~0.94× oracle**, from 1.98× — and the sensor-burst / recovery phases improve too.
-  Residual tradeoff: the BOTH phase (a *dynamic* sensor noisy while process is active) costs ~11%
-  more (partly-white channel → occasional over-rejection); an observability-weighted gate is the
+  Residual tradeoff: the BOTH phase (a *dynamic* sensor noisy while process is active) costs more
+  (partly-white channel → occasional over-rejection); an observability-weighted gate is the
   refinement.
+  **Update (research 0031): the robust magnitude is now DERIVED, not the 4σ cutoff.** The sensor
+  noise scale is uncertain, so marginalising the correction over it is a heavy-tail; the state
+  MAPs each sensor's scale for this innovation (`η−μ = ½s²(1−c/S)(e²/S−1)`) — smooth, no threshold,
+  no branch, the only constant the class swing `s`. Hot regimes stay at the floor (pot-hot 1.03×,
+  process+pot 1.15×). The *targeting* (whiteness/shed) is the remaining non-derived piece: the
+  smooth whiteness lets the MAP fire partially on the partly-white accel in BOTH (~1.7×), and the
+  fast shed still uses a hard whiteness floor. Both are the collinear confound during fast
+  reaction — a decisive white-vs-correlated call — best resolved by the **observability-weighted
+  gate** (protect robustly only sensors whose loss collapses observability), the planned build.
 - **Collinear process/sensor modes — the confound, measured (research 0027).** When a sensor
   reads the state the process noise enters (accelerometer on the jerk-driven acceleration), the
   two scale axes are **collinear** in innovation space (exact scale-Fisher correlation
