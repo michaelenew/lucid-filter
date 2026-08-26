@@ -47,36 +47,37 @@ Two things distinguish it from :class:`WalkingVectorFilter` (the exponential tes
   significance of the innovation-correlation EMA, tied to the adaptation timescale, not a
   separate knob.  Cost per step is ``O(r m^2)`` -- polynomial, no grid.
 
-* **Robust outlier shedding (the hot regimes).**  The expensive extreme is a failing *absolute*
-  reference: when a bad potentiometer degrades further, position observability collapses (an
-  accelerometer only integrates to a *drifting* position), and the slow scale walk trusts the
-  failing sensor for its first ~1/K* steps -- a spike the drifting state then carries (research
-  0029/0030, adaptive-vs-oracle 1.98x).  Two additions shed it fast: an **instantaneous robust
-  gate** inflates a sensor's ``R`` for the current correction when its normalised innovation is a
-  large outlier on a *clearly white* channel (a sensor failure, not a partly-correlated process
-  disturbance), protecting the state at the first corrupted sample; and an **outlier-boosted
-  raise-rate** ramps that sensor's scale in a few steps rather than ~1/K*.  Both fire only above
-  the whiteness floor, so a process disturbance never triggers them.  Result: the failing-
-  absolute-sensor regimes drop to the online floor (pot-hot and process+pot **~0.94x** oracle,
-  from 1.98x), and the sensor-burst / recovery phases also improve.
+* **Robust measurement update, derived (the hot regimes).**  The expensive extreme is a failing
+  *absolute* reference: when a bad potentiometer degrades further, position observability
+  collapses (an accelerometer only integrates to a *drifting* position), and the walked scale
+  trusts the failing sensor for its first steps -- a spike the drifting state then carries
+  (research 0029/0030, adaptive-vs-oracle 1.98x).  The measurement noise scale is *uncertain*
+  (it breathes), so marginalising the Gaussian correction over that uncertainty is a
+  **heavy-tail**: the state correction MAPs each sensor's log-scale for THIS innovation (prior =
+  its walked scale, spread the class swing ``s^2``), inflating ``R`` smoothly on an outlier with
+  **no threshold and no branch** -- the 4-sigma cutoff of the earlier gate is now the derived
+  heavy-tail (research 0031, ``_robust_eta``).  A fast persistent shed keeps the walked scale
+  current so the MAP does not over-fire on a sustained burst.  Result: the failing-absolute-sensor
+  regimes drop to the online floor (pot-hot **1.03x**, process+pot **1.15x** oracle, from 1.98x).
 
 **No theoretically relevant free parameters.**  The spectral floor is derived
 (``(1-phi)/(4 (SPAN_S s)^2)``); the walk gain ``K* = (1-phi)/4`` and drift ``q_mu`` are the
 finding-18 loop; the grid spacing is the Sparrow limit ``1.5 s``; the gate threshold is the
 2-sigma EMA significance.  ``SPAN_S`` and ``_BETA`` (the adaptation timescale) are *labeled
 budgets* -- they trade responsiveness for smoothness, they do not move the fixed point.  The
-robustness thresholds are labeled too: ``_ROBUST_CHI`` is a 4-sigma outlier cutoff, ``_WHITE_MIN``
-the whiteness confidence to call a large innovation a sensor failure, ``_SHED`` the shed rate.
+robust measurement update is fully derived (the heavy-tail from the scale swing ``s``, no cutoff).
 
 Open items / known warts (see ``research/multivariate-statfilter/SUMMARY.md``):
 
-* **BOTH-regime tradeoff (research 0030).**  When a *dynamic* sensor (accelerometer) is noisy AND
-  a process disturbance is active at once, its channel is only partly white, so the robust gate
-  occasionally over-rejects it -- that phase costs ~11% more than before the shedding was added
-  (1.43 -> 1.59x oracle), the price of solving the far larger absolute-sensor regime (1.98 ->
-  0.94x).  Distinguishing "sensor failing" from "noisy-but-useful under process" on a
-  process-coupled sensor is the collinear confound again; an observability-weighted gate (protect
-  only sensors whose loss collapses observability) is the planned refinement.
+* **The fast shed is still empirical, and the BOTH regime.**  The persistent-scale *shed* that
+  keeps the walked scale current (so the derived robust MAP does not over-fire) still uses an
+  outlier-rate boost and a hard whiteness floor -- the last non-derived pieces.  And when a
+  *dynamic* sensor is noisy AND a process disturbance is active at once, the channel is only
+  partly white, so the smooth whiteness lets the robust MAP fire partially and over-reject it
+  (BOTH ~1.7x oracle).  Distinguishing "sensor failing" from "noisy-but-useful under process" is
+  the collinear confound; the whiteness discriminant during fast reaction is inherently a
+  decision, and an **observability-weighted gate** (protect robustly only sensors whose loss
+  collapses observability) is the planned way to make it both smooth and confound-safe.
 
 * **Collinear process/sensor modes (measured, research 0027).**  When a sensor reads the very
   state the process noise enters (an accelerometer on the jerk-driven acceleration), the two
@@ -115,7 +116,6 @@ _BETA = 0.02               # innovation-statistics EMA rate (labeled adaptation-
 _Q_DRIVE = 0.2             # process-scale whitening rate (labeled adaptation-rate budget)
 _Q_REVERT = 0.008          # process-scale reversion to baseline (an elapsed disturbance decays out)
 _SHED = 0.05               # outlier-shedding boost: raise a sensor scale fast on a big white outlier
-_ROBUST_CHI = 16.0         # per-step robust gate: inflate R above a 4-sigma white innovation outlier
 _WHITE_MIN = 0.90          # both fire only when a channel is CLEARLY white (a sensor failure, not
 #                            a partly-correlated process disturbance -- protects a noisy accel in BOTH)
 _RIDGE = 1e-9
@@ -296,6 +296,32 @@ class AdaptiveKalmanFilter:
     def _R_of(self, eta):
         return np.diag(self.rho * np.exp(np.clip(eta, -60, 60)))
 
+    @staticmethod
+    def _robust_eta(ei2, c, rho, mu, sig2):
+        """MAP of a sensor log-scale eta given this innovation, prior N(mu, sig2).
+
+        The measurement variance R = rho e^eta is uncertain (its scale breathes); marginalising
+        the Gaussian likelihood over that uncertainty is heavy-tailed, so a large innovation is
+        partly attributed to a larger scale -- inflating R and down-weighting the sample SMOOTHLY,
+        with no threshold.  With innovation variance S(eta) = c + rho e^eta (c = the state's share
+        (H Pp H^T)_ii), the MAP condition L'(eta)=0 is
+            eta - mu = 1/2 sig2 (1 - c/S)(ei2/S - 1),
+        signed (raises on ei2>S, lowers on ei2<S -- no branch), attributing the excess by the
+        sensor's own share (1 - c/S) of the innovation variance.  sig2 is the class scale-swing
+        s^2 (no new knob).  Solved by a few damped Newton steps.  This REPLACES the 4-sigma robust
+        gate (research 0031): the cutoff and its hinge become the derived heavy-tail.
+        """
+        if sig2 < 1e-12:
+            return mu
+        eta = mu
+        for _ in range(6):
+            S = c + rho * math.exp(min(max(eta, -60.0), 60.0))
+            A = 1.0 - c / S; B = ei2 / S - 1.0
+            Lp = 0.5 * A * B - (eta - mu) / sig2
+            Lpp = 0.5 * ((S - c) / S ** 2) * (c * B - A * ei2) - 1.0 / sig2
+            eta -= max(-2.0, min(2.0, Lp / Lpp))
+        return eta
+
     def _dS(self, scale, k):
         """dS/dpsi_k (M x M): how the innovation covariance moves with log-scale k."""
         if k < self.n:
@@ -418,21 +444,20 @@ class AdaptiveKalmanFilter:
         # rebuild the state prior at the walked scale
         Pp = F @ Ppost @ F.T + self._Q_of(self.mu[:n])
         Rw = self._R_of(self.mu[n:])
-        # ---- instantaneous robust gate (research 0030): protect the STATE from a white outlier
-        # at the FIRST corrupted sample, before the scale has ramped.  A large per-sensor
-        # normalised innovation e_i^2/S_ii, on a channel that is white (wg~1, so not a process
-        # disturbance), inflates that sensor's R for THIS correction -- so a failing absolute
-        # reference can't inject a spike the drifting state then carries.  Dormant in normal
-        # regimes (nis~1 -> factor 1).
-        Hpp = H @ Pp @ H.T; Svar = np.diag(Hpp) + np.diag(Rw)
-        nis = e ** 2 / (Svar + 1e-12)
+        # ---- robust measurement update (research 0031): protect the STATE from an outlier at the
+        # FIRST corrupted sample, before the walked scale has ramped.  Instead of a 4-sigma cutoff,
+        # MAP each sensor's scale for THIS correction given its innovation (prior = the walked scale
+        # mu_i with spread s^2, tightened by the whiteness wg so a correlated process disturbance
+        # can't trigger it).  A smooth, derived heavy-tail -- no threshold, no branch.
+        Hpp = H @ Pp @ H.T; Hd = np.diag(Hpp)
         for a, k in enumerate(self.active):
             if k >= n:
                 i = k - n
                 rho1_i = dC1[i] / (dC0[i] + 1e-12)
                 wgi = float(np.clip(1.0 - (rho1_i - thr) / thr, 0.0, 1.0))
-                if wgi > _WHITE_MIN:                                  # inflate R only on a CLEARLY
-                    Rw[i, i] *= 1.0 + max(nis[i] - _ROBUST_CHI, 0.0)  # white outlier (sensor failure)
+                eta_r = self._robust_eta(float(e[i] ** 2), float(Hd[i]), float(self.rho[i]),
+                                         float(self.mu[n + i]), self.s ** 2 * wgi)
+                Rw[i, i] = self.rho[i] * math.exp(min(max(eta_r, -60.0), 60.0))
         S = Hpp + Rw + _RIDGE * np.eye(m)
         Si = np.linalg.inv(S)
 
