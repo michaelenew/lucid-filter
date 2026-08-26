@@ -276,6 +276,22 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
 
 ## Open items
 
+**Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
+were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in
+idealized vs realistic regimes shows the triage mostly **holds** — but the *critical regime* was
+mis-framed. Fixed `V`, diagonal `R`, large-`n`, and static drift cost ≈0 for state even in
+coupled / correlated / high-dimensional / realistic regimes (the cost is also **flat with
+dimension** — a scalar arm shows the same bursty cost, so low-dim domains hid nothing).
+**Deprioritize those.** The realistic-regime cost is entirely **adaptation lag under a burst**,
+and its expensive facet is **not** the collinear confound (cheap for state, 1.14×) but
+**adaptation lag when the *absolute* position sensor degrades** (pot-hot 1.86×) — position
+observability is fragile, and the filter briefly trusts a sensor it should discard. **Promote
+that.** See `exploration/0029_reprofile.md`.
+
+- **[PROMOTED] Adaptation lag on a degrading absolute sensor.** The dominant realistic-regime
+  cost (1.86×): when the bad potentiometer worsens, position observability collapses (the
+  accelerometer only integrates to a drifting position) and the filter lags in shedding it. Fix:
+  faster / observability-weighted adaptation of the absolute sensor's noise scale.
 - **Collinear process/sensor modes — the confound, measured (research 0027).** When a sensor
   reads the state the process noise enters (accelerometer on the jerk-driven acceleration), the
   two scale axes are **collinear** in innovation space (exact scale-Fisher correlation
