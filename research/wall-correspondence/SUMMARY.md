@@ -757,6 +757,17 @@ relative error the test calls a genuinely screened m = 0.5 channel
 massless **86.5%** of the time; at 3% it never does. They need ~3% at
 r = 1..4, which is what their 24x estimator is for.
 
+**Corrected by the port (their 0143).** The 2-nat criterion as
+specified is **not safe**: applied to a channel that is provably
+massless (uniform λ gives −2.3e−13 exactly) it *rejected* it at 3.13
+nats, because a Yukawa fit on a periodic box absorbs short-distance
+structure and wrapping into a fake mass. The instrument that works is
+a **same-volume massless reference** sharing the same zero-mode
+removal and projection — ratio 1.0722, spread 1.68% over a factor 15
+in r. And any ratio test needs a stated window rule, since removing
+the zero mode forces a zero crossing. The 3% precision figure stands;
+the comparison it was attached to does not.
+
 **And the scope correction.** The masslessness in their 0125 comes
 from a uniform λ shifting ln det by exactly a constant — a property of
 **matter's** determinant. A uniform λ on the gauge weight just

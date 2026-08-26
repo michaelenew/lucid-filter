@@ -95,3 +95,42 @@ free energy is not linear in β.
 > So item 3 is not "insert an operator we already have". It is
 > **put matter on the lattice.** That is the honest scope, and it is
 > better to know before the run than after it.
+
+---
+
+## Correction, from the port (their 0143)
+
+The port ran, and **s2's acceptance test as specified here is not
+safe.** Two things it got wrong, both found by using it:
+
+**1. A Yukawa-vs-1/r fit on a periodic box is not a test of
+masslessness.** Applied to a channel that is *provably* massless — a
+uniform λ gives exactly zero, −2.3e−13, in their real gauge
+background — the criterion **rejected** it, at 3.13 nats against the
+2-nat threshold, with a fitted mass of 0.100. The fit absorbs
+short-distance structure at one end of the window and periodic
+wrapping at the other, and reports the sum as a mass.
+
+Diagnosing it took two more passes. At a fixed window the fitted mass
+**plateaus** (0.210 → 0.095 over L = 16…64) instead of falling as
+1/L, so it is not wrapping alone; moving the window outward at fixed L
+gave 0.095 → 0.035 → 0.040 → 0.105, inconclusive, because the outer
+window re-enters the wrap region.
+
+**The instrument that works** is a **same-volume massless reference**:
+build the static response of an exactly massless lattice Laplacian
+`1/k̂²` on the same volume, with the same zero-mode removal and the
+same projection, and take the ratio. Every artifact cancels. Result:
+ratio 1.0722, spread **1.68%**, across a factor 15 in r.
+
+**2. Any ratio test needs a stated window rule.** Removing the zero
+mode forces the profile's 3D sum to vanish, so both curves cross zero
+at large r and the ratio there is undefined — it read 1.92 at r = 28
+and 0.96 at r = 24 purely from that. The rule used: keep r where the
+reference is still above 2% of its r = 1 value.
+
+> The lesson generalises past this port: **a fit that can absorb an
+> artifact into a physical parameter will do so.** Prefer a reference
+> that shares the artifact over a model that has to represent it.
+> s2's 3%-precision figure stands; the *comparison* it was attached
+> to does not.
