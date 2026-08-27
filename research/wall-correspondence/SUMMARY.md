@@ -337,6 +337,462 @@ generator ⟹ continuous time. *A count-generated record is one you
 can always ask "what happened in between"* — the founding premise
 read backwards.
 
+## The two phases ([`0031`](0031_two_phases.md))
+
+A conflation this workstream had been carrying, separated inside one
+generator. **The factorisation phase is gauge even dynamically**:
+re-phasing each Kraus operator changes the amplitude at every step
+and leaves the record *bitwise identical* (code differs 1.1e−16,
+detector advantage 0.06136 vs 0.06136). **The relative phase is
+physical**: a phase *between* interfering components moves the
+record (10–19% of bits) and the measurable advantage. So the source
+ledger's observable content is **not a field attached to the
+weight** — all factorisations agree on everything — it is the
+relative phase between alternatives that later **compose**, the same
+structure the order channel (0009) measures. *The source ledger is a
+statement about composition, not about a field.*
+
+## The matter coupling and the two channels (0032–0033)
+
+[`0032`](0032_the_matter_coupling.md): **the stress tensor is the
+Fisher information matrix.** Its trace is exactly the scalar mass
+source 0010/0019 have used (verified identically); its traceless
+part is anisotropic stress the scalar theory cannot carry — *the
+mass we have been using is the trace of a tensor we had not written
+down*. **Conservation is information continuity** (drift 0.0e+00,
+per-node change = net flux to 3.6e−15) — that is ∇·T = 0. And with
+the learning operator of 0019, **G_Newton = 1/(4πp)** with p the
+record precision: the matter coupling is closed as a formula, and it
+turns direct G into one measurement — the sibling's G = 5.165 a²
+*requires* p = 0.0154 for the gravity-carrying channel, ~865× softer
+than the plaquette weight.
+[`0033`](0033_two_channels.md) **corrects 0031**: composition has
+two independent layers. Record A (classical nonabelian) carries
+0.0545 nats/triple of order information and no interference; record
+B (quantum abelian) carries 0.3020 nats/trial of interference and
+*exactly zero* order information (swapping paths is bitwise
+identical). Each fires one detector. **The source ledger's
+observable content is interference specifically** — the order
+channel is a record-ledger phenomenon that merely requires
+nonabelian structure.
+
+## Why complex ([`0034`](0034_why_complex.md))
+
+The composition rule, closed — and the sibling's measurement of the
+number 0032 predicted.
+
+**The premise is already proved.** Concatenating segments *adds*
+both the code length (their 0095: the action IS a prequential code
+length) and the phase (the source ledger's additivity). One object
+carries both, so composition must be associative, unital and
+**norm-multiplicative — moduli multiply because code lengths add**.
+That is Frobenius's hypothesis, and its answer is the trichotomy
+**ℝ, ℂ, ℍ** (verified: each satisfies the constraints to ~1e−28; a
+40-restart search at n = 3 finds nothing, floor 2.4e+1). The one
+property separating them is commutativity.
+
+**The filter measures which one, and both exclusions were already
+in 0033.**
+
+| | mechanism | cost | verdict |
+|---|---|---|---|
+| ℝ | unit group {±1} is discrete ⇒ a continuous additive phase is constant ⇒ best predictor is a constant, and that constant *is* the incoherent model (E_δ[p_coh] = (a₁²+a₂²)/(a₁+a₂)², exact to 1e−9) | **0.302 nats/trial** | excluded |
+| ℍ | unit group S³ is nonabelian ⇒ two influences composed in either order interfere differently against a reference | **0.019 nats/trial** of order leaking into the interference channel; record has exactly 0 | excluded |
+| ℂ | commutative, continuous phase | leak 1.8e−15 (machine zero) | survives |
+
+A sub-result: the ℍ leak vanishes *identically* against a real
+reference, because Re(ab) = Re(ba) — it is visible only through a
+reference carrying a phase of its own.
+
+> **Amplitudes compose by complex multiplication because the record
+> carries two additive ledgers, turns its phase continuously, and
+> shows no order in the channel where the phases meet.** Every
+> clause is a measurement this program already made; none is a
+> postulate about Hilbert space.
+
+**Corollary — where S³ belongs.** The S³ this filter adopted for
+noncommutativity (0089) is a **record-ledger** structure, where 0009
+and 0033 put it. Putting it in the *amplitude* would forge the
+0.019 nats/trial order signal the record does not have. The two
+channels of 0033 are not merely independent: they are
+*algebraically constrained to be different structures*.
+
+**What is left of the source ledger** is one step — why alternatives
+are **summed** (the linearity of marginalising unresolved paths),
+which 0034 assumed rather than measured.
+
+**And the sibling measured p** (their 0125). Integrating out a
+massless lattice scalar in the trust background w = e^{2λ} gives
+**p = 0.15493 per field** against 0032's target of 0.0154: the
+formula G = 1/(4πp) is off by **20×**, and in the unexpected
+direction — the gravity channel is too *stiff*. Two things came back
+with it. The induced quadratic form is PSD with kernel exactly the
+constants, so **0019's massless mode is a theorem on their side, not
+an assumption**. And the gap is field-count independent
+(G_ent/G_ind = πp/α = 20.11 for any N), so it is a pure number, not
+a bookkeeping error. That number is now the entire open content of
+direct G.
+
+## Why summed ([`0035`](0035_why_summed.md))
+
+The source ledger's last clause, closed — and the honest finding is
+that the *obvious* argument does not work.
+
+**The structural axioms do not pin addition.** Prepending a common
+segment forces ℂ-homogeneity; the record forces commutativity,
+associativity and an identity. The power family (aⁿ+bⁿ)^{1/n}
+satisfies **every one, for every n** (residuals ≤ 4e−15). What kills
+it is 0034's algebra: on ℂ the family is multivalued — continued
+around its branch point, √(1+t²) returns with monodromy **−1.000
+exactly**. Only n = 1 is single-valued. (That no *more exotic*
+solution exists is not established.)
+
+**The operational separator is I₃, and it is an experiment.** A
+three-alternative record, all seven configurations, 400k trials
+each: **I₃ = +0.00124 ± 0.00130 — 0.95σ from zero**, against a
+degree-3 rule's prediction **31σ away**. The triple-slit
+measurement, run in the filter.
+
+**And I₃ = 0 is the square.** Sorkin's decoherence functional,
+reconstructed from the **single and pair records only**: Hermitian
+to 0.0e+00, rank 1 to sampling error (2.6e−3 against ~4e−4 noise)
+and rank 1 *exactly* with the noise removed (4.9e−17) — so
+D_ij = z̄_i z_j and P = |Σz|². It predicts the triple record
+(0.057688 vs 0.058928 observed). There is no independent three-way
+content to encode.
+
+The sibling then closed the degree by elimination (their 0126): the
+band budget gives B = 11, a degree-d weight needs d | (B−1) = 10,
+and of {1,2,5,10} only d = 2 survives — d = 1 has no interference at
+all (0033's 0.302 nats), d = 5 makes the weight negative, d = 10
+carries third-order interference the record lacks.
+
+> **The source ledger is closed.** Its content is *interference*
+> (0033), composed by *complex multiplication* because two ledgers
+> add and the record is order-blind (0034), and *summed* over
+> alternatives because the budget makes the weight a square
+> (0035 + their 0126). Not one clause is a postulate about Hilbert
+> space.
+
+What remains in the program is no longer a postulate — it is a
+**number**: the factor 20 between the two routes to G (their 0125).
+
+## The continuous filter ([`0036`](0036_the_continuous_filter.md))
+
+The sibling's last open conjunct is **continuity**, and by the
+isomorphism programme this is where to solve it first: replace a
+discrete transition **matrix** with a continuous transition
+**integral transform**, keep the inputs discrete.
+
+**Half of it was already done and not labelled as continuity.**
+0030's embedding result — a record's dynamics embeds in continuous
+time iff T = exp(−H) — *is* the time direction being continuous
+underneath.
+
+**And 0030 has a gap.** A real H is not enough for a *history*: −H
+must also be a rate matrix. Of 789 random 3-state records passing
+0030's test, only **251 (31.8%)** have one. A counterexample
+reproduces T to 7e−16 yet its half-step exp(Q/2) carries a negative
+entry (−0.055) — there is no distribution for "what happened
+halfway". So **counting buys the generator, not yet the history**,
+and their "counting buys time" should carry the same asterisk.
+
+**The state direction**: discretising an OU record at spacing h with
+dt = h²/2, the transition transform's generator converges to
+(σ²/2)∂² − θx∂ (error 0.0438 → 0.0022), and at a fixed physical step
+the kernel is local (weight within k sites: 0.52, 0.92, 0.9998 for
+k = 2, 5, 10). The limit is a field theory, not a nonlocal one.
+
+**The criterion — and the measurement corrected the expectation.** I
+expected a bad refinement to diverge. It does not: holding the
+dynamics fixed in *grid* units converges perfectly well, to **white
+noise**. Both regimes converge, to different limits, with a gap of
+**0.888 nats/observation**.
+
+> **The continuum limit exists iff the prequential code length per
+> unit physical time converges to a NONTRIVIAL limit under
+> refinement.** Renormalisability as an operational statement, in
+> the program's own currency, needing no continuum manifold — only a
+> sequence of discrete models and a score.
+
+Triviality, not blow-up, is the real failure mode — which is exactly
+the lattice's failure mode off criticality. What it demands of the
+physics is ξ/a → ∞, and a theory with a fixed coupling and no dial
+gets that only by accident or by asymptotic freedom. Their 0115
+measures it: **ξ/a ~ 10¹⁷ on one branch, ~10³ on the other.**
+
+## The continuous observable ([`0037`](0037_the_continuous_observable.md))
+
+0036 made state and time continuous; what stayed discrete was the
+**observation**. Making it continuous — an arbitrary kernel against
+the field — paid off immediately, because the sibling's 0129 failed
+for want of exactly one.
+
+**The fully continuous filter**: the discrete recursion converges to
+Kalman–Bucy at first order in dt, so continuous observation is a
+*limit*, not a redefinition.
+
+**Which kernel**: in d = 4 with ξ = 4 and white UV noise, smearing at
+w ~ r/2 gives **62× the signal-to-noise** of a local readout. But
+each w is a **different observable** — the value moves by far more
+than its error across the range — so the kernel buys *statistics*,
+and comparisons must be at matched w against a matched baseline.
+
+**A kernel can forge the answer.** On a field isotropic by
+construction, a cubic kernel manufactures +0.1556 ± 0.0036. A radial
+Gaussian manufactures +0.0204 ± 0.0006 — **33σ from zero**. I wrote
+"a radial kernel injects none" before measuring; false. It makes the
+artefact small instead of dominant, and **a kinematic baseline must
+be subtracted either way.**
+
+> **An observable is a choice of observation kernel**, made by
+> maximising information about the mode of interest *subject to not
+> contaminating it*. Physics calls the first half "improving the
+> overlap" and leaves the second half implicit — and the second half
+> is where the errors live.
+
+**Ported and confirmed** (their 0130): the smeared operator took
+their anisotropy measurement from 0.1σ to **49σ**. It also caught
+them computing the baseline at the wrong volume. The statistical
+obstruction is solved; a finite-volume one replaced it.
+
+## The acceptance criterion ([`0038`](0038_the_acceptance_criterion.md))
+
+The program's own prequential principle, turned on its own practice.
+A prequential score requires the model committed *before* the data;
+**an acceptance criterion is part of the model**, so choosing it
+after seeing the spread is fitting on the test set. Measured rather
+than asserted:
+
+| | false positive (no common exponent) | power at σ = 0.4 |
+|---|---|---|
+| mean-based test (`\|mean − 2\| < 0.8`) | **0.512** | 1.000 |
+| per-item consistency test | **0.005** | 0.933 |
+
+**A factor 99 in false positives.** The sibling's 0121 used the
+mean-based test and it passed on exponents of −0.36, 1.02, 4.15,
+4.98.
+
+And the power table gives the design constraint: the honest test
+keeps its power only while per-item scatter stays below ~0.5, so
+**size the measurement first** — past that the run is wasted before
+it starts, which is knowable in advance.
+
+**Applied immediately, it caught a mis-diagnosis.** Their 0132
+blamed the L = 20 failure on lever arm; the statistical slope errors
+were ±0.06, ±0.68, ±0.49 against a spread of −0.36 to 4.98, and one
+slope is **3.31 ± 0.06 — significantly not 2**. The spread was
+*systematic*, so more lever arm cannot fix it, and the follow-up
+run's purpose changes from "buy precision" to "decide whether these
+per-pair slopes are finite-volume or physical."
+
+## Z_N in the filter ([`0041`](0041_z_n_in_the_filter.md))
+
+The sibling's level N is the alphabet size of a *geometric* record.
+Nothing in that description is geometric except the nouns, and every
+ingredient needed to build Z_N is already proved here.
+
+**Cyclic is forced.** Compose two resolvable phases; the filter can
+only represent the result if it is itself resolvable, else it rounds
+and loses what it paid to resolve. Evenly spaced sets are closed
+**exactly** (loss 0.000000 at N = 5, 8, 13); every unevenly spaced
+set of the same size leaks (~0.21). And a finite subset of the
+circle closed under addition **is** a finite subgroup, which **is
+Z_N**.
+
+**N is the phase channel's capacity, exponentiated.** I(θ;y)/ln N is
+1.000 while the level fits inside the record's resolution and
+collapses above it; N\* runs 21, 8, 5, 3 as σ runs 0.05 → 0.50. So
+**N = exp(I)** — the dictionary has carried "innovation capacity =
+ln N" since 0100 as an *identification*, and it is not one. It is
+what N **is**.
+
+**Even N die on coincidence counting.** The amplitude is a count, so
+its autocorrelation counts coincidences, and the ledger demands a
+profile. Summing it gives (Σc)² = N², so **Σc = N exactly** — the
+total number of frames a level carries *is* the level. Exhaustive
+search: no even level admits one; every odd level does. At N = 2 the
+failure is one equation, **2c₀c₁ = 1** — half a coincidence.
+
+**And the ladder is 0034's complexity requirement, read
+arithmetically.** 0034 proved the amplitude algebra must be ℂ; over
+a finite ring that needs √−1 ∈ Z_N, i.e. x² ≡ −1 mod N. With the
+parity constraint that gives **5, 13, 17, 25, 29, 37, …** — their
+admissible ladder exactly, recovered from the source ledger with no
+Hodge star and no geometry.
+
+> Their two obstructions read, on this side: a level must **count
+> coincidences in whole numbers**, and must be able to **hold a
+> phase**. Their Lorentzian congruence is the second one wearing a
+> metric.
+
+**For their requirement (D):** this relocates rather than answers.
+If N is a channel capacity, it is set by how precisely the world is
+recorded — a *mechanism* for the "world's data, not the law's"
+reclassification their 0127 called a retreat. "Why this N" becomes
+**"why this record precision"**, which lives where this side has
+instruments. Nothing here predicts 5.
+
+## Λ in the filter ([`0042`](0042_lambda_in_the_filter.md))
+
+Their only observational route rested on a mod-N mechanism their own
+audit showed to be a toy. The filter has the pieces to re-base it.
+
+**The level is gauge, the winding is not.** A global shift leaves a
+difference record *bitwise* unchanged (<1e−12 at shifts of 0.5, 3,
+100), so the absolute level carries zero Fisher information. But
+unwrap the phase record around a closed loop and the total turn comes
+back as an exact integer — **8/8**, at σ = 0.05 and 0.15.
+
+**Quantisation needs compactness, not discreteness.** On a closed
+loop, single-valuedness permits a circle-valued field 2πℤ sectors
+(measured: −1, +1, −1, −3, 0, −2) and a line-valued field exactly
+{0}. Nothing in the construction is discrete.
+
+> **Λ·V ∈ (2π/q)·ℤ**, q the charge the record winds under. The Z_N
+> formula is the q = N case. In the continuum q is the gauge group's
+> **centre** — Z₂ for SU(2) — not the lattice level. The
+> quantisation ports; the identification of its quantum with the
+> level does not, moving the prediction by a factor 2.5.
+
+**And it makes one premise load-bearing and explicit:** the integer
+exists *because the loop closes*. On an open arena there is no
+winding, and their 0080 §3 already measured that a free arena does
+not prefer Λ = 0. **Whether the universe is closed** is now the
+single assumption their falsifiable line rests on.
+
+## The Casimir coupling ([`0043`](0043_the_casimir_coupling.md))
+
+Their 0139's volatility — ξ/a swinging 10¹² across a free bin scale —
+turned out to be pointing at a single scalar.
+
+**κ = (8/3)⟨j(j+1)⟩**, dimension-weighted, exactly. Verified against
+the numeric second derivative on six profiles. The profile's shape,
+peak and width are all invisible to the coupling: **s₀ does not
+perturb the amplitude, it moves its mean Casimir.**
+
+**And the Casimir is a forgetting rate here** — the heat kernel
+decays χ_j as exp(−τ j(j+1)), measured flat across sectors to 25%. So
+**κ is a record precision**, closing a loop with 0032's G = 1/(4πp).
+
+**Spin(4) vs SU(2) is one record versus two.** Fusing the self-dual
+and anti-self-dual records gives χ_n² = χ₁+χ₃+…+χ_{2n−1}, raising κ
+by ~2.4×. The number of records fused into one amplitude is
+*exponentially* consequential — which is why their unrecorded group
+step was worth 4e21.
+
+> **Three roads, one question.** N = exp(phase-channel capacity)
+> (0041); s₀ = range/exp(frame-magnitude capacity) (here); their
+> requirement (D) = "why this record precision". The last free
+> parameter, the last underived constant, and the volatility that
+> exposed both are one open problem: **what sets the precision of the
+> world's record?**
+
+## The precision fixed point, the wedge, the two streams (0044–0047)
+
+[`0044`](0044_the_precision_fixed_point.md) — the volatility that
+exposed s₀ is a **criticality condition**, and the correct exponent is
+c = 1/(d−3), not 1/(d−2) (an assertion caught the first form).
+
+[`0045`](0045_the_wedge_and_the_bin.md) — a capacity argument fixes
+the multiplicity profile: **equiprobable bins ⟹ flat multiplicities
+uniquely**, so κ = (M+2)(M−1)/3 = N(N+3)/3. **s₀ was never a free
+parameter.** Simplicity is balance (|B⁺| = |B⁻| machine-exact); the
+wedge |a∧b| = √det J is the information volume of a record pair.
+
+[`0046`](0046_spin4_two_locked_streams.md) — **one record or two,
+settled: two, locked.** The double copy on Spin(4),
+A(U⁺,U⁻) = Σ n_j χ_j(U⁺)χ_j(U⁻), gives κ = 16.000 = **exactly 6/5** of
+the single-stream 13.333. (A first write-up quoted 12/5 = 2.4 — that
+is the *diagonal restriction*, a different construction.) The graviton
+sector is **pure synergy**: traceless-sym(B⁺⊗B⁻), 5 of 9, residual
+spread 1.0000 given either stream alone and 0.0000 given both.
+
+[`0047`](0047_fluctuation_or_response.md) — the factor 20 is a
+**category error**, not a defect: πp/α runs 2.64 → 123.07 with mass.
+A cut and a deformation are different functionals. G is a *response*.
+
+## The estimator problem ([`0048`](0048_the_estimator_problem.md))
+
+Their item-2 blocker, rediagnosed. The C kernel bought 30× throughput
+and the result did not move, because the bottleneck was never
+throughput — **it is what the estimator does with the samples it
+already has.** The signal is the same at every operator length; only
+the error grows, because each extra factor adds fluctuation that
+carries no signal.
+
+Rao-Blackwell — replace each sampled factor by its conditional mean —
+is exact and gives **120× in variance** at k = 8, j = 7. The law is a
+ratio of product variances,
+`[(1+v)^{2k} − 1] / [(1+v)^{2(k−j)} − 1]`, not the naive `(1+v)^j`
+(a first pass used the naive form and under-predicted by 15×).
+
+And it **does not** evaporate for stiff links: ~8× even at
+v/m² = 0.005, because the gain comes from the operator's **length**,
+not the noisiness of each link. Port spec in s4; the honest caveat is
+that shared links inside a composite operator make the substitution
+exact per plaquette and approximate for their product, so the bias is
+theirs to measure.
+
+> **Stop sampling what can be integrated.** Not a physics idea — an
+> estimator idea, and the filter has been making it since its first
+> stone: a posterior mean beats a draw.
+
+## The static projection ([`0049`](0049_the_static_projection.md))
+
+Their items 3 and 4. Filter 0011/0012 already carry the 1/r here, so
+the open part is engineering, and it is two things.
+
+**Which projection.** One exactly massless 4D field gives three
+different laws: static (sum over the time separation) fits A/r^n + C
+with **n = 1.020**; equal-time gives 1.860; zero spatial momentum does
+not decay at all — nearly linear. "Read the 1/r" means the **static**
+projection. Their 0++ fell 11x from d=0 to d=1 at zero spatial
+momentum, which an elementary massless channel cannot do, so the
+plaquette is not the channel that carries the 1/r.
+
+**How precise.** Pre-registered criterion (0038's lesson): call
+massless when the best Yukawa beats pure 1/r by < 2 nats. At 30%
+relative error the test calls a genuinely screened m = 0.5 channel
+massless **86.5%** of the time; at 3% it never does. They need ~3% at
+r = 1..4, which is what their 24x estimator is for.
+
+**Corrected by the port (their 0143).** The 2-nat criterion as
+specified is **not safe**: applied to a channel that is provably
+massless (uniform λ gives −2.3e−13 exactly) it *rejected* it at 3.13
+nats, because a Yukawa fit on a periodic box absorbs short-distance
+structure and wrapping into a fake mass. The instrument that works is
+a **same-volume massless reference** sharing the same zero-mode
+removal and projection — ratio 1.0722, spread 1.68% over a factor 15
+in r. And any ratio test needs a stated window rule, since removing
+the zero mode forces a zero crossing. The 3% precision figure stands;
+the comparison it was attached to does not.
+
+**And the scope correction.** The masslessness in their 0125 comes
+from a uniform λ shifting ln det by exactly a constant — a property of
+**matter's** determinant. A uniform λ on the gauge weight just
+rescales β, and the free energy is not linear in β. So item 3 is not
+"insert an operator we already have"; it is **put matter on the
+lattice**.
+
+## The PSD obstruction ([`0050`](0050_the_psd_obstruction.md))
+
+Their item 6 failed, algebraically rather than numerically: with B a
+projector, the induced action is `Γ⁽²⁾[A] = ‖(1−B)AB‖²_F ≥ 0` for every
+symmetric A including the conformal mode, while linearised
+Einstein-Hilbert needs that mode to carry the opposite sign. γ ≈ −1
+across two source conventions and two volumes — **zero light bending**.
+A sum of PSD forms is PSD, so no field content fixes it.
+
+This puts a question back to us. 0010 measured lensing here and 0011
+measured Newton's 1/r (α = 1.02). A 1/r Green function does **not**
+distinguish spin-2 from scalar — scalar gravity gets Newton right and
+died at bending. And 0010's Shapiro delay does not discriminate either,
+since a conformally flat metric leaves null geodesics alone but still
+delays propagation. So: **is our lensing deflection of null rays, or
+routing through a varying refractive index?** Score the two models in
+nats on the existing data. Our 1/r was real and it was not enough.
+
 ## The established dictionary
 
 Their trust axis is our precision channel (their 0065; verified

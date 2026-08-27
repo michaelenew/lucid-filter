@@ -1,5 +1,22 @@
 # lucid
 
+> ## ⚠️ AI-generated, not peer-reviewed
+>
+> **Every document, derivation and number in this repository was produced by
+> an AI system.** None of it has been peer-reviewed.
+>
+> **Assume prior art.** Where something looks novel, the correct default is
+> that it is a re-derivation of published work rather than an independent
+> discovery — the system had the literature in training and did not reliably
+> cite it at the time of writing. Statistical and estimation results here
+> rest on standard theory (Rao–Blackwell, Fisher information, Whittle
+> likelihood, MDL); gravity and lattice results in the sibling repository are
+> credited in its `ATTRIBUTION.md`.
+>
+> The reliable content is the measured numbers with their stated error bars
+> and failure modes.
+
+
 **Adaptive filters with no theoretically relevant free parameters.**
 
 Real-world data is noisy, and regimes change. Look at this graph.
