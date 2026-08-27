@@ -520,6 +520,7 @@ class AdaptiveKalmanFilter:
                 # confound-bounded (tau >= 1/beta) and trades net-negative (the process onset-lag
                 # misfire outweighs the sensor gain).  So the parameter-free filter holds the floor.
                 self.mu[k] += float(np.clip(self._Kstar * wg * step, -self.gap, self.gap))
+                self.mu[k] += self._sensor_reach(i, k, e, wg, step, Sdiag, thr)   # exp hook (0042); base 0
         self.mu[:n] = np.clip(self.mu[:n], -8.0, 20.0)
         self.mu[n:] = np.clip(self.mu[n:], -8.0, 20.0)
         # rebuild the state prior at the walked scale
@@ -552,6 +553,12 @@ class AdaptiveKalmanFilter:
         self.loglik += ll
         return AdaptiveStep(m_new.copy(), P_new.copy(), e.copy(), ll,
                             self.mu[:n].copy(), self.mu[n:].copy())
+
+    def _sensor_reach(self, i, k, e, wg, step, Sdiag, thr):
+        """Extra log-scale reach for sensor i beyond the K* floor walk.  Base: none -- the
+        parameter-free filter holds the floor (research 0039).  Overridden in exploration probe 0042
+        to test a SPATIAL (cross-channel, per-step) confound discriminant against the temporal C1."""
+        return 0.0
 
     def derivatives(self, mean):
         """Reshape a kinematic-model state (or state trajectory) into per-DOF derivatives.
