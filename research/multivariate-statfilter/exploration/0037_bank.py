@@ -30,21 +30,21 @@ BASE = {"pot-hot": (1.189, 1.052), "process+pot": (1.421, 1.307), "SENSOR": (1.1
         "PROCESS": (1.122, 1.121), "BOTH": (2.378, 2.352)}   # (PR20, main/PR22)
 
 
-def bank(phis=(0.3, 0.6, 0.85, 0.95), ss=(0.3, 0.5, 0.8), forget=0.999):
+def bank(phis=(0.7, 0.85, 0.95), ss=(0.3, 0.5, 0.8), forget=0.999):
     return AdaptiveBank.kinematic(NJ, ORDER, DT, process_var=JERK ** 2,
                                   meas_var={"pos": POT ** 2, "acc": ACC ** 2},
                                   measured=("pos", "acc"), control=True,
                                   phis=phis, ss=ss, forget=forget)
 
 
-def main(nseed=8, phis=(0.3, 0.6, 0.85, 0.95)):
-    print(f"shed-less (phi,s) BANK  phis={phis}  ({nseed} seeds)")
+def main(nseed=8, phis=(0.7, 0.85, 0.95), forget=0.999):
+    print(f"shed-less (phi,s) BANK  phis={phis} forget={forget}  ({nseed} seeds)")
     print(f"  {'regime':12s} {'bank/orc':>9} {'PR20':>7} {'main':>7}")
     for regime, tag in p34.REGIMES:
         ad = np.zeros(nseed); oc = np.zeros(nseed)
         for seed in range(nseed):
             f, F, B, H, U, S, Y, jstd, pot, acc = p34.sim(seed, regime)
-            b = bank(phis=phis)
+            b = bank(phis=phis, forget=forget)
             ad[seed] = p34.rms(b.filter(Y, U=U).mean, S)
             oc[seed] = p34.rms(p34.oracle(F, B, H, U, Y, jstd, pot, acc, f.n, f.m), S)
         r = ad / oc
