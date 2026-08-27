@@ -71,12 +71,19 @@ Two things distinguish it from :class:`WalkingVectorFilter` (the exponential tes
 finding-18 loop; the grid spacing is the Sparrow limit ``1.5 s``; the sensor share is the derived
 ``1 - rho1 (S/R)`` (research 0032) with ``rho1`` garrote-denoised at its 2-sigma EMA noise floor;
 the process-walk gain is the derived Newton whitening rate ``K*/b_k`` (research 0035, ``_whiten_
-gain``); the outlier-shed floor is the 2-sigma point of ``chi^2_1`` (``1 + 2 sqrt2``).  ``SPAN_S``
-and ``_BETA`` (the adaptation timescale) are *labeled budgets* -- they trade responsiveness for
-smoothness, they do not move the fixed point.  The robust measurement update is fully derived (the
-heavy-tail from the scale swing ``s``, no cutoff).  Remaining measured constants are the fast-shed
-speed/floor (``_SHED``, ``_WHITE_MIN``) and the process-scale forgetting ``_Q_REVERT`` -- the
-confound-coupled pieces the planned observability-weighted build is meant to retire.
+gain``); the outlier-shed floor is the 2-sigma point of ``chi^2_1`` (``1 + 2 sqrt2``); and a
+process-DECOUPLED absolute reference sheds fast with no tuned gate (research 0036, ``_decouple_
+weight``: it stays white under a process disturbance, so an outlier can only be a failure).
+``SPAN_S`` and ``_BETA`` (the adaptation timescale) are *labeled budgets* -- they trade
+responsiveness for smoothness, they do not move the fixed point.  The robust measurement update is
+fully derived (the heavy-tail from the scale swing ``s``, no cutoff).
+
+The **one irreducible empirical corner** is the fast shed of a process-COUPLED channel (``_SHED``,
+``_WHITE_MIN``): its outlier could be its own failure OR a process burst, a call only the DYNAMIC
+whiteness can make, and that gate's EMA lags a burst onset -- so the gentle slope + whiteness floor
+bound the onset misfire.  Removing either regresses the process regimes; a static weight cannot
+substitute (it cannot tell a white failure from process on the same channel).  ``_Q_REVERT`` (the
+process-scale forgetting time) is a labeled timescale.
 
 Open items / known warts (see ``research/multivariate-statfilter/SUMMARY.md``):
 
@@ -87,10 +94,11 @@ Open items / known warts (see ``research/multivariate-statfilter/SUMMARY.md``):
   for *inferring* the masked ``Q`` (oracle-R) is ~3x oracle, and the adaptive already sits below it
   -- the distance to the *full* oracle is the oracle discounting an unobservable jerk, so the
   full-oracle ratio overstates BOTH.  No smooth-transition arm is missing here; the binding
-  constraint is observability.  The *sensor share* is now derived (0032, above); the still-empirical
-  pieces are the robust-MAP whiteness gate (kept -- the derived share does not fit the instantaneous
-  first-sample role) and the fast persistent *shed* (an outlier-rate boost and a hard whiteness
-  floor).  A cross-sensor **observability-weighted** gate is the planned way to retire those.
+  constraint is observability.  The *sensor share* is derived (0032); the shed's fast path is now
+  derived for process-decoupled absolute references (0036), which also improved the failing-absolute
+  regimes (pot-hot, process+pot).  The residual empiricism is confined to the process-coupled shed
+  (``_SHED``, ``_WHITE_MIN``) -- irreducible, since a coupled channel's failure-vs-process call is
+  dynamic (see the note above) -- and the robust-MAP whiteness gate (built from the derived ``thr``).
 
 * **Collinear process/sensor modes (measured, research 0027).**  When a sensor reads the very
   state the process noise enters (an accelerometer on the jerk-driven acceleration), the two
@@ -126,12 +134,12 @@ _LOG2PI = math.log(2.0 * math.pi)
 _GAP_FACTOR = 1.5           # gap = 1.5 s: resolution (Sparrow) spacing (finding 11)
 _SPAN_S = 3.0               # spectral-truncation coverage budget (half-span in units of s)
 _BETA = 0.02               # innovation-statistics EMA rate (labeled adaptation-timescale budget)
-_Q_REVERT = 0.016          # process-scale reversion to baseline (an elapsed disturbance decays out)
-_SHED = 0.05               # outlier-shedding boost: raise a sensor scale fast on a big white outlier
+_Q_REVERT = 0.008          # process-scale reversion to baseline (an elapsed disturbance decays out)
 _CHI1_2SIG = 1.0 + 2.0 * math.sqrt(2.0)   # 2-sigma point of chi^2_1 (mean 1, std sqrt2): the derived
 #                                          significant-outlier floor for nis = e^2/S (was 4.0)
-_WHITE_MIN = 0.90          # both fire only when a channel is CLEARLY white (a sensor failure, not
-#                            a partly-correlated process disturbance -- protects a noisy accel in BOTH)
+_SHED = 0.05               # gentle shed slope for a process-COUPLED channel (decoupled references
+_WHITE_MIN = 0.90          # shed statically); the whiteness floor + gentleness bound the onset-lag
+#                            misfire on a coupled channel -- the confound-coupled residual (0036)
 _RIDGE = 1e-9
 
 
@@ -228,6 +236,7 @@ class AdaptiveKalmanFilter:
         self._floor = (1.0 - self.phi) / (4.0 * (_SPAN_S * self.s) ** 2)
         self._Ichar = self._steady_fisher()
         self._qgain = self._whiten_gain()                 # derived per-mode whitening gain (0035)
+        self._decouple = self._decouple_weight()          # per-sensor process-decoupling (0036)
         # ACTIVATE structurally-observable axes -- NOT by the delocalisation floor, and NOT by a
         # threshold relative to the loudest axis (a quiet process mode next to a loud sensor would
         # be frozen and then coast rigidly on a wrong velocity when the sensor is down-weighted --
@@ -406,6 +415,31 @@ class AdaptiveKalmanFilter:
             g[k] = self._Kstar / max(b, B_MIN)             # Newton whitening gain, SOR-capped
         return g
 
+    def _decouple_weight(self) -> np.ndarray:
+        """Per sensor, its process-DECOUPLING (research 0036): 1 - rho1_i, where rho1_i is the lag-1
+        innovation autocorrelation channel i picks up under a strong process disturbance.  With the
+        gain from the ASSUMED (nominal) scale but a TRUE process cov Q0*BIG, the actual a-priori
+        error cov solves the closed-loop Lyapunov M = A M A^T + F K R K^T F^T + Qtrue (A=F(I-KH)),
+        and the Mehra lag-1 innovation autocov C1 = H A M H^T - H F K R gives rho1_i = C1_ii/S_ii;
+        as the disturbance grows this saturates at the channel's intrinsic closed-loop decay (a
+        parameter-free limit).  Decoupling ~1 for an absolute reference that stays white under
+        process (safe to shed FAST -- it carries no process to misattribute), ~0 for a
+        process-coupled channel (shed only slowly: at an outlier ONSET the whiteness gate's lagged
+        EMA cannot yet tell a sensor failure from a process burst, so the fast raise is capped).
+        This caps the fast shed, retiring the empirical boost (_SHED) and whiteness floor
+        (_WHITE_MIN)."""
+        H, F, n, m = self.H, self.F, self.n, self.m
+        R0 = self._R_of(np.zeros(m)); I = np.eye(n)
+        K = self._gain_for(self._Q_of(np.zeros(n)), R0)
+        A = F @ (I - K @ H); W = F @ K @ R0 @ K.T @ F.T + self._Q_of(np.zeros(n)) * 1e4
+        M = I.copy()
+        for _ in range(3000):
+            M = A @ M @ A.T + W
+        S = H @ M @ H.T + R0
+        C1 = H @ A @ M @ H.T - H @ F @ K @ R0
+        C1 = 0.5 * (C1 + C1.T)
+        return np.clip(1.0 - np.array([C1[i, i] / (S[i, i] + 1e-12) for i in range(m)]), 0.0, 1.0)
+
     # ------------------------------------------------------------------- streaming
     def reset(self, mean=None, scale=None) -> "AdaptiveKalmanFilter":
         self._m = None if mean is None else np.asarray(mean, float)
@@ -501,13 +535,21 @@ class AdaptiveKalmanFilter:
                 target = math.log(max(resid, 1e-8) / self.rho[i])
                 step = target - self.mu[k]
                 rate = self._Kstar
-                if step > 0.0 and wg > _WHITE_MIN:                      # SHEDDING a failing sensor:
-                    # accelerate when this step's innovation is a large outlier on a CLEARLY white
-                    # channel -- shed a failing absolute reference in a few steps, not ~1/K*
-                    # (research 0030); the whiteness floor keeps a (partly-correlated) process
-                    # disturbance from triggering it.
+                if step > 0.0:                                          # SHEDDING a failing sensor:
+                    # The outlier surprise (nis above the 2-sigma point of chi^2_1) drives the raise-
+                    # rate up.  How aggressively depends on the channel's process-DECOUPLING (research
+                    # 0036): a process-decoupled ABSOLUTE REFERENCE (decouple ~1) can never confuse a
+                    # failure with a process burst, so an outlier is always a failure -> shed FAST,
+                    # statically, no whiteness gate needed.  A process-COUPLED channel (decouple ~0)
+                    # must instead read the DYNAMIC whiteness (its outlier could be process), so its
+                    # fast shed fires only while the channel is white (garrote share wg above the
+                    # floor) and gently, so the whiteness gate's onset lag cannot run it away.
                     nis = e[i] ** 2 / (Sdiag[i] + 1e-12)
-                    rate = min(1.0, self._Kstar * (1.0 + _SHED * max(nis - _CHI1_2SIG, 0.0)))
+                    surprise = max(nis - _CHI1_2SIG, 0.0)
+                    if self._decouple[i] > 0.5:                         # decoupled reference
+                        rate = min(1.0, self._Kstar * (1.0 + surprise))
+                    elif wg > _WHITE_MIN:                               # coupled: dynamic whiteness
+                        rate = min(1.0, self._Kstar * (1.0 + _SHED * surprise))
                 self.mu[k] += float(np.clip(rate * wg * step, -self.gap, self.gap))
         self.mu[:n] = np.clip(self.mu[:n], -8.0, 20.0)
         self.mu[n:] = np.clip(self.mu[n:], -8.0, 20.0)
