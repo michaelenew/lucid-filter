@@ -57,12 +57,14 @@ from .walking import (WalkingFilter, WalkResult, WalkStep,
                       WalkingBank, BankStep, BankResult)
 from .vector import VectorFilter, VecParams, VecStep, VecFilterResult
 from .walkingvector import WalkingVectorFilter, WalkVecStep, WalkVecResult
-from .adaptive import AdaptiveKalmanFilter, AdaptiveStep, AdaptiveResult
+from .adaptive import (AdaptiveKalmanFilter, AdaptiveStep, AdaptiveResult,
+                       AdaptiveBank, AdaptiveBankStep)
 
 __all__ = ["AdaptiveFilter", "FilterResult", "Params", "Step",
            "WalkingFilter", "WalkResult", "WalkStep",
            "WalkingBank", "BankStep", "BankResult",
            "VectorFilter", "VecParams", "VecStep", "VecFilterResult",
            "WalkingVectorFilter", "WalkVecStep", "WalkVecResult",
-           "AdaptiveKalmanFilter", "AdaptiveStep", "AdaptiveResult"]
+           "AdaptiveKalmanFilter", "AdaptiveStep", "AdaptiveResult",
+           "AdaptiveBank", "AdaptiveBankStep"]
 __version__ = "1.7.0"

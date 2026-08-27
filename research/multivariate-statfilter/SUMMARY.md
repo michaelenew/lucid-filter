@@ -358,6 +358,24 @@ that.** See `exploration/0029_reprofile.md`.
   coupled channel then never sheds), and removing `_WHITE_MIN` regresses the process regimes (+5–7σ,
   the onset-lag misfire runs away via ρ₁ dilution). (This pass also fixed a leaked `_Q_REVERT=0.016`
   from PR#21 back to 0.008.)
+  **Update (research 0037/0038): the shed was never needed — remove it; the family is the ridge.**
+  Re-reading the parent workstreams settled it. optimality-proof **Prop 1** is exactly this confound
+  ("level jumped" ≡ "sensor glitched" if scales move freely) and its resolution is that `(φ, s)` are
+  the **class definition, not parameters**, with the scale inferred by *likelihood* — "no
+  thresholds, no changepoint detection." My shed was a hand-built changepoint detector. Removing it
+  entirely (with `_SHED`/`_WHITE_MIN`/`_decouple`) costs only ~0.1× on the hot regimes (pot-hot
+  1.13, process+pot 1.18) — the derived robust-MAP (0031) already reacts at the first sample, the
+  walk follows. So the filter now has **no tuning parameters**, only the class `(φ, s)` + labeled
+  budgets. **Open (family retirement).** adaptive-grid findings 13-16: `(φ, s)` sit on a sloppy,
+  flat ridge, so even the *point* need not be committed — integrate it with a model-averaged bank
+  (shipped scalar `WalkingBank`; `forget` the one concession, remedy: derive its drift from the
+  AR(1) shape, findings 16). The multivariate `AdaptiveBank` is added (plumbing verified: a 1-member
+  bank == the single filter), **but underperforms** on the short hot-regime bursts — the average
+  concentrates on the calm-optimal member and mis-serves a 300-step burst (0037). The clean
+  within-member cure is the 0008 windowed-GPB1 scale posterior, whose reach is the finding-18
+  analogue `q` — an **open derivation** (0008); my quick sigma-point port (0038) blows up and is a
+  negative result. So: shed removed and validated; the ridge-integral over the family is understood
+  and correct in principle but not yet realized for the high-D fast-burst case.
 - **Collinear process/sensor modes — the confound, measured (research 0027).** When a sensor
   reads the state the process noise enters (accelerometer on the jerk-driven acceleration), the
   two scale axes are **collinear** in innovation space (exact scale-Fisher correlation
