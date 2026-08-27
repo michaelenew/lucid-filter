@@ -39,3 +39,33 @@ limit, now living in `q`: reach faster than C1 can confirm and you misfire on pr
 than the machinery can tell process from measurement. Whether there is a principled convergent /
 minimax / asymptotically-stable q is the subject of the parallel s-interior-optimum study. `_QREACH`
 is exposed and defaulted OFF (=0, exactly the safe no-shed walk) until that q is derived.
+
+## Resolved: q is a convergent floor + a minimax reach surcharge (the q-study)
+
+A parallel study (scratch_*.py; fast scalar rig, faithful to WalkingFilter -- K* exact, q_mu form
+matched) quantified the burst-optimal swing / q across burst magnitude B, duration L, ridge phi, and
+AR(1) data families. It reproduces the 5-DOF interior optimum (phi=0.85, B=5, L=150 -> s*=0.80) and
+cleanly decomposes it:
+
+- **Steady (jitter) optimum is B-INDEPENDENT** -- s_steady* = 0.15 for every B, i.e. q_steady* sits on
+  the finding-18 floor q_mu = K*^2/(I_char(1-K*)) (~0.011 at phi=0.85). Sustained tracking wants the
+  SMALLEST q that still tracks. This piece is **convergent / derivable**, and it is the K* gain.
+- **Transient (reach) optimum GROWS with B**: s_transient* ~ 0.10 B, and in the windowed walker
+  q_reach ~ B^2/(c*tau) (c~3 from the sigma-span sqrt(3 Sig) reaching B in ~tau steps). Sweeping the
+  latency tau, q* increases monotonically with B at every tau and with 1/tau at every B, with **NO
+  fixed point** -- a **minimax** quantity set by the worst-case (B_max, tau) envelope, not intrinsic.
+
+Classification: not asymptotically-drifting (stable across n/seeds); convergent in the sustained
+limit; minimax in the reach requirement. A single fixed q cannot serve both. On the AR(1) *family*
+(genuine stationary wandering) there is only a flat self-consistent ridge (s* ~ s_data, ~1% deep) --
+confirming the sharp interior optimum is a BURST/reach phenomenon, not a stationary-family one.
+
+**Conclusion.** The convergent floor q_mu is derivable and is what the filter already uses (K*). The
+reach surcharge is not a derivable constant -- it is a burst-envelope commitment (a tuning
+parameter). On the multivariate rig it is additionally confound-bounded (tau >= 1/beta, the C1
+confirmation rate) and, as 0039 measured, trades net-negative because the process onset-lag misfire
+outweighs the sensor-reach gain. So the **parameter-free filter holds the floor q = q_mu** (the
+current no-shed walk, pot-hot ~1.13). The shed's extra ~0.1x was an implicit burst-envelope
+commitment -- real, but not parameter-free. (The study's own architectural suggestion, a q_mu floor
+transiently opened on a white surprise, is exactly 0039's adaptive gain; it works on a single sensor
+but the confound onset-lag defeats it multivariate -- so it is not net-positive here.)

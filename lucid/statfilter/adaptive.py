@@ -80,14 +80,22 @@ are identically distributed, so the class must fix how fast scales move) -- and 
 budgets* ``_BETA``, ``_SPAN_S``, ``_Q_REVERT`` (adaptation timescales that trade responsiveness for
 smoothness, they do not move the fixed point).
 
+The walk gain is the finding-18 floor ``K*``, and the q-study (research 0039) proves this is the
+right parameter-free choice for a burst: the burst-optimal window-growth ``q`` splits into a
+CONVERGENT floor (the sustained-tracking optimum ``q_mu = K*^2/(I_char(1-K*))``, burst-magnitude
+independent -- realised by ``K*``) plus a MINIMAX reach surcharge (``q ~ B^2/(c tau)``, growing
+without bound with burst size ``B`` and inverse latency, no fixed point).  The surcharge is a
+worst-case burst-envelope commitment, not a derivable constant, and multivariate it is
+confound-bounded (``tau >= 1/beta``) and trades net-negative (the process onset-lag misfire outweighs
+the sensor-reach gain), so the filter holds the floor.  The shed's extra ~0.1x on the hot regimes was
+an implicit burst-envelope commitment -- real but not parameter-free.
+
 Even the ``(phi, s)`` POINT need not be committed: it lives on a sloppy identification ridge that is
 flat in what matters, so it can be integrated over by a model-averaged bank (adaptive-grid findings
 13-16; shipped scalar as ``WalkingBank``).  :class:`AdaptiveBank` is the multivariate analogue --
-**work in progress**: it retires the ``(phi, s)`` commitment when the class varies slowly, but the
-model average concentrates on the calm-optimal member and under-serves a short burst, so it does not
-yet match a single member on the hot regimes (research 0037).  The right within-member cure is a
-scale POSTERIOR (the windowed GPB1, 0008) whose reach is the finding-18 analogue ``q`` -- an open
-derivation.
+**work in progress**: it retires the ``(phi, s)`` commitment when the class varies slowly, but on a
+short burst the model average concentrates on the calm-optimal member (the burst evidence is rare),
+so it does not yet match a single member on the hot regimes (research 0037).
 
 Open items / known warts (see ``research/multivariate-statfilter/SUMMARY.md``):
 
@@ -135,7 +143,6 @@ _GAP_FACTOR = 1.5           # gap = 1.5 s: resolution (Sparrow) spacing (finding
 _SPAN_S = 3.0               # spectral-truncation coverage budget (half-span in units of s)
 _BETA = 0.02               # innovation-statistics EMA rate (labeled adaptation-timescale budget)
 _Q_REVERT = 0.008          # process-scale reversion to baseline (an elapsed disturbance decays out)
-_QREACH = 0.0             # OFF pending the derived q (0039); heavy-tail reach gain (1/nu of the log-scale process t) -- research 0039
 _RIDGE = 1e-9
 
 
@@ -504,15 +511,15 @@ class AdaptiveKalmanFilter:
                 resid = float(self._C0[i, i] - HPHt[i, i])
                 target = math.log(max(resid, 1e-8) / self.rho[i])
                 step = target - self.mu[k]
-                # ADAPTIVE-gain walk (research 0039): the fixed K* under-reaches a burst; a heavy tail
-                # on the log-scale process noise inflates the gain on a surprising step (the t E-step:
-                # q_eff = q(1 + delta^2/nu), delta = step/s the standardised log-scale innovation), so
-                # the walk reaches a jump.  The C1-derived share wg still multiplies the step, so a
-                # CORRELATED (process) surprise is attributed away and cannot run the sensor scale up
-                # -- the confound stays with the built lag-correlation machinery, no new gate.
-                z = wg * step  # the C1-attributed log-scale innovation
-                rate = min(1.0, self._Kstar * (1.0 + _QREACH * (z * z) / (self.s * self.s)))
-                self.mu[k] += float(np.clip(rate * wg * step, -self.gap, self.gap))
+                # Walk at the finding-18 gain K* -- the DERIVED convergent floor for the log-scale
+                # drift (research 0039 / the q-study): the sustained-tracking optimum q_mu is
+                # burst-magnitude-INDEPENDENT and equals K*^2/(I_char(1-K*)), realised by the K* gain.
+                # The only thing that would beat it on a large burst is a REACH surcharge q ~ B^2/(c*tau),
+                # which grows without bound with burst size B and has NO fixed point -- a minimax
+                # burst-envelope choice, not a derivable constant, and on the multivariate rig it is
+                # confound-bounded (tau >= 1/beta) and trades net-negative (the process onset-lag
+                # misfire outweighs the sensor gain).  So the parameter-free filter holds the floor.
+                self.mu[k] += float(np.clip(self._Kstar * wg * step, -self.gap, self.gap))
         self.mu[:n] = np.clip(self.mu[:n], -8.0, 20.0)
         self.mu[n:] = np.clip(self.mu[n:], -8.0, 20.0)
         # rebuild the state prior at the walked scale
