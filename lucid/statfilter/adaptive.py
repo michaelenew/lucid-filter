@@ -135,6 +135,7 @@ _GAP_FACTOR = 1.5           # gap = 1.5 s: resolution (Sparrow) spacing (finding
 _SPAN_S = 3.0               # spectral-truncation coverage budget (half-span in units of s)
 _BETA = 0.02               # innovation-statistics EMA rate (labeled adaptation-timescale budget)
 _Q_REVERT = 0.008          # process-scale reversion to baseline (an elapsed disturbance decays out)
+_QREACH = 0.0             # OFF pending the derived q (0039); heavy-tail reach gain (1/nu of the log-scale process t) -- research 0039
 _RIDGE = 1e-9
 
 
@@ -503,14 +504,15 @@ class AdaptiveKalmanFilter:
                 resid = float(self._C0[i, i] - HPHt[i, i])
                 target = math.log(max(resid, 1e-8) / self.rho[i])
                 step = target - self.mu[k]
-                # Clean derived walk at the class rate K* -- NO shed.  The fast jump-reaction that a
-                # single (phi, s) lacks (its K* = (1-phi)/4 is capped by the persistent prior) is
-                # supplied instead by the IMPULSIVE members of a (phi, s) bank: a small-phi member
-                # has a large K* and sheds fast, and a burst simply shifts model-average weight onto
-                # it, by likelihood, no threshold (research 0037; adaptive-grid findings 13-16, the
-                # ridge is integrated over rather than a point (phi,s) chosen).  Within a member the
-                # sensor still absorbs only its derived whiteness share wg (0032).
-                self.mu[k] += float(np.clip(self._Kstar * wg * step, -self.gap, self.gap))
+                # ADAPTIVE-gain walk (research 0039): the fixed K* under-reaches a burst; a heavy tail
+                # on the log-scale process noise inflates the gain on a surprising step (the t E-step:
+                # q_eff = q(1 + delta^2/nu), delta = step/s the standardised log-scale innovation), so
+                # the walk reaches a jump.  The C1-derived share wg still multiplies the step, so a
+                # CORRELATED (process) surprise is attributed away and cannot run the sensor scale up
+                # -- the confound stays with the built lag-correlation machinery, no new gate.
+                z = wg * step  # the C1-attributed log-scale innovation
+                rate = min(1.0, self._Kstar * (1.0 + _QREACH * (z * z) / (self.s * self.s)))
+                self.mu[k] += float(np.clip(rate * wg * step, -self.gap, self.gap))
         self.mu[:n] = np.clip(self.mu[:n], -8.0, 20.0)
         self.mu[n:] = np.clip(self.mu[n:], -8.0, 20.0)
         # rebuild the state prior at the walked scale
