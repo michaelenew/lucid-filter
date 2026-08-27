@@ -36,9 +36,11 @@ deploying to something small.
 | filter | model | fit? | reach for it when |
 |---|---|---|---|
 | [`statfilter.AdaptiveFilter`](statfilter/README.md) | unbiased random walk observed with noise | once, offline | you have representative history and the regime is stable — **industrial processes, sensor monitoring** — where a one-time `fit()` captures the operating range |
+| [`statfilter.VectorFilter`](statfilter/README.md#multivariate-state-and-a-supplied-measurement-matrix-vectorfilter) | **multivariate** random walk read through a **supplied measurement matrix `H`** | once, offline | the state has structure and you know how the sensors read it — a few coupled load cells, cross-coupled probes; you supply `H`, `fit()` infers the full-symmetric `Q0, R0` and the noise scales. Reduces to `AdaptiveFilter` at n=m=1 |
 | [`odefilter.OdeFilter`](odefilter/README.md) | process locally a linear ODE (oscillates, drifts, decays) | once, offline | the **dynamics** themselves can change unpredictably — a **drone** manoeuvring, a plant changing modes; `alpha` is fit once *and then tracked*, **or** you hand `fit` a `linearized_dynamics(state)` callable (you know the model — a control loop re-linearising each tick) and only the noise is inferred |
 | [`odefilter`](odefilter/README.md) offset channel | two series reading one latent at a lead/lag `tau` | once, offline | you have two sensors on the same process and need the (fractional, moving) delay between them |
 | [`statfilter.WalkingFilter` / `WalkingBank`](statfilter/README.md) | random walk with the noise scale **walked online** | **no `fit()`** | you have no representative history, or the regime will move **outside anything a one-time fit saw** — the scale is unbounded and tracked step by step |
+| [`statfilter.WalkingVectorFilter`](statfilter/README.md#walkingvectorfilter--per-component-scales-tracked-online) | **multivariate** walk: a log-scale **per process eigenmode and per sensor**, walked online through a supplied `H` | **no `fit()`** | you want to know **which component's noise is up** online — which mode is drifting, which sensor is glitching. A theory testbed (grid exponential in active axes; a documented coupling residual) |
 
 The three fit-based filters commit to a **stationary family** once (`fit()` fixes
 the *class* — how fast each scale may move and roughly how big — not the operating

@@ -55,6 +55,41 @@ algorithmic one.
 - The level posterior is a single-Gaussian collapse per step (GPB1); weakest
   exactly at a jump, where the true posterior is bimodal.
 
+## Open: drop the shape assumption — assume *stationarity*, learn the shape online
+
+The filter's one real modelling commitment is a **shape**: the log-scale is a
+Gaussian AR(1). The proposal is to weaken that to the strictly weaker assumption of
+**stationarity** — *whatever* the dependence structure is, it does not change over
+time — and to **learn the shape from the data online** instead of asserting it.
+
+Seed procedure: treat each observation as evidence for the underlying distribution
+by placing a kernel (probably a Gaussian) whose maximum-likelihood point sits at the
+observed value, and **narrow that kernel's scale as more data accrues** (the usual
+bandwidth→0 as n→∞). The effective model is the **sum of all the per-observation
+PDFs** — a running kernel-density estimate of the stationary law — so over time it
+can uncover structure the AR(1)/Gaussian shape cannot, up to and including
+**multimodal** distributions. The stationarity assumption is what makes the pooled
+KDE meaningful (all observations are draws from one time-invariant law).
+
+Open problem in the seed: **efficiency.** Summing over *every* point ever seen is
+infeasible, so the KDE needs a bounded-memory surrogate — a fixed set of adaptive
+kernels/inducing points, a merge/prune rule, or a sufficient-statistic
+recursion — that preserves the "discover, don't assume" property while staying O(1)
+per step. That compression is the research; the seed above is only the shape of it.
+
+This is a foundational re-frame (it changes what the class *is*, cf.
+`optimality-proof/` which formalises the current Gaussian-AR(1) class), not an
+increment to the shipped filter.
+
+Support from `wall-correspondence/` (correspondences to validate on our harness): a
+recursive filter needs a *stationary* record, and a **count**-generated stationary
+record always **embeds in continuous time** — a PSD transfer operator has a real
+generator (`wall-correspondence/0028, 0030`). The KDE-of-observations here is exactly
+count-generated, so the learned stationary law is embeddable/consistent by
+construction; and the KDE's bandwidth-narrowing is an **annealing** schedule
+(`0008`: smoothing is the search schedule, sharp likelihood combs trap local search) —
+one instrument for the shape-learning search.
+
 ## Layout
 
 - `output/` — the deliverable: the `statfilter` package, its tests, and
