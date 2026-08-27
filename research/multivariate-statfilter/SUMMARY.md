@@ -345,6 +345,19 @@ that.** See `exploration/0029_reprofile.md`.
   timescale). These are the cross-sensor **observability-weighted** build. The robust-MAP whiteness
   gate is built entirely from the derived `thr` (a detection ramp at the noise scale) — no measured
   constant.
+  **Update (research 0036): the shed's derivable empiricism is retired (hybrid shed).** The right
+  static weight is not observability criticality (fails: high for a coupled lone sensor) but the
+  channel's **process-decoupling** `1 − ρ₁` under a disturbance (Lyapunov + Mehra lag-1; the
+  intrinsic closed-loop decay, parameter-free) — bimodal: pot ~1.0, accel ~0.26, 2-state lone
+  sensor ~0.06. A **process-decoupled absolute reference** (decouple > 0.5) sheds fast with no gate
+  (an outlier there can only be a failure); a **process-coupled** channel keeps the dynamic
+  whiteness-gated gentle shed (`_SHED`, `_WHITE_MIN`). Net vs the last clean baseline (paired, 40
+  seeds): neutral-or-better on every regime, failing-absolute regimes better (pot-hot 1.19→1.05,
+  process+pot 1.42→1.31). The coupled shed is the **one irreducible corner**: a static weight can't
+  replace the dynamic gate (gating the accel statically regressed SENSOR +10σ — a white failure on a
+  coupled channel then never sheds), and removing `_WHITE_MIN` regresses the process regimes (+5–7σ,
+  the onset-lag misfire runs away via ρ₁ dilution). (This pass also fixed a leaked `_Q_REVERT=0.016`
+  from PR#21 back to 0.008.)
 - **Collinear process/sensor modes — the confound, measured (research 0027).** When a sensor
   reads the state the process noise enters (accelerometer on the jerk-driven acceleration), the
   two scale axes are **collinear** in innovation space (exact scale-Fisher correlation
