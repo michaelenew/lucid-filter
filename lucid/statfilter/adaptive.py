@@ -62,40 +62,28 @@ Two things distinguish it from :class:`WalkingVectorFilter` (the exponential tes
   **heavy-tail**: the state correction MAPs each sensor's log-scale for THIS innovation (prior =
   its walked scale, spread the class swing ``s^2``), inflating ``R`` smoothly on an outlier with
   **no threshold and no branch** -- the 4-sigma cutoff of the earlier gate is now the derived
-  heavy-tail (research 0031, ``_robust_eta``).  This is what reacts to a failing sensor at the first
-  corrupted sample; the walked scale then follows over the adaptation window.  Result: the
-  failing-absolute-sensor regimes track near the online floor (pot-hot ~**1.13x**, process+pot
-  ~**1.18x** oracle, from 1.98x) with **no shed** (research 0037: the empirical fast shed
-  ``_SHED``/``_WHITE_MIN`` bought only ~0.1x more and is removed).
+  heavy-tail (research 0031, ``_robust_eta``).  A fast persistent shed keeps the walked scale
+  current so the MAP does not over-fire on a sustained burst.  Result: the failing-absolute-sensor
+  regimes drop to the online floor (pot-hot **1.03x**, process+pot **1.15x** oracle, from 1.98x).
 
-**No tuning parameters.**  The spectral floor is derived (``(1-phi)/(4 (SPAN_S s)^2)``); the sensor
-walk gain ``K* = (1-phi)/4`` and drift ``q_mu`` are the finding-18 loop; the grid spacing is the
-Sparrow limit ``1.5 s``; the sensor share is the derived ``1 - rho1 (S/R)`` (research 0032) with
-``rho1`` garrote-denoised at its 2-sigma EMA noise floor; the process-walk gain is the derived
-Newton whitening rate ``K*/b_k`` (research 0035).  The robust measurement update is fully derived
-(the heavy-tail from the scale swing ``s``, no cutoff).  The only remaining inputs are the model
-**class** -- the pair ``(phi, s)``, which is the *definition of the class, not a parameter within
-it* (optimality-proof Prop 1: with free scale motion, "the level jumped" and "the sensor glitched"
-are identically distributed, so the class must fix how fast scales move) -- and the *labeled
-budgets* ``_BETA``, ``_SPAN_S``, ``_Q_REVERT`` (adaptation timescales that trade responsiveness for
-smoothness, they do not move the fixed point).
+**No theoretically relevant free parameters.**  The spectral floor is derived
+(``(1-phi)/(4 (SPAN_S s)^2)``); the sensor walk gain ``K* = (1-phi)/4`` and drift ``q_mu`` are the
+finding-18 loop; the grid spacing is the Sparrow limit ``1.5 s``; the sensor share is the derived
+``1 - rho1 (S/R)`` (research 0032) with ``rho1`` garrote-denoised at its 2-sigma EMA noise floor;
+the process-walk gain is the derived Newton whitening rate ``K*/b_k`` (research 0035, ``_whiten_
+gain``); the outlier-shed floor is the 2-sigma point of ``chi^2_1`` (``1 + 2 sqrt2``); and a
+process-DECOUPLED absolute reference sheds fast with no tuned gate (research 0036, ``_decouple_
+weight``: it stays white under a process disturbance, so an outlier can only be a failure).
+``SPAN_S`` and ``_BETA`` (the adaptation timescale) are *labeled budgets* -- they trade
+responsiveness for smoothness, they do not move the fixed point.  The robust measurement update is
+fully derived (the heavy-tail from the scale swing ``s``, no cutoff).
 
-The walk gain is the finding-18 floor ``K*``, and the q-study (research 0039) proves this is the
-right parameter-free choice for a burst: the burst-optimal window-growth ``q`` splits into a
-CONVERGENT floor (the sustained-tracking optimum ``q_mu = K*^2/(I_char(1-K*))``, burst-magnitude
-independent -- realised by ``K*``) plus a MINIMAX reach surcharge (``q ~ B^2/(c tau)``, growing
-without bound with burst size ``B`` and inverse latency, no fixed point).  The surcharge is a
-worst-case burst-envelope commitment, not a derivable constant, and multivariate it is
-confound-bounded (``tau >= 1/beta``) and trades net-negative (the process onset-lag misfire outweighs
-the sensor-reach gain), so the filter holds the floor.  The shed's extra ~0.1x on the hot regimes was
-an implicit burst-envelope commitment -- real but not parameter-free.
-
-Even the ``(phi, s)`` POINT need not be committed: it lives on a sloppy identification ridge that is
-flat in what matters, so it can be integrated over by a model-averaged bank (adaptive-grid findings
-13-16; shipped scalar as ``WalkingBank``).  :class:`AdaptiveBank` is the multivariate analogue --
-**work in progress**: it retires the ``(phi, s)`` commitment when the class varies slowly, but on a
-short burst the model average concentrates on the calm-optimal member (the burst evidence is rare),
-so it does not yet match a single member on the hot regimes (research 0037).
+The **one irreducible empirical corner** is the fast shed of a process-COUPLED channel (``_SHED``,
+``_WHITE_MIN``): its outlier could be its own failure OR a process burst, a call only the DYNAMIC
+whiteness can make, and that gate's EMA lags a burst onset -- so the gentle slope + whiteness floor
+bound the onset misfire.  Removing either regresses the process regimes; a static weight cannot
+substitute (it cannot tell a white failure from process on the same channel).  ``_Q_REVERT`` (the
+process-scale forgetting time) is a labeled timescale.
 
 Open items / known warts (see ``research/multivariate-statfilter/SUMMARY.md``):
 
@@ -106,7 +94,11 @@ Open items / known warts (see ``research/multivariate-statfilter/SUMMARY.md``):
   for *inferring* the masked ``Q`` (oracle-R) is ~3x oracle, and the adaptive already sits below it
   -- the distance to the *full* oracle is the oracle discounting an unobservable jerk, so the
   full-oracle ratio overstates BOTH.  No smooth-transition arm is missing here; the binding
-  constraint is observability.  The full-oracle ratio overstates BOTH by the unobservable-Q term.
+  constraint is observability.  The *sensor share* is derived (0032); the shed's fast path is now
+  derived for process-decoupled absolute references (0036), which also improved the failing-absolute
+  regimes (pot-hot, process+pot).  The residual empiricism is confined to the process-coupled shed
+  (``_SHED``, ``_WHITE_MIN``) -- irreducible, since a coupled channel's failure-vs-process call is
+  dynamic (see the note above) -- and the robust-MAP whiteness gate (built from the derived ``thr``).
 
 * **Collinear process/sensor modes (measured, research 0027).**  When a sensor reads the very
   state the process noise enters (an accelerometer on the jerk-driven acceleration), the two
@@ -143,6 +135,11 @@ _GAP_FACTOR = 1.5           # gap = 1.5 s: resolution (Sparrow) spacing (finding
 _SPAN_S = 3.0               # spectral-truncation coverage budget (half-span in units of s)
 _BETA = 0.02               # innovation-statistics EMA rate (labeled adaptation-timescale budget)
 _Q_REVERT = 0.008          # process-scale reversion to baseline (an elapsed disturbance decays out)
+_CHI1_2SIG = 1.0 + 2.0 * math.sqrt(2.0)   # 2-sigma point of chi^2_1 (mean 1, std sqrt2): the derived
+#                                          significant-outlier floor for nis = e^2/S (was 4.0)
+_SHED = 0.05               # gentle shed slope for a process-COUPLED channel (decoupled references
+_WHITE_MIN = 0.90          # shed statically); the whiteness floor + gentleness bound the onset-lag
+#                            misfire on a coupled channel -- the confound-coupled residual (0036)
 _RIDGE = 1e-9
 
 
@@ -239,6 +236,7 @@ class AdaptiveKalmanFilter:
         self._floor = (1.0 - self.phi) / (4.0 * (_SPAN_S * self.s) ** 2)
         self._Ichar = self._steady_fisher()
         self._qgain = self._whiten_gain()                 # derived per-mode whitening gain (0035)
+        self._decouple = self._decouple_weight()          # per-sensor process-decoupling (0036)
         # ACTIVATE structurally-observable axes -- NOT by the delocalisation floor, and NOT by a
         # threshold relative to the loudest axis (a quiet process mode next to a loud sensor would
         # be frozen and then coast rigidly on a wrong velocity when the sensor is down-weighted --
@@ -417,6 +415,31 @@ class AdaptiveKalmanFilter:
             g[k] = self._Kstar / max(b, B_MIN)             # Newton whitening gain, SOR-capped
         return g
 
+    def _decouple_weight(self) -> np.ndarray:
+        """Per sensor, its process-DECOUPLING (research 0036): 1 - rho1_i, where rho1_i is the lag-1
+        innovation autocorrelation channel i picks up under a strong process disturbance.  With the
+        gain from the ASSUMED (nominal) scale but a TRUE process cov Q0*BIG, the actual a-priori
+        error cov solves the closed-loop Lyapunov M = A M A^T + F K R K^T F^T + Qtrue (A=F(I-KH)),
+        and the Mehra lag-1 innovation autocov C1 = H A M H^T - H F K R gives rho1_i = C1_ii/S_ii;
+        as the disturbance grows this saturates at the channel's intrinsic closed-loop decay (a
+        parameter-free limit).  Decoupling ~1 for an absolute reference that stays white under
+        process (safe to shed FAST -- it carries no process to misattribute), ~0 for a
+        process-coupled channel (shed only slowly: at an outlier ONSET the whiteness gate's lagged
+        EMA cannot yet tell a sensor failure from a process burst, so the fast raise is capped).
+        This caps the fast shed, retiring the empirical boost (_SHED) and whiteness floor
+        (_WHITE_MIN)."""
+        H, F, n, m = self.H, self.F, self.n, self.m
+        R0 = self._R_of(np.zeros(m)); I = np.eye(n)
+        K = self._gain_for(self._Q_of(np.zeros(n)), R0)
+        A = F @ (I - K @ H); W = F @ K @ R0 @ K.T @ F.T + self._Q_of(np.zeros(n)) * 1e4
+        M = I.copy()
+        for _ in range(3000):
+            M = A @ M @ A.T + W
+        S = H @ M @ H.T + R0
+        C1 = H @ A @ M @ H.T - H @ F @ K @ R0
+        C1 = 0.5 * (C1 + C1.T)
+        return np.clip(1.0 - np.array([C1[i, i] / (S[i, i] + 1e-12) for i in range(m)]), 0.0, 1.0)
+
     # ------------------------------------------------------------------- streaming
     def reset(self, mean=None, scale=None) -> "AdaptiveKalmanFilter":
         self._m = None if mean is None else np.asarray(mean, float)
@@ -511,16 +534,23 @@ class AdaptiveKalmanFilter:
                 resid = float(self._C0[i, i] - HPHt[i, i])
                 target = math.log(max(resid, 1e-8) / self.rho[i])
                 step = target - self.mu[k]
-                # Walk at the finding-18 gain K* -- the DERIVED convergent floor for the log-scale
-                # drift (research 0039 / the q-study): the sustained-tracking optimum q_mu is
-                # burst-magnitude-INDEPENDENT and equals K*^2/(I_char(1-K*)), realised by the K* gain.
-                # The only thing that would beat it on a large burst is a REACH surcharge q ~ B^2/(c*tau),
-                # which grows without bound with burst size B and has NO fixed point -- a minimax
-                # burst-envelope choice, not a derivable constant, and on the multivariate rig it is
-                # confound-bounded (tau >= 1/beta) and trades net-negative (the process onset-lag
-                # misfire outweighs the sensor gain).  So the parameter-free filter holds the floor.
-                self.mu[k] += float(np.clip(self._Kstar * wg * step, -self.gap, self.gap))
-                self.mu[k] += self._sensor_reach(i, k, e, wg, step, Sdiag, thr)   # exp hook (0042); base 0
+                rate = self._Kstar
+                if step > 0.0:                                          # SHEDDING a failing sensor:
+                    # The outlier surprise (nis above the 2-sigma point of chi^2_1) drives the raise-
+                    # rate up.  How aggressively depends on the channel's process-DECOUPLING (research
+                    # 0036): a process-decoupled ABSOLUTE REFERENCE (decouple ~1) can never confuse a
+                    # failure with a process burst, so an outlier is always a failure -> shed FAST,
+                    # statically, no whiteness gate needed.  A process-COUPLED channel (decouple ~0)
+                    # must instead read the DYNAMIC whiteness (its outlier could be process), so its
+                    # fast shed fires only while the channel is white (garrote share wg above the
+                    # floor) and gently, so the whiteness gate's onset lag cannot run it away.
+                    nis = e[i] ** 2 / (Sdiag[i] + 1e-12)
+                    surprise = max(nis - _CHI1_2SIG, 0.0)
+                    if self._decouple[i] > 0.5:                         # decoupled reference
+                        rate = min(1.0, self._Kstar * (1.0 + surprise))
+                    elif wg > _WHITE_MIN:                               # coupled: dynamic whiteness
+                        rate = min(1.0, self._Kstar * (1.0 + _SHED * surprise))
+                self.mu[k] += float(np.clip(rate * wg * step, -self.gap, self.gap))
         self.mu[:n] = np.clip(self.mu[:n], -8.0, 20.0)
         self.mu[n:] = np.clip(self.mu[n:], -8.0, 20.0)
         # rebuild the state prior at the walked scale
@@ -553,12 +583,6 @@ class AdaptiveKalmanFilter:
         self.loglik += ll
         return AdaptiveStep(m_new.copy(), P_new.copy(), e.copy(), ll,
                             self.mu[:n].copy(), self.mu[n:].copy())
-
-    def _sensor_reach(self, i, k, e, wg, step, Sdiag, thr):
-        """Extra log-scale reach for sensor i beyond the K* floor walk.  Base: none -- the
-        parameter-free filter holds the floor (research 0039).  Overridden in exploration probe 0042
-        to test a SPATIAL (cross-channel, per-step) confound discriminant against the temporal C1."""
-        return 0.0
 
     def derivatives(self, mean):
         """Reshape a kinematic-model state (or state trajectory) into per-DOF derivatives.
@@ -608,129 +632,3 @@ class AdaptiveKalmanFilter:
                                   process_scale=ps, measurement_scale=ms, loglik=total)
         finally:
             (self._m, self._P, self.mu, self._Pmu, self.loglik) = saved
-
-
-def _logsumexp(a: np.ndarray) -> float:
-    m = float(np.max(a))
-    return m + math.log(float(np.sum(np.exp(a - m))))
-
-
-@dataclass
-class AdaptiveBankStep:
-    """Model-averaged state after one observation (the bank's output)."""
-
-    mean: np.ndarray               #: posterior state mean (n,), weight-averaged over the bank
-    var: np.ndarray                #: posterior state covariance (n, n), mixture-collapsed
-    innovation: np.ndarray         #: weight-averaged innovation (m,)
-    loglik: float                  #: mixture predictive log-density of this observation
-    process_scale: np.ndarray      #: weight-averaged process-eigenmode log-scales (n,)
-    measurement_scale: np.ndarray  #: weight-averaged per-sensor log-scales (m,)
-    n_eff: float                   #: effective number of live members (1 / sum w_i^2)
-    phi_hat: float                 #: posterior-mean class persistence
-    s_hat: float                   #: posterior-mean class swing
-
-
-class AdaptiveBank:
-    """A ``(phi, s)`` bank of :class:`AdaptiveKalmanFilter`s, online Bayesian model-averaged.
-
-    A single filter needs the class pair ``(phi, s)``.  Those live on a *sloppy ridge* the data
-    identifies only weakly, and tracking is nearly flat along it (adaptive-grid findings 13-16), so
-    the right move is not to pick a point but to run a bank across a ``(phi, s)`` grid and combine
-    by online Bayesian model averaging ``w_i propto w_i^forget * p_i(y)`` -- the data pours weight
-    onto the ridge, the flat sloppy direction averages out, and the caller commits only to the model
-    *class* and a broad grid range, no fitted ``(phi, s)`` number.
-
-    The grid also spans ``phi`` down to the **impulsive** end.  A small-``phi`` member has a large
-    walk gain ``K* = (1-phi)/4`` and so reacts fast to a jump; a burst simply shifts model-average
-    weight onto it, by likelihood.  That is what supplies the fast reaction a single persistent
-    member lacks -- and why the member filter needs **no shed** (research 0037).
-
-    ``forget`` is the one residual, and it is a not-a-parameter: it governs the drift rate of
-    ``(phi, s)``, the slowest-varying quantities and the ones on the flat ridge, so its value barely
-    reaches the estimate (identical tracking across ``[0.99, 1.0]``).  ``1.0`` is clean pure-Bayes
-    (weights concentrate and freeze); the default ``0.999`` keeps the bank re-selectable if the
-    class drifts.
-    """
-
-    def __init__(self, members, phis, ss, forget: float = 0.999):
-        if not 0.0 < forget <= 1.0:
-            raise ValueError("forget must lie in (0, 1]")
-        if not members:
-            raise ValueError("the bank needs at least one member")
-        self.filters = list(members)
-        self.phi_arr = np.asarray(phis, dtype=float)
-        self.s_arr = np.asarray(ss, dtype=float)
-        self.forget = float(forget)
-        self.n = self.filters[0].n
-        self.m = self.filters[0].m
-        self.p = self.filters[0].p
-        self.B = self.filters[0].B
-        self.reset()
-
-    @classmethod
-    def kinematic(cls, n_dof, order=2, dt=1.0, process_var=1e-3, meas_var=1.0, measured=("pos",),
-                  control=False, phis=(0.3, 0.6, 0.85, 0.95), ss=(0.3, 0.5, 0.8), forget=0.999):
-        """Build a bank of :meth:`AdaptiveKalmanFilter.kinematic` members over the ``(phi, s)`` grid.
-        The grid spans the impulsive (small ``phi``) to persistent (``phi`` -> 1) ends; widen it
-        freely, the data down-weights the unsupported corners."""
-        members, pa, sa = [], [], []
-        for phi in phis:
-            for s in ss:
-                members.append(AdaptiveKalmanFilter.kinematic(
-                    n_dof, order, dt, process_var=process_var, meas_var=meas_var,
-                    measured=measured, control=control, phi=phi, s=s))
-                pa.append(phi); sa.append(s)
-        return cls(members, pa, sa, forget=forget)
-
-    def reset(self) -> "AdaptiveBank":
-        for f in self.filters:
-            f.reset()
-        self._logw = np.zeros(len(self.filters))          # uniform prior (unnormalised)
-        self.loglik = 0.0
-        return self
-
-    def update(self, y, u=None) -> AdaptiveBankStep:
-        M = len(self.filters)
-        prior = self._logw - _logsumexp(self._logw)
-        ll = np.empty(M)
-        means, vars_, ps, ms, inn = [], [], [], [], []
-        for i, f in enumerate(self.filters):
-            st = f.update(y, u=u)
-            ll[i] = st.loglik
-            means.append(st.mean); vars_.append(st.var); inn.append(st.innovation)
-            ps.append(st.process_scale); ms.append(st.measurement_scale)
-        y = np.atleast_1d(np.asarray(y, dtype=float))
-        if np.all(np.isfinite(y)):
-            bank_ll = _logsumexp(prior + ll)
-            self._logw = self.forget * prior + ll         # Bayes update with forgetting
-        else:
-            bank_ll = 0.0
-            self._logw = prior
-        post = np.exp(self._logw - _logsumexp(self._logw))
-        mean = sum(post[i] * means[i] for i in range(M))
-        var = sum(post[i] * (vars_[i] + np.outer(means[i] - mean, means[i] - mean))
-                  for i in range(M))
-        pscale = sum(post[i] * ps[i] for i in range(M))
-        mscale = sum(post[i] * ms[i] for i in range(M))
-        innov = sum(post[i] * inn[i] for i in range(M))
-        self.loglik += bank_ll
-        return AdaptiveBankStep(mean, var, innov, bank_ll, pscale, mscale,
-                                float(1.0 / (post @ post)),
-                                float(post @ self.phi_arr), float(post @ self.s_arr))
-
-    def filter(self, Y, U=None) -> AdaptiveResult:
-        """Filter a batch; returns the model-averaged trajectory (same shape as a single filter)."""
-        Y = np.atleast_2d(np.asarray(Y, dtype=float))
-        if U is not None:
-            U = np.atleast_2d(np.asarray(U, dtype=float))
-        self.reset()
-        T = Y.shape[0]
-        mean = np.empty((T, self.n)); var = np.empty((T, self.n, self.n))
-        inn = np.empty((T, self.m)); ps = np.empty((T, self.n)); ms = np.empty((T, self.m))
-        total = 0.0
-        for i, row in enumerate(Y):
-            st = self.update(row, None if U is None else U[i])
-            mean[i] = st.mean; var[i] = st.var; inn[i] = st.innovation
-            ps[i] = st.process_scale; ms[i] = st.measurement_scale; total += st.loglik
-        return AdaptiveResult(mean=mean, var=var, innovation=inn,
-                              process_scale=ps, measurement_scale=ms, loglik=total)
