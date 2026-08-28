@@ -14,10 +14,10 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from odefilter import OdeFilter, Params, difference_matrix          # noqa: E402
-from odefilter.core import (_iv_alpha, _moment_noises, _pin_maps,   # noqa: E402
-                            _companion)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from lucid.odefilter import OdeFilter, Params, difference_matrix          # noqa: E402
+from lucid.odefilter.core import (_iv_alpha, _moment_noises, _pin_maps,   # noqa: E402
+                                  _companion)
 
 PARENT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__)))), "..", "random-walk-filter", "output")
@@ -253,7 +253,7 @@ def test_pinned_and_free_agree_where_they_meet():
     """The same alpha scored through the pinned coordinates and the free ones
     must give the same likelihood: the constraint changes the SEARCH SPACE,
     never the model."""
-    from odefilter.core import _loglik_batch
+    from lucid.odefilter.core import _loglik_batch
     rng = np.random.default_rng(19)
     x, y = ar(200, ALPHA3, 1.0, 9.0, rng)
     pr = Params(alpha=ALPHA3, Q=1.0, s2=9.0, unit_roots=1)
@@ -484,7 +484,7 @@ def test_quadrature_resolution_is_inert_at_s_zero():
 
 
 def test_streaming_and_batched_agree():
-    from odefilter.core import _loglik_batch
+    from lucid.odefilter.core import _loglik_batch
     rng = np.random.default_rng(52)
     x, y = ar(300, ALPHA3, 1.0, 9.0, rng)
     pr = Params(alpha=ALPHA3, Q=1.0, s2=9.0, phi_P=0.9, s_P=0.8,
