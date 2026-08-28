@@ -14,8 +14,8 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from statfilter import AdaptiveKalmanFilter, AdaptiveStep, AdaptiveResult  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from lucid.statfilter.adaptive import AdaptiveKalmanFilter, AdaptiveStep, AdaptiveResult  # noqa: E402
 
 
 def _crusher(seed, q_on, r_on, q_base=1e-3, r_base=0.04, T=600):

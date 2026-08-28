@@ -10,7 +10,10 @@ import math
 import numpy as np
 import pytest
 
-from odefilter import OdeFilter, Params, OffsetFilter, delay_row, cross_anchor
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from lucid.odefilter import OdeFilter, Params, OffsetFilter, delay_row, cross_anchor  # noqa: E402
 
 # a damped oscillator: roots 0.95 exp(+/- 0.4i)
 ALPHA = (2 * 0.95 * math.cos(0.4), -(0.95 ** 2))

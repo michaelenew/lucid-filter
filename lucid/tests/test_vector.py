@@ -14,8 +14,9 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from statfilter import AdaptiveFilter, Params, VectorFilter, VecParams  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from lucid.statfilter.core import AdaptiveFilter, Params  # noqa: E402
+from lucid.statfilter.vector import VectorFilter, VecParams  # noqa: E402
 
 
 # ------------------------------------------------------------------ fixtures

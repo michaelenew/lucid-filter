@@ -11,8 +11,8 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from statfilter import WalkingFilter, WalkResult  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from lucid.statfilter.walking import WalkingFilter, WalkResult  # noqa: E402
 
 
 # ------------------------------------------------------------------ fixtures
@@ -124,7 +124,7 @@ def test_reset_chains_and_seeds_scale():
 
 
 # --------------------------------------------------------------- WalkingBank
-from statfilter import WalkingBank, BankResult  # noqa: E402
+from lucid.statfilter.walking import WalkingBank, BankResult  # noqa: E402
 
 
 def test_bank_construction_validates():

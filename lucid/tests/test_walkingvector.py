@@ -13,8 +13,8 @@ import sys
 import numpy as np
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from statfilter import WalkingVectorFilter  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from lucid.statfilter.walkingvector import WalkingVectorFilter  # noqa: E402
 
 
 def mv_series(H, Q0, rho, T, seed, hot_axis=None, amp=0.0):
