@@ -38,11 +38,12 @@ general case.** Everything else follows from taking that seriously.
    not *identifiability* — the 0024 activation rule is unchanged.
 3. **An axis with no evidence drifts; it is never frozen and never updated on nothing**
    (0001 §4). This is not an addition to the walk: `P_mu ← (1−K_mu)P_mu + q_mu` at
-   `info → 0` **is** `P_mu ← P_mu + q_mu`, measured 4.9e-06 apart. Applying it on the
+   `info → 0` **is** `P_mu ← P_mu + q_mu`, measured 9.3e-06 apart. Applying it on the
    all-missing row too removes a discontinuity in the sensor count — a sensor absent while
    others report would otherwise drift, and the same sensor absent while none report would
-   not. **Recorded cost, not a win:** free when the scale did not move across the gap,
-   1.9%/5.9% worse (8σ) when it moved during a blackout.
+   not. Free when the scale did not move across the gap, and **1.5%/5.0% better (3–4σ)**
+   when it moved during a blackout. ~~Recorded cost, not a win: 1.9%/5.9% *worse* at 8σ~~ —
+   that was measured before the split ladder and the split ladder retired it (0001 §4).
 4. **Time enters as a rate, everywhere** (0001, 0004). `timestep` fixes the unit;
    everything supplied about the model and every class timescale is per nominal step, and
    an event `a = dt/timestep` steps later takes each of them to that power:
@@ -141,9 +142,9 @@ checking.
   inverse with no PSD guarantee, which is why it is not done.
 - **The no-information drift's saturation** (0001 §4). Over a long unobserved gap the walk
   covariance drifts to the window-localisation bound `(3s)²`. The scale's own stationary
-  variance is `s²`, and saturating there instead is the first thing to try against 0001's
-  cost table — it is the term that makes the post-blackout reading spend one large clipped
-  step.
+  variance is `s²`, and saturating there instead is the alternative; 0001 §4's table is what
+  it would have to beat, and that bar moved when the split ladder turned the drift from a
+  1.9%/5.9% cost into a 1.5%/5.0% gain.
 - **The residual pointwise/joint gap** (0003). 2–10% above a 0.6–2.0% frozen-walk floor:
   `m` successive GPB1 collapses and `m` smaller walk steps on the same information. It is
   a property of the caltrop-plus-GPB1 construction, not of the decomposition, and it is

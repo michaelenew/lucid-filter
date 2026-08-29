@@ -67,8 +67,8 @@ The walk is a scalar Kalman filter on each axis's window centre:
 
 Take an axis this event carries no information about — a sensor that did not read.
 `info → 0`, so `K_mu → 0` and the recursion **is** `P_mu ← P_mu + q_mu`: the drift, on its
-own. Measured at the engine's Fisher stabiliser: `K_mu = 6.9e-06`, the recursion gives
-`0.09835160`, the pure drift `0.09835207` — **4.9e-06 apart**. The drift is not an addition
+own. Measured at the engine's Fisher stabiliser: `K_mu = 1.1e-05`, the recursion gives
+`0.12990585`, the pure drift `0.12990706` — **9.3e-06 apart**. The drift is not an addition
 to the walk; it is the walk's own no-information limit.
 
 The old code never had to evaluate that limit. With a full row every active axis always
@@ -82,19 +82,29 @@ What that costs, over a blackout across which the sensor scale moves (12 seeds):
 
 | blackout | with the limit | without (old) | Δ (se) |
 |---|---|---|---|
-| 5 steps, scale unchanged | 0.3724 | 0.3725 | −0.0001 (0.0000) |
-| 5 steps, sensor ×10 | 3.3301 | 3.2693 | **+0.0607** (0.0077) |
-| 40 steps, scale unchanged | 0.3816 | 0.3819 | −0.0004 (0.0001) |
-| 40 steps, sensor ×10 | 3.5538 | 3.3565 | **+0.1973** (0.0228) |
+| 5 steps, scale unchanged | 0.3203 | 0.3203 | −0.0000 (0.0000) |
+| 5 steps, sensor ×10 | 2.8104 | 2.8531 | **−0.0427** (0.0135) |
+| 40 steps, scale unchanged | 0.3502 | 0.3504 | −0.0002 (0.0001) |
+| 40 steps, sensor ×10 | 2.8997 | 3.0537 | **−0.1541** (0.0402) |
 
-**Free when the scale did not move, and 1.9% / 5.9% worse when it moved during the
-blackout — 8σ, not noise.** The mechanism is visible: coming out of a blackout at the
-walk's cap spends the first reading on one large clipped step and collapses `P_mu` behind
-it, so the next few readings move less. This is a **recorded cost, not a win**: it is paid
-to remove the discontinuity, and the alternative — freezing the walk's confidence for
-exactly as long as nothing is heard — is the same latched-freeze error
+**Free when the scale did not move across the gap, and 1.5% / 5.0% BETTER when it moved
+during the blackout — 3.2σ and 3.8σ.** So on the current engine the honest limit is also
+the cheaper one, and the discontinuity argument does not have to carry the decision alone.
+
+> ~~**Superseded.** On the engine as it stood before the sequence-demix split ladder
+> (`05efef1`) this table read the other way: +0.0607 (0.0077) and +0.1973 (0.0228) — the
+> drift measured 1.9% / 5.9% **worse** at 8σ, and was kept anyway, as a recorded cost paid
+> to remove the discontinuity. The mechanism named then was that coming out of a blackout
+> at the walk's cap spends the first reading on one large clipped step and collapses `P_mu`
+> behind it. The split ladder retired that: with the process/sensor attribution carried in
+> the bank rather than settled by a per-axis Newton step, one noisy step out of a blackout
+> costs much less, and the wider window makes the honest prior the better one. The claim
+> that changed is the sign of the cost; the reason for the choice did not.~~
+
+The alternative — freezing the walk's confidence for exactly as long as nothing is heard —
+is the same latched-freeze error
 [`dynamics-learning/0003`](../../dynamics-learning/exploration/0003_excitation_honesty.md)
 measured at 20× one level up. The cap that the drift saturates against over a long gap is
 the window-localisation bound `(3s)²`, not the scale's stationary variance `s²`; whether
-the *no-information* drift should saturate at the latter is an open, and would be the
-first thing to try against this table.
+the *no-information* drift should saturate at the latter is still an open, and this table
+is what it would have to beat.
