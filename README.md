@@ -258,14 +258,18 @@ $\log(1/\rho)\,/\,\mathrm{KL}$, computed rather than tuned. The nominal model
 never leaves the bank, which is what makes a false alarm cost almost nothing —
 and *that* is what makes the fast end of the frontier affordable.
 
-Measured on the two acceptance rigs: a quadrotor that has a payload attached
-mid-flight is caught in $28.9\pm1.7$ steps against a derived frontier of 29.6,
-and recovers its mass and inertia to three figures; a differential drive whose
-wheel blows out is caught in **18 ms** against a 25 ms frontier, with the side
-pinned immediately and the healthy wheel's estimate returning home to within 1%.
-Both hold calm-regime cost at 1.00× and never do worse than the frozen-model
-filter in any regime
-([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
+Measured, with the shipped filter separated from the research prototypes that
+designed it. **Shipped**: on a scalar step change it detects in $15.7\pm1.7$
+steps against a derived frontier of **15** — on the frontier; on a differential
+drive whose wheel blows out it detects in **43 ms**, recovers the blown radius to
+$0.303\pm0.018$ (true 0.30) and the healthy one to $1.043\pm0.021$ (true 1.00),
+and settles at $1.037\times$ a refit oracle where the frozen model pays
+$5.06\times$. **Prototypes** (the ladder that fixed the design): the same blowout
+with its failure modes *named* is caught in 18 ms, and a quadrotor that has a
+payload attached mid-flight in $28.9\pm1.7$ steps against a frontier of 29.6,
+recovering its mass and inertia to three figures. Calm-regime cost is 1.00×
+throughout, and no configuration does worse than the frozen-model filter in any
+regime ([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
 
 One honest caveat throughout: nothing here has been flown. The mechanism is
 measured on synthetic systems with known ground truth; hardware validation is
