@@ -140,13 +140,15 @@ general case.** Everything else follows from taking that seriously.
   the same filter.
 - **The asynchronous rig** (0005), the acceptance benchmark — a 100 Hz rate gyro, a 5 Hz
   absolute fix and a 12 Hz jittered second absolute, none phase-locked, one failing ×10
-  mid-run, 1877 events, driven entirely through `observe`. Lucid **1.111×** an oracle told
-  the true schedule and the true noise (1.048× calm, 1.145× with the sensor hot) against a
+  mid-run, 1877 events, driven entirely through `observe`. Lucid **1.158×** an oracle told
+  the true schedule and the true noise (1.027× calm, 1.434× with the sensor hot) against a
   fixed-noise filter at 2.103× (1.000× calm — the adaptation costs nothing when there is
   nothing to adapt to — and **3.357×** once a sensor degrades). The failing sensor's chip
-  rises +4.49 nats on a truth of 4.61. **The old API's route — bin onto the fast grid,
-  drop any incomplete row — keeps 11 of 1600 rows (0.7%) and pays 21.2×**, and that number
-  gets worse as sensor rates get less commensurable, not better.
+  rises +4.74 nats on a truth of 4.61. **The old API's route — bin onto the fast grid,
+  drop any incomplete row — keeps 11 of 1600 rows (0.7%) and pays 21.3×**, and that number
+  gets worse as sensor rates get less commensurable, not better. 2.95 ms per event in pure
+  numpy. This is the probe that found design items 6, 8 and 9; the row-wise rigs could not
+  have.
 
 ## A note on the second engine
 

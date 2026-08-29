@@ -26,34 +26,54 @@ an asynchronous suite to a row-shaped filter does not degrade gracefully.
 | position RMSE (m) | whole run | calm | sensor 2 hot |
 |---|---|---|---|
 | oracle | 0.0345 | 0.0490 | 0.0241 |
-| **lucid** | **0.0383** | **0.0513** | **0.0276** |
+| **lucid** | **0.0400** | **0.0503** | **0.0346** |
 | fixed | 0.0726 | 0.0490 | 0.0809 |
-| gridded (old API) | 0.7313 | | |
+| gridded (old API) | 0.7346 | | |
 
 | ratio to oracle | whole run | calm | sensor 2 hot |
 |---|---|---|---|
-| **lucid** | **1.111** | **1.048** | **1.145** |
+| **lucid** | **1.158** | **1.027** | **1.434** |
 | fixed | 2.103 | 1.000 | 3.357 |
-| gridded (old API) | **21.181** | | |
+| gridded (old API) | **21.277** | | |
 
-Near-oracle throughout — 1.05× calm, 1.14× with a sensor at ten times its stated noise —
+Near-oracle throughout — 1.03× calm, 1.43× with a sensor at ten times its stated noise —
 against a fixed-noise filter that is exactly oracle in the calm (1.000, so the adaptation
 costs nothing when there is nothing to adapt to) and pays **3.4×** the moment a sensor
 degrades. The old API's route is 21× the oracle, and would be worse on a suite with less
 commensurable rates.
 
-**The diagnosis.** The failing sensor's own chip rises **+4.49 nats** against a truth of
+**The diagnosis.** The failing sensor's own chip rises **+4.74 nats** against a truth of
 `log 10² = 4.61` — it names the right sensor, at nearly the right size, from readings that
 arrive at 12 Hz among two other sensors' traffic. The worst leak onto a healthy sensor is
-**+0.90**, and that is not noise: sensors 0 and 2 both read *position*, so they are partly
-collinear in innovation space and share some identifiable total, which is the same
+**+1.85**, and that is not noise: sensors 0 and 2 both read *position*, so they are partly
+collinear and share an identifiable total — the same
 confound [`multivariate-statfilter/0027`](../../multivariate-statfilter/exploration/0027_confound.md)
-measured for the accelerometer/disturbance pair. The state estimate needs the total and is
-unaffected — 1.145× oracle through the burst — but the *attribution* between two sensors
-reading the same state is shared, and this rig is a cleaner instance of that than the arm
-is. Not a streaming defect; the standing collinearity limit, now visible in a second place.
+measured for the accelerometer/disturbance pair. The state needs the total and mostly gets
+it (1.43× through the burst), but the *attribution* between two sensors reading one state is
+shared, and it is **worse here than the +0.90 the same rig showed before the wider
+`(phi, s)` box**: a wide window gives a shared direction more room to sit in. Not a
+streaming defect; the standing collinearity limit, now visible in a second place.
 
-**Cost.** 6.14 ± 0.07 ms per event in pure numpy, for `n = 2`, `m = 3`, one sensor per
-event. Per *instant* that is the pointwise column of
+## What this rig was actually for
+
+It found three things no row-wise rig could have, and each is a design item in
+[`SUMMARY.md`](../SUMMARY.md) (6, 8, 9):
+
+1. **`Q(a) = Q·a` was a bug, not an approximation.** A pure double integrator accumulates
+   position variance as `t³`; 15% of this rig's gaps are under half a nominal step, where
+   linear scaling asks for **4×** the position noise there is, and a tenth-length gap
+   **100×**. `Q(a)` is now exact. [`0004`](0004_the_clock.md) had measured that same map at
+   ≤15% error and called it safe — its rig carries a direct position-diffusion term that
+   masks the cubic. **A probe that agrees with you is not evidence.**
+2. **A single-sensor event cannot see the process/sensor split at all** — with one sensor
+   `S` is a scalar and the two enter it additively. The event now moves the pair's total and
+   holds its split.
+3. **The right bound is not the split ladder's revert.** Applying it here fixed the hot
+   window (2.7× against 17.4× without it) and *caused* a permanent process-scale latch in
+   the tail (3.61× against 1.23×): reverting toward the member's base split hands half of a
+   genuinely elevated total to the process axis when a sensor really is bad.
+
+**Cost.** 2.95 ± 0.03 ms per event in pure numpy, for `n = 2`, `m = 3`, one sensor per
+event — down from 6.14 before the stacked bank landed. Per *instant* that is the pointwise column of
 [`0003`](0003_pointwise_vs_joint.md): fewer multiply-adds than the joint row, more
 interpreter passes.
