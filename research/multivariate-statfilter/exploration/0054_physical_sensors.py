@@ -1,29 +1,36 @@
-"""0054 -- sensors the arm could actually carry, and what the old diagonal H was worth.
+"""0054 -- sensors the arm could actually carry, and what the sensor-model shortcuts cost.
 
 `0052` gave every joint an "accelerometer" reading that joint's own angular acceleration
-through a constant, diagonal ``H``.  No sensor does that.  An inertial sensor is bolted to a
-*link*, and reads the motion of the whole chain beneath it in axes that rotate with the arm.
-On this arm joints 2, 3 and 4 all rotate about their local y, so their axes are exactly
-parallel and a sensor on link 4 reads ``al_2 + al_3 + al_4``; the joint 1 <-> joint 5 coupling
-is not even constant, sweeping -0.15 to -0.53 across the trajectory.  Measured against 0052's
-own sensor sigma, that model error is **7-13x** on joints 3, 4 and 5.
+through a constant, diagonal ``H``.  No sensor does that.  This probe replaced it in two
+steps, and both are part of the record:
 
-`../scripts/arm5dof.py` replaces it with the physical map -- coupled, state-dependent, and
-with a rate-quadratic term, so ``h(x)`` is not ``H(x) x`` -- supplied to the shipped filter as
-``LucidFilter(H=callable)``.  The servo also now flies on an alpha-beta-gamma tracker of the
-potentiometers rather than on the true state, at a bandwidth the potentiometer can support.
+* **First cut, an angular sensor.**  A link-mounted angular-rate/acceleration sensor reads
+  the CHAIN beneath it, ``sum_{i<=j} (a_j . a_i) al_i`` -- but on a serial chain the
+  couplings are axis dot products, constant wherever axes are parallel or orthogonal.  On
+  the old chain that was every coupling but one: a constant COUPLED ``H`` (the "simple sum")
+  fixed links 1-4 exactly and left a single varying coefficient.  The honest headline there
+  was "diagonal where it should have been a constant sum"; a reactive ``H`` was motivated,
+  not forced.
+* **The rig as it stands, a linear accelerometer** (`../scripts/arm5dof.py`) on the common
+  5-DOF chain (yaw+pitch base, pitch+roll elbow, one wrist flex).  A MEMS accelerometer at
+  each link's distal end reads proper acceleration: a configuration-dependent lever-arm map
+  on the joint accelerations, centripetal/Coriolis terms quadratic in the rates, and
+  **gravity resolved in the link frame** -- 9.81 m/s^2 that moves with every joint below.
+  There is no constant ``H`` here at all, so the map reaches the shipped filter as
+  ``LucidFilter(H=callable)`` and is linearised at every step.
 
-Four questions, in order:
+Questions, in order:
 
-  1. Is the analytic Jacobian right?  (against central differences)
+  1. Is the complex-step Jacobian right?  (against central differences)
   2. On the physical rig, how does the filter do against an oracle told the true noise
-     schedule, and against the same model frozen?
-  3. What does the OLD diagonal ``H`` cost, run on this same physical data?  That is the
-     price of the shortcut, and the reason the feature had to exist.
-  4. Why the second sensor is an accelerometer and not a rate gyro -- a relative-degree
-     result that is a genuine limit of the scale walk, isolated here.
+     schedule, and against the same model frozen at the base noise?
+  3. What does FREEZING the linearisation cost -- the same filter handed ``H_CHAR``, the
+     map linearised once at the home pose and never again?  That is the ablation that shows
+     the per-step linearisation is load-bearing, not decoration.
+  4. Why the dynamic sensor is an accelerometer and not a rate gyro -- a relative-degree
+     limit of the per-step scale walk, isolated on a diagonal control rig.
 
-Run: python 0054_physical_sensors.py        (~20 min)
+Run: python 0054_physical_sensors.py        (~25 min)
 """
 from __future__ import annotations
 
@@ -53,21 +60,21 @@ def se(v):
     return float(np.std(v, ddof=1) / np.sqrt(len(v))) if v.size > 1 else 0.0
 
 
-def schedule(sig2=None):
+def schedule():
     jstd = np.full(T, A.JERK)
     pot = np.full((T, A.NJ), A.POT)
-    dyn = np.full((T, A.NJ), A.ACC if sig2 is None else sig2)
+    acc = np.full((T, A.NJ), A.ACC)
     for nm, a, b in PHASES:
         if nm == "SENSOR":
-            dyn[a:b] *= ACC_MULT
+            acc[a:b] *= ACC_MULT
         elif nm == "PROCESS":
             jstd[a:b] *= JERK_MULT
         elif nm == "POTFAIL":
             pot[a:b, FAIL_J] *= POT_MULT
         elif nm == "BOTH":
-            dyn[a:b] *= ACC_MULT
+            acc[a:b] *= ACC_MULT
             jstd[a:b] *= JERK_MULT
-    return jstd, pot, dyn
+    return jstd, pot, acc
 
 
 def tip(Z):
@@ -104,12 +111,19 @@ def jacobian_check():
             e[i] = 1e-6
             num[:, i] = (A.measure(x + e)[1] - A.measure(x - e)[1]) / 2e-6
         worst = max(worst, float(np.abs(Hm - num).max()))
-    print(f"1. analytic Jacobian vs central differences, worst abs error: {worst:.2e}")
+    print(f"1. complex-step Jacobian vs central differences, worst abs error: {worst:.2e}")
     Hc = A.H_CHAR
-    print("   what each accelerometer actually reads (coefficients on alpha, at theta = 0):")
+    y0 = A.measure(np.zeros(A.N))[1]
+    print("   what each accelerometer reads at the home pose:")
+    print(f"   {'':>10} {'gravity (m/s^2)':>16}   {'d/d theta (per rad)':>28}   "
+          f"{'lever arms d/d alpha (m)':>28}")
     for j in range(A.NJ):
-        row = "  ".join(f"al{i + 1}={Hc[2 * j + 1, A.ORDER * i + 2]:+.2f}" for i in range(A.NJ))
-        print(f"     link {j + 1}: {row}")
+        g = 2 * j + 1
+        print(f"   link {j + 1:>4} {y0[g]:>16.2f}   "
+              f"{np.array2string(np.round(Hc[g, 0::3], 1), floatmode='fixed'):>28}   "
+              f"{np.array2string(np.round(Hc[g, 2::3], 2), floatmode='fixed'):>28}")
+    print("   (the riser accelerometer reads ~nothing under yaw -- physically correct; yaw"
+          "\n    redundancy rides on links 2-5 through the chain)")
 
 
 def main():
@@ -117,24 +131,26 @@ def main():
     jacobian_check()
 
     W = windows()
-    acc = {k: {b: [] for b in ("lucid", "fixed", "diagH")} for k in W}
-    burst = {b: [] for b in ("raw", "lucid", "fixed", "oracle", "diagH")}
-    Hd = np.zeros((A.M, A.N))                # the retired model: diagonal, joint-local
-    for j in range(A.NJ):
-        Hd[2 * j, A.ORDER * j] = 1.0
-        Hd[2 * j + 1, A.ORDER * j + 2] = 1.0
+    acc_r = {k: {b: [] for b in ("lucid", "fixed", "frozenH")} for k in W}
+    burst = {b: [] for b in ("raw", "lucid", "fixed", "oracle", "frozenH")}
+    Y0 = A.measure(np.zeros(A.N))[1]         # h(0): the gravity offset, computed once
 
     for sd in range(NS):
-        jstd, pot, dyn = schedule()
-        U, S, Y = A.simulate(sd, jstd, pot, dyn)
+        jstd, pot, acc = schedule()
+        U, S, Y = A.simulate(sd, jstd, pot, acc)
         Qs = [j ** 2 * (A.B @ A.B.T) for j in jstd]
-        Rs = [np.concatenate([[pot[k, j] ** 2, dyn[k, j] ** 2] for j in range(A.NJ)])
+        Rs = [np.concatenate([[pot[k, j] ** 2, acc[k, j] ** 2] for j in range(A.NJ)])
               for k in range(T)]
         est = {"lucid": A.make_filter().filter(Y, U).mean,
                "fixed": A.kalman(U, Y),
                "oracle": A.kalman(U, Y, Qs, Rs),
-               "diagH": LucidFilter(dynamics=A.F, control=A.B, H=Hd, process=A.Q0,
-                                    measurement=A.R0).filter(Y, U).mean}
+               # the ablation: the same lucid filter, H linearised ONCE at the home pose.
+               # (A constant H cannot carry h(0) either, so this contender is also spotted
+               # the true gravity offset -- the handicap is purely the frozen Jacobian.)
+               "frozenH": LucidFilter(dynamics=A.F, control=A.B,
+                                      H=lambda x: (A.H_CHAR, A.H_CHAR @ x + Y0),
+                                      process=A.Q0,
+                                      measurement=A.R0).filter(Y, U).mean}
         Pt = tip(S)
         P = {k: tip(v) for k, v in est.items()}
         P["raw"] = np.array([A.joints3d(Y[k, 0::2])[-1] for k in range(T)])
@@ -147,18 +163,18 @@ def main():
         for key, spans in W.items():
             sl = mask(spans)
             o = rms(P["oracle"], Pt, sl)
-            for b in ("lucid", "fixed", "diagH"):
-                acc[key][b].append(rms(P[b], Pt, sl) / o)
+            for b in ("lucid", "fixed", "frozenH"):
+                acc_r[key][b].append(rms(P[b], Pt, sl) / o)
         print(f"   seed {sd} done ({time.time() - t0:.0f}s)", flush=True)
 
     print(f"\n2/3. tip RMSE over the bursts ({NS} seeds), metres")
-    for b in ("raw", "fixed", "oracle", "lucid", "diagH"):
+    for b in ("raw", "fixed", "oracle", "lucid", "frozenH"):
         print(f"     {b:<8} {np.mean(burst[b]):.4f} +- {se(burst[b]):.4f}")
     print("\n     ratio to an oracle told the true noise schedule "
-          "(`diag-H` is the RETIRED model, on this same physical data)")
-    print(f"     {'regime':<10}{'lucid':>10}{'fixed':>10}{'diag-H':>12}")
+          "(`frozen-H` is the same lucid filter, linearised once at home)")
+    print(f"     {'regime':<10}{'lucid':>10}{'fixed':>10}{'frozen-H':>12}")
     for key in ("calm", "SENSOR", "PROCESS", "POTFAIL", "BOTH"):
-        row = [np.mean(acc[key][b]) for b in ("lucid", "fixed", "diagH")]
+        row = [np.mean(acc_r[key][b]) for b in ("lucid", "fixed", "frozenH")]
         print(f"     {key:<10}{row[0]:>10.2f}{row[1]:>10.2f}{row[2]:>12.2f}")
 
     print("\n4. why the dynamic sensor is an accelerometer, not a rate gyro (1 seed)")
@@ -166,10 +182,14 @@ def main():
     print("   acceleration sensor through dt -- 200x more per step at this rate.  The scale")
     print("   walk scores per step, so on a rate sensor a process burst is nearly invisible")
     print("   in one step while the sensor axis is not, and the burst is blamed on the")
-    print("   sensor.  Both rigs below are DIAGONAL, so only the read derivative differs.")
-    for lab, di, sig in (("accelerometer (reads alpha)", 2, A.ACC),
+    print("   sensor.  Both control rigs are DIAGONAL; only the read derivative differs.")
+    for lab, di, sig in (("angular accel (reads alpha)", 2, 0.020),
                          ("rate gyro     (reads omega)", 1, 0.010)):
-        jstd, pot, dyn = schedule(sig)
+        jstd, pot, _ = schedule()
+        dyn = np.full((T, A.NJ), sig)
+        for nm, a, b in PHASES:
+            if nm in ("SENSOR", "BOTH"):
+                dyn[a:b] *= ACC_MULT
         rows = []
         for j in range(A.NJ):
             e = np.zeros(A.N); e[A.ORDER * j] = 1.0; rows.append(e)
@@ -204,7 +224,8 @@ def main():
             Pk = Pp - K @ Hm @ Pp
             orc[k] = m0
         Pt, Pl, Po = tip(S), tip(lu), tip(orc)
-        out = "  ".join(f"{nm} {rms(Pl, Pt, mask(W[nm])) / rms(Po, Pt, mask(W[nm])):.2f}"
+        W4 = windows()
+        out = "  ".join(f"{nm} {rms(Pl, Pt, mask(W4[nm])) / rms(Po, Pt, mask(W4[nm])):.2f}"
                         for nm in ("calm", "SENSOR", "PROCESS", "POTFAIL", "BOTH"))
         print(f"   {lab}  lucid/oracle:  {out}")
     print(f"\ndone in {time.time() - t0:.0f}s")

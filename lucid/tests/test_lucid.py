@@ -501,3 +501,20 @@ def test_callable_H_nonlinear_pair_and_stacked_bank():
     assert np.allclose(ra.process_scale, rb.process_scale, atol=1e-8)
     assert np.allclose(ra.measurement_scale, rb.measurement_scale, atol=1e-8)
     assert np.allclose(ra.fault, rb.fault, atol=1e-9)
+
+
+def test_callable_H_offset_is_not_misread_at_init():
+    """h with a constant offset (an accelerometer's gravity term) must not poison the start.
+
+    The cold-start mean is a least squares against the measurement map; with an ``(H, y_pred)``
+    hook the map has a value at zero state, and solving ``H x = y`` without subtracting it
+    would book gravity as enormous state.  The init linearises h at the origin instead.
+    """
+    Hm = np.array([[1.0, 0.0], [0.5, 2.0]])
+    c = np.array([0.0, 7.0])
+    f = LucidFilter(dynamics=np.eye(2), H=lambda x: (Hm, Hm @ x + c),
+                    process=np.eye(2) * 1e-4, measurement=[1e-4, 1e-4],
+                    phis=(0.85,), ss=(0.40,))
+    f.reset()
+    st = f.update(Hm @ np.array([1.0, -0.5]) + c)      # the exact reading at x = (1, -0.5)
+    assert np.allclose(st.mean, [1.0, -0.5], atol=0.05), st.mean

@@ -1,18 +1,20 @@
 """Render the LucidFilter 5-DOF arm demo to a GIF for the main README.
 
 Real output of the PUBLIC filter (`from lucid import LucidFilter`) on the 3D 5-DOF arm rig of
-`arm5dof.py`: a bad potentiometer plus a link-mounted angular accelerometer per joint, driven
-along a commanded trajectory by a servo that flies on the potentiometers, with noise arriving
-in phases:
+`arm5dof.py` -- the common chain (yaw + shoulder pitch at the base, elbow pitch + forearm
+roll, one wrist flex), a bad potentiometer plus a link-mounted MEMS accelerometer per joint,
+driven along a commanded trajectory by a servo that flies on the potentiometers, with noise
+arriving in phases:
 
     calm | SENSOR (accelerometers swamped) | calm | PROCESS (disturbance jerk) |
     calm | POT FAILURE (one joint's potentiometer dies) | calm | BOTH | calm
 
-The measurement map is a CALLABLE, and has to be: an accelerometer bolted to link j reads the
-whole chain beneath it, through axes that rotate with the arm, plus a term quadratic in the
-joint rates.  `arm5dof.py` derives it and pins the Jacobian against central differences; a
-filter handed the old diagonal `H` instead is 13-192x the oracle on this same data
-(`../exploration/0054_physical_sensors.md`).
+The measurement map is a CALLABLE, and has to be: a linear accelerometer reads gravity in a
+link frame that moves with every joint below it, configuration-dependent lever arms on the
+joint accelerations, and terms quadratic in the rates -- there is no constant `H`, so the map
+is linearised at every step, exactly as `F` would be.  `arm5dof.py` builds it and `0054` pins
+the complex-step Jacobian against central differences and measures what freezing the
+linearisation costs (`../exploration/0054_physical_sensors.md`).
 
 Panels: a rotating 3D view of the arm (true vs raw-pot vs lucid estimate), a per-component
 "which noise is hot" chip grid (the learned log-scales, per joint: pots / accels / process

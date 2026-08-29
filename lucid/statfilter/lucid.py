@@ -603,8 +603,16 @@ class _WalkEngine:
         if self._pi_ax is None:
             self._pi_ax = self._w1[self._act].copy()
             if self._m is None:
-                self._m = (np.linalg.lstsq(H, y, rcond=None)[0]
-                           if np.all(np.isfinite(y)) else np.zeros(n))
+                if np.all(np.isfinite(y)):
+                    # Initialise by linearising h at the origin.  With a constant H this is
+                    # the least-squares start it always was (h(0) = 0); with a hook it
+                    # subtracts the measurement's value at zero state -- gravity, for an
+                    # accelerometer -- which a raw lstsq against the Jacobian would
+                    # otherwise misread as enormous state.
+                    H0, y0 = self._H_at(np.zeros(n))
+                    self._m = np.linalg.lstsq(H0, y - y0, rcond=None)[0]
+                else:
+                    self._m = np.zeros(n)
             if self._P is None:
                 self._P = self._cap_P(
                     np.eye(n) * float(Rg.reshape(self._G, -1).max()
@@ -868,7 +876,16 @@ class _EngineBank:
         Qg, Rg = self._star_QR()
         if self._fresh:
             self._pi[:] = self._w1[:, self._act]
-            self._m[:] = (np.linalg.lstsq(H, y, rcond=None)[0] if ok else np.zeros(n))
+            if not ok:
+                self._m[:] = 0.0
+            elif self._hooks is None:
+                self._m[:] = np.linalg.lstsq(H, y, rcond=None)[0]
+            else:
+                # linearise h at the origin -- every member starts there, so one member's
+                # (H0, h(0)) serves the stack; subtracting h(0) keeps an offset measurement
+                # (an accelerometer's gravity term) out of the least-squares start
+                H0, y0 = self.members[0]._H_at(np.zeros(n))
+                self._m[:] = np.linalg.lstsq(H0, y - y0, rcond=None)[0]
             scal = (Rg.reshape(M, -1).max(1) + Qg.reshape(M, -1).max(1)) * n
             self._P[:] = np.eye(n)[None] * scal[:, None, None]
             self._cap_P(self._P)
