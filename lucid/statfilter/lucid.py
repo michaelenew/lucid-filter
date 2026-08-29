@@ -34,6 +34,19 @@ the window centre plus an axial window per active axis, ``1 + 2K * (#active axes
 in `n + m`, so the whole filter is polynomial-time.  The star does not represent the joint scale
 density (no corner nodes); it locates its peak by per-axis walking, which 0013 validates as matching
 the exact grid for state tracking at linear cost.
+
+The walk is the right instrument for every scale direction the one-step likelihood can see, and
+there is one it cannot.  Where a process eigenmode is read by exactly ONE sensor, the two scale
+derivatives are proportional as matrices, so the likelihood sees only the SUM of their
+contributions to that channel and the SPLIT between them is invisible at every step, at every
+operating point -- Proposition 1 in coordinates (research/sequence-demix/0001).  The engine finds
+those pairs structurally and carries the split as a dimension of the BANK instead: a ladder of
+anchored hypotheses, each a complete filter, so the sequence evidence reaches it through the
+member's own mean (a rung with too much process chases sensor noise and pays for it in its own
+predictive likelihood) and its weight accumulates on the `forget` timescale.  The rungs are placed
+by their consequence rather than by an offset from the supplied base, which makes the ladder
+COMPLETE -- see `_rung_odds`.  A structure where every process mode is read more than once has no
+such pair, gets no ladder, and costs exactly what it did before.
 """
 from __future__ import annotations
 
@@ -202,6 +215,11 @@ class _WalkEngine:
     def __init__(self, Q0, R0, H, F, B, phi, s, groups=(), anchor_lo=0.0, group_class=None):
         self._groups = tuple(groups)      # (process axis, sensor axis, (H v)^2) per confound
         self._anchor_lo = float(anchor_lo)   # this member's hypothesis about each group's split
+        self._revert = float(phi)         # rate the walk's null excursion returns to that
+                                          # hypothesis; the class's own persistence.  Named so
+                                          # research can vary it -- both bounds are load-bearing
+                                          # (research/sequence-demix/0002 §3), and neither end is
+                                          # a setting anyone should reach for.
         # ``group_class`` optionally gives a confounded group's two axes their OWN (phi, s) --
         # ``((phi_P, s_P), (phi_M, s_M))``.  A shared class cannot express what a confounded pair
         # needs: a level jump wants a process window that reaches a long way, and a sensor that
@@ -477,7 +495,7 @@ class _WalkEngine:
             self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap[k], self.gap[k]))
             self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k], self._Pmu_cap[k])
         self._pi_ax, self._m, self._P = pi_ax, m_new, P_new
-        if self._groups:
+        if self._groups and self._revert is not None:
             # The per-axis Newton walk steps by ``score/info``, which is ~1/Q on a process axis
             # and ~1/R on a sensor axis; where the two are confounded, that step is almost
             # entirely along the NULL direction, in which the score carries no information at
@@ -488,7 +506,7 @@ class _WalkEngine:
             # class's own rate ``phi``, at the total the walk just established.  The verdict is
             # the bank's, on the ``forget`` timescale (research 0053's lesson b).
             tots, los = zip(*self._group_read(self.mu))
-            back = [self._anchor_lo + self.phi * (lo - self._anchor_lo) for lo in los]
+            back = [self._anchor_lo + self._revert * (lo - self._anchor_lo) for lo in los]
             self.mu = self._group_write(self.mu, list(tots), back)
         self.loglik += ll
         wmean = self._wmean(pi_ax)
