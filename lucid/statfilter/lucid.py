@@ -750,25 +750,39 @@ class _WalkEngine:
         without ever forming the (m, m) block.
         """
         n = self.n
-        e = np.exp(np.clip(self.mu[:n], -60, 60))
-        if a == 1.0:
-            Qc = self.V @ np.diag(self.lam * e) @ self.V.T
-        else:
-            # base exact, the scale's DEPARTURE from it linear in the gap -- so dQ/dxi is
-            # unchanged and the walk tracks the same object it always did
-            Qc = self._base_Q(a) + self.V @ np.diag(a * self.lam * (e - 1.0)) @ self.V.T
+        xi = np.clip(self.mu[:n], -60, 60)
         rc = self.rho * np.exp(np.clip(self.mu[n:], -60, 60))
-        Qg = np.repeat(Qc[None], self._G, 0)
         rg = np.repeat(rc[None], self._G, 0)
+        if a == 1.0:
+            Qc = self.V @ np.diag(self.lam * np.exp(xi)) @ self.V.T
+            Qg = np.repeat(Qc[None], self._G, 0)
+            for g in range(1, self._G):
+                k = int(self._star_axis[g]); o = float(self._star_off[g])
+                if k < n:
+                    dlam = self.lam[k] * (math.exp(min(self.mu[k] + o, 60.0))
+                                          - math.exp(min(self.mu[k], 60.0)))
+                    Qg[g] += dlam * np.outer(self.V[:, k], self.V[:, k])
+                else:
+                    rg[g, k - n] = self.rho[k - n] * math.exp(min(self.mu[k] + o, 60.0))
+            return Qg, rg
+        # Off the nominal step the base is the exact accumulation (`_base_Q`) and the scale
+        # is applied to it as a CONGRUENCE, ``D^(1/2) Q(a) D^(1/2)`` with
+        # ``D = V diag(e^xi) V'``.  That is positive semidefinite for every scale and every
+        # gap, because a congruence of a PSD matrix is PSD -- which adding the scale's
+        # departure to the base is NOT: for the default ``Q0 = I`` on a double integrator
+        # that sum goes negative at ``a ~ 0.8`` with the scale walked down, and a negative
+        # ``Q`` diverges the filter outright.  It also reduces to ``V diag(lam e^xi) V'``
+        # exactly at ``a = 1``, since ``D`` and ``Q0`` share the eigenbasis -- so this is one
+        # formula through the nominal step, not two that happen to agree at it.
+        XI = np.repeat(xi[None], self._G, 0)
         for g in range(1, self._G):
             k = int(self._star_axis[g]); o = float(self._star_off[g])
             if k < n:
-                dlam = a * self.lam[k] * (math.exp(min(self.mu[k] + o, 60.0))
-                                          - math.exp(min(self.mu[k], 60.0)))
-                Qg[g] += dlam * np.outer(self.V[:, k], self.V[:, k])
+                XI[g, k] = min(self.mu[k] + o, 60.0)
             else:
-                i = k - n
-                rg[g, i] = self.rho[i] * math.exp(min(self.mu[k] + o, 60.0))
+                rg[g, k - n] = self.rho[k - n] * math.exp(min(self.mu[k] + o, 60.0))
+        half = np.einsum("ik,gk,jk->gij", self.V, np.exp(0.5 * XI), self.V)
+        Qg = np.einsum("gij,jk,gkl->gil", half, self._base_Q(a), half)
         return Qg, rg
 
     def _kernel(self, a):
@@ -1246,25 +1260,30 @@ class _EngineBank:
         """The stacked twin of ``_WalkEngine._star_QR``: ``Q`` carries the elapsed factor, ``r``
         does not, and ``r`` comes back as the (M, G, m) diagonal for sub-selection."""
         n, M, G = self.n, self.M, self._G
-        e = np.exp(np.clip(self.mu[:, :n], -60, 60))
-        if a == 1.0:
-            Qc = np.einsum("bk,bkij->bij", self.lam * e, self._Vout)
-        else:                       # base exact, scale departure linear -- see _base_Q
-            Qc = (np.stack([f._base_Q(a) for f in self.members])
-                  + np.einsum("bk,bkij->bij", a * self.lam * (e - 1.0), self._Vout))
+        xi = np.clip(self.mu[:, :n], -60, 60)
         rc = self.rho * np.exp(np.clip(self.mu[:, n:], -60, 60))
-        Qg = np.repeat(Qc[:, None], G, 1)
         rg = np.repeat(rc[:, None], G, 1)
-        if self._gp.size:
-            kp = self._kp
-            mu_k = self.mu[:, kp]
-            dlam = a * self.lam[:, kp] * (
-                np.exp(np.minimum(mu_k + self._star_off[:, self._gp], 60.0))
-                - np.exp(np.minimum(mu_k, 60.0)))
-            Qg[:, self._gp] += dlam[:, :, None, None] * self._Vout[:, kp]
         if self._gs.size:
             rg[:, self._gs, self._is] = self.rho[:, self._is] * np.exp(
                 np.minimum(self.mu[:, n + self._is] + self._star_off[:, self._gs], 60.0))
+        if a == 1.0:
+            Qc = np.einsum("bk,bkij->bij", self.lam * np.exp(xi), self._Vout)
+            Qg = np.repeat(Qc[:, None], G, 1)
+            if self._gp.size:
+                kp = self._kp
+                mu_k = self.mu[:, kp]
+                dlam = self.lam[:, kp] * (
+                    np.exp(np.minimum(mu_k + self._star_off[:, self._gp], 60.0))
+                    - np.exp(np.minimum(mu_k, 60.0)))
+                Qg[:, self._gp] += dlam[:, :, None, None] * self._Vout[:, kp]
+            return Qg, rg
+        XI = np.repeat(xi[:, None], G, 1)          # the congruence -- see _WalkEngine._star_QR
+        if self._gp.size:
+            XI[:, self._gp, self._kp] = np.minimum(
+                self.mu[:, self._kp] + self._star_off[:, self._gp], 60.0)
+        half = np.einsum("bik,bgk,bjk->bgij", self.V, np.exp(0.5 * XI), self.V)
+        base = np.stack([f._base_Q(a) for f in self.members])
+        Qg = np.einsum("bgij,bjk,bgkl->bgil", half, base, half)
         return Qg, rg
 
     def _kernel(self, a):
