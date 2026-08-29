@@ -1,5 +1,13 @@
 # 0052 — LucidFilter on the 5-DOF arm: the freeze-lockout regression, and the 0024 fix restored
 
+> **Superseded in one respect, by [`0054`](0054_physical_sensors.md): the sensor model.**
+> This probe's "accelerometer" reads its own joint's angular acceleration through a constant
+> diagonal `H`.  No sensor does that -- a link-mounted one reads the whole chain beneath it
+> through rotating axes, and on this arm the model error is 7-13x the sensor sigma.  Run on
+> physical data the diagonal map costs **10-154x the oracle**.  The noise-machinery findings
+> here stand; the ratio table is superseded by 0054's.
+
+
 Profiling the public `LucidFilter` (the caltrop-star engine) on the 5-DOF arm rig — the README-demo
 case: every joint fuses a bad potentiometer (angle, sigma 0.06) with a good accelerometer (angular
 acceleration, sigma 0.02) through `H`, commanded 2-sinusoid jerk trajectory as known forcing `B u`,

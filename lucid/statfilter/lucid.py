@@ -352,6 +352,13 @@ class _WalkEngine:
         self.phi, self.s = float(phi), float(s)
         self._cap = None if cap is None else np.asarray(cap, float)
         self._dyn = None            # optional (mean, u) -> (Jacobian, predicted mean) callable
+        self._hook = None           # optional mean -> (H Jacobian, predicted measurement).
+        # ``self.H`` stays the CHARACTERISTIC linearisation whatever the hook does: the
+        # structural questions -- which axes are observable, which pairs are confounded, what
+        # the steady-state scale-Fisher is -- are facts about the model, not about where the
+        # state happens to be this step, and are answered once at the origin (the same
+        # convention `_as_base` uses for a moving F).  The live Jacobian is used where it
+        # actually belongs: the innovation, its covariance, and dS/dxi.
         # ACTIVATE structurally-observable axes -- NOT by the delocalisation floor (research 0024,
         # ported from AdaptiveKalmanFilter): a quiet process mode next to a loud sensor would be
         # frozen and then coast rigidly on a wrong velocity when that sensor is down-weighted --
@@ -475,11 +482,23 @@ class _WalkEngine:
             w[k] = float(pi_ax[i] @ self._off[k])
         return w
 
-    def _dS_axis(self, k):
+    def _H_at(self, mean):
+        """(live Jacobian, predicted measurement) -- the constant map unless a hook is set."""
+        if self._hook is None:
+            return self.H, self.H @ mean
+        out = self._hook(mean)
+        if isinstance(out, tuple):
+            Hk, yp = out
+            Hk = np.atleast_2d(np.asarray(Hk, float))
+            return Hk, np.asarray(yp, float)
+        Hk = np.atleast_2d(np.asarray(out, float))
+        return Hk, Hk @ mean
+
+    def _dS_axis(self, k, HV=None):
         """dS/dxi_k at each of axis k's window nodes (dS_k depends only on the k-coordinate)."""
         a = np.exp(np.minimum(self.mu[k] + self._off[k], 60.0))
         if k < self.n:
-            hv = self.HV[:, k]
+            hv = (self.HV if HV is None else HV)[:, k]
             return (self.lam[k] * a)[:, None, None] * np.outer(hv, hv)[None]
         out = np.zeros((self._nn, self.m, self.m))
         i = k - self.n
@@ -610,7 +629,14 @@ class _WalkEngine:
             return LucidStep(self._m.copy(), self._P.copy(), np.full(m, np.nan), 0.0,
                              self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
         Ppred = FPFt[None] + Qg
-        e = y - H @ mpred
+        # The measurement map is a CALLABLE whenever the sensors are not a fixed linear
+        # functional of the state -- which is every inertial sensor on a moving linkage: what
+        # a link-mounted gyro reads is the whole chain below it, through axes that rotate with
+        # the state.  It returns the linearisation (for the covariance and for dS/dxi) and the
+        # predicted measurement (from h, not the Jacobian -- they differ once h is nonlinear).
+        H, ypred = self._H_at(mpred)
+        HV = self.HV if self._hook is None else H @ self.V
+        e = y - ypred
         PHt = np.einsum("gij,kj->gik", Ppred, H)
         S = np.einsum("ij,gjk->gik", H, PHt) + Rg
         Si = np.linalg.inv(S)
@@ -648,7 +674,7 @@ class _WalkEngine:
         # profile carries the axis's evidence at linear cost).
         for i, k in enumerate(self._act):
             idx = self._axwin[k]
-            dpk = self._dS_axis(k)
+            dpk = self._dS_axis(k, HV)
             Sik = Si[idx]
             Sie = np.einsum("gij,j->gi", Sik, e)
             score_g = 0.5 * (np.einsum("gi,gij,gj->g", Sie, dpk, Sie)
@@ -686,7 +712,7 @@ def _bank_key(f):
     model objects -- they differ only in parameters and state."""
     return (type(f).update is _WalkEngine.update, f.n, f.m, f.D, f._G,
             tuple(f._act), tuple((k, i) for k, i, _ in f._groups),
-            f._dyn is None, id(f.H), id(f.F),
+            f._dyn is None, id(f.H), id(f.F), f._hook is None,
             None if f._cap is None else id(f._cap), f._revert is None)
 
 
@@ -728,6 +754,7 @@ class _EngineBank:
         self._act, self._axwin = list(e0._act), e0._axwin
         self.H, self.B, self.F = e0.H, e0.B, e0.F
         self._dyns = None if e0._dyn is None else [f._dyn for f in members]
+        self._hooks = None if e0._hook is None else [f._hook for f in members]
         self._cap = e0._cap
         self._groups = e0._groups
         st = lambda name: np.ascontiguousarray(np.stack([getattr(f, name) for f in members]))
@@ -808,10 +835,11 @@ class _EngineBank:
             w[:, k] = np.einsum("bn,bn->b", pi[:, i], self._off[:, k])
         return w
 
-    def _dS_axis(self, k):
+    def _dS_axis(self, k, Hout=None):
         a = np.exp(np.minimum(self.mu[:, k, None] + self._off[:, k], 60.0))
         if k < self.n:
-            return (self.lam[:, k, None] * a)[:, :, None, None] * self._Hout[:, k, None]
+            Ho = self._Hout if Hout is None else Hout
+            return (self.lam[:, k, None] * a)[:, :, None, None] * Ho[:, k, None]
         out = np.zeros((self.M, self._nn, self.m, self.m))
         i = k - self.n
         out[:, :, i, i] = self.rho[:, i, None] * a
@@ -864,9 +892,23 @@ class _EngineBank:
             return (self._m.copy(), self._P.copy(), np.full((M, m), np.nan),
                     np.zeros(M), sc[:, :n], sc[:, n:])
         Ppred = FPFt[:, None] + Qg
-        e = y[None] - mpred @ H.T
-        PHt = np.einsum("bgij,kj->bgik", Ppred, H)
-        S = np.einsum("ij,bgjk->bgik", H, PHt) + Rg
+        # The live measurement map, per member (each evaluates its own mean).  With no hook
+        # this is exactly the shared-H arithmetic it always was, contraction order included --
+        # a state-dependent H costs nothing where there is none.
+        if self._hooks is None:
+            Hb, Hout = None, None
+            e = y[None] - mpred @ H.T
+            PHt = np.einsum("bgij,kj->bgik", Ppred, H)
+            S = np.einsum("ij,bgjk->bgik", H, PHt) + Rg
+        else:
+            Hb = np.empty((M, m, n)); yp = np.empty((M, m))
+            for j in range(M):
+                Hb[j], yp[j] = self.members[j]._H_at(mpred[j])
+            HbV = np.einsum("bij,bjk->bik", Hb, self.V)
+            Hout = np.einsum("bik,bjk->bkij", HbV, HbV)
+            e = y[None] - yp
+            PHt = np.einsum("bgij,bkj->bgik", Ppred, Hb)
+            S = np.einsum("bij,bgjk->bgik", Hb, PHt) + Rg
         Si = np.linalg.inv(S)
         _, logdet = np.linalg.slogdet(S)
         maha = np.einsum("bi,bgij,bj->bg", e, Si, e)
@@ -893,14 +935,15 @@ class _EngineBank:
         m_new = mpred + np.einsum("bil,bl->bi", Kbar, e)
         mpost = mpred[:, None] + np.einsum("bgil,bl->bgi", K, e)
         dm = mpost - m_new[:, None]
-        HPp = np.einsum("ij,bgjk->bgik", H, Ppred)
+        HPp = (np.einsum("ij,bgjk->bgik", H, Ppred) if Hb is None
+               else np.einsum("bij,bgjk->bgik", Hb, Ppred))
         Ppost = Ppred - np.einsum("bgil,bglk->bgik", K, HPp)
         P_new = (np.einsum("bg,bgij->bij", w, Ppost)
                  + np.einsum("bg,bgi,bgj->bij", w, dm, dm))
         P_new = self._cap_P(0.5 * (P_new + np.swapaxes(P_new, 1, 2)))
         for a, k in enumerate(self._act):
             idx = self._axwin[k]
-            dpk = self._dS_axis(k)
+            dpk = self._dS_axis(k, Hout)
             Sik = Si[:, idx]
             Sie = np.einsum("bgij,bj->bgi", Sik, e)
             score = 0.5 * (np.einsum("bgi,bgij,bgj->bg", Sie, dpk, Sie)
@@ -1070,6 +1113,38 @@ def _as_base(dynamics, B, n):
     return base, base(np.zeros(n))[0]
 
 
+def _as_hbase(H):
+    """Normalise a callable measurement map to ``h(x) -> (Jacobian, predicted measurement)``.
+
+    Accepts either return shape: a bare Jacobian, for a map that is linear with
+    state-dependent coefficients (``h(x) = H(x) x`` -- a link-mounted gyro reading a chain of
+    joint rates through rotating axes), or an ``(H, y)`` pair when ``h`` is genuinely
+    nonlinear and the predicted measurement is not the Jacobian applied to the mean (the same
+    distinction `_as_base` draws for the transition).
+    """
+    def hbase(x):
+        out = H(x)
+        if isinstance(out, tuple):
+            Hj, yp = out
+            return np.atleast_2d(np.asarray(Hj, float)), np.asarray(yp, float)
+        Hj = np.atleast_2d(np.asarray(out, float))
+        return Hj, Hj @ np.asarray(x, float)
+    return hbase
+
+
+def _augment_hook(hbase, n, k):
+    """The same measurement map on a departure walker's augmented state ``(x, g)``.
+
+    ``g`` is not measured, so the augmented Jacobian is ``[H(x) | 0]`` -- and the map is
+    linearised at the walker's own ``x``, not at the caller's, which is the whole point of
+    carrying it per member.
+    """
+    def hook(ma):
+        Hj, yp = hbase(ma[:n])
+        return np.hstack([Hj, np.zeros((Hj.shape[0], k))]), yp
+    return hook
+
+
 def _fixed_hook(base):
     """Engine hook for supplied-but-moving dynamics (no departure channel)."""
     def _dyn(m, u):
@@ -1146,8 +1221,15 @@ class LucidFilter:
     control : (n, p) array, optional
         Forcing/bias map ``B`` for a known input ``u`` (the ODE bias).  If given, ``update``/``filter``
         require ``u``/``U``.
-    H : (m, n) array, optional
-        Measurement matrix.  Defaults to the identity.
+    H : (m, n) array or callable, optional
+        Measurement matrix.  Defaults to the identity.  A **callable** of the state is the
+        general sensing case, and the one every inertial sensor on a moving linkage needs:
+        what a link-mounted gyro reads is the whole chain below it, through axes that rotate
+        with the state, so ``H`` has to be linearised at each step exactly as ``F`` does.  It
+        is called with the predicted mean and returns either the Jacobian, or an
+        ``(H, y_predicted)`` pair when the map is genuinely nonlinear (a rate-squared term,
+        say) and ``h(x)`` is not ``H(x) x``.  Then ``n`` cannot be read off ``H``, so supply
+        it through ``dynamics``, ``process`` or ``n``.
     process, measurement : arrays, optional
         Base noise magnitudes ``Q0`` (n, n, PD) and ``R0`` (m, diagonal).  Default to identity/unit --
         the walk breathes around them with unbounded reach, so a rough base is fine.
@@ -1170,7 +1252,9 @@ class LucidFilter:
                 raise ValueError("faults (the hazard rho) must lie in (0, 1)")
         if anchors is not None and not learn:
             learn = True                        # named fault hypotheses imply a fault class
-        H = None if H is None else np.atleast_2d(np.asarray(H, float))
+        h_moving = callable(H)
+        hbase = _as_hbase(H) if h_moving else None
+        H = None if (H is None or h_moving) else np.atleast_2d(np.asarray(H, float))
         B = None if control is None else np.atleast_2d(np.asarray(control, float))
         moving = callable(dynamics)
         Fm = (None if (moving or np.ndim(dynamics) == 0)
@@ -1195,10 +1279,13 @@ class LucidFilter:
         if F.shape != (n, n):
             raise ValueError(f"dynamics must be ({n}, {n})"
                              + (" -- the callable returned the wrong shape" if moving else ""))
-        Hm = np.eye(n) if H is None else H
+        # The characteristic linearisation of a moving H, at the origin -- the same convention
+        # `_as_base` uses for a moving F.  Everything structural is answered from it.
+        Hm = hbase(np.zeros(n))[0] if h_moving else (np.eye(n) if H is None else H)
         m = Hm.shape[0]
         if Hm.shape != (m, n):
-            raise ValueError(f"H must be (m, {n})")
+            raise ValueError(f"H must be (m, {n})"
+                             + (" -- the callable returned the wrong shape" if h_moving else ""))
         Q0 = np.eye(n) if proc is None else proc
         if Q0.shape != (n, n) or not np.allclose(Q0, Q0.T, atol=1e-10):
             raise ValueError("process must be a square symmetric (n, n) matrix")
@@ -1289,6 +1376,9 @@ class LucidFilter:
                 if bs is not None:
                     for e in eng:
                         e._dyn = _fixed_hook(bs)
+                if hbase is not None:
+                    for e in eng:
+                        e._hook = hbase
                 self._members += eng
                 self._pidx += [np.arange(n)] * len(cells)
                 continue
@@ -1307,6 +1397,8 @@ class LucidFilter:
                                 fisher_Si=Si_c)
                 Si_c = e._fisher_Si
                 e._dyn = dep.callable_for()
+                if hbase is not None:
+                    e._hook = _augment_hook(hbase, n, dep.k)
                 self._members.append(e)
                 self._pidx.append(xmode)
         self._nd, self._nc = len(specs), len(cells)

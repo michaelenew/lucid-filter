@@ -60,7 +60,7 @@ Configure by **give-what-you-know**; every argument has a working default.
 |---|---|---|
 | `dynamics` | state transition `F`; `None` learns it; a callable re-linearises it per operating point and may return `(F, B)` | `0` → random-walk level |
 | `control` | known-forcing map `B` (then pass `u`/`U` at update) | none |
-| `H` | measurement matrix | identity |
+| `H` | measurement matrix, or a **callable** of the state returning the Jacobian (or an `(H, y_predicted)` pair when `h(x)` is not `H(x) x`) -- the general sensing case, and the one every inertial sensor on a moving linkage needs | identity |
 | `process` | base process covariance `Q0` (n, n, PD) | identity |
 | `measurement` | base per-sensor variances `R0` (m,) | ones |
 | `n` | state dimension, when nothing else fixes it | 1 |

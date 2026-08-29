@@ -276,6 +276,17 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
 
 ## Open items
 
+- **Physically-realisable sensing, and a relative-degree limit** ([`0054`](exploration/0054_physical_sensors.md)).
+  The arm rig's diagonal `H` was not a sensor anyone can buy: a link-mounted inertial sensor
+  reads the whole chain beneath it through rotating axes, and the model error was 7-13x the
+  sensor sigma.  The shipped filter now takes `H` as a **callable** (Jacobian, or an
+  `(H, y_pred)` pair when `h(x)` is not `H(x) x`), the arm rig supplies the physical map, and
+  the retired diagonal one costs **10-154x the oracle** on the same data.  The open it exposed:
+  the scale walk's attribution of a process burst degrades with the **relative degree** between
+  the disturbance and the sensor that sees it -- swap the accelerometer for a rate gyro, so a
+  jerk reaches the channel through `dt^2/2` instead of `dt`, and a process burst is blamed on
+  the sensors at 99x the oracle.  Nothing in the construction prices that in.
+
 **Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
 were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in
 idealized vs realistic regimes shows the triage mostly **holds** — but the *critical regime* was

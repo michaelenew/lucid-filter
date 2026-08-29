@@ -1,11 +1,18 @@
 """Render the LucidFilter 5-DOF arm demo to a GIF for the main README.
 
-Real output of the PUBLIC filter (`from lucid import LucidFilter`) on the 3D 5-DOF arm rig
-(probes 0026/0052): a bad potentiometer + a good accelerometer per joint fused through `H`,
-driven along a commanded trajectory (known forcing B.u), with noise arriving in phases:
+Real output of the PUBLIC filter (`from lucid import LucidFilter`) on the 3D 5-DOF arm rig of
+`arm5dof.py`: a bad potentiometer plus a link-mounted angular accelerometer per joint, driven
+along a commanded trajectory by a servo that flies on the potentiometers, with noise arriving
+in phases:
 
-    calm | SENSOR (accelerometers swamped) | calm | PROCESS (disturbance torque) |
+    calm | SENSOR (accelerometers swamped) | calm | PROCESS (disturbance jerk) |
     calm | POT FAILURE (one joint's potentiometer dies) | calm | BOTH | calm
+
+The measurement map is a CALLABLE, and has to be: an accelerometer bolted to link j reads the
+whole chain beneath it, through axes that rotate with the arm, plus a term quadratic in the
+joint rates.  `arm5dof.py` derives it and pins the Jacobian against central differences; a
+filter handed the old diagonal `H` instead is 13-192x the oracle on this same data
+(`../exploration/0054_physical_sensors.md`).
 
 Panels: a rotating 3D view of the arm (true vs raw-pot vs lucid estimate), a per-component
 "which noise is hot" chip grid (the learned log-scales, per joint: pots / accels / process
@@ -25,139 +32,52 @@ import matplotlib.pyplot as plt
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "..", ".."))
-from lucid import LucidFilter  # noqa: E402
+import arm5dof as R  # noqa: E402
 
 OUT = os.path.join(HERE, "..", "figures", "arm5dof-lucid.gif")
 
-# ---------------------------------------------------------------- rig (0026/0052 constants)
-NJ, ORDER, DT = 5, 3, 0.01
-POT, ACC, JERK = 0.06, 0.02, 0.6
+NJ, ORDER, DT = R.NJ, R.ORDER, R.DT
 POT_MULT, ACC_MULT, JERK_MULT = 15.0, 15.0, 20.0
 FAIL_J = 2                                   # the joint whose potentiometer dies in POTFAIL
 T = 1900
 PHASES = [("calm", 0, 250), ("SENSOR", 250, 500), ("calm", 500, 650),
           ("PROCESS", 650, 900), ("calm", 900, 1050), ("POTFAIL", 1050, 1300),
           ("calm", 1300, 1450), ("BOTH", 1450, 1700), ("calm", 1700, 1900)]
-
-Fb = np.eye(ORDER)
-for i in range(ORDER):
-    for j in range(i + 1, ORDER):
-        Fb[i, j] = DT ** (j - i) / math.factorial(j - i)
-G = np.array([DT ** (ORDER - i) / math.factorial(ORDER - i) for i in range(ORDER)])
-F = np.kron(np.eye(NJ), Fb)
-Q0 = np.kron(np.eye(NJ), JERK ** 2 * np.outer(G, G) + 1e-12 * np.eye(ORDER))
-B = np.kron(np.eye(NJ), G[:, None])
-rows = []
-for d in range(NJ):
-    for di in (0, 2):                        # pot reads theta, accel reads alpha
-        e = np.zeros(ORDER * NJ); e[d * ORDER + di] = 1.0; rows.append(e)
-H = np.array(rows)
-R0 = np.tile([POT ** 2, ACC ** 2], NJ)
-N, M = ORDER * NJ, 2 * NJ
-
-# eigenmode -> joint map for the process-scale diagnostics (block-diag Q0 -> localised modes)
-_lam, _V = np.linalg.eigh(Q0)
-_top = np.argsort(_lam)[-NJ:]                # the NJ jerk modes (eigh sorts ascending)
-MODE_OF_JOINT = {int(np.argmax([np.abs(_V[j * ORDER:(j + 1) * ORDER, k]).sum()
-                                for j in range(NJ)])): k for k in _top}
+MODE_OF_JOINT = R.MODE_OF_JOINT
+joints3d = R.joints3d
+EL = math.radians(22)
 
 
 def schedule():
-    jstd = np.full(T, JERK)
-    pot_s = np.full((T, NJ), POT); acc_s = np.full((T, NJ), ACC)
+    jstd = np.full(T, R.JERK)
+    pot_s = np.full((T, NJ), R.POT)
+    acc_s = np.full((T, NJ), R.ACC)
     for name, a, b in PHASES:
         if name == "SENSOR":
-            acc_s[a:b] = ACC * ACC_MULT
+            acc_s[a:b] = R.ACC * ACC_MULT
         elif name == "PROCESS":
-            jstd[a:b] = JERK * JERK_MULT
+            jstd[a:b] = R.JERK * JERK_MULT
         elif name == "POTFAIL":
-            pot_s[a:b, FAIL_J] = POT * POT_MULT
+            pot_s[a:b, FAIL_J] = R.POT * POT_MULT
         elif name == "BOTH":
-            acc_s[a:b] = ACC * ACC_MULT; jstd[a:b] = JERK * JERK_MULT
+            acc_s[a:b] = R.ACC * ACC_MULT
+            jstd[a:b] = R.JERK * JERK_MULT
     return jstd, pot_s, acc_s
 
 
-# ---- the job: slow minimum-jerk waypoint moves with holds, servo-tracked ----------------
-# The arm follows a deliberate pick-and-place-style cycle (move, hold, move, ... , return),
-# driven by a per-joint jerk-level servo (feed-forward + pole-placed feedback).  The commanded
-# jerk (feed-forward + feedback) is the KNOWN forcing the filter receives; disturbances show
-# as bounded vibration the servo fights, not free flight -- an arm with a job to do.
-_POSES = [np.zeros(NJ),
-          np.array([0.50, 0.30, -0.30, 0.25, 0.60]),
-          np.array([-0.40, 0.45, 0.25, -0.30, -0.50]),
-          np.array([0.20, -0.25, 0.40, 0.35, 0.30]),
-          np.zeros(NJ)]
-_SEGS = [(0.0, 1.5, 0, 0), (1.5, 4.0, 0, 1), (4.0, 5.5, 1, 1), (5.5, 8.0, 1, 2),
-         (8.0, 9.5, 2, 2), (9.5, 12.0, 2, 3), (12.0, 13.5, 3, 3), (13.5, 16.0, 3, 4),
-         (16.0, 19.0, 4, 4)]
-_LAM = 8.0                                    # servo pole (triple, s = -LAM): tau ~ 0.12 s
-
-
-def _reference():
-    """Minimum-jerk reference theta/omega/alpha/jerk arrays, (T, NJ) each."""
-    th = np.zeros((T, NJ)); om = np.zeros((T, NJ)); al = np.zeros((T, NJ)); jk = np.zeros((T, NJ))
-    t = np.arange(T) * DT
-    for (t0, t1, ia, ib) in _SEGS:
-        a, b = _POSES[ia], _POSES[ib]
-        sel = (t >= t0) & (t < t1)
-        if not sel.any():
-            continue
-        Tm = t1 - t0
-        tau = (t[sel] - t0) / Tm
-        s0 = 10 * tau ** 3 - 15 * tau ** 4 + 6 * tau ** 5
-        s1 = (30 * tau ** 2 - 60 * tau ** 3 + 30 * tau ** 4) / Tm
-        s2 = (60 * tau - 180 * tau ** 2 + 120 * tau ** 3) / Tm ** 2
-        s3 = (60 - 360 * tau + 360 * tau ** 2) / Tm ** 3
-        d = (b - a)[None, :]
-        th[sel] = a[None, :] + d * s0[:, None]
-        om[sel] = d * s1[:, None]
-        al[sel] = d * s2[:, None]
-        jk[sel] = d * s3[:, None]
-    return th, om, al, jk
-
-
 def simulate(seed=0):
-    rng = np.random.default_rng(seed)
-    rth, rom, ral, rjk = _reference()
     jstd, pot_s, acc_s = schedule()
-    s = np.zeros(N); S = np.zeros((T, N)); Y = np.zeros((T, M)); U = np.zeros((T, NJ))
-    for k in range(T):
-        e1 = rth[k] - s[0::ORDER]; e2 = rom[k] - s[1::ORDER]; e3 = ral[k] - s[2::ORDER]
-        U[k] = rjk[k] + _LAM ** 3 * e1 + 3 * _LAM ** 2 * e2 + 3 * _LAM * e3
-        s = F @ s + B @ U[k] + B @ (jstd[k] * rng.standard_normal(NJ)); S[k] = s
-        std = np.empty(M); std[0::2] = pot_s[k]; std[1::2] = acc_s[k]
-        Y[k] = H @ s + std * rng.standard_normal(M)
+    U, S, Y = R.simulate(seed, jstd, pot_s, acc_s)
     return U, S, Y, jstd, pot_s, acc_s
 
 
 def fixed_kf(U, Y):
-    Qc = JERK ** 2 * (B @ B.T); Rc = np.diag(R0)
-    m0 = np.zeros(N); P = np.eye(N); out = np.zeros((T, N))
-    for k, y in enumerate(Y):
-        mp = F @ m0 + B @ U[k]; Pp = F @ P @ F.T + Qc
-        K = Pp @ H.T @ np.linalg.inv(H @ Pp @ H.T + Rc)
-        m0 = mp + K @ (y - H @ mp); P = Pp - K @ H @ Pp; out[k] = m0
-    return out
-
-
-# ---------------------------------------------------------------- 3D arm + rotating camera
-AXES = ["z", "y", "y", "y", "x"]; L = [0.30, 0.50, 0.40, 0.25, 0.15]
-HOME = np.array([0.25, 0.55, -0.95, 0.55, 0.0])   # articulated home pose; theta is the deviation
-EL = math.radians(22)
-
-
-def joints3d(theta):
-    def rot(ax, a):
-        c, s = math.cos(a), math.sin(a)
-        if ax == "z": return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1.0]])
-        if ax == "y": return np.array([[c, 0, s], [0, 1.0, 0], [-s, 0, c]])
-        return np.array([[1.0, 0, 0], [0, c, -s], [0, s, c]])
-    Rm = np.eye(3); pos = np.zeros(3); pts = [pos.copy()]
-    for j in range(NJ):
-        Rm = Rm @ rot(AXES[j], HOME[j] + theta[j])
-        pos = pos + Rm @ np.array([0, 0, L[j]]); pts.append(pos.copy())
-    return np.array(pts)
+    """The same model frozen at the base noise -- and given the SAME live measurement map,
+    so the comparison is about the noise and not about handing one contender a better
+    sensor model than the other."""
+    return R.kalman(U, Y)
 
 
 def project(P, az):
@@ -193,8 +113,7 @@ def phase_at(i):
 def render():
     print("simulating + filtering (LucidFilter, full bank)...")
     U, S, Y, jstd, pot_s, acc_s = simulate(0)
-    f = LucidFilter(dynamics=F, control=B, H=H, process=Q0, measurement=R0)
-    res = f.filter(Y, U=U)
+    res = R.make_filter().filter(Y, U=U)
     fx = fixed_kf(U, Y)
     th_true = S.reshape(T, NJ, ORDER)[:, :, 0]
     th_lu = res.mean.reshape(T, NJ, ORDER)[:, :, 0]
@@ -230,8 +149,8 @@ def render():
 
     fig.text(0.005, 0.94, "LucidFilter — a 5-DOF arm, all noise inferred online", color=INK,
              fontsize=15, weight="bold", family="sans-serif")
-    fig.text(0.005, 0.885, "bad potentiometer + good accelerometer per joint · commanded "
-             "trajectory · nothing tuned · from lucid import LucidFilter",
+    fig.text(0.005, 0.885, "bad potentiometer + link-mounted accelerometer per joint · H "
+             "linearised every step · nothing tuned · from lucid import LucidFilter",
              color=MUT, fontsize=8.2)
 
     # arm panel: fixed workspace box over all frames and cameras -- sized to the true and
