@@ -224,7 +224,9 @@ named next measurement.
    5-DOF arm (five pairs) built 1740 members and ran at 1.5 s/step, which is why the budget is
    shared; with it that rig is 315 members and 0.28 s/step.  Inside the gate, which is stated on
    the demo rig, where no pair qualifies and nothing changes at all — but a factor of 21 is not
-   free.  What the budget costs is ladder RESOLUTION per pair, not coverage: the grid stays
+   free — and this repository's own fast test suite, which is almost entirely scalar rigs with one
+   confounded pair each, goes from about a minute to about half an hour.  (There is no CI to
+   break.)  What the budget costs is ladder RESOLUTION per pair, not coverage: the grid stays
    complete.
 
    **The obvious lever was tried and it does not work.**  0037 says the `(phi, s)` ridge is flat
@@ -246,7 +248,20 @@ named next measurement.
    the cost, and it is the worst on regime C (1.263x).  So the box is load-bearing, it is
    load-bearing for calibration rather than for tracking, and which box is best depends on which
    gate one is trying to close.  The shipped fifteen is the one that is best on the gate that is
-   still open; that is the reason for it, and it is a choice rather than a derivation.
+   still open; that is the reason for it, and it is a choice rather than a derivation.  (The
+   four-cell box is also *not* available on the coverage argument that widened the box in the
+   first place: it drops `s = 3.2`, so its window reaches a factor of 121 in one step where the
+   arm's own regimes are x225 and x400.)
+
+   **Where the cost actually comes from, and the one idea left.**  It is not the star and it is
+   not the box: it is that *every rung is a complete filter*, which is precisely the thing 0053
+   found to be the only structure that de-mixes.  The lever that does not give that up is the one
+   this workstream tried first and abandoned for architectural reasons rather than cost
+   ([`0002`](exploration/0002_ratio_ladder.md), the witness build): rungs as **plain Kalman
+   filters** whose only job is to rank splits, feeding a verdict into a single engine, at roughly
+   1% of a star member's cost.  It measured worse then — but on the class-derived ladder that
+   could not reach `ln(0.02)`, before the complete arclength grid existed.  It has never been
+   measured on the grid that works, and it is the obvious next thing to measure.
 5. **More than one confounded pair: handled, and measured on two.**  A rung index cannot mean a
    different split for each of several pairs, and the joint set of split vectors is `J ** G`, so
    the ladder is enumerated the way this filter enumerates every other scale grid — as the
