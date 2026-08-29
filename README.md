@@ -17,53 +17,102 @@
 > and failure modes.
 
 
-**An adaptive state estimator with no tuning parameters.** You supply what you
-know about a system — its dynamics, which sensor reads what, rough noise
-magnitudes. Everything about the *noise* it infers online, per component, per
-step: which sensor is failing, which mechanical mode is being disturbed, and by
-how much. No thresholds, no forgetting factors, no changepoint detectors, no
-windows to pick, and nothing to fit.
+**A state estimator that finds its own settings — and tells you what it found.**
 
-The animation below is real output of the filter. A 5-DOF robotic arm works
+You supply what you know about a system: its dynamics, which sensor reads what,
+rough noise magnitudes. It works out the rest online — every scale, per
+component, per step — and it works it out *fast*: told nothing at all it lands
+**3.5% above an oracle-tuned Kalman filter** on the scalar benchmark, and
+**1.03×** an oracle handed both the true noise schedule and the true payload on
+the drone below. Across every rig here the worst case anywhere is 1.36×, on the
+one window where a sensor degrades by ×12 and the walk is still reaching it;
+the same model with fixed noise pays 2.1–6.9× on those same runs. A regime
+change is absorbed in a few steps, not a window. There is no `fit()`, no
+threshold, no forgetting factor, no window and no changepoint detector; the
+single residual knob does nothing near its default.
+
+It is **lucid** because it tells you what the data is, rather than making you
+tell it. A conventional filter takes your `Q` and your `R` and believes them: if
+the sensor you trusted has died, it goes on trusting it, and you find out
+somewhere downstream. This one reads those numbers off the data and hands them
+back live, per component — which sensor is failing and by how much, which
+mechanical mode is being shaken, and whether the vehicle it is flying is still
+the one you described. The state estimate is what you give the control loop; the
+read-out is what you can act on.
+
+## It picks a heavy crate up off centre, and works out what changed
+
+The animation is real output of the public filter. A delivery quadrotor flies a
+job. The filter is handed the **empty** aircraft — its mass and inertias, which
+of the twelve noisy channels reads what — and nothing else. Mid-flight the drone
+grabs a 0.42 kg crate that hangs out on the arms: mass ×1.38, roll and pitch
+inertia ×1.8, and the centre of mass shifted **1.6 cm off the thrust axis**. A
+gust hits, the GPS goes multipath, the crate is set down again, and a damaged
+rotor leaves the gyros noisy on the way home. The autopilot is told none of it
+either — it trims the crate away and flies on, so the aircraft's *behaviour*
+does not give the payload up; only the residual does.
+
+![a 3D quadrotor flying a delivery mission, tracked live: it picks up a crate that hangs visibly off-centre, carries it through a gust and a GPS multipath burst, and sets it down. A chip grid of learned per-channel noise scales turns orange on whichever channel has gone bad; a payload panel reports the crate's mass and off-centre lever arm two steps after the grab and returns to zero when it is released; a log-scale error trace shows the raw GPS at metres, a fixed-model Kalman filter at 5 cm and the lucid estimate at 2 cm](research/dynamics-learning/figures/drone3d-lucid.gif)
+
+*The same animation as [an MP4](research/dynamics-learning/figures/drone3d-lucid.mp4)
+— open it on GitHub for pause, scrubbing and 0.25×–2× playback.*
+
+Everything in the right-hand column is filter output:
+
+1. **Which noise is hot** — the learned per-channel scales. A chip turns orange
+   when the filter has decided *that* channel is bad right now: the GPS block
+   under multipath, the gyro row under rotor vibration, the wind row under the
+   gust. Nothing is told — and a gust is not mistaken for a payload: fly the same
+   mission with no crate and 0.64% of steps are ever flagged as a dynamics change.
+2. **What it says it is carrying** — read straight off `r.control`, the dynamics
+   as currently believed. Two steps after the grab (2.8 ± 0.4 over five seeds) it
+   reports a payload, and it settles at **0.44 kg hung 1.6 cm off centre** against
+   a truth of 0.42 kg and 1.63 cm. When the crate is released the same read-out
+   comes home to 0.00 kg and 0.1 cm: the original dynamics, recovered, with no
+   refit.
+3. **Position error.** Over the whole mission the lucid estimate holds **2.0 cm**
+   RMSE through the bursts where the raw GPS reads 3.7 m and the same model
+   frozen at the nominal airframe and base noise reads 4.9 cm.
+
+The off-centre part is the one a planar rig cannot pose. A displaced centre of
+mass turns collective thrust into a standing torque — a thrust→roll/pitch
+coupling that is **exactly zero** on the vehicle the filter was given. It is
+found from a residual, with no fault named and no threshold crossed
+([`0008`](research/dynamics-learning/exploration/0008_drone3d_payload.md)).
+
+```python
+from lucid import LucidFilter
+
+f = LucidFilter(dynamics=airframe,          # F, B at an operating point (a callable)
+                departures=[mass, Ixx, Iyy, Izz, com_x, com_y],   # what may change
+                H=H, process=Q0, measurement=R0, faults=1/3200)   # rough magnitudes
+r = f.filter(Y, U)
+
+r.mean                  # tracked state
+r.measurement_scale     # (T, m) which sensor is hot, per step — the chip grid
+r.process_scale         # (T, n) which dynamics mode is being disturbed
+r.control               # (T, n, p) the dynamics as currently believed — the payload
+```
+
+## The same machinery, five joints deep
+
+The noise channel alone, with the dynamics held fixed: a 5-DOF robotic arm works
 through a slow pick-and-place cycle while its operating conditions change out
-from under it, regime after regime: a calm stretch, the accelerometers turning
+from under it, regime after regime — a calm stretch, the accelerometers turning
 noisy, **vibration shaking the arm itself** (the arm moves — the sensors are
 fine), a position sensor **failing outright**, and vibration and sensor noise
-together. The filter is told nothing about any of this. It does two things,
-live:
-
-1. **It finds the regime almost instantly.** The top-right grid is the filter's
-   learned noise scale for every channel of every joint; a chip turning orange
-   means the filter has decided *that channel* is hot right now. The
-   `ACTIVE REGIME` line names the ground truth as it evolves, so you can watch
-   the chips find it.
-2. **It keeps the state estimate locked** (bottom right). Because it knows which
-   channel to stop trusting, the tip-error trace stays flat through conditions
-   that send the raw sensor readout off the chart and degrade a fixed-noise
-   Kalman filter given the very same model.
+together. The `ACTIVE REGIME` line names the ground truth as it evolves, so you
+can watch the chips find it.
 
 ![a 5-DOF robotic arm in 3D working a slow pick-and-place cycle, tracked live through five noise regimes — calm, noisy accelerometers, vibration shaking the arm, a failing position sensor, and both at once; an ACTIVE REGIME label names each phase, a chip grid of learned noise scales turns orange on the hot channel, the raw potentiometer estimate flails while the lucid estimate stays locked on the true arm](research/multivariate-statfilter/figures/arm5dof-lucid.gif)
 
-*Want to pause or change speed? The same animation as
-[an MP4](research/multivariate-statfilter/figures/arm5dof-lucid.mp4) — open it
-on GitHub for a player with pause, scrubbing, and 0.25×–2× playback.*
+*Also as [an MP4](research/multivariate-statfilter/figures/arm5dof-lucid.mp4).*
 
 The rig: every joint fuses a **bad potentiometer** (angle, σ ≈ 0.06 rad ≈ 3.4°)
 with a **good accelerometer** (angular acceleration, σ ≈ 0.02); the arm's servo
 tracks minimum-jerk waypoint moves, and the commanded forcing is the known input
 `U`. The regimes: accelerometers ×15, vibration (disturbance torque) ×20, one
 joint's potentiometer ×15, then both at once.
-
-```python
-from lucid import LucidFilter
-
-f = LucidFilter(dynamics=F, control=B, H=H,      # kinematics + sensor layout
-                process=Q0, measurement=R0)      # rough base magnitudes; the live noise: inferred
-r = f.filter(Y, U=U)
-r.mean                  # tracked state
-r.measurement_scale     # (T, m) which sensor is hot, per step — the chip grid above
-r.process_scale         # (T, n) which dynamics mode is hot
-```
 
 Through the bursts the lucid tip estimate holds **0.017 m RMSE**. The raw
 potentiometer reads 0.316 m — **19× worse** — and a fixed-noise Kalman filter
@@ -89,19 +138,20 @@ linear in the axes; a joint grid would be $5^r$). For the arm above
 ($n{=}15$, $m{=}10$, $r{=}25$, $G{=}101$, and the default bank of 15 members)
 that is **≈ 14 million multiply-adds per update — measured 40 ms/step in pure
 numpy**, where profiling attributes most of the wall time to interpreter
-overhead rather than flops. The two levers that matter for embedded use: the
+overhead rather than flops. The drone above runs the same engine with a dynamics
+channel on top ($n{=}12$ plus six departure coefficients, $m{=}12$, 30 members)
+at **≈ 60 ms/step**. The two levers that matter for embedded use: the
 bank multiplier (a 1–3 member bank tracks the same — the bank exists to average
 away the class choice, not for accuracy; pass `phis=`/`ss=`), and structure —
 when the model is block-diagonal (independent joints), five separate per-joint
 filters ($n{=}3$, $m{=}2$, $G{=}21$) cost ≈ 30 k multiply-adds each per update,
 microsecond-scale in a compiled implementation.
 
----
-
 ## What a lucid filter is
 
 A state estimator — an observer, in the control-engineering sense — for systems
-whose noise environment changes while they are running. The model:
+whose noise environment, and optionally whose dynamics, change while they are
+running. The model:
 
 ```
 theta_t = F theta_{t-1} + B u_t + w_t,   w_t ~ N(0, Q(t))
@@ -152,14 +202,29 @@ Configure by **give-what-you-know**; every argument has a working default:
 | `process` | base process covariance `Q0` | identity |
 | `measurement` | base per-sensor variances `R0` | ones |
 | `faults` | hazard `rho`: the supplied dynamics may **change** | none → they are fixed |
-| `departures`, `anchors` | the directions the dynamics may move in; named fault modes | full basis; none |
+| `departures` | the directions the dynamics may move along — a matrix, an `(A, C)` pair when one physical parameter moves `F` and `B` together, or a callable of the state when the direction rotates with the operating point | full basis |
+| `anchors` | named fault hypotheses, each carried as its own full filter | none |
 
 A rough base is fine — the walk breathes around it, and where a base is not just
 rough but *silent* about the process/sensor split, the bank learns the split
 rather than holding it (3.5% of oracle RMSE told nothing, on the scalar
 benchmark below). Outputs per step: posterior
-mean and covariance, innovation, predictive log-likelihood, and the
-per-component log-scales.
+mean and covariance, innovation, predictive log-likelihood, the per-component
+log-scales, and — when the dynamics may change — `dynamics`, `control` and
+`fault`.
+
+One thing `departures=` does ask of you. A departure's class size is scale-free
+("this part of the dynamics changed by about its own magnitude") and is tied to
+`‖B‖`, which is a *single* global scale, so it says the same thing on every
+direction only when the columns those directions live in are comparable in
+magnitude. Choosing input units that make them so is free and is the caller's
+to do — the drone rig puts its thrust in hover units and its torques in units of
+a reference angular acceleration for exactly this reason. What it costs when you
+do not is measured, not asserted: with the same data and the torques in newton
+metres, the mass read-out's scatter more than triples and its bias grows
+five-fold — and the inertias, which the prediction said would be untouched, get
+worse too, because the departure coefficients share one augmented state
+([`0008`](research/dynamics-learning/exploration/0008_drone3d_payload.md)).
 
 ## Measured behaviour
 
@@ -185,18 +250,43 @@ trust, so it buys nothing
 Fusing one bad absolute sensor with one good dynamic sensor per joint is the
 use case.
 
-On the dynamics channel (`0007`, the shipped filter re-measured on the research
-rigs): a scalar step change in `F` is detected in **15.7 ± 1.7 steps against a
-derived frontier of 15** — on the frontier, not near it. On a differential drive
-whose wheel blows out, driven entirely through the public API, it detects in
-**43 ms**, recovers the blown radius to 0.303 ± 0.018 (true 0.30) and the healthy
-one to 1.043 ± 0.021 (true 1.00), and settles at 1.037× a refit oracle where the
-frozen model pays 5.06×. The research prototypes that fixed the design go
-further where the failure modes are *named*: the same blowout in 18 ms, and a
-quadrotor that has a payload attached mid-flight in 28.9 ± 1.7 steps against a
-frontier of 29.6, recovering its mass and inertia to three figures. Calm-regime
-cost is 1.00× throughout
-([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
+On the 3D drone rig (5 seeds, position RMSE ratio to an oracle Kalman filter told
+the true noise schedule **and** the true payload; `noise-only` is told the noise
+but flies the nominal airframe, which is what isolates the dynamics channel from
+the noise machinery; `frozen` is told neither —
+[`0008`](research/dynamics-learning/exploration/0008_drone3d_payload.py)):
+
+| window | lucid | noise-only | frozen |
+|---|---|---|---|
+| before the crate | 0.98 | 1.00 | 1.00 |
+| calm, carrying | 1.03 | 1.10 | 3.47 |
+| gust, carrying | 1.03 | 1.11 | 1.29 |
+| GPS multipath ×12, carrying | 1.36 | 1.12 | 6.92 |
+| calm, after the drop | 1.03 | 1.12 | 2.10 |
+| gyro vibration ×12, after the drop | 0.98 | 0.98 | 2.36 |
+
+The crate is detected **2.8 ± 0.4 steps (28 ms)** after the grab, on 5 seeds out
+of 5, with **0.00%** of pre-pick-up steps ever flagged. Run the same mission with
+no crate at all and the cost of carrying the fault hypothesis is 1.024 ± 0.043 —
+indistinguishable from not carrying it — which is what makes the 28 ms end of the
+detection frontier affordable. Carrying, it recovers the
+mass to 1.528 ± 0.003 kg (true 1.520) and the off-centre lever arm to
+1.62 ± 0.01 cm (true 1.63) — the inertias only to −15%, which is the excitation
+limit below. After the release the same read-out returns to 1.101 ± 0.001 kg and
+0.11 ± 0.00 cm. The one place the lucid filter is beaten is the ×12 GPS burst,
+where an oracle *told* the new sensor noise is 1.36/1.12 = 21% better than one
+still walking towards it — the transient-attribution open, on a bigger rig.
+
+On the earlier dynamics rigs (`0007`, the shipped filter re-measured): a scalar
+step change in `F` is detected in **15.7 ± 1.7 steps against a derived frontier
+of 15** — on the frontier, not near it. On a differential drive whose wheel blows
+out, driven entirely through the public API, it detects in **43 ms**, recovers
+the blown radius to 0.303 ± 0.018 (true 0.30) and the healthy one to
+1.043 ± 0.021 (true 1.00), and settles at 1.037× a refit oracle where the frozen
+model pays 5.06×. The research prototypes that fixed the design go further where
+the failure modes are *named*: the same blowout in 18 ms, and a planar quadrotor
+that has a payload attached mid-flight in 28.9 ± 1.7 steps against a frontier of
+29.6 ([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
 
 ## Current limits, measured
 
@@ -232,6 +322,26 @@ cost is 1.00× throughout
   shares one identifiable total with it; the state estimate needs exactly that
   total and is unaffected, but the *attribution* between the two is partly
   shared.
+- **The dynamics read-out comes home; the fault *flag* does not.** Eleven steps
+  after the drone releases the crate the reported payload is already back inside
+  10% of zero, and it settles at 1.101 ± 0.001 kg against a truth of 1.100 and an
+  off-centre lever arm of 0.11 cm against 0.00. `r.fault`, though, stays pinned
+  at 1.0 for the rest of the
+  run. That is what it should do and not what the name suggests: the marginal
+  asks *which member of the bank is flying*, and once the departure walker has
+  re-learned the nominal dynamics the two members predict identically, so no
+  evidence can move probability back to the nominal one. Read `r.fault` as a
+  rising-edge detector for "the dynamics left what you supplied"; read
+  `r.dynamics` / `r.control` for what they are now.
+- **A recovered parameter is only as good as its excitation.** On the same run
+  the mass and the centre-of-mass lever arm come back to within ~1% of the truth,
+  and the three inertias only to roughly ±20–30% — best where the torque channel
+  is exercised, worst while the gyros are swamped by rotor vibration. That is the
+  bounded-never-frozen rule doing its job: a weakly excited axis stands at honest
+  class width instead of reporting a number it has no evidence for. It costs the
+  state estimate nothing here, and it is the reason a recovered parameter should
+  be read next to the excitation that produced it
+  ([`0008`](research/dynamics-learning/exploration/0008_drone3d_payload.md)).
 - **Nothing here has been flown.** Every number is from synthetic rigs with
   known ground truth; hardware validation is not part of this repository.
 
@@ -252,7 +362,7 @@ are:
 | workstream | state |
 |---|---|
 | [`multivariate-statfilter/`](research/multivariate-statfilter/SUMMARY.md) | **delivered** — the per-component noise machinery behind `LucidFilter` |
-| [`dynamics-learning/`](research/dynamics-learning/SUMMARY.md) | **delivered** — online learned dynamics (`dynamics=None`, `faults=`): detects a dynamics change (a weight attached, a tire blowout) on the derived information frontier and recovers the new dynamics online |
+| [`dynamics-learning/`](research/dynamics-learning/SUMMARY.md) | **delivered** — online learned dynamics (`dynamics=None`, `faults=`): detects a dynamics change (a crate picked up off centre, a tire blowout) on the derived information frontier, recovers the new dynamics online, and names the physical parameter that moved |
 | [`random-walk-filter/`](research/random-walk-filter/SUMMARY.md) | delivered (specimen) — the scalar parent and the scale-walk theory |
 | [`ode-filter/`](research/ode-filter/SUMMARY.md) | candidate (specimen) — locally-linear-ODE dynamics, the tracked dynamics channel |
 | [`optimality-proof/`](research/optimality-proof/SUMMARY.md) | where "optimal" does and does not hold; the per-step process/sensor ambiguity is Proposition 1 here |
@@ -265,10 +375,14 @@ research.
 ## Open directions
 
 - **The dynamics channel's remaining rungs** — the `dynamics=None` cell is
-  filled; what is left is the live-demo work (dynamics-fault regimes in the arm
-  profiler) and two measured opens: the exact jump-hold prior for the departure's
-  hold phase, and time-anchored (run-length) hypotheses, which measured *dormant*
-  on a fully-observed rig and so stay in the record rather than the product
+  filled and the drone demo above closes the live-demo open. What is left is
+  three measured opens: the exact jump-hold prior for the departure's hold
+  phase; time-anchored (run-length) hypotheses, which measured *dormant* on a
+  fully-observed rig and so stay in the record rather than the product; and a
+  **per-direction class size**, so a caller supplying `departures=` does not have
+  to choose input units that make `B`'s columns comparable — the residual of the
+  scale-free convention, with the cost of ignoring it measured in
+  [`0008`](research/dynamics-learning/exploration/0008_drone3d_payload.md)
   ([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
 - **The sequence-evidence de-mix** — the scalar split is now carried by the bank,
   and told nothing the hero gate's steady-state, calibration and jump targets are

@@ -1,373 +1,189 @@
-# statfilter
+# lucid-filter
 
-An adaptive local-level filter that tracks a drifting quantity through noise,
-learns both noise scales from the data, and reports *why* it moved — with no
-tuning parameters, no thresholds, and no changepoint detection.
+**A state estimator that finds its own settings — and tells you what it found.**
 
-**When to use.** `AdaptiveFilter` fits a stationary class once from a
-representative history and then streams — the right tool where you have good
-sample data and the regime is stable (industrial processes, sensor monitoring).
-If the regime will move outside anything a one-time `fit()` saw, or you have no
-history to fit, use `WalkingFilter` (below), which walks the scale online with
-unbounded reach and no fit.
+You supply what you know about a system: its dynamics, which sensor reads what,
+rough noise magnitudes. Everything about the *noise* it infers online, per
+component, per step — which sensor is failing, which mechanical mode is being
+disturbed, and by how much — and, when you ask it to, whether the system's
+**dynamics** are still the ones you described. No thresholds, no forgetting
+factors, no changepoint detectors, no windows to pick, and no `fit()`.
+
+It is *lucid* because it tells you what the data is, rather than making you tell
+it. A conventional filter takes your `Q` and your `R` and believes them; this one
+reads them off the data and hands them back, live, as outputs you can act on.
 
 ```python
-from statfilter import AdaptiveFilter
+from lucid import LucidFilter
 
-f = AdaptiveFilter.fit(x)     # learns all six parameters
-r = f.filter(x)
+f = LucidFilter(dynamics=F, control=B, H=H,      # what you know
+                process=Q0, measurement=R0)      # rough base magnitudes
+r = f.filter(Y, U=U)
 
-r.mean                        # the tracked level
-r.var                         # its uncertainty
-r.measurement_anomaly         # this looked like an outlier
-r.measurement_regime          # the noise level itself has changed
+r.mean                  # (T, n) tracked state
+r.var                   # (T, n, n) its covariance
+r.measurement_scale     # (T, m) which sensor is hot, per step
+r.process_scale         # (T, n) which process eigenmode is hot, per step
 ```
 
-Requires numpy. Fitting additionally requires scipy; filtering does not.
+`numpy` is the only runtime dependency. Python ≥ 3.10. Everything is vector —
+pass length-1 arrays for a scalar problem, and `LucidFilter()` with no arguments
+is a scalar random-walk level observed directly.
 
-## What it does that a Kalman filter doesn't
-
-A Kalman filter allocates a fixed fraction of every surprise to the level — the
-same fraction whether the surprise is half a sigma or eight. That is why it
-cannot chase a jump without also chasing outliers.
-
-This filter treats both noise scales as processes in their own right:
+## The model
 
 ```
-theta_t = theta_{t-1} + w_t     w_t ~ N(0, Q  * exp(lamP_t))
-x_t     = theta_t     + v_t     v_t ~ N(0, s2 * exp(lamM_t))
-lam_t   = phi * lam_{t-1} + noise            per channel
+theta_t = F theta_{t-1} + B u_t + w_t,   w_t ~ N(0, Q(t))
+y_t     = H theta_t          + v_t,      v_t ~ N(0, R(t))
+Q(t) = V diag(lam_k e^{xi_k(t)}) V^T     R(t) = diag(rho_i e^{eta_i(t)})
 ```
 
-Two channels (process, measurement) crossed with the two ends of each channel's
-own autocorrelation gives the four ways a series can deviate:
+Every process eigenmode and every sensor carries its own log-scale (`xi_k`,
+`eta_i`), and each scale is **walked online with unbounded reach**: a window of
+scale hypotheses per axis, each hypothesis a Kalman update, the window centre
+following the evidence with a critically-damped gain derived from the scale's
+assumed persistence class. A sensor that fails by ×200 is reached in tens of
+steps; a sensor that recovers is re-trusted the same way. Axes are activated by
+structural observability — a process mode is walked iff it carries base variance
+and is seen by `H` — and what the data cannot identify is bounded, never guessed.
 
-| | `phi -> 0` impulsive | `phi -> 1` persistent |
+There is no `fit()`. The one assumption a scale walk needs — how fast a log-scale
+may move — is not estimated but **averaged over**: the filter runs a small bank
+across a broad `(phi, s)` box and lets each member's running predictive
+likelihood weight it.
+
+## Arguments
+
+Configure by **give-what-you-know**; every argument has a working default.
+
+| argument | meaning | default |
 |---|---|---|
-| **process** | a jump in the level | a change in drift rate |
-| **measurement** | an outlier | a change in noise level |
+| `dynamics` | state transition `F`; `None` learns it; a callable re-linearises it per operating point and may return `(F, B)` | `0` → random-walk level |
+| `control` | known-forcing map `B` (then pass `u`/`U` at update) | none |
+| `H` | measurement matrix | identity |
+| `process` | base process covariance `Q0` (n, n, PD) | identity |
+| `measurement` | base per-sensor variances `R0` (m,) | ones |
+| `n` | state dimension, when nothing else fixes it | 1 |
+| `faults` | hazard `rho`: the supplied dynamics may **change** | none → they are fixed |
+| `departures` | the directions the dynamics may move along — each an `(n, n)` matrix, an `(A, C)` pair when one physical parameter moves `F` and `B` together, or a callable of the state when the direction rotates with the operating point | every entry of `F` (and `B`) |
+| `anchors` | named fault hypotheses, each carried as its own full filter | none |
+| `phis`, `ss` | the `(phi, s)` box the bank averages over | a broad dead-zone-free range |
+| `forget` | the bank's weight memory — the single residual knob | 0.999 |
 
-Those are not four hypotheses to test between. They are corners of one
-continuous space, and the filter reports a position in it at every step.
+A rough base is fine: the walk breathes around it with unbounded reach. Where a
+base is not just rough but *silent* about the process/sensor split, the bank
+learns the split rather than holding it.
 
-## API
+## Outputs
 
-### `AdaptiveFilter.fit(x, order=5, max_iter=500) -> AdaptiveFilter`
+`f.filter(Y, U=None) -> LucidResult` runs a whole series; `f.update(y, u=None) ->
+LucidStep` is the same recursion one step at a time (the two agree exactly). Per
+step: `mean`, `var`, `innovation`, `loglik`, `process_scale`, `measurement_scale`
+— and, when the dynamics channel is on, `dynamics`, `control` and `fault`.
+A row of `Y` that is all-`NaN` is a clean gap: the filter predicts through it.
 
-Learn `Q, s2, phi_P, phi_M, s_P, s_M` by maximum marginal likelihood. `order` is
-the quadrature resolution per channel (`order**2` grid states) — a numerical
-knob, not a model choice. `max_iter` is a compute budget.
+## The dynamics channel
 
-### `f.filter(x) -> FilterResult`
-
-Batch run from a fresh state. Arrays of length `n`:
-
-| field | meaning |
-|---|---|
-| `mean`, `var` | posterior level and its uncertainty |
-| `innovation` | `x_t` minus the prior mean |
-| `share_prior`, `share_process`, `share_measurement` | how the innovation was allocated; **sums to 1** |
-| `process_anomaly`, `process_regime` | process-scale, split new-at-`t` vs carried-over |
-| `measurement_anomaly`, `measurement_regime` | same for the measurement channel |
-| `modes` | `(n, 4)` stack of the four coordinates |
-| `loglik` | marginal log-likelihood of the series |
-
-### `f.update(x) -> Step`
-
-One streaming step, same fields as scalars. `NaN` means missing: the state is
-propagated but not corrected. `f.reset()` clears streaming state.
-
-### `f.predict(horizon) -> (mean, var)`
-
-Forecast. The level is a random walk, so the mean is flat and the variance grows.
-
-### `f.to_dict()` / `AdaptiveFilter.from_dict(d)`
-
-Round-trip a fitted filter through JSON.
-
-## Reading the outputs
-
-**`share_*` answers "what just happened".** Three numbers summing to one:
-how much of the surprise was the filter already being wrong about the level, how
-much was the level genuinely moving, how much was measurement noise. On a plain
-Kalman filter these are constants; here they respond to magnitude and to context.
-
-**`s_P` / `s_M` answer "is there scale structure at all".** Near zero means
-homoscedastic. This is the reliably estimated coordinate.
-
-**`phi_P` / `phi_M` answer "is it impulsive or persistent" — but only where the
-corresponding `s` is above zero.** The persistence of a scale that does not vary
-is undefined, so a scattered `phi` on clean data is the correct non-answer, not a
-failure. Check `s` before reading `phi`.
-
-## Multivariate state and a supplied measurement matrix: `VectorFilter`
-
-`AdaptiveFilter` is the scalar case — a 1-D level, observed directly. `VectorFilter`
-is the same filter with an **n-vector state**, an **m-vector observation**, and a
-**supplied measurement matrix `H` (m×n)**:
-
-```
-theta_t = theta_{t-1} + w_t     w_t ~ N(0, Q0 * exp(lamP_t))     Q0  n×n
-y_t     = H theta_t   + v_t     v_t ~ N(0, R0 * exp(lamM_t))     R0  m×m
-```
-
-`H` is **structural** — the observation model you built (which linear combinations
-of the state each sensor reads), exactly like `OdeFilter`'s `linearized_dynamics`.
-So `fit()` still infers everything noise-related: the **full-symmetric** base
-covariances `Q0, R0` and the four scale numbers `phi_P, phi_M, s_P, s_M`. *Give the
-filter what you know (how the sensors read the state), it infers what you don't
-(the live noise).*
+`dynamics=None` learns `F` (and `B`) online from the random-walk prior.
+`dynamics=F0, faults=rho` says the supplied dynamics may **change** — a payload
+picked up by a drone, a tyre blown out — and the filter detects the change and
+recovers the new dynamics with no refit and no threshold.
 
 ```python
-from statfilter import VectorFilter
-import numpy as np
+f = LucidFilter(dynamics=airframe,            # a callable: (F, B) at an operating point
+                departures=[mass, Ixx, Iyy, Izz, com_x, com_y],   # what may change
+                H=H, process=Q0, measurement=R0, faults=1/3200)
+r = f.filter(Y, U)
 
-H = np.array([[1., 0., 0.],          # sensor 1 reads component 0
-              [0., 1., -1.]])        # sensor 2 reads component 1 minus component 2
-f = VectorFilter.fit(Y, H)           # Y is (T, m); learns Q0, R0 (full symmetric) + scales
-r = f.filter(Y)
-r.mean                               # (T, n) tracked state
-r.var                                # (T, n, n) its covariance
-r.share_prior, r.share_process, r.share_measurement   # still sum to 1, per step
+r.dynamics   # (T, n, n) the dynamics as currently believed
+r.control    # (T, n, p) the learned B — read the physical parameter off it
+r.fault      # (T,) posterior probability they have left the nominal
 ```
 
-**What generalises, and what doesn't.** The noise-deduction machinery is
-*unchanged* — the same `order**2` quadrature grid, the same scalar scale channels,
-the same four mode coordinates. Only two things lift to matrices:
+It is the same construction one level up: the departure from nominal is carried
+as extra state, so the noise machinery above runs on top of it unchanged — which
+is what separating a wrong `F` from an elevated `Q` requires, since the two then
+compete as hypotheses under a live noise walk rather than through a whiteness
+statistic bolted on the side. A fault is a **jump process**, so its one labeled
+prior is the hazard `rho` and everything else follows: the departure's drift is
+`sigma^2 rho`, its variance is bounded at the class size (bounded, never frozen —
+an axis the data cannot see today must still move when excitation arrives), and
+the detection delay is `log(1/rho) / KL`, computed rather than tuned. The nominal
+model never leaves the bank, so a false detection costs almost nothing.
 
-- **The Kalman node** becomes the standard matrix update (`S = H(P+Qg)Hᵀ + Rg`,
-  `K = (P+Qg)Hᵀ S⁻¹`), with the grid mixture collapsed to one Gaussian per step
-  (multivariate GPB1).
-- **The amplitude conservation law** becomes a trace decomposition:
-  `S = H P Hᵀ + H Qg Hᵀ + Rg` (three pieces summing to `S`), and
-  `share_• = tr(S⁻¹ · piece)/m`, which sums to 1 and reduces to the scalar
-  `P/S, Qg/S, Rg/S` at `m=1`.
+One thing `departures=` asks of you: a direction's class size is scale-free
+("this part of the dynamics changed by about its own magnitude") and is tied to
+`‖B‖`, a *single* global scale, so it says the same thing on every direction only
+when the columns those directions live in are comparable in magnitude. Choosing
+input units that make them so is free, and is the caller's to do.
 
-At **n = m = 1, H = [[1]]** every formula collapses to `AdaptiveFilter`; the test
-suite pins the agreement to 1e-10.
+## What one update costs
 
-**When to use it.** A state with genuine structure read through a known linear
-sensor model — a small mechanical assembly with a few load cells, a chemical bath
-with cross-coupled probes, any place you know how the measurements map to the
-underlying quantities but not how noisy the environment will be. It recovers the
-full cross-correlated `Q0, R0` through a mixing `H` (to sampling error, not bias)
-and correctly finds *which* channel is live: on data with a real process-scale
-channel and clean sensors it fits `s_P ≈ 0.5, s_M ≈ 0` and beats the best
-homoscedastic model on held-out likelihood.
+Per bank member, per step, the arithmetic is one small Kalman update per
+scale-window node:
 
-**Scope and the one open.** The **scale channels are scalar** — one per matrix,
-`Q0·exp(lamP)` and `R0·exp(lamM)` — an overall magnitude that breathes over a
-*fixed* correlation shape. This is what keeps the grid at `order**2` states.
-Per-component scale deduction ("*which* sensor is hot right now", a different scale
-per observation channel) is genuinely richer, but a separate scale per channel
-makes the tensor-product grid `order**(#channels)` and needs a factorised or
-walking representation instead — a recorded open, not a knob here. Partially
-missing observations (some sensors present, some `NaN` in the same step) are also
-not handled yet; an all-`NaN` row is a clean gap (propagate, do not correct).
+    cost ~ G (2 n^2 m + 2 n m^2 + m^3) multiply-adds,     G = 1 + 4 r
 
-## A second filter: `WalkingFilter` — learn the scale *online*, no fit
+with `n` the state dimension, `m` the sensor count and `r <= n + m` the number of
+active noise axes. `G` is the node count of the axial scale windows — **linear**
+in the axes, where a joint grid would be `5^r`. A 5-DOF arm (`n=15`, `m=10`,
+`r=25`, the default 15-member bank) is ≈ 14 M multiply-adds per update, measured
+40 ms/step in pure numpy, where profiling attributes most of the wall time to
+interpreter overhead rather than flops. The two levers for embedded use: the bank
+multiplier (a 1–3 member bank tracks the same — the bank exists to average away
+the class choice, not for accuracy; pass `phis=`/`ss=`), and structure — a
+block-diagonal model run as separate per-block filters is orders of magnitude
+cheaper.
 
-`AdaptiveFilter` learns its six numbers **once**, from a whole series, by maximum
-likelihood, and then runs with them frozen. `WalkingFilter` learns the changing
-part **as it streams**: it carries a small, fine quadrature window over the
-process log-scale and lets that window *walk* to wherever the scale actually is.
-It is the only filter here that learns and walks most of its own settings rather
-than being told them.
+## Honest limits, measured
 
-```python
-from statfilter import WalkingFilter
-
-f = WalkingFilter(Q=1.0, s2=1.0, phi=0.9, s=0.30)   # only the class pair (phi, s)
-r = f.filter(x)
-r.mean                 # tracked level
-r.process_scale        # process log-scale, tracked step by step — no fit()
-```
-
-Everything else the filter needs is **derived or learned online**, which is what
-sets it apart:
-
-| what | `AdaptiveFilter` | `WalkingFilter` |
-|---|---|---|
-| noise-scale level | fit offline, then frozen | **walked online**, unbounded reach |
-| step gain | from fitted `Q, s2` | **read off the grid** each step (Fisher info `I`) |
-| drift variance `q_mu` | — | derived: settles the gain to the **critically-damped `K*=(1−φ)/4`** |
-| cold-start prior | — | `s²`, the AR(1) stationary variance |
-| grid spacing | `order` (resolution) | **`1.5 s`**, the resolution limit |
-| what you supply | six numbers via `fit(x)` | **two**: `phi, s` (+ base `Q, s2`) |
-
-The two remaining numbers `(phi, s)` are not a tuning knob — they are the model
-of the process itself (how sticky the volatility is, and how far it swings). A
-filter that assumes *nothing* about how fast volatility can move cannot separate a
-real regime change from a run of noise, so that pair is irreducible; the point of
-`WalkingFilter` is that it is the *only* thing left to supply. See
-`../../research/adaptive-grid/` for the derivation of every "derived" row above,
-and `../../research/adaptive-grid/figures/0024-walking-vs-fit.png` for the result:
-on data that shifts to a new volatility regime, a fit made on the earlier history
-and run forward (the realistic deployment) tracks the new regime at RMSE ≈ 3.6,
-while `WalkingFilter` tracks it at ≈ 1.0 — matching an oracle fit that was allowed
-to see the future, with no `fit()` at all.
-
-**Scope.** `WalkingFilter` is a single (process) channel: it adapts the process
-noise scale and holds the measurement scale `s2` fixed. Use `AdaptiveFilter` when
-you have a representative history to fit and both channels matter; use
-`WalkingFilter` to stream with no training pass, or when the regime will move
-outside anything a one-time fit saw.
-
-### `WalkingFilter(Q, s2, phi, s, nodes=7)` · `.filter` / `.update` / `.loglik_of`
-
-`filter(x) -> WalkResult` (arrays: `mean, var, innovation, process_scale,
-scale_step, info`, plus `loglik`); `update(x) -> WalkStep` streams one step
-(`NaN` = missing, propagated not corrected); `loglik_of(x)` returns the marginal
-log-likelihood. `nodes` (odd) is the window's node count — a resolution, since the
-window *walks* for anything beyond its span. `reset(level=None, scale=0.0)` clears
-state and seeds the window centre.
-
-## `WalkingBank` — not even `(phi, s)`, just the class
-
-`WalkingFilter` still asks for the pair `(phi, s)`. Those two live on a **sloppy
-ridge** the data identifies only weakly, and tracking is nearly flat along it — so
-the right move is not to pick a point but to run a **bank** of walkers over a grid
-of `(phi, s)` and average them by online Bayesian model weighting. The evidence
-concentrates weight onto the ridge the data supports; the flat, sloppy direction
-is integrated out. The caller commits only to the model **class** (a stationary
-AR(1) log-scale) and a broad grid **range** — both shape assumptions, no fitted
-numbers.
-
-```python
-from statfilter import WalkingBank
-
-f = WalkingBank(Q=1.0, s2=1.0)     # no (phi, s) — just the class and a default box
-r = f.filter(x)
-r.mean                             # model-averaged level
-r.process_scale                    # model-averaged process log-scale
-r.phi_hat, r.s_hat                 # what the data learned about (phi, s), per step
-r.n_eff                            # how many models still carry weight
-```
-
-Measured on a process whose scale shifts regime, `WalkingBank` (given *no* `(phi,
-s)`) tracks at level-RMSE **0.86**, matching a single `WalkingFilter` *told the
-true* `(phi, s)` (0.86) — it pays essentially nothing for not being told; see
-`../../research/adaptive-grid/figures/0027-walking-bank.png`. The learned
-`phi_hat, s_hat` settle onto the ridge (not necessarily the exact truth-point —
-the data cannot separate them, and it does not need to), and `n_eff` sheds from
-the full grid onto a handful.
-
-### `WalkingBank(Q, s2, phis=None, ss=None, nodes=7, forget=0.999)`
-
-`phis, ss` default to a broad dead-zone-free box (persistence 0.70–0.95, swing
-0.20–0.80); widen freely, since the data down-weights the unsupported corners.
-`forget` in `(0, 1]` is weight persistence — **the one residual free parameter**,
-and it governs the slowest, least consequential channel there is: the drift rate
-of `(phi, s)`, which is both the slowest-varying quantity and the one on the flat
-identification ridge. `1.0` is exact Bayesian averaging, which concentrates onto
-the ridge and then *freezes*; the default `0.999` is near-but-not-1 (a ~1000-step
-memory) so the bank still concentrates yet can re-select if the process `(phi, s)`
-drift. Tracking is identical for any `forget` in `[0.99, 1.0]` on both static and
-shifted scales, so a value near 1 costs nothing measurable. Same `filter` /
-`update` / `loglik_of` / `reset` surface as `WalkingFilter`; results carry `mean,
-var, innovation, process_scale, n_eff, phi_hat, s_hat` (plus `loglik`).
-
-## `WalkingVectorFilter` — per-component scales, tracked online
-
-The multivariate, **per-component** walker: an n-vector state, an m-vector
-observation through a supplied `H`, and a **vector of log-scales walked online** —
-one per significant *process eigenmode* and one per *sensor*. So it deduces, per
-step, **which component's noise is up**: which mechanical mode is drifting, which
-sensor is glitching — the thing a single scalar scale (`VectorFilter`) cannot say.
-
-```python
-from statfilter import WalkingVectorFilter
-import numpy as np
-
-Q0 = np.array([[1.0, 0.6], [0.6, 1.0]])     # base process cov (its eigenvectors are the
-                                            # fixed noise directions; eigenvalues breathe)
-f = WalkingVectorFilter(Q0, R0=[1.0, 1.0],  # R0 diagonal: sensor noise is per-sensor
-                        H=np.array([[1., 0.], [0.6, 1.]]), phi=0.9, s=0.4)
-r = f.filter(Y)                             # Y is (T, m); no fit()
-r.measurement_scale                         # (T, m) — which sensor is hot, per step
-r.process_scale                             # (T, n) — which eigenmode is hot, per step
-```
-
-How it works (all derived, no `order`/`nodes` knob):
-
-- **the grid is dense and walks.** Each active log-scale axis carries a dense window
-  at the resolution spacing `1.5 s`; the joint window is their tensor product and its
-  centre **walks** to follow the scale (unbounded reach). The state is a Kalman filter
-  at every node, collapsed by multivariate GPB1 — the `VectorFilter` recursion over a
-  per-component scale grid.
-- **each axis walks by the finding-18 loop** (`K* = (1−φ)/4`, derived `q_mu`), one copy
-  per axis.
-- **spectral truncation (derived, no free parameter).** Axes the data cannot resolve
-  are **frozen**, not walked: an unbounded walk on a near-zero-Fisher axis only
-  integrates noise into a drift. The freeze threshold is *derived* — an axis
-  delocalises when the walk's steady spread `(1−φ)/(4 I_char)` (finding-18 Theorem 2)
-  exceeds its own window `(1.5·(span/1.5))²`, giving `freeze ⇔ I_char < (1−φ)/(4(SPAN·s)²)`,
-  a pure function of the class `(φ, s)` and the coverage budget. This is the "compose
-  the Q-eigenbasis with the Fisher spectrum" criterion made exact, and it keeps the
-  joint grid (exponential in the *active* axis count) small. Derivation + validation:
-  `research/multivariate-statfilter/0010`.
-
-**This is a testbed filter** (`statfilter` is a theory testbed; the grid is
-exponential in the active-axis count — a handful of modes + sensors). Measured against
-the exact grid over 6 seeds, the walk is **faithful**: when a strong process mode is
-hot the sensor reads ~0.26 and the exact grid also reads ~0.31 there — with a mixing
-`H`, process and measurement noise are genuinely partly confounded, so that is the
-*true* posterior coupling, not a walk defect; a clean sensor stays clean when another
-is hot. The only walk artifact is a **~0.1-nat static drift on the strong axis**
-(bounded — the unbounded walk's small bias). Shaving that, and deriving the grid
-resolution in force, are recorded opens; see
-[`../../research/multivariate-statfilter/SUMMARY.md`](../../research/multivariate-statfilter/SUMMARY.md).
-
-## Honest limits
-
-Measured on a nine-probe battery against a constant-gain Kalman filter whose
-gain is chosen *in hindsight* to minimise that series' own error, over four
-seeds: **geometric mean 0.678, worst case 1.017.** On stationary diffusions,
-where a constant gain is genuinely optimal, the ratio is 1.001–1.005 — the
-adaptivity is close to free when it isn't needed. Beating a fixed gain where the
-truth is non-stationary is expected and is not a claim of beating the optimal
-filter.
-
-Known weaknesses, all measured rather than guessed:
-
-- **`s_P` is weakly identified.** On a homoscedastic series it can land anywhere;
-  the likelihood gain is ~0.0017 nats per point. Tracking is unaffected, but do
-  not read a fitted `s_P` as an estimate.
-- **`phi` on sparse impulsive data.** ~12 outliers in 1200 points gives a
-  persistence estimate that is right about half the time. A persistence is an
-  autocorrelation and needs enough events to correlate.
-- **The level posterior is collapsed to one Gaussian per step** (GPB1). That is
-  weakest exactly at a jump, where the true posterior is bimodal.
-- **Speed.** ~30 µs per step per grid state in Python, almost all of it numpy
-  dispatch overhead on small arrays rather than arithmetic. Fitting a
-  1200-point series takes about a minute. The recursion is sequential in `t` so
-  it does not vectorise; a compiled implementation would be roughly 40× faster.
+- **A single channel.** With one sensor and one state, "the level moved" and "the
+  sensor glitched" are indistinguishable *within a step* — a theorem, not a
+  shortfall. The filter carries the split as a dimension of its **bank** instead:
+  a ladder of anchored hypotheses, each a complete filter reading the innovation
+  *sequence* through its own mean. Told nothing at all, steady-state RMSE is
+  3.5% above an oracle-tuned Kalman filter, a level jump is absorbed in 3 steps
+  to that filter's 16, and the error bars stay honest when the sensor degrades
+  (`E[e^2/S] = 0.81` against the Kalman filter's 4.6× overconfidence). What is
+  still open is the first ~50 steps after a sensor-noise regime change.
+- **Collinear channels are tracked as a total.** A sensor that directly reads the
+  state a disturbance drives shares one identifiable total with it. The state
+  estimate needs exactly that total and is unaffected; the *attribution* between
+  the two is partly shared.
+- **A recovered parameter is only as good as its excitation.** The dynamics
+  channel is bounded, never frozen: an axis the data does not pin stands at
+  honest class width rather than reporting a number it has no evidence for.
+- **Speed.** Pure numpy, sequential in `t`, dominated by interpreter dispatch on
+  small arrays rather than by arithmetic.
+- **Nothing here has been run on hardware.** Every number is from synthetic rigs
+  with known ground truth.
 
 ## Tests
 
-Run from this directory (`output/`, where `pyproject.toml` and `tests/` live):
-
-```
-python -m pytest tests -q                  # all 19, ~13 min (fitting dominates)
-python -m pytest tests -q -m "not slow"    # 11 structural checks, 0.3 s
+```bash
+pip install -e '.[test]'
+pytest                       # from the repository root
 ```
 
-The fast subset covers what breaks silently: exact reduction to a plain Kalman
-filter when `s_P = s_M = 0`, both conservation laws to machine precision,
-streaming matching batch exactly, `filter()` leaving streaming state untouched,
-and missing-data handling. The slow ones all call `fit()`.
+The suite covers what breaks silently: exact reduction to a plain Kalman filter
+on the homoscedastic face, streaming against batched, missing-value handling, the
+stacked bank pinned to the looped reference at machine precision, and the
+oracle-gap battery that pins the per-node covariance repair.
 
 ## Where this comes from
 
-[`../exploration/theory/`](../../research/random-walk-filter/theory/README.md) derives it:
-`01`–`02` the information accounting and why relevance decays the way it does,
-`03` the four deviation modes, `04` nats to trust to influence, `06` why
-detection is the wrong frame, `07` the finished computation and the measured
-results.
-
-One result worth stating here, because it is the reason there is no changepoint
-test: asking *where* a change occurred costs a null penalty that grows like
-`log n`, while asking *how large the deviation is at each t* costs a constant
-(1.353 nats, the boundary-LRT quantile, with no `n` in it). Detection is not
-merely unnecessary — it is strictly more expensive than not detecting, and the
-gap widens without bound as the series grows.
+Every mechanism here is derived and measured in
+[`../../research/`](../../research/), one workstream per question, each with a
+falsifiable `SUMMARY.md`:
+[`multivariate-statfilter/`](../../research/multivariate-statfilter/SUMMARY.md)
+for the per-component noise machinery,
+[`dynamics-learning/`](../../research/dynamics-learning/SUMMARY.md) for the
+dynamics channel,
+[`sequence-demix/`](../../research/sequence-demix/SUMMARY.md) for the
+process/sensor split,
+[`optimality-proof/`](../../research/optimality-proof/SUMMARY.md) for where
+"optimal" does and does not hold. The earlier fitted filters this one replaced
+(`AdaptiveFilter`, `VectorFilter`, `WalkingFilter`, `WalkingVectorFilter`) are
+preserved as specimens in
+[`research/multivariate-statfilter/specimens/`](../../research/multivariate-statfilter/specimens/)
+and are no longer part of the public API.
