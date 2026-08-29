@@ -115,7 +115,29 @@ That is a property of the **rig**, not a fitted constant, and `units_control()` 
 buys by re-running the identical data with the angular inputs in newton-metres instead, where the
 torque columns become `dt/I ≈ 0.67` and set `||B0||` by themselves:
 
-<!-- UNITS_CONTROL -->
+**Prediction, recorded before the run:** mass and offset get much noisier; the inertias do not.
+Measured (one seed, the settled carrying window; ± is the step-to-step standard deviation of the
+read-out, which is what precision means here):
+
+| | as shipped | in N m | true |
+|---|---|---|---|
+| mass, carried (kg) | 1.535 ± 0.107 | 1.596 ± 0.376 | 1.520 |
+| offset, carried (cm) | 1.64 ± 0.16 | 1.66 ± 0.31 | 1.63 |
+| inertia Ixx (kg m²) | 0.0236 ± 0.0042 | 0.0197 ± 0.0066 | 0.0275 |
+| inertia Iyy (kg m²) | 0.0250 ± 0.0044 | 0.0198 ± 0.0051 | 0.0279 |
+| inertia Izz (kg m²) | 0.0303 ± 0.0071 | 0.0300 ± 0.0091 | 0.0281 |
+
+Half of the prediction holds and half does not, so both go in the record.  **Holds:** the mass
+read-out's scatter more than triples (±0.107 → ±0.376 kg) and its bias grows five-fold
+(+0.015 → +0.076); the offset's scatter nearly doubles.  Those are the two directions whose
+coefficients fall to ~1/30 of the class size, below what the walker's own jump drift
+(`sd = sqrt(rho) = 0.018` per step) covers in a single step, exactly as the arithmetic says.
+**Does not hold:** Ixx and Iyy get *worse* too (−28% instead of −15%, with 1.4× the scatter),
+though Izz is untouched.  The clean prediction assumed the directions are independent; they are
+not — they share one augmented state and one gain, so ill-conditioning on the thrust-borne
+coefficients leaks into the torque-borne ones through `P_x,theta`.  The lesson is a little
+stronger than predicted, then: bad input units cost the whole departure block, not only the
+directions whose class size they mis-set.
 
 The remedy available to the caller is free (choose input units); the remedy available to the
 filter is a **per-direction class size**, which needs a labelled prior per direction and is

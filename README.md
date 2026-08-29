@@ -62,7 +62,8 @@ Everything in the right-hand column is filter output:
 1. **Which noise is hot** — the learned per-channel scales. A chip turns orange
    when the filter has decided *that* channel is bad right now: the GPS block
    under multipath, the gyro row under rotor vibration, the wind row under the
-   gust. Nothing is told, and the gust is not mistaken for the crate.
+   gust. Nothing is told — and a gust is not mistaken for a payload: fly the same
+   mission with no crate and 0.64% of steps are ever flagged as a dynamics change.
 2. **What it says it is carrying** — read straight off `r.control`, the dynamics
    as currently believed. Two steps after the grab (2.8 ± 0.4 over five seeds) it
    reports a payload, and it settles at **0.44 kg hung 1.6 cm off centre** against
@@ -220,8 +221,10 @@ magnitude. Choosing input units that make them so is free and is the caller's
 to do — the drone rig puts its thrust in hover units and its torques in units of
 a reference angular acceleration for exactly this reason. What it costs when you
 do not is measured, not asserted: with the same data and the torques in newton
-metres, the mass and off-centre read-outs lose most of their precision while the
-inertias do not ([`0008`](research/dynamics-learning/exploration/0008_drone3d_payload.md)).
+metres, the mass read-out's scatter more than triples and its bias grows
+five-fold — and the inertias, which the prediction said would be untouched, get
+worse too, because the departure coefficients share one augmented state
+([`0008`](research/dynamics-learning/exploration/0008_drone3d_payload.md)).
 
 ## Measured behaviour
 

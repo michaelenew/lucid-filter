@@ -111,7 +111,7 @@ of carrying P_theta in the gain; the exact jump-hold theta-prior is the candidat
 goes vestigial after the walker takes over (read attribution from the refined walker; give the
 diagnostic a validity flag).
 
-## Shipped (`lucid/statfilter/lucid.py`, measured in 0007)
+## Shipped (`lucid/statfilter/lucid.py`, measured in 0007 and 0008)
 
 ```python
 LucidFilter(dynamics=None)                       # learn F (and B) from nothing
@@ -130,7 +130,10 @@ shipped filter detects in **15.7 ± 1.7** steps against the derived frontier of 
 0005 blowout rig, driven entirely through the public API (state-dependent `B(x)` plus the two
 physical wheel-radius directions as callables), it detects in 43 ms, recovers the blown radius
 to 0.303 ± 0.018 (true 0.30) and the healthy one to 1.043 ± 0.021, and settles at 1.037× the
-refit oracle where the frozen nominal pays 5.06×.
+refit oracle where the frozen nominal pays 5.06×.  0008 puts the whole vehicle through the same
+API — `B(x)` a callable, six physical departure directions as callables, and gravity carried by
+a constant input channel — and reads the payload's mass and its off-centre lever arm straight
+off `r.control`.
 
 0007 also records the one real defect the wiring exposed: scaling departure directions to unit
 Frobenius norm assumes O(1) entries, which holds for `F` and fails for `B` — the class size is
