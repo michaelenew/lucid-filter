@@ -136,8 +136,10 @@ Configure by **give-what-you-know**; every argument has a working default:
 | `process` | base process covariance `Q0` | identity |
 | `measurement` | base per-sensor variances `R0` | ones |
 
-A rough base is fine — the walk breathes around it (a base wrong by 5× costs
-~16% of oracle RMSE on the scalar benchmark below). Outputs per step: posterior
+A rough base is fine — the walk breathes around it, and where a base is not just
+rough but *silent* about the process/sensor split, the bank learns the split
+rather than holding it (3.5% of oracle RMSE told nothing, on the scalar
+benchmark below). Outputs per step: posterior
 mean and covariance, innovation, predictive log-likelihood, and the
 per-component log-scales.
 
@@ -150,11 +152,11 @@ noise schedule; `fixed` is the same model frozen at the base noise —
 | regime | lucid / oracle | fixed / oracle |
 |---|---|---|
 | calm | 0.98 | 1.00 |
-| accelerometers ×15 | 1.14 | 2.58 |
-| one potentiometer ×15 | 1.20 | 5.48 |
-| vibration ×20 | 1.09 | 1.01 |
+| accelerometers ×15 | 1.15 | 2.58 |
+| one potentiometer ×15 | 1.22 | 5.48 |
+| vibration ×20 | 1.07 | 1.01 |
 | vibration + accels | 1.11 | 2.42 |
-| vibration + potentiometer | 1.21 | 5.48 |
+| vibration + potentiometer | 1.17 | 5.48 |
 
 Near-oracle in every regime, with the fixed filter paying 2.4–5.5× wherever a
 sensor degrades. Sensor redundancy is what the filter converts into accuracy:
@@ -167,22 +169,26 @@ use case.
 
 ## Current limits, measured
 
-- **A single channel cannot split process from sensor noise.** With one sensor
-  and one state (the scalar case), "the level moved" and "the sensor glitched"
-  are indistinguishable within a step, so the filter learns the *total* noise
-  but holds the process/measurement ratio at its base. Measured on a scalar
-  benchmark against a Kalman filter told the truth
-  ([`README-004`](research/random-walk-filter/scripts/README-004-hero-lucidfilter.py)):
-  told nothing at all, the lucid filter still absorbs a level jump in **4 steps
-  to the Kalman filter's 16** and keeps its error bars honest when the sensor
-  degrades ($E[e^2/S] = 1.3$ vs the Kalman filter's **4.6× overconfidence**) —
-  but it pays 84% on steady-state RMSE, falling to 16% with a base within 5× and
-  to parity with the true base. A sensor-noise regime change in the scalar case
-  is partly mis-attributed to process (the same per-step ambiguity), costing
-  RMSE while calibration holds. The evidence that splits the two lives in the
-  innovation *sequence*; the mechanism is identified and its stable realization
-  is the top open
-  ([`0053`](research/multivariate-statfilter/exploration/0053_pernode_demix.md)).
+- **A single channel: the split is learned by the bank, not held at its base.**
+  With one sensor and one state, "the level moved" and "the sensor glitched" are
+  indistinguishable *within a step* — that half is a theorem
+  ([Proposition 1](research/optimality-proof/SUMMARY.md)), and the per-step score
+  for the two scales is provably parallel. So the filter carries the split as a
+  dimension of its **bank** instead: a ladder of anchored hypotheses, each a
+  complete filter, each reading the innovation *sequence* through its own mean
+  ([`research/sequence-demix`](research/sequence-demix/SUMMARY.md)). Measured on a
+  scalar benchmark against a Kalman filter told the truth
+  ([`README-004`](research/random-walk-filter/scripts/README-004-hero-lucidfilter.py)),
+  told nothing at all: steady-state RMSE is **3.5% above the oracle-tuned Kalman**,
+  where it used to be 84% — better than the *fitted* filter this one replaced
+  (5.6%) — the level jump is absorbed in **3 steps to the Kalman filter's 16**,
+  and the error bars stay honest when the sensor degrades ($E[e^2/S] = 0.81$ vs the
+  Kalman filter's **4.6× overconfidence**). What is still open is the first fifty
+  steps after a sensor-noise regime change, which are partly mis-attributed to
+  process — the same per-step ambiguity applied to the transient rather than to
+  the base — costing 14% on regime-C RMSE while calibration holds. That, and why
+  it is the *same* problem as the jump, is stated with its measurements in
+  [`0005`](research/sequence-demix/exploration/0005_reach_and_restraint.md).
 - **Collinear channels are tracked as a total.** A sensor that directly reads
   the state a disturbance drives (the accelerometer/vibration pair above)
   shares one identifiable total with it; the state estimate needs exactly that
@@ -223,12 +229,14 @@ research.
 - **Online learned dynamics** — the `dynamics=None` cell:
   [`research/dynamics-learning/SUMMARY.md`](research/dynamics-learning/SUMMARY.md)
   is the opening document.
-- **The sequence-evidence de-mix** — per-hypothesis filters carry the lag-1
-  evidence that splits collinear noise channels; the mechanism is validated and
-  its stable in-engine realization is open:
+- **The sequence-evidence de-mix** — the scalar split is now carried by the bank
+  and the hero gate's steady-state and calibration targets are met told nothing;
+  what remains is the *transient* attribution, where a level jump and a sensor
+  degradation are tied per step and pull the same lever opposite ways:
   [`research/sequence-demix/SUMMARY.md`](research/sequence-demix/SUMMARY.md)
-  is the opening document, with the scalar hero gate and the 5-DOF guard as its
-  acceptance benchmarks.
+  states the two open sub-gates with their causes, and the collinear accel↔jerk
+  pair on the arm is untouched (no pair there is exactly degenerate, so the
+  ladder does not switch on).
 - **A lean/embedded profile** — the bank multiplier and per-cluster execution,
   including block structure when `F`/`B` arrive as callables (see the
   [SUMMARY opens](research/multivariate-statfilter/SUMMARY.md#open-items)).

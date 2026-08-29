@@ -16,12 +16,25 @@ guessed.
 | jump rise | ≤ 4 steps | 4 | **3** | **PASS** |
 | regime-C RMSE / mistuned Kalman | ≤ 1.05x | 2.382x | 1.138x | open — see §"What is open" |
 
-**The 5-DOF guard is not merely passed, it is inapplicable by construction.**  The mechanism
-switches on only where a process eigenmode is read by *exactly one* sensor.  On the arm every
-jerk mode is read by its pot as well as its accelerometer, so no pair qualifies, and the filter
-is **bit-identical** to the previous engine there — mean, covariance and learned scales all
-agreeing to 0.0 — at the same cost per step.  This is the opposite of 0053's failure mode: there
-is nothing to regress.
+**The 5-DOF guard passes, in two parts.**  The *ladder* is inapplicable there by construction: it
+switches on only where a process eigenmode is read by exactly one sensor, and on the arm every
+jerk mode is read by its pot as well as its accelerometer.  The 4-seed paired profile reads
+**+0.000 SE 0.000 in every regime, angle and velocity** — bit-identical, at the same cost per
+step.  This is the opposite of 0053's failure mode: there is nothing to regress.  The *box* change
+does reach the arm, and its own 4-seed paired profile passes with room:
+
+| regime | angle, shipped → geometric box | velocity |
+|---|---|---|
+| CALM | 0.983 → 0.983 (−0.0σ) | 0.995 → 0.995 (−0.0σ) |
+| SENSOR | 1.135 → 1.148 (+1.0σ) | 1.209 → 1.212 (+1.1σ) |
+| pot-hot | 1.201 → 1.218 (+0.4σ) | 1.027 → 1.030 (+0.1σ) |
+| PROCESS | 1.085 → 1.074 (−0.7σ) | 1.477 → 1.460 (−0.7σ) |
+| BOTH | 1.108 → 1.108 (−0.8σ) | 1.093 → 1.093 (−0.6σ) |
+| **process+pot** | **1.214 → 1.166 (−2.3σ)** | **1.338 → 1.196 (−2.7σ)** |
+
+Every regime is inside +2 SE, and the arm's hardest regime improves by more than two standard
+errors on both angle and velocity — the same fact the hero rig reports as a jump gate: a box that
+cannot represent a x225 or x400 regime change was leaving that on the table.
 
 ### How it works
 
