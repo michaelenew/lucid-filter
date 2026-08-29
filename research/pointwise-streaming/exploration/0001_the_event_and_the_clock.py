@@ -32,6 +32,10 @@ from lucid import LucidFilter                                             # noqa
 from lucid.statfilter.lucid import _Propagator, _expm, _logm              # noqa: E402
 
 OUT = os.path.join(HERE, "figures", "pw0001.json")
+# The filter as it stood before this workstream: the commit this branch was measured
+# against.  Pinned rather than "HEAD~1" or "main" so the audit keeps meaning the same
+# thing after the merge -- once this work IS main, comparing against main is vacuous.
+BASELINE = os.environ.get("PW_BASELINE", "2ecc3d9")
 
 
 # ------------------------------------------------------------ 1. the propagator
@@ -105,12 +109,7 @@ def timescale_identity():
 def no_regression():
     """Run every rig through the shipped filter and through the filter as it stood
     before this workstream, and require BIT-identity."""
-    old_src = subprocess.check_output(
-        ["git", "-C", ROOT, "show", "HEAD:lucid/statfilter/lucid.py"]).decode()
-    d = tempfile.mkdtemp()
-    open(os.path.join(d, "pw_baseline.py"), "w").write(old_src)
-    sys.path.insert(0, d)
-    import pw_baseline                                                    # noqa: E402
+    pw_baseline_cls()                                    # noqa: F841 -- imports it
 
     r = np.random.default_rng(3)
     T, dt = 200, 0.1
@@ -149,12 +148,19 @@ def no_regression():
         x = Fm @ x + r.standard_normal(2 * nd) * 0.05
         Y6[t] = Hm @ x + r.standard_normal(nd) * 0.3
     rigs.append(("3-DOF, all sensors", dict(dynamics=Fm, H=Hm), Y6, None))
+    # H = I pairs every process mode with a sensor, so this exercises the SPLIT LADDER
+    # (research/sequence-demix) -- the confounded-pair rungs and their per-axis classes.
+    x = np.zeros(2); Y8 = np.empty((T, 2))
+    for t in range(T):
+        x = F @ x + r.standard_normal(2) * np.array([0.01, 0.05])
+        Y8[t] = x + r.standard_normal(2) * np.array([0.30, 0.02])
+    rigs.append(("2 sensors, H = I (split ladder)", dict(dynamics=F, H=np.eye(2)), Y8, None))
     Y7 = Y6.copy(); Y7[40:45] = np.nan
     rigs.append(("3-DOF with whole-row gaps", dict(dynamics=Fm, H=Hm), Y7, None))
 
     out = []
     for name, kw, Y, U in rigs:
-        a = pw_baseline.LucidFilter(**kw).filter(Y, U)
+        a = pw_baseline_cls()(**kw).filter(Y, U)
         b = LucidFilter(**kw).filter(Y, U)
         worst, where = 0.0, ""
         for fld in ("mean", "var", "innovation", "process_scale", "measurement_scale"):
@@ -246,7 +252,7 @@ _BASE = {}
 def pw_baseline_cls():
     if "cls" not in _BASE:
         old_src = subprocess.check_output(
-            ["git", "-C", ROOT, "show", "HEAD:lucid/statfilter/lucid.py"]).decode()
+            ["git", "-C", ROOT, "show", f"{BASELINE}:lucid/statfilter/lucid.py"]).decode()
         d = tempfile.mkdtemp()
         open(os.path.join(d, "pw_baseline.py"), "w").write(old_src)
         sys.path.insert(0, d)
@@ -277,7 +283,7 @@ if __name__ == "__main__":
     print()
     print("=" * 78)
     print("3. NO REGRESSION -- a full row at the nominal step, against the filter")
-    print("   as it stood before this workstream.  Required: bit-for-bit.")
+    print(f"   as it stood before this workstream ({BASELINE}).  Required: bit-for-bit.")
     print("=" * 78)
     reg = no_regression()
     for row in reg:

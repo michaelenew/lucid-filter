@@ -118,6 +118,55 @@ def test_dynamics_none_is_implemented():
     assert f._learn and f._nd == 2          # the nominal hedge plus the departure walker
 
 
+def test_bank_matches_the_looped_members():
+    """The stacked executor is the same recursion as ``_WalkEngine.update`` -- pinned.
+
+    `LucidFilter` runs its members stacked (`_EngineBank`, one leading member axis) because the
+    split ladder multiplies the member count and per-member numpy dispatch was 99% of the step
+    cost.  This pins the stack to the looped reference on every path it has: a fresh start, a
+    missing observation, the multi-pair star, the dynamics channel with its fault kernel and
+    reprice, and a control input.
+    """
+    from lucid.statfilter.lucid import _WalkEngine
+
+    class _Looped(_WalkEngine):
+        def update(self, y, u=None, a=1.0):
+            return _WalkEngine.update(self, y, u=u, a=a)
+
+    r = rng(3)
+    box = {"phis": (0.70, 0.95), "ss": (0.30, 0.80)}
+    Y1 = r.standard_normal((40, 1)); Y1[7] = np.nan
+    # partly-observed rows, and rows with some sensors absent AND a whole row absent
+    Y2 = r.standard_normal((30, 2)); Y2[::3, 0] = np.nan; Y2[11] = np.nan
+    rigs = [
+        (dict(box), Y1, None),
+        (dict(n=2, H=np.eye(2), **box), r.standard_normal((30, 2)), None),
+        (dict(dynamics=[[0.9]], process=[[0.09]], measurement=[0.25], faults=1 / 100, **box),
+         np.concatenate([r.standard_normal((20, 1)), 4 + 0.3 * r.standard_normal((20, 1))]),
+         None),
+        # the paths this workstream added: partial rows, and non-nominal gaps
+        (dict(n=2, H=np.eye(2), **box), Y2, None),
+        (dict(dynamics=[[1.0, 0.1], [0.0, 1.0]], H=np.eye(2), timestep=0.1, **box),
+         r.standard_normal((30, 2)), np.cumsum(np.abs(r.normal(0.1, 0.05, 30)) + 1e-3)),
+    ]
+    for kw, Y, tt in rigs:
+        a = LucidFilter(**kw)
+        b = LucidFilter(**kw)
+        for f in b._members:
+            f.__class__ = _Looped
+        b.reset()
+        assert all(type(bk).__name__ == "_EngineBank" for bk in a._banks)
+        assert all(type(bk).__name__ == "_LoopBank" for bk in b._banks)
+        ra, rb = a.filter(Y, t=tt), b.filter(Y, t=tt)
+        assert np.allclose(ra.mean, rb.mean, atol=1e-9, equal_nan=True)
+        assert np.allclose(ra.var, rb.var, atol=1e-9)
+        assert np.allclose(ra.process_scale, rb.process_scale, atol=1e-8)
+        assert np.allclose(ra.measurement_scale, rb.measurement_scale, atol=1e-8)
+        assert abs(ra.loglik - rb.loglik) < 1e-6
+        if ra.fault is not None:
+            assert np.allclose(ra.fault, rb.fault, atol=1e-9)
+
+
 def test_five_dof_arm_polynomial():
     """A 5-DOF arm (n=10 pos/vel, m=5 pots, D=15) must construct and run.
 
@@ -515,6 +564,33 @@ def test_control_forcing_is_continuous_through_the_nominal_step():
     assert np.allclose(p.at(0.0)[1], np.zeros((2, 2)))
     near = p.at(1.0 - 1e-6)[1]
     assert np.abs(near - np.eye(2)).max() < 1e-5
+
+
+def test_split_ladder_revert_is_a_rate_not_a_per_arrival_step():
+    """The confounded pair's log-odds relaxes toward its member's hypothesis at the class's
+    persistence PER NOMINAL STEP.  Feeding one instant as m points must therefore revert
+    once, not m times -- a zero gap moves no clock, so it must move no revert either.
+    """
+    F, H, X, Y = two_sensor(T=40)
+    kw = dict(dynamics=F, H=H)                     # H = I pairs every mode with a sensor
+    assert any(f._groups for f in LucidFilter(**kw)._members), "rig must exercise the ladder"
+    joint = LucidFilter(**kw).filter(Y)
+    pts = [(i, float(t), Y[t, i]) for t in range(len(Y)) for i in (0, 1)]
+    ptw = LucidFilter(**kw).stream(pts)
+    # the scales after each instant must track the joint row's, not run away by reverting
+    # once per arrival (which pulls the split back toward the anchor twice as fast)
+    assert np.abs(ptw.measurement_scale[1::2] - joint.measurement_scale).max() < 0.25
+    # and a zero-gap event on its own must not revert at all
+    f = LucidFilter(**kw)
+    f.update(Y[0]); f.update(Y[1])
+    before = np.array([e.mu.copy() for e in f._members])
+    f.update(np.array([Y[2, 0], np.nan]), dt=0.0)
+    after = np.array([e.mu.copy() for e in f._members])
+    g = LucidFilter(**kw)
+    g.update(Y[0]); g.update(Y[1])
+    g.update(np.array([Y[2, 0], np.nan]), dt=0.0)
+    assert np.allclose(after, np.array([e.mu for e in g._members]))
+    assert not np.allclose(before, after)           # the reading still moved the scale
 
 
 def test_stream_with_a_dynamics_channel():
