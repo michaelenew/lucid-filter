@@ -70,6 +70,11 @@ _SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weigh
                                            #   at a factor of 11, which is smaller than the regime
                                            #   changes in this repository's own rigs.
 _RANK_TOL = 1e-8            # numerical rank tolerance (the order used for structural activation)
+_LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sense as _SPAN_S: the
+                            # finest grid the engine will build is the one a thousand-step memory
+                            # supports (24 rungs).  A longer `forget` still sharpens the bank's
+                            # weights; it does not buy a finer ladder, and `forget = 1` would ask
+                            # for an infinite one.
 
 
 # --------------------------------------------------- the per-step-blind directions
@@ -143,11 +148,13 @@ def _rung_odds(forget):
     The entire space of splits is therefore an interval of arclength ``pi/2``.  Two rungs are
     resolvable when the evidence the bank can hold -- ``1/(1 - forget)`` steps -- separates them
     by order one nat, i.e. ``dt = sqrt(2 (1 - forget))``; spacing them at the grid's own Sparrow
-    factor above that limit leaves no dead zone.  The result COVERS EVERY POSSIBLE SPLIT with a
+    factor above that limit leaves no dead zone.  The memory entering that resolution is capped at
+    ``_LADDER_MEM``, which is a node budget and not a statistical claim.  The result COVERS EVERY POSSIBLE SPLIT with a
     couple of dozen rungs, and no rung refers to the supplied base: told nothing means told
     nothing.
     """
-    step = _GAP_FACTOR * math.sqrt(2.0 * (1.0 - forget))
+    mem = min(1.0 / (1.0 - forget), _LADDER_MEM) if forget < 1.0 else _LADDER_MEM
+    step = _GAP_FACTOR * math.sqrt(2.0 / mem)
     J = int(math.ceil((0.5 * math.pi) / step))
     t = (np.arange(J) + 0.5) * (0.5 * math.pi) / J
     K = 1.0 - np.cos(t)

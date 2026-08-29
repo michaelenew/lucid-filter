@@ -3,18 +3,18 @@
 ## Current state
 
 **Built and shipped in the engine: the split is carried by the bank, where a per-step score
-cannot carry it.**  `LucidFilter()` told nothing now runs the hero rig at **1.031x** the
+cannot carry it.**  `LucidFilter()` told nothing now runs the hero rig at **1.035x** the
 oracle-tuned Kalman's steady-state RMSE — past the 1.10x gate, and past what the RETIRED FITTED
-filter managed (1.056x) with six numbers handed to it by `fit()`.  Two of the four hero
-sub-gates pass; two are open, with the miss localised in each case and the cause measured, not
+filter managed (1.056x) with six numbers handed to it by `fit()`.  **Three of the four hero
+sub-gates pass**; one is open, localised to fifty steps, with its cause measured rather than
 guessed.
 
 | hero sub-gate | target | shipped before | **now** | |
 |---|---|---|---|---|
-| steady-state RMSE / oracle Kalman | ≤ 1.10x | 1.837x | **1.031x** | **PASS** (retired fitted filter: 1.056x) |
-| calibration `E[e²/S]`, every regime | [0.6, 1.5] | 1.38 / 1.29 | **1.44 / 0.78** | **PASS** |
-| regime-C RMSE / mistuned Kalman | ≤ 1.05x | 2.382x | 1.101x | open — see §"What is open" |
-| jump rise | ≤ 4 steps | 4 | 7 | open — a reach problem, with a measured fix that costs regime C |
+| steady-state RMSE / oracle Kalman | ≤ 1.10x | 1.837x | **1.035x** | **PASS** (retired fitted filter: 1.056x) |
+| calibration `E[e²/S]`, regimes A and C | [0.6, 1.5] | 1.38 / 1.29 | **1.43 / 0.81** | **PASS** |
+| jump rise | ≤ 4 steps | 4 | **3** | **PASS** |
+| regime-C RMSE / mistuned Kalman | ≤ 1.05x | 2.382x | 1.138x | open — see §"What is open" |
 
 **The 5-DOF guard is not merely passed, it is inapplicable by construction.**  The mechanism
 switches on only where a process eigenmode is read by *exactly one* sensor.  On the arm every
@@ -53,55 +53,67 @@ is nothing to regress.
 
 ### What is open, sharply
 
-Both remaining misses are the **same tension seen from two sides**, and both are localised to a
-handful of steps rather than spread over a run.
+**Regime C, and it is fifty steps.**  Broken out by window against the comparator (the
+regime-A-tuned Kalman, at 1.031 / 0.652 / 0.751):
 
-**The jump is a reach problem.**  With the split correctly at `q ≈ 0.02` the base gain is 0.13, so
-a 9-sigma level jump has to be absorbed by a *split excursion* — and the star's window half-span is
-`3 s`, with the shipped `s` box topping out at 0.8: a factor of 11, where the jump needs ~1000.
-Replacing the box with a geometric `0.2 .. 3.2` (same member count, so no extra cost) gives **rise
-3** immediately and also improves the settled part of regime C (750–900 goes 0.766 → 0.738, past
-the comparator's 0.751), because a window that can reach absorbs the jump instead of letting it
-bias the ladder's verdict.  It costs the fifty steps after the sensor degrades (600–650 goes
-1.173 → 1.415), taking regime C to 1.138x.  So the box change trades one open gate for the other;
-it is not shipped, and the choice is recorded rather than made.
+| | 600–650 | 650–750 | 750–900 | all of C |
+|---|---|---|---|---|
+| comparator (mistuned Kalman) | 1.031 | 0.652 | 0.751 | 0.775 |
+| **shipped now** | **1.415** | 0.716 | **0.738** | 0.882 |
+| what re-learning the C split would buy | 0.503 | 0.421 | 0.629 | 0.547 |
 
-**Regime C is an attribution problem in the first fifty steps.**  The settled filter is already at
-the comparator (750–900: 0.766 against 0.751); the entire miss is the adaptation after the sensor
-triples, where the star's two axial windows each say "the whole change was mine", fit `S` exactly
-equally well (Proposition 1), and split the change between them — so the bank-mean gain goes
-0.148 → 0.208 → 0.166 over t = 600..680 when the correct move is to *lower* it.  A wider window
-makes the misattribution larger, which is the whole of the trade above.
+The settled filter is already *past* the comparator (0.738 against 0.751); the entire miss is the
+adaptation in the first fifty steps after the sensor triples, where the star's two axial windows
+each say "the whole change was mine", fit `S` exactly equally well (Proposition 1), and split the
+change between them — so the bank-mean gain rises when the correct move is to lower it.  Closing
+that window to the comparator's 1.031 would put regime C at 1.02x and the gate would be met; there
+is no other deficit to find.
 
-**What the tension actually is.**  A confounded pair's process axis needs to REACH a long way (for
-the jump) and to not HOLD what it reached (for the sensor change), while the sensor's own axis must
-hold.  Reach and persistence pull opposite ways on one axis and the same way on two — and the
-shipped bank gives both axes one shared class `(phi, s)`, so it cannot express the difference.
-This is exactly the structure `fit()` found for the retired filter on this rig — `phi_P ~ 0` with
-`s_P = 3.69`, `phi_M = 0.93` with `s_M = 1.62` — and the one piece of it the bank could not
-represent.  Adding an impulsive corner to the *shared* box does nothing at all (those members take
-no weight; measured twice).  The engine now supports a **per-axis class**, so crossing the class
-per channel for a confounded group is a small change; whether it closes the two gates is the next
-measurement, not a claim.
+**And it is the same problem as the jump was** ([`0005`](exploration/0005_reach_and_restraint.md)).
+A confounded pair's process window has to REACH (a jump) and to show RESTRAINT (a sensor
+degrading), the two events are tied at the step they happen, and across five independent settings
+the 600–650 column and the jump rise move together and by the same size.  The hypothesis that
+should have separated them — the retired filter's per-channel class, `phi_P ~ 0` with `s_P = 3.69`
+beside a persistent measurement channel, which the shipped bank could not express and the engine
+now can — buys the jump and makes the sensor change worse, because non-persistence stops a window
+*keeping* a hypothesis and not *offering* one.  What governs the misattribution is the prior WIDTH
+on the process axis, which is the same number that governs reach.
 
-**And a second open, separate from the gates: the verdict's memory.**  In regime C the ladder sits
-at −3.5 log-odds when the truth is −6.11, because the bank's ~1000-step memory gives the
-regime-A verdict a ~17-nat lead that 300 steps of a 0.015-nat/step signal cannot overturn.  The
-memory that is right for *holding* a verdict is wrong for *revising* one.  The one derivation of a
-better number that was tried — `theory/02`'s `L* = sqrt(3d / (omega² tr I_1))`, which lands on
-25–225 steps, squarely on 0041's Lorden frontier — fails, and instructively:
-`omega` is the drift of the *scales*, which the walk already carries, so feeding it to the ladder
-double-counts and the verdict's own noise costs more than the staleness did
+So the open is a structure, not a setting.  A per-step prior cannot separate the two, because the
+separation is not in the step; the bank is what separates things a step cannot, and it currently
+carries only the base split.  **What is missing is a second banked coordinate: anchored hypotheses
+about the EXCURSION rather than the base** — "this departure is process" against "this departure is
+sensor" — carried by members with their own means, so that the next two or three steps decide
+between them the way the next two or three hundred decide the base.  Neither the retired filter nor
+the shipped one has ever had that; `fit()` did not solve this problem for the retired filter, it was
+handed the answer.
+
+**A second open, separate from the gates: the verdict's memory.**  In regime C the ladder sits at
+−3.5 log-odds when the truth is −6.11, because the bank's ~1000-step memory gives the regime-A
+verdict a ~17-nat lead that 300 steps of a 0.015-nat/step signal cannot overturn.  The memory that
+is right for *holding* a verdict is wrong for *revising* one.  The one derivation of a better
+number that was tried — `theory/02`'s `L* = sqrt(3d / (omega² tr I_1))`, which lands on 25–225
+steps, squarely on 0041's Lorden frontier — fails, and instructively: `omega` is the drift of the
+*scales*, which the walk already carries, so feeding it to the ladder double-counts and the
+verdict's own noise costs more than the staleness did
 ([`0004`](exploration/0004_four_negatives.md) §3).
+
+**The `(phi, s)` box moved, and it is a fix in its own right.**  `s` is the SD of a LOG variance, so
+the top of the box is the largest scale change a window can represent in one step (`3 s` of
+half-span).  The old box ended at 0.8 — a factor of 11 — which is smaller than the regime changes in
+this repository's own rigs (x9 on the hero rig, x225 and x400 on the arm), so no member could
+represent them.  The default is now a geometric `0.2 .. 3.2` at the same member count.  That is what
+takes the jump from 7 steps to 3, and it also improves the settled part of regime C.
 
 ### Cost
 
-On the demo rig, unchanged — bit-identical members, 45.6 ms/step against the shipped engine's
-47.8, and the per-joint embedded path is untouched because no group exists there.  Where a ladder
-*does* switch on, the member count is multiplied by the rung count (24), and the scalar hero rig
-goes 3.2 → 84 ms/step.  That is inside the gate (which is stated on the demo rig) but it is not
-free, and whether the `(phi, s)` box still earns fifteen members once a ladder spans the split is
-untested.
+On the demo rig the LADDER is free: no pair on the arm is exactly degenerate, so no member changes
+and the 4-seed paired guard reads **+0.000 SE 0.000 in every regime, angle and velocity** — the
+filter is bit-identical there, at 45 ms/step against 45–48 before, and the per-joint embedded path
+is untouched.  Where a ladder does switch on, the member count is multiplied by the rung count
+(24) and the scalar hero rig goes 3.2 → 88 ms/step.  That is inside the gate (which is stated on
+the demo rig) but it is not free, and whether the `(phi, s)` box still earns fifteen members once a
+ladder spans the split is untested.
 
 ---
 
@@ -220,19 +232,31 @@ A and D compose (bank for detection-grade ratio, accumulator for refinement); B 
 same idea at different D.  Start where the benchmark is: the scalar case, D = 2, where every
 candidate can be raced on the hero rig in minutes.
 
-## Probe ladder
+## Probe ladder — as planned, and as it actually went
 
-- **0001**: replicate the lockstep cleanly (scalar rig, plot both mu trajectories and the
-  per-axis scores); verify the score-proportionality claim in §6 numerically.
-- **0002**: race the candidates on the hero rig, told nothing: A (ratio ladder × current walk),
-  C (25-node joint window, per-node means, static centre), D (derived lag-1 accumulator) — vs
-  the retired fitted filter and the oracle Kalman.  Detection delay for regime C on the 0041
-  frontier; steady-state ratio convergence rate.
-- **0003**: the moving-ratio case (scale schedule where the true ratio drifts) — what breaks
-  the static ladder; whether the walk-on-total + ladder-on-ratio split holds.
-- **0004**: the winner into `_WalkEngine` behind the same public API; hero gate + full 0052
-  guard (4 seeds, paired, velocity included) + cost measurement.
-- **0005**: the collinear pair on the arm (accel↔jerk) with the same mechanism per cluster;
-  attribution leak measured against 0052's chips; BOTH regime watched against its 0033 floor.
+- **0001** — done, and it settled more than replication: the lockstep is the scale-Fisher's
+  *exact* null direction, and the structural test that finds a confounded pair falls out of it.
+  [`0001`](exploration/0001_lockstep.md)
+- **0002** — done.  Candidate **A** was raced and won; **C** (the 25-node joint window) was not
+  built, because A subsumes it — a ladder of anchored full filters IS the joint window's corners,
+  at linear cost and with the anchoring and memory that 0053's lessons demand.  **D** (a derived
+  lag-1 accumulator) was not built as such, and 0003 explains why it should not be.
+  [`0002`](exploration/0002_ratio_ladder.md)
+- **0003** — *reassigned*.  The planned moving-ratio case has **not** been run.  What 0003 became
+  is the channel underneath the whole workstream, `V(k) = kQ + 2σ²`, measured directly against the
+  ladder — because it is the sharper question, and the answer bears on candidate D: the direct read
+  matches the ladder in regime A and is far worse in C, and adding it on top makes the filter worse
+  because a rung's own predictive densities already multiply to the exact likelihood of the same
+  tail.  [`0003`](exploration/0003_variogram_channel.md)
+- **0004** — done as the ledger of what did not work: memoryless windows on the confounded axes,
+  pairing them into one star axis, deriving the ladder's memory from the class, and the variogram
+  as a second evidence stream.  [`0004`](exploration/0004_four_negatives.md)
+- **0005** — *reassigned*.  The planned arm collinear pair has **not** been run: 0001 shows no pair
+  on the arm is exactly degenerate (each jerk mode is read by its pot as well as its
+  accelerometer), so the ladder does not switch on there and the SENSOR/PROCESS chips are exactly
+  as coupled as 0052 left them.  Measuring the leak under a *relaxed* activation, against 0052's
+  chips with BOTH watched against its 0033 floor, is untouched and is the prize's own next step.
+  What 0005 became is the finding that the two remaining hero sub-gates are one problem.
+  [`0005`](exploration/0005_reach_and_restraint.md)
 
 File findings as numbered notes here in the house style; negative results are results.
