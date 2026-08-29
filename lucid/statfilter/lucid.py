@@ -97,6 +97,8 @@ _SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weigh
                                            #   (`3 s` of half-span).  A box ending at 0.8 tops out
                                            #   at a factor of 11, which is smaller than the regime
                                            #   changes in this repository's own rigs.
+_SERIES_REACH = 4.0         # gaps out to 4 nominal steps: how far the pre-factored Q(a)
+                            # series must stay accurate before the exact route is used instead
 _HAZARD = 1e-4              # default fault rate: ~1 dynamics fault per 10,000 steps.  A LABELED
                             # prior of the same standing as `forget`, not a tuning constant: it is
                             # the operating point on the false-alarm/delay frontier, and the delay
@@ -549,15 +551,49 @@ class _Propagator:
             return None
         return Qc
 
-    def accumulate(self, Qc, a):
-        """``Q(a)`` for a recovered spectral density -- exact, cached per gap."""
-        key = (id(Qc), a)
-        got = self._qcache.get(key)
-        if got is None:
-            got = self._vanloan(Qc, a)
-            if len(self._qcache) < 512:
-                self._qcache[key] = got
-        return got
+    def series(self, Qc):
+        """Pre-factor ``Q(a)`` into pieces that do not depend on the gap.
+
+            Q(a) = sum_{p,q} A^p Qc (A^T)^q  a^(p+q+1) / (p! q! (p+q+1))
+
+        -- the Taylor expansion of ``int_0^a exp(As) Qc exp(A's) ds``.  Every matrix product
+        in it is independent of ``a``, so they are computed ONCE and each gap costs only a
+        weighted sum of them.  That matters because a real stream hands over a different gap
+        every event: a Van Loan exponential per member per event was measured at 7.6 ms an
+        event on the asynchronous rig against 3.0 without it, and none of it caches, because
+        no two gaps repeat.
+
+        Returns ``(terms, degree)`` with ``terms[d] = sum_{p+q=d} ...``, or ``None`` when the
+        expansion is not trustworthy over the gaps a caller might bring -- the exact route
+        then stands.
+        """
+        n, P = self.n, 10
+        Ap = [np.eye(n)]
+        for _ in range(P):
+            Ap.append(Ap[-1] @ self._A)
+        fact = [math.factorial(j) for j in range(P + 1)]
+        terms = []
+        for d in range(P + 1):
+            T = np.zeros((n, n))
+            for q in range(d + 1):
+                pth = d - q
+                T = T + (Ap[pth] @ Qc @ Ap[q].T) / (fact[pth] * fact[q] * (d + 1))
+            terms.append(T)
+        nrm = float(np.abs(self._A).sum(1).max())
+        if nrm * _SERIES_REACH > 1.0:              # the tail is not negligible out to the
+            return None                            # gaps a caller may bring: use Van Loan
+        return terms
+
+    def accumulate(self, Qc, a, terms=None):
+        """``Q(a)`` -- from the pre-factored series when it is trustworthy, else exact."""
+        if terms is None:
+            return self._vanloan(Qc, a)
+        out = np.zeros((self.n, self.n))
+        w = a
+        for T in terms:
+            out = out + w * T
+            w *= a
+        return 0.5 * (out + out.T)
 
     def at(self, a):
         """``(F(a), Psi(a))`` with ``mpred = F(a) x + Psi(a) B u``."""
@@ -734,12 +770,14 @@ class _WalkEngine:
         scaling, which is exactly what the caller would otherwise have had.
         """
         if self._Qc is False:
-            self._Qc = None
+            self._Qc = self._Qterms = None
             if self._dyn is None and self._prop.factor():
                 self._Qc = self._prop.spectral(self._Q0)
+                if self._Qc is not None:
+                    self._Qterms = self._prop.series(self._Qc)
         if self._Qc is None:
             return a * self._Q0
-        return self._prop.accumulate(self._Qc, a)
+        return self._prop.accumulate(self._Qc, a, self._Qterms)
 
     def _star_QR(self, a=1.0):
         """(Q_g, r_g) at every star node: the centre pair plus a per-node one-axis change.
