@@ -188,12 +188,16 @@ block, is defective and an eigendecomposition gets it wrong), `Q → Q·a`,
 a measurement variance belongs to the reading, not to the gap before it.
 
 What it buys, measured
-([`pointwise-streaming/`](research/pointwise-streaming/SUMMARY.md)): on a
-two-sensor rig where the coarse absolute sensor reports one row in 25, keeping the
-partial rows holds the velocity estimate at its all-sensors value while dropping
-incomplete rows costs **6.8×**; under irregular arrivals, supplying the timestamps
-puts the filter **on** an oracle told the true schedule and the true noise
-(ratio 1.001–1.003) where assuming uniformity costs 1.1–1.5×.
+([`pointwise-streaming/`](research/pointwise-streaming/SUMMARY.md)): on an
+asynchronous three-sensor rig — 100 Hz rate gyro, 5 Hz fix, 12 Hz jittered fix,
+one failing ×10 — it holds **1.16× an oracle told the true schedule and the true
+noise**, where the same model at fixed noise pays 2.10× and binning onto a common
+grid keeps 11 rows of 1600 and pays 21×. Under irregular arrivals, supplying the
+timestamps puts the filter **on** that oracle (1.000–1.002) where assuming
+uniformity costs 1.1–1.5×. The honest limit: a partial event cannot split process
+from sensor noise *within* the step, so the filter tracks the total and holds the
+split — which keeps every reading, and costs the identifiability a complete row
+would have had.
 
 ## Measured behaviour
 

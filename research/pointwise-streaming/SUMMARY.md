@@ -122,12 +122,19 @@ general case.** Everything else follows from taking that seriously.
   every reduction to the old case (no clock, full rows, `a = 1`) returns the same floats,
   which is what makes the general path a generalisation rather than a second filter. A
   seventh rig, whole-row gaps, differs — deliberately, by design item 3.
-- **Partial beats dropping the row, and the diagnosis survives** (0002). Velocity RMSE
-  held at the all-sensors value (0.0241) at every duty cycle from 1-in-1 to 1-in-25, where
-  dropping incomplete rows degrades to 0.1632 (**6.8×**). A sensor failing ×8 is still
-  named at 3.59 of a true 4.16 nats when it reports only one row in five, with the leak
-  onto the healthy sensor flat at −0.02 throughout; at 1-in-10 it reaches 1.84, and the
-  limit is arithmetic — the walk moves at most `1.5 s` per *reading*.
+- **Partial observation converts a schedule problem into an identifiability one** (0002) —
+  and the sweep says so in two tables that disagree. **Velocity**, read by the sensor that
+  never stops reporting, is held at the all-sensors value at every duty cycle (better past
+  1-in-5), while dropping incomplete rows degrades it to **11.4×**. **Position**, pinned by
+  the *slow* sensor, goes the other way at moderate duty: dropping rows is **2× better** at
+  1-in-2, because a complete row identifies the process/sensor split and a partial one does
+  not (item 8), and only past 1-in-10 do the extra readings win (1.51× at 1-in-25). So the
+  claim is not "partial beats dropping" — it is that partial keeps every reading and pays
+  for it in identifiability, which is unambiguously the right trade when the fast sensor
+  carries the state you care about, and a genuine trade otherwise. Model-free half: 416
+  readings used against 32. The **diagnosis is what it does not cost**: a sensor failing ×8
+  is named at 3.34 of a true 4.16 nats at one row in ten, and the leak onto the healthy
+  sensor is *smaller* under partial delivery (+0.03) than under complete rows (+0.48).
 - **The pointwise decomposition is the same filter** (0003). One row fed as `m` points at
   one timestamp: ratio to the joint row **1.018–1.100** across n = m = 2…10, against a
   frozen-walk floor of 1.006–1.020, with the log-likelihood ledger telescoping to within
