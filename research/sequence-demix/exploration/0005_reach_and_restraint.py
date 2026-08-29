@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(HERE, "..", "..", "..")))
 import importlib                                    # noqa: E402
 L = importlib.import_module("0002_ratio_ladder")    # noqa: E402
 from lucid import LucidFilter                       # noqa: E402
+from lucid.statfilter.lucid import _WalkEngine, _apply_split   # noqa: E402
 
 BOX = {"shipped": ((0.70, 0.85, 0.95), (0.20, 0.30, 0.45, 0.60, 0.80)),
        "geo5": ((0.70, 0.85, 0.95), (0.20, 0.40, 0.80, 1.60, 3.20)),
@@ -45,24 +46,36 @@ CLASSES = {"shared": (None,),
 
 
 class PerChannelClassFilter(LucidFilter):
-    """`LucidFilter` whose bank also spans per-channel classes on each confounded group."""
+    """`LucidFilter` whose bank also spans per-channel classes on each confounded pair.
+
+    The shipped filter gives every axis one class.  This assembles the same bank with an extra
+    dimension: alongside the shared assignment, a member type whose confounded pair carries
+    ``(phi_P, s_P)`` and ``(phi_M, s_M)`` of its own.  It measures worse (see the note), so it
+    stays here rather than on the public filter.
+    """
 
     def __init__(self, *a, group_classes=(None,), **kw):
         super().__init__(*a, **kw)
-        gcs = tuple(group_classes) if self.groups else (None,)
-        los = self.split_arr if self.groups else np.zeros(1)
+        gcs = tuple(group_classes) if len(self.groups) else (None,)
+        e0 = self._members[0]
+        Q0 = e0.V @ np.diag(e0.lam) @ e0.V.T
+        probe = _WalkEngine(Q0, e0.rho, e0.H, e0.F, e0.B, float(self.phi_arr[0]),
+                            float(self.s_arr[0]))
+        bases = [_apply_split(probe, v) for v in self.split_arr]
         phis = sorted(set(self.phi_arr.tolist()))
         ss = sorted(set(self.s_arr.tolist()))
         mem, pa, sa = [], [], []
         for p in phis:
             for sv in ss:
-                for lo in los:
+                for bq, br in bases:
                     for gc in gcs:
                         cls = None if gc is None else ((gc[0] or (p, sv)), (gc[1] or (p, sv)))
-                        mem.append(self._build(p, sv, float(lo), cls))
+                        mem.append(_WalkEngine(bq, br, e0.H, e0.F, e0.B, p, sv, group_class=cls))
                         pa.append(p); sa.append(sv)
         self._members = mem
         self.phi_arr, self.s_arr = np.array(pa), np.array(sa)
+        self._nd, self._nc = 1, len(mem)
+        self._pidx = [np.arange(self.n)] * len(mem)
         self.reset()
 
 

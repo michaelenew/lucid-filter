@@ -19,9 +19,21 @@ Configure by the give-what-you-know / infer-the-rest rule -- for each input pass
     LucidFilter()                                # scalar random-walk level, direct observation
     LucidFilter(dynamics=F, process=Q0, ...)     # you also know the base noise magnitudes
 
-Everything is vector; a scalar problem is length 1.  `dynamics=None` (learn the dynamics) is the one
-open cell -- it belongs to the ODE-learning filter and raises `NotImplementedError` for now; the
-opening document for that workstream is `research/dynamics-learning/SUMMARY.md`.
+Everything is vector; a scalar problem is length 1.
+
+**The dynamics channel.**  `dynamics=None` learns `F` (and `B`) online from the random-walk prior;
+`dynamics=F0, faults=rho` says the supplied dynamics may CHANGE -- a payload attached to a drone, a
+tire blown out -- and the filter detects the change and recovers the new dynamics without a refit, a
+threshold, or a fitted constant.  It is realised as a state augmentation `(x, g)` with
+`F = F0 + sum_j g_j A_j`, so the noise machinery above runs on top of it unchanged, which is what
+separating a wrong `F` from elevated `Q` requires: the two compete as hypotheses under a live noise
+walk rather than through a bolted-on whiteness statistic.  The bank carries the nominal member
+forever (a false detection then costs ~nothing), optional named fault `anchors` (the fastest
+detector when the failure modes can be named), and a departure walker whose variance is bounded at
+the class cap and re-priced to it when a fault is confirmed -- bounded, never frozen.  The one
+labeled prior is the fault hazard `rho`; every gain, drift, cap and restart width follows from it
+and the class size, and the detection delay it buys is derived (`log(1/rho) / KL-rate`), not tuned.
+The derivations and the measured acceptance results are `research/dynamics-learning/SUMMARY.md`.
 
 This is a benchmark toy: the RMSE for a given amount of supplied knowledge is the bound a real
 implementation can aim at.  The mechanism (per-component walk, axial GPB1, structural axis
@@ -69,6 +81,10 @@ _SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weigh
                                            #   (`3 s` of half-span).  A box ending at 0.8 tops out
                                            #   at a factor of 11, which is smaller than the regime
                                            #   changes in this repository's own rigs.
+_HAZARD = 1e-4              # default fault rate: ~1 dynamics fault per 10,000 steps.  A LABELED
+                            # prior of the same standing as `forget`, not a tuning constant: it is
+                            # the operating point on the false-alarm/delay frontier, and the delay
+                            # it buys is derived, log(1/rho) / KL-rate (research 0001).
 _RANK_TOL = 1e-8            # numerical rank tolerance (the order used for structural activation)
 _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sense as _SPAN_S: the
                             # finest grid the engine will build is the one a thousand-step memory
@@ -78,21 +94,30 @@ _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sens
 
 
 # --------------------------------------------------- the per-step-blind directions
-def _scale_fisher(eng):
+def _scale_fisher(eng, lam, rho):
     """Full per-step scale-Fisher ``I_ab = 0.5 tr(Si dS_a Si dS_b)`` at the steady state.
 
-    The engine's own ``_steady_fisher`` keeps only the diagonal, which cannot see a degeneracy.
+    ONE solve answers both questions a member has to ask about the model it runs: the DIAGONAL is
+    the characteristic Fisher that sets the walk's drift, and the off-diagonals are where a
+    degenerate pair shows itself.  It is evaluated at the base ``(lam, rho)`` handed in -- the
+    split-balanced one -- so that neither answer depends on which split hypothesis the member
+    happens to be carrying.  The structure of a model is not a function of the hypothesis under
+    test, and read at an extreme rung it would not even look like itself.
     """
-    H, F, n = eng.H, eng.F, eng.n
-    P = np.eye(n) * (eng.lam.max() + eng.rho.max())
-    Q0, R0 = eng._Q_of(np.zeros(n)), eng._R_of(np.zeros(eng.m))
+    H, F, n, m = eng.H, eng.F, eng.n, eng.m
+    P = np.eye(n) * (lam.max() + rho.max())
+    Q0 = eng.V @ np.diag(lam) @ eng.V.T
+    R0 = np.diag(rho)
     for _ in range(400):
-        Pp = F @ P @ F.T + Q0
+        Pp = eng._cap_P(F @ P @ F.T + Q0)
         K = Pp @ H.T @ np.linalg.inv(H @ Pp @ H.T + R0)
         P = Pp - K @ H @ Pp
-    Pp = F @ P @ F.T + Q0
+    Pp = eng._cap_P(F @ P @ F.T + Q0)
     Si = np.linalg.inv(H @ Pp @ H.T + R0)
-    dS = eng._dS_list(np.zeros(eng.D))
+    dS = [lam[k] * np.outer(eng.HV[:, k], eng.HV[:, k]) for k in range(n)]
+    for i in range(m):
+        E = np.zeros((m, m)); E[i, i] = rho[i]
+        dS.append(E)
     I = np.empty((eng.D, eng.D))
     for a in range(eng.D):
         SdA = Si @ dS[a]
@@ -101,7 +126,7 @@ def _scale_fisher(eng):
     return I
 
 
-def _split_groups(eng):
+def _split_groups(eng, I):
     """Pairs whose SPLIT no per-step score can ever carry -- Proposition 1, in coordinates.
 
     ``dS_xi_k = lam_k e^xi (H v_k)(H v_k)^T`` and ``dS_eta_i = rho_i e^eta E_ii`` are proportional
@@ -112,9 +137,9 @@ def _split_groups(eng):
     axis whose own scale-Fisher is numerically zero is not half of a confound, it is nothing --
     which is what keeps a ridge-regularised ``Q0``'s null modes out.
 
-    Returns ``(process axis, sensor axis, (H v)_i^2)`` triples.
+    Returns ``(process axis, sensor axis, (H v)_i^2)`` triples.  ``I`` is the scale-Fisher of
+    `_scale_fisher`, already computed for the walk's drift, so this costs a look and no solve.
     """
-    I = _scale_fisher(eng)
     dg = np.diag(I)
     info = dg > _RANK_TOL * dg.max()
     out = []
@@ -133,6 +158,64 @@ def _split_groups(eng):
         if w[0] < _RANK_TOL * w[-1]:
             out.append((k, i, float(eng.HV[i, k] ** 2)))
     return out
+
+
+def _apply_split(eng, lo_vec):
+    """Divide each confounded pair's noise between process and sensor at a FIXED TOTAL.
+
+    The null direction of the per-step scale-Fisher integrates to ``dQ = -dR`` (research 0001), so
+    this moves exactly along the coordinate the one-step likelihood cannot see and leaves
+    everything it can see alone.  Returns a ``(Q0, R0)`` base, which is the only thing a member
+    ever needs to be told: it reads its own anchor back off it.
+    """
+    lam, rho = eng.lam.copy(), eng.rho.copy()
+    for g, (k, i, h2) in enumerate(eng._groups):
+        a, b = lam[k] * h2, rho[i]
+        tot = a + b
+        lo = float(np.clip(lo_vec[g], -80.0, 80.0))
+        a2 = tot / (1.0 + math.exp(-lo))
+        lam[k] = max(a2, 1e-300) / h2
+        rho[i] = max(tot - a2, 1e-300)
+    return eng.V @ np.diag(lam) @ eng.V.T, rho
+
+
+def _split_star(los, n_pairs):
+    """The split hypotheses: one reference vector, plus one pair moved off it at a time.
+
+    Enumerating a rung for every pair jointly is ``J ** n_pairs``, exponential in the pair count,
+    which is the same wall the scale grid hits and is answered the same way -- the caltrop star of
+    research 0013: the centre plus an axial arm per axis.  With a single pair the star IS the whole
+    ladder, so nothing about the one-pair case is a special case of anything; with none it is the
+    empty vector and the bank is what it was.
+
+    The star is linear in the pair count, and linear is still a multiplier on a bank of complete
+    filters: five pairs at full resolution is 116 vectors, and a pots-only 5-DOF arm measured 1740
+    members and 1.5 s/step.  So the NODE BUDGET is what one pair's resolution costs, and several
+    pairs share it -- the same "support budget -> node count" trade `_SPAN_S` already makes, and
+    it needs no constant of its own because the budget is the resolution `forget` supports.  The
+    grid stays COMPLETE over `[0, pi/2]` at every pair count; what degrades is its resolution, and
+    that is the honest thing to give up when there is more to resolve and the same budget to do it
+    with.
+
+    The reference is the middle of the arclength grid -- the agnostic split, the one the ladder's
+    own uniform prior puts its mass around.  It is not the supplied base: no rung refers to that.
+    """
+    if n_pairs == 0:
+        return np.zeros((1, 0))
+    arms = max(len(los) - 1, 1)                       # the budget: one pair's own arm count
+    per = max(arms // n_pairs, 2)                     # shared out, never below a usable ladder
+    idx = np.unique(np.round(np.linspace(0, len(los) - 1, per + 1)).astype(int))
+    c = int(idx[len(idx) // 2])
+    ref = np.full(n_pairs, los[c])
+    out = [ref]
+    for g in range(n_pairs):
+        for j in idx:
+            if j == c:
+                continue
+            v = ref.copy()
+            v[g] = los[j]
+            out.append(v)
+    return np.array(out)
 
 
 def _rung_odds(forget):
@@ -172,6 +255,11 @@ class LucidStep:
     loglik: float                  #: mixture predictive log-density of y_t
     process_scale: np.ndarray      #: per process-eigenmode log-scale (n,)
     measurement_scale: np.ndarray  #: per-sensor log-scale (m,)
+    dynamics: np.ndarray = None    #: posterior-mean ``F`` (n, n) -- ``None`` when supplied fixed
+    control: np.ndarray = None     #: posterior-mean ``B`` (n, p) -- ``None`` when fixed or absent
+    fault: float = 0.0             #: posterior probability the dynamics have left the NOMINAL --
+    #: which is the supplied ``F`` under ``faults=``, and the random walk ``F = I`` under
+    #: ``dynamics=None`` (where it therefore reads "the dynamics are not a random walk")
 
     @property
     def scale(self) -> np.ndarray:
@@ -188,6 +276,9 @@ class LucidResult:
     process_scale: np.ndarray
     measurement_scale: np.ndarray
     loglik: float = 0.0
+    dynamics: np.ndarray = None    #: (T, n, n) learned ``F``, or ``None`` when supplied fixed
+    control: np.ndarray = None     #: (T, n, p) learned ``B``, or ``None``
+    fault: np.ndarray = None       #: (T,) posterior probability of a dynamics fault
 
     def __len__(self) -> int:
         return len(self.mean)
@@ -219,9 +310,7 @@ class _WalkEngine:
     the class ``(phi, s)``; no EMA, no tuned constant.
     """
 
-    def __init__(self, Q0, R0, H, F, B, phi, s, groups=(), anchor_lo=0.0, group_class=None):
-        self._groups = tuple(groups)      # (process axis, sensor axis, (H v)^2) per confound
-        self._anchor_lo = float(anchor_lo)   # this member's hypothesis about each group's split
+    def __init__(self, Q0, R0, H, F, B, phi, s, walk_axes=None, cap=None, group_class=None):
         self._revert = float(phi)         # rate the walk's null excursion returns to that
                                           # hypothesis; the class's own persistence.  Named so
                                           # research can vary it -- both bounds are load-bearing
@@ -246,16 +335,8 @@ class _WalkEngine:
         self.p = 0 if B is None else B.shape[1]
         self.HV = H @ V
         self.phi, self.s = float(phi), float(s)
-        self.phi_ax = np.full(self.D, self.phi)
-        self.s_ax = np.full(self.D, self.s)
-        if group_class is not None:
-            for (k, i, _h2) in self._groups:
-                (self.phi_ax[k], self.s_ax[k]) = group_class[0]
-                (self.phi_ax[n + i], self.s_ax[n + i]) = group_class[1]
-        self.gap = _GAP_FACTOR * self.s_ax
-        self._Kstar = (1.0 - self.phi_ax) / 4.0
-        self._Ichar = self._steady_fisher()
-        self._Ifloor = (1.0 - self.phi_ax) / (4.0 * (_SPAN_S * self.s_ax) ** 2)
+        self._cap = None if cap is None else np.asarray(cap, float)
+        self._dyn = None            # optional (mean, u) -> (Jacobian, predicted mean) callable
         # ACTIVATE structurally-observable axes -- NOT by the delocalisation floor (research 0024,
         # ported from AdaptiveKalmanFilter): a quiet process mode next to a loud sensor would be
         # frozen and then coast rigidly on a wrong velocity when that sensor is down-weighted --
@@ -267,6 +348,36 @@ class _WalkEngine:
         self.active = np.ones(self.D, dtype=bool)
         for k in range(n):
             self.active[k] = self.lam[k] > 1e-12 * self.lam.max() and hv_norm[k] > 1e-8
+        if walk_axes is not None:
+            # Axes whose scale is a CLASS COMMITMENT, not a live noise scale (the dynamics
+            # channel's theta block: its drift is q_theta = cap * rho from the fault class).
+            # This bounds nothing about theta itself -- theta is a state with a live gain and a
+            # cap, never frozen (research 0003); only the log-scale WALK of its drift is off.
+            self.active &= np.asarray(walk_axes, bool)
+        # Every member answers the same two questions about the model IT runs, and answers them
+        # the same way: which of my scale axes are confounded in pairs, and what split does my
+        # own base already sit at?  That base is where the walk's null excursion returns to, so a
+        # member is anchored by construction rather than by being told -- which is what makes the
+        # rule uniform across the bank, whatever dynamics hypothesis a member carries and whether
+        # or not its state has been augmented.
+        _I = _scale_fisher(self, *self._balanced_base())
+        self._groups = tuple(_split_groups(self, _I))
+        self._anchor_lo = np.array([lo for _, lo in self._group_read(np.zeros(self.D))])
+        self.phi_ax = np.full(self.D, self.phi)
+        self.s_ax = np.full(self.D, self.s)
+        if group_class is not None:
+            for (k, i, _h2) in self._groups:
+                (self.phi_ax[k], self.s_ax[k]) = group_class[0]
+                (self.phi_ax[n + i], self.s_ax[n + i]) = group_class[1]
+        self.gap = _GAP_FACTOR * self.s_ax
+        self._Kstar = (1.0 - self.phi_ax) / 4.0
+        # The DIAGONAL of that same solve is the characteristic Fisher, which sets `q_mu`, the
+        # drift of the scale WALK.  The walk's business is the identifiable directions, not the
+        # split, so taking it at the balanced point is what keeps the bank's hypothesis out of
+        # the walk's tuning -- measured worth 1.230x -> 1.138x on regime C and 0.06 of
+        # calibration headroom (`research/sequence-demix/0002`).
+        self._Ichar = np.diag(_I) + _RIDGE
+        self._Ifloor = (1.0 - self.phi_ax) / (4.0 * (_SPAN_S * self.s_ax) ** 2)
         self._qmu = self._Kstar ** 2 / (np.maximum(self._Ichar, self._Ifloor)
                                         * (1.0 - self._Kstar))
         self._Pmu_cap = (_SPAN_S * self.s_ax) ** 2
@@ -356,6 +467,21 @@ class _WalkEngine:
         out[:, i, i] = self.rho[i] * a
         return out
 
+    def _cap_P(self, P):
+        """Bound a state's variance at its class cap by symmetric row/column scaling.
+
+        A BOUND, never a freeze: the gain stays live, so later evidence still moves the
+        component (research 0003 measured the latched-freeze alternative at 20x worse)."""
+        if self._cap is None:
+            return P
+        d = np.diag(P)
+        over = d > self._cap
+        if not over.any():
+            return P
+        sc = np.ones_like(d)
+        sc[over] = np.sqrt(self._cap[over] / np.maximum(d[over], 1e-300))
+        return P * np.outer(sc, sc)
+
     def _Q_of(self, xi):
         return self.V @ np.diag(self.lam * np.exp(np.clip(xi, -60, 60))) @ self.V.T
 
@@ -372,19 +498,26 @@ class _WalkEngine:
             out.append(E)
         return out
 
-    def _steady_fisher(self):
-        H, F, n, m = self.H, self.F, self.n, self.m
-        P = np.eye(n) * (self.lam.max() + self.rho.max())
-        Q0, R0 = self._Q_of(np.zeros(n)), self._R_of(np.zeros(m))
-        for _ in range(400):
-            Ppred = F @ P @ F.T + Q0
-            S = H @ Ppred @ H.T + R0
-            K = Ppred @ H.T @ np.linalg.inv(S)
-            P = Ppred - K @ H @ Ppred
-        Ppred = F @ P @ F.T + Q0
-        Si = np.linalg.inv(H @ Ppred @ H.T + R0)
-        dS = self._dS_list(np.zeros(self.D))
-        return np.array([0.5 * np.trace(Si @ d @ Si @ d) for d in dS]) + _RIDGE
+    def _balanced_base(self):
+        """This member's base with every confounded pair's noise divided evenly.
+
+        The split-agnostic point of the same base -- the same total in every channel, half of each
+        confounded pair's share on each side of it.  A pair is a process eigenmode whose ``H v``
+        lies along one sensor axis, which is a fact about ``H`` and needs no prior knowledge of
+        the pairs; the rest of the test needs the Fisher this base is for.
+        """
+        lam, rho = self.lam.copy(), self.rho.copy()
+        for k in range(self.n):
+            hv = np.abs(self.HV[:, k])
+            if hv.max() <= 0.0:
+                continue
+            nz = np.flatnonzero(hv > _RANK_TOL * hv.max())
+            if nz.size != 1:
+                continue
+            i, h2 = int(nz[0]), float(self.HV[nz[0], k] ** 2)
+            tot = lam[k] * h2 + rho[i]
+            lam[k], rho[i] = 0.5 * tot / h2, 0.5 * tot
+        return lam, rho
 
     # -- a confounded group's two coordinates: its contribution to S (identifiable per step)
     #    and its log-odds (in the exact null space of the per-step scale-Fisher) --
@@ -419,15 +552,23 @@ class _WalkEngine:
         self._P = None
         self.mu = np.zeros(self.D) if scale is None else np.asarray(scale, float).copy()
         self._Pmu = self.s_ax ** 2
-        if self._groups:                  # start ON this member's hypothesis, at the base total
-            tots = [t for t, _ in self._group_read(self.mu)]
-            self.mu = self._group_write(self.mu, tots, [self._anchor_lo] * len(self._groups))
         self.loglik = 0.0
         return self
 
+    def reprice(self, idx):
+        """A detected jump re-prices ignorance: variance back to the class cap on ``idx``,
+        cross-covariances cleared (research 0003).  The estimate itself is kept -- the data
+        moves it at cap gain.  A fault is ONE event, so this fires on EVERY departure axis,
+        excited or not: an unexcited axis then stands at honest cap width instead of
+        reporting a stale coefficient it has no evidence for."""
+        if self._P is None or self._cap is None or len(idx) == 0:
+            return
+        self._P[idx, :] = 0.0
+        self._P[:, idx] = 0.0
+        self._P[idx, idx] = self._cap[idx]
+
     def update(self, y, u=None):
-        n, m, H, F = self.n, self.m, self.H, self.F
-        bu = (self.B @ u) if self.B is not None else 0.0
+        n, m, H = self.n, self.m, self.H
         y = np.atleast_1d(np.asarray(y, dtype=float))
         r = len(self._act)
         Qg, Rg = self._star_QR()
@@ -437,15 +578,24 @@ class _WalkEngine:
                 self._m = (np.linalg.lstsq(H, y, rcond=None)[0]
                            if np.all(np.isfinite(y)) else np.zeros(n))
             if self._P is None:
-                self._P = np.eye(n) * float(Rg.reshape(self._G, -1).max()
-                                            + Qg.reshape(self._G, -1).max()) * n
+                self._P = self._cap_P(
+                    np.eye(n) * float(Rg.reshape(self._G, -1).max()
+                                      + Qg.reshape(self._G, -1).max()) * n)
         pi_ax = np.einsum("ai,aij->aj", self._pi_ax, self._T1[self._act])
-        mpred = F @ self._m + bu
+        # The dynamics are a CALLABLE when they are learned or nonlinear: it returns the
+        # linearisation (for the covariance) and the predicted mean (from f, not the
+        # Jacobian -- they differ once the transition depends on the state).  Real F/B
+        # arrive linearised per operating point, so this is the general path.
+        if self._dyn is None:
+            F = self.F
+            mpred = F @ self._m + ((self.B @ u) if self.B is not None else 0.0)
+        else:
+            F, mpred = self._dyn(self._m, u)
         FPFt = F @ self._P @ F.T
         if not np.all(np.isfinite(y)):
             self._pi_ax = pi_ax
             w = self._star_weights(pi_ax)
-            self._P = FPFt + np.einsum("g,gij->ij", w, Qg)
+            self._P = self._cap_P(FPFt + np.einsum("g,gij->ij", w, Qg))
             self._m = mpred
             wmean = self._wmean(pi_ax)
             return LucidStep(self._m.copy(), self._P.copy(), np.full(m, np.nan), 0.0,
@@ -483,7 +633,7 @@ class _WalkEngine:
         HPp = np.einsum("ij,gjk->gik", H, Ppred)
         Ppost = Ppred - np.einsum("gil,glk->gik", K, HPp)   # K(H Ppred): n^2 m per node, not n^3
         P_new = np.einsum("g,gij->ij", pi, Ppost) + np.einsum("g,gi,gj->ij", pi, dm, dm)
-        P_new = 0.5 * (P_new + P_new.T)
+        P_new = self._cap_P(0.5 * (P_new + P_new.T))
         # finding-18 walk per active axis, score/Fisher averaged over that axis's window
         # posterior only (the caltrop: dS_k depends only on the k-coordinate, so the axial
         # profile carries the axis's evidence at linear cost).
@@ -513,12 +663,204 @@ class _WalkEngine:
             # class's own rate ``phi``, at the total the walk just established.  The verdict is
             # the bank's, on the ``forget`` timescale (research 0053's lesson b).
             tots, los = zip(*self._group_read(self.mu))
-            back = [self._anchor_lo + self._revert * (lo - self._anchor_lo) for lo in los]
+            back = [a + self._revert * (lo - a) for a, lo in zip(self._anchor_lo, los)]
             self.mu = self._group_write(self.mu, list(tots), back)
         self.loglik += ll
         wmean = self._wmean(pi_ax)
         return LucidStep(m_new.copy(), P_new.copy(), e.copy(), ll,
                          self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
+
+
+# ------------------------------------------------------- the dynamics channel
+class _Departure:
+    """One learned-dynamics hypothesis: ``F(g) = F0 + sum_j g_j A_j``, ``B(g) = B0 + sum_j g_j C_j``.
+
+    Realised as a STATE AUGMENTATION.  With the augmented state ``(x, g)``, the augmented
+    observation ``[H | 0]`` and the augmented transition
+
+        [[ F(g),  d(F(g)x + B(g)u)/dg ],
+         [ 0,     I                   ]]
+
+    the departure channel is just more state, so the whole noise machinery above (the caltrop
+    scale walk, the structural activation, the bank) runs on top of it unchanged -- which is what
+    the record demands: the Q<->F confound is split by per-hypothesis MEANS competing under a
+    LIVE noise walk (research 0002), not by a whiteness statistic bolted on the side.
+
+    Three commitments, all from the fault class, none tuned:
+
+    * ``g``'s drift is ``q_g = sigma^2 rho`` (a jump of class size ``sigma`` at hazard ``rho``
+      has that mean square per step) and its variance is capped at ``sigma^2`` -- **bounded,
+      never frozen**: the gain stays live so an axis the data cannot see today still moves when
+      excitation arrives (research 0003 measured the latched-freeze alternative at 20x worse).
+    * ``g``'s scale axes are excluded from the noise walk: their drift is a class commitment,
+      not a live noise scale.  (Structural, per 0024 -- ``[H | 0]`` cannot see ``g`` directly,
+      so the engine's own activation rule already reaches this conclusion; the mask makes it
+      exact under eigenvalue degeneracy.)
+    * ``sigma = 1`` in CLASS UNITS, where a direction is scaled so that a unit coefficient
+      moves that part of the dynamics by about its own magnitude.  That is the only scale-free
+      statement of "how big is a fault", and the only dimensionally sound one -- see the
+      comment in ``__init__``.
+    """
+
+    def __init__(self, base, dirs, rho, n, p):
+        self.base, self.n, self.p = base, n, p
+        # A direction may itself be a callable of the state: on a real vehicle the direction a
+        # physical parameter pushes in ROTATES with the operating point (a wheel radius acts
+        # along the heading; a drone's mass acts along the tilted thrust axis).  Such a
+        # direction is scaled ONCE, at the origin, so its coefficient keeps a fixed meaning
+        # rather than drifting with the state.
+        self._dirs = [d if callable(d) else (lambda x, _d=d: _d) for d in dirs]
+        self.moving = any(callable(d) for d in dirs)
+        self.k = len(self._dirs)
+        ref = [self._pair(f(np.zeros(n)), n, p) for f in self._dirs]
+        # CLASS SIZE.  A unit coefficient must mean "this part of the dynamics changed by
+        # about its own magnitude" -- the only scale-free statement available, and the only
+        # one that is dimensionally sound: F's entries are O(1) for a stable discrete
+        # transition, but B's are in the input's units and can be arbitrarily small (a 50 Hz
+        # differential drive has |B| ~ 5e-3).  Normalising directions to unit Frobenius norm
+        # instead would put the true coefficient orders of magnitude inside the prior and the
+        # departure would never move.
+        F_rep, B_rep = base(np.zeros(n))
+        fn = float(np.linalg.norm(F_rep)) or 1.0
+        bn = float(np.linalg.norm(B_rep)) if B_rep is not None else 0.0
+        bn = bn or fn
+        div = []
+        for a, c in ref:
+            aN, cN = float(np.linalg.norm(a)), float(np.linalg.norm(c))
+            dn = math.hypot(aN, cN)
+            if dn == 0.0:
+                raise ValueError("a departure direction must be non-zero")
+            div.append(dn * dn / math.hypot(aN * fn, cN * bn))
+        self._div = np.array(div)
+        self.A = np.stack([a for a, _ in ref]) / self._div[:, None, None]
+        self.C = np.stack([c for _, c in ref]) / self._div[:, None, None]
+        self.na = n + self.k
+        sig2 = np.ones(self.k)                      # directions are in class units, so 1
+        self.cap = np.concatenate([np.full(n, np.inf), sig2])
+        self.q_g = sig2 * rho
+        self.gidx = np.arange(n, self.na)
+
+    @staticmethod
+    def _pair(d, n, p):
+        A, C = d if isinstance(d, tuple) else (d, None)
+        A = np.zeros((n, n)) if A is None else np.atleast_2d(np.asarray(A, float))
+        C = (np.zeros((n, max(p, 1))) if C is None
+             else np.atleast_2d(np.asarray(C, float)))
+        return A, C
+
+    def at(self, x):
+        """The departure directions at the operating point ``x``."""
+        if not self.moving:
+            return self.A, self.C
+        ref = [self._pair(f(x), self.n, self.p) for f in self._dirs]
+        return (np.stack([a for a, _ in ref]) / self._div[:, None, None],
+                np.stack([c for _, c in ref]) / self._div[:, None, None])
+
+    def augment(self, Q0, R0, H):
+        """(Q0_aug, R0, H_aug, walk_axes) -- walk_axes in EIGENMODE space, so it is exact even
+        if a departure's drift coincides with a process eigenvalue."""
+        Qa = np.zeros((self.na, self.na))
+        Qa[:self.n, :self.n] = Q0
+        Qa[self.gidx, self.gidx] = self.q_g
+        Ha = np.zeros((H.shape[0], self.na))
+        Ha[:, :self.n] = H
+        _, V = np.linalg.eigh(Qa)                   # the engine repeats this deterministically
+        walk = np.ones(self.na + H.shape[0], bool)
+        walk[:self.na] = np.linalg.norm(V[self.n:], axis=0) < 0.5
+        return Qa, R0, Ha, walk
+
+    def dynamics_of(self, x, g):
+        """The dynamics as currently believed, at the operating point ``x``."""
+        F0, B0 = self.base(x)
+        if not self.k:
+            return F0, B0
+        A, C = self.at(x)
+        F = F0 + np.einsum("j,jab->ab", g, A)
+        return F, (None if B0 is None else B0 + np.einsum("j,jab->ab", g, C))
+
+    def callable_for(self):
+        """The (mean, u) -> (Jacobian, predicted mean) hook the engine calls each step."""
+        n, k = self.n, self.k
+
+        def _dyn(m, u):
+            x, g = m[:n], m[n:]
+            F, B = self.dynamics_of(x, g)
+            mp = np.empty_like(m)
+            mp[:n] = F @ x + (B @ u if B is not None else 0.0)
+            mp[n:] = g
+            J = np.zeros((self.na, self.na))
+            J[:n, :n] = F
+            J[n:, n:] = np.eye(k)
+            if k:
+                A, C = self.at(x)
+                J[:n, n:] = np.einsum("jab,b->aj", A, x)
+                if B is not None:
+                    J[:n, n:] += np.einsum("jab,b->aj", C, np.atleast_1d(u))
+            return J, mp
+
+        return _dyn
+
+
+def _as_base(dynamics, B, n):
+    """Normalise supplied dynamics to ``base(x) -> (F, B)``, plus a constant linearisation.
+
+    A callable is the general robotics case: real ``F``/``B`` arrive linearised per operating
+    point, so the dynamics cannot be a constant matrix and the block structure cannot be
+    precomputed.  It is called with the current state estimate and may return ``F`` or
+    ``(F, B)``.  The returned constant is the linearisation at the origin -- the characteristic
+    transition the steady-state Fisher scale is computed from, not a model commitment.
+    """
+    def base(x):
+        out = dynamics(x)
+        F_, B_ = out if isinstance(out, tuple) else (out, B)
+        return (np.atleast_2d(np.asarray(F_, float)),
+                None if B_ is None else np.atleast_2d(np.asarray(B_, float)))
+    return base, base(np.zeros(n))[0]
+
+
+def _fixed_hook(base):
+    """Engine hook for supplied-but-moving dynamics (no departure channel)."""
+    def _dyn(m, u):
+        F, B = base(m)
+        return F, F @ m + (B @ u if B is not None else 0.0)
+    return _dyn
+
+
+def _basis(n, p, departures):
+    """Departure directions as (A, C) pairs, unit-Frobenius.
+
+    Default (research mechanism (c), the full walk): every elementary entry of F, and of B when
+    a control map is supplied.  Supplying ``departures`` is mechanism (b) -- the low-rank
+    physical channel (a drone's added mass moves F AND B through one coefficient), which is the
+    production form and is `n**2 / len(departures)` times cheaper.  Directions are returned raw;
+    ``_Departure`` puts them in class units.
+    """
+    if departures is None:
+        out = []
+        for i in range(n):
+            for j in range(n):
+                A = np.zeros((n, n)); A[i, j] = 1.0
+                out.append((A, np.zeros((n, max(p, 1)))))
+        for i in range(n):
+            for j in range(p):
+                C = np.zeros((n, p)); C[i, j] = 1.0
+                out.append((np.zeros((n, n)), C))
+        return out
+    out = []
+    for d in departures:
+        if callable(d):
+            out.append(d)                       # a state-dependent direction, scaled in
+            continue                            # _Departure by its norm at the origin
+        A, C = d if isinstance(d, tuple) else (d, None)
+        A = np.atleast_2d(np.asarray(A, float))
+        if A.shape != (n, n):
+            raise ValueError(f"each departure direction must be ({n}, {n})")
+        C = (np.zeros((n, max(p, 1))) if C is None
+             else np.atleast_2d(np.asarray(C, float)))
+        if p and C.shape != (n, p):
+            raise ValueError(f"each departure control direction must be ({n}, {p})")
+        out.append((A, C))
+    return out
 
 
 # ------------------------------------------------------------- the public filter
@@ -527,9 +869,28 @@ class LucidFilter:
 
     Parameters (each: explicit value, or a null/default for "none", or the give-what-you-know rule)
     ----------
-    dynamics : (n, n) array, or 0
+    dynamics : (n, n) array, 0, or None
         The linear state dynamics ``F``.  ``0`` (default) means no dynamics -> a random-walk level.
-        ``None`` (learn the dynamics) is not implemented -- that is the ODE-learning filter's cell.
+        ``None`` means **learn them**: the prior is the random walk (``F = I``) and the filter
+        recovers ``F`` (and ``B``) online.  See *The dynamics channel* below.
+    faults : float or True, optional
+        Turn on the dynamics channel around a SUPPLIED ``F``: the value is the hazard ``rho``,
+        the per-step probability that the dynamics change (``True`` -> ``1e-4``, about one fault
+        per 10,000 steps).  Implied by ``dynamics=None``.  This is a labeled prior of the same
+        standing as ``forget``, not a tuning constant -- it is the operating point on the
+        false-alarm/delay frontier, and the detection delay it buys is derived,
+        ``log(1/rho) / KL-rate``.
+    departures : sequence, optional
+        The directions the dynamics may move along: each an ``(n, n)`` matrix, or an
+        ``(A, C)`` pair when the same physical parameter moves ``F`` and ``B`` together (a
+        drone's added mass does).  Default: every entry of ``F`` (and of ``B``) -- fully general
+        and ``n**2`` coefficients.  Supplying the physical directions is the production form and
+        is far cheaper.
+    anchors : sequence, optional
+        Named fault hypotheses -- each an ``(n, n)`` ``F`` or an ``(F, B)`` pair -- carried as
+        their own full filters.  When the failure modes are nameable (blown-left, blown-right,
+        payload-attached) this is the fastest detector there is; the walker still refines
+        whatever the anchors only bracket.
     control : (n, p) array, optional
         Forcing/bias map ``B`` for a known input ``u`` (the ODE bias).  If given, ``update``/``filter``
         require ``u``/``U``.
@@ -540,19 +901,28 @@ class LucidFilter:
         the walk breathes around them with unbounded reach, so a rough base is fine.
     n : int, optional
         State dimension, when it cannot be inferred from ``dynamics``/``process``/``H`` (default 1).
-    phis, ss : sequences, optional
+    phis, ss : sequences, optional  
         The ``(phi, s)`` box the bank averages over.  Defaults to a broad dead-zone-free range;
         not a fitted value.  ``forget`` (default 0.999) is the weight memory -- the one residual.
     """
 
     def __init__(self, dynamics=0, control=None, H=None, process=None, measurement=None,
-                 n=None, phis=_PHIS, ss=_SS, forget=0.999):
-        if dynamics is None:
-            raise NotImplementedError(
-                "dynamics=None (learn the dynamics) is the open ODE-learning cell; supply F or 0")
+                 n=None, faults=None, departures=None, anchors=None,
+                 phis=_PHIS, ss=_SS, forget=0.999):
+        learn = dynamics is None or faults is not None
+        if faults is None or faults is True:
+            rho = _HAZARD
+        else:
+            rho = float(faults)
+            if not 0.0 < rho < 1.0:
+                raise ValueError("faults (the hazard rho) must lie in (0, 1)")
+        if anchors is not None and not learn:
+            learn = True                        # named fault hypotheses imply a fault class
         H = None if H is None else np.atleast_2d(np.asarray(H, float))
         B = None if control is None else np.atleast_2d(np.asarray(control, float))
-        Fm = None if np.ndim(dynamics) == 0 else np.atleast_2d(np.asarray(dynamics, float))
+        moving = callable(dynamics)
+        Fm = (None if (moving or np.ndim(dynamics) == 0)
+              else np.atleast_2d(np.asarray(dynamics, float)))
         proc = None if process is None else np.atleast_2d(np.asarray(process, float))
         # resolve n
         if Fm is not None:
@@ -565,9 +935,14 @@ class LucidFilter:
             n = B.shape[0]
         elif n is None:
             n = 1
-        F = np.eye(n) if Fm is None else Fm
+        if moving:
+            base, F = _as_base(dynamics, B, n)
+        else:
+            F = np.eye(n) if Fm is None else Fm
+            base = None
         if F.shape != (n, n):
-            raise ValueError(f"dynamics must be ({n}, {n})")
+            raise ValueError(f"dynamics must be ({n}, {n})"
+                             + (" -- the callable returned the wrong shape" if moving else ""))
         Hm = np.eye(n) if H is None else H
         m = Hm.shape[0]
         if Hm.shape != (m, n):
@@ -593,23 +968,99 @@ class LucidFilter:
         self.forget = float(forget)
         # Which directions can no per-step score ever carry?  Where a process eigenmode is read
         # by exactly one sensor, the two scale derivatives are proportional as matrices and only
-        # their SUM is identifiable per step (research 0001), so the split is carried as a
-        # dimension of the BANK: every member is a complete filter anchored at one rung of the
-        # ladder, the evidence reaches it through its own MEAN (a rung with too much process
-        # chases sensor noise and pays for it in its own predictive likelihood), and its weight
-        # accumulates on the `forget` timescale.  No EMA, no whiteness statistic, and no rung
-        # refers to the supplied base.  A structure with no such pair -- any rig where every
+        # their SUM is identifiable per step (research/sequence-demix 0001), so the split is
+        # carried as a dimension of the BANK: every member is a complete filter anchored at one
+        # rung of the ladder, the evidence reaches it through its own MEAN (a rung with too much
+        # process chases sensor noise and pays for it in its own predictive likelihood), and its
+        # weight accumulates on the `forget` timescale.  No EMA, no whiteness statistic, and no
+        # rung refers to the supplied base.  A structure with no such pair -- any rig where every
         # process mode is read by more than one sensor -- gets no ladder and no extra cost.
+        #
+        # The ladder is a third bank dimension, INSIDE the cell index, so the dynamics channel's
+        # own reshape(n_dynamics, n_cells) and its hazard kernel are untouched: a fault is a
+        # change of dynamics, a split is a property of the noise, and mixing one does not mix the
+        # other.  It is crossed into the hypotheses that share the caller's own state space --
+        # the nominal dynamics and any named anchors; the departure WALKERS carry an augmented
+        # state whose axes are not the caller's, and are left unladdered (see the SUMMARY opens).
+        #
+        # Several pairs would make the joint set of split vectors exponential, so the ladder is
+        # enumerated the way this filter enumerates every other scale grid: as the CALTROP STAR
+        # (research 0013) -- one reference vector, plus one pair moved off it at a time.  That is
+        # ``1 + G (J - 1)`` vectors, LINEAR in the pair count, and with ONE pair it is the whole
+        # ladder exactly, and with none it is a single empty vector and the bank is what it was.
+        # The reference is the middle of the arclength grid, the agnostic split; no rung refers to
+        # the supplied base.
+        #
+        # A split vector is applied to the BASE `(Q0, R0)` a member is built from, not carried
+        # beside it.  That is what it is -- a division of a channel's noise between the process
+        # and the sensor at a fixed total -- and it keeps the bank uniform: a member reads its own
+        # anchor off its own base, so the same construction reaches the augmented state of a
+        # departure walker through `augment` without anything having to know it is one.
         probe = _WalkEngine(Q0, R0, Hm, F, B, phis[0], ss[0])
-        self.groups = _split_groups(probe)
-        los = (np.log(_rung_odds(self.forget)) if self.groups else np.zeros(1))
-        self.phi_arr = np.array([p for p in phis for _ in ss for _ in los], float)
-        self.s_arr = np.array([sv for _ in phis for sv in ss for _ in los], float)
-        self.split_arr = los if self.groups else np.array([])
-        self._build = lambda p, sv, lo, gc=None: _WalkEngine(
-            Q0, R0, Hm, F, B, p, sv, groups=self.groups, anchor_lo=lo, group_class=gc)
-        self._members = [self._build(p, sv, lo)
-                         for p in phis for sv in ss for lo in los]
+        self.groups = probe._groups
+        self.split_arr = _split_star(np.log(_rung_odds(self.forget)), len(self.groups))
+        bases = [_apply_split(probe, v) for v in self.split_arr]
+        self.phi_arr = np.array([ph for ph in phis for _ in ss for _ in bases], float)
+        self.s_arr = np.array([sv for _ in phis for sv in ss for _ in bases], float)
+        cells = [(ph, sv, bq, br) for ph in phis for sv in ss for (bq, br) in bases]
+
+        # -------- the dynamics hypotheses (the ladder of research/dynamics-learning) --------
+        # The NOMINAL member is always present and never leaves: it is the hedge that makes a
+        # false detection cost ~nothing, which is in turn what makes the fast end of the
+        # detection frontier affordable (research 0001).  Named ANCHORS come next -- when the
+        # failure modes can be named, they are the fastest detector there is (0005).  The
+        # WALKER refines whatever the anchors only bracket: detection degrades gracefully under
+        # a mis-specified anchor set, recovery does not (0001 s4).
+        const = base if base is not None else (lambda x, _F=F, _B=B: (_F, _B))
+        specs = [(base, F, B, None)]
+        for a in (anchors or []):
+            Fa, Ba = a if isinstance(a, tuple) else (a, B)
+            Fa = np.atleast_2d(np.asarray(Fa, float))
+            if Fa.shape != (n, n):
+                raise ValueError(f"each anchor must be ({n}, {n})")
+            specs.append((None, Fa,
+                          None if Ba is None else np.atleast_2d(np.asarray(Ba, float)), None))
+        if learn:
+            specs.append((base, F, B,
+                          _Departure(const, _basis(n, self.p, departures),
+                                     rho, n, self.p)))
+
+        self._members, self._pidx, self._specs = [], [], specs
+        for bs, Fs, Bs, dep in specs:
+            if dep is None:
+                eng = [_WalkEngine(bq, br, Hm, Fs, Bs, ph, sv)
+                       for ph, sv, bq, br in cells]
+                if bs is not None:
+                    for e in eng:
+                        e._dyn = _fixed_hook(bs)
+                self._members += eng
+                self._pidx += [np.arange(n)] * len(cells)
+                continue
+            _, _, Ha, walk = dep.augment(Q0, R0, Hm)   # the shape; the bases follow per cell
+            xmode = np.flatnonzero(walk[:dep.na])
+            if xmode.size != n:
+                raise RuntimeError("augmented process eigenbasis did not separate")
+            Fa = np.eye(dep.na)
+            Fa[:n, :n] = Fs                     # the Jacobian at g = 0, x = 0: the
+            Ba = (None if Bs is None                     # characteristic linearisation the
+                  else np.vstack([Bs, np.zeros((dep.k, self.p))]))   # steady Fisher wants
+            for ph, sv, bq, br in cells:   # the split rides into the augmentation with the base
+                Qa, Ra, _Ha, _w = dep.augment(bq, br, Hm)
+                e = _WalkEngine(Qa, Ra, Ha, Fa, Ba, ph, sv, walk_axes=walk, cap=dep.cap)
+                e._dyn = dep.callable_for()
+                self._members.append(e)
+                self._pidx.append(xmode)
+        self._nd, self._nc = len(specs), len(cells)
+        k = self._nd
+        # The fault class's kernel: a uniform-leak chain with probability rho per step of
+        # leaving the current dynamics hypothesis (Shiryaev's rule for a jump process).  It
+        # mixes WITHIN each (phi, s) cell -- a dynamics fault does not change the noise class,
+        # so the joint kernel over the two nuisances is their product.
+        self._Md = (np.eye(k) * (1.0 - rho * k / (k - 1)) + np.ones((k, k)) * (rho / (k - 1))
+                    if k > 1 else np.ones((1, 1)))
+        self._learn, self.hazard = learn, rho
+        # report the dynamics whenever they are not a fixed matrix the caller already has
+        self._report = learn or base is not None
         self.reset()
 
     def reset(self):
@@ -617,7 +1068,47 @@ class LucidFilter:
             f.reset()
         self._logw = np.zeros(len(self._members))
         self.loglik = 0.0
+        self._alarm = False
         return self
+
+    def _hazard_mix(self, logw):
+        """Propagate the bank prior through the fault class's kernel."""
+        W = np.exp(logw - float(logw.max())).reshape(self._nd, self._nc)
+        out = np.log(np.maximum(self._Md.T @ W, 1e-300)).ravel()
+        return out - _logsumexp(out)
+
+    def _dynamics_mean(self, post):
+        """Posterior-mean (F, B) across the bank -- fixed members contribute their own."""
+        W = post.reshape(self._nd, self._nc)
+        Fh = np.zeros((self.n, self.n))
+        Bh = None if self.B is None else np.zeros((self.n, self.p))
+        for d, (bs, Fs, Bs, dep) in enumerate(self._specs):
+            if dep is None and bs is None:
+                w = float(W[d].sum())
+                Fh += w * Fs
+                if Bh is not None and Bs is not None:
+                    Bh += w * Bs
+                continue
+            for c in range(self._nc):
+                e = self._members[d * self._nc + c]
+                x = np.zeros(self.n) if e._m is None else e._m[:self.n]
+                if dep is None:
+                    Fg, Bg = bs(x)
+                else:
+                    g = np.zeros(dep.k) if e._m is None else e._m[self.n:]
+                    Fg, Bg = dep.dynamics_of(x, g)
+                Fh += W[d, c] * Fg
+                if Bh is not None and Bg is not None:
+                    Bh += W[d, c] * Bg
+        return Fh, Bh
+
+    def _reprice(self):
+        """Fire the shared-event restart on every walker (research 0003)."""
+        for d, (_, _, _, dep) in enumerate(self._specs):
+            if dep is None:
+                continue
+            for c in range(self._nc):
+                self._members[d * self._nc + c].reprice(dep.gidx)
 
     def update(self, y, u=None) -> LucidStep:
         if self.B is not None and u is None:
@@ -626,6 +1117,8 @@ class LucidFilter:
             raise ValueError("filter has no control map; do not pass u")
         M = len(self._members)
         prior = self._logw - _logsumexp(self._logw)
+        if self._nd > 1:
+            prior = self._hazard_mix(prior)
         steps = [f.update(y, u=u) for f in self._members]
         ll = np.array([st.loglik for st in steps])
         yv = np.atleast_1d(np.asarray(y, float))
@@ -636,14 +1129,28 @@ class LucidFilter:
             bank_ll = 0.0
             self._logw = prior
         post = np.exp(self._logw - _logsumexp(self._logw))
-        mean = sum(post[i] * steps[i].mean for i in range(M))
-        var = sum(post[i] * (steps[i].var + np.outer(steps[i].mean - mean, steps[i].mean - mean))
+        n = self.n
+        mn = [st.mean[:n] for st in steps]
+        mean = sum(post[i] * mn[i] for i in range(M))
+        var = sum(post[i] * (steps[i].var[:n, :n] + np.outer(mn[i] - mean, mn[i] - mean))
                   for i in range(M))
-        ps = sum(post[i] * steps[i].process_scale for i in range(M))
+        ps = sum(post[i] * steps[i].process_scale[self._pidx[i]] for i in range(M))
         ms = sum(post[i] * steps[i].measurement_scale for i in range(M))
         innov = sum(post[i] * steps[i].innovation for i in range(M))
         self.loglik += bank_ll
-        return LucidStep(mean, var, innov, bank_ll, ps, ms)
+        if not self._report:
+            return LucidStep(mean, var, innov, bank_ll, ps, ms)
+        Fh, Bh = self._dynamics_mean(post)
+        # The fault readout is a marginal of the posterior -- the filter itself never
+        # thresholds, it mixes.  Its RISING EDGE re-prices the walkers' ignorance: a jump has
+        # just been confirmed, so what the walkers think they know about the departure is
+        # priced back to the class prior (research 0003).
+        fault = float(1.0 - post.reshape(self._nd, self._nc)[0].sum())
+        alarm = fault > 0.5
+        if alarm and not self._alarm:
+            self._reprice()
+        self._alarm = alarm
+        return LucidStep(mean, var, innov, bank_ll, ps, ms, Fh, Bh, fault)
 
     def filter(self, Y, U=None) -> LucidResult:
         Y = np.atleast_2d(np.asarray(Y, float))
@@ -657,13 +1164,22 @@ class LucidFilter:
         T = Y.shape[0]
         mean = np.empty((T, self.n)); var = np.empty((T, self.n, self.n))
         inn = np.empty((T, self.m)); ps = np.empty((T, self.n)); ms = np.empty((T, self.m))
+        live = self._report
+        dyn = np.empty((T, self.n, self.n)) if live else None
+        ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
+        flt = np.empty(T) if live else None
         total = 0.0
         for i, row in enumerate(Y):
             st = self.update(row, None if U is None else U[i])
             mean[i] = st.mean; var[i] = st.var; inn[i] = st.innovation
             ps[i] = st.process_scale; ms[i] = st.measurement_scale; total += st.loglik
+            if live:
+                dyn[i] = st.dynamics; flt[i] = st.fault
+                if ctl is not None:
+                    ctl[i] = st.control
         return LucidResult(mean=mean, var=var, innovation=inn,
-                           process_scale=ps, measurement_scale=ms, loglik=total)
+                           process_scale=ps, measurement_scale=ms, loglik=total,
+                           dynamics=dyn, control=ctl, fault=flt)
 
     def loglik_of(self, Y, U=None) -> float:
         return self.filter(Y, U).loglik

@@ -136,6 +136,11 @@ in the filter:
 | which axes form a group | the structure `(F, H, Q0, R0)` alone, once, at construction |
 | the null-excursion revert rate | `phi` — the member's own class |
 | the anchor of each rung | absolute, and no rung refers to the supplied base |
+| how several pairs are enumerated | the caltrop star of research 0013, the same construction the scale grid already uses; its reference is the middle of the arclength grid, the agnostic split |
+| the star's node budget | one pair's own arm count, shared out among the pairs — so the budget IS the resolution `forget` supports and there is no constant of its own.  One pair is unchanged; the grid stays complete at every pair count and only its resolution per pair degrades |
+| where a member's split lives | in the `(Q0, R0)` it is built from — so a member reads its own anchor off its own base and the same construction reaches an augmented state through `augment`, with no member type treated specially |
+| which axes form a pair, per member | the off-diagonals of one steady-state Fisher, evaluated at the balanced base — so a member's own rung cannot change what it believes the structure of its model is.  This is load-bearing, not tidiness: read at a member's *own* split, the rung at log-odds −15.1 finds **no pair at all** (its process axis looks uninformative), so exactly the members the ladder needs when the true split is extreme would carry no anchor.  Measured. |
+| `q_mu`'s characteristic Fisher | the diagonal of that same solve, so there is one steady-state solve per member and not two.  Evaluated with every confounded pair **balanced**.  The walk's business is the identifiable directions; letting a member's split move the walk's drift would leak the bank's hypothesis into the walk.  Same rule for every member, and worth 1.230x → 1.138x on regime C |
 
 **Two new named numbers, neither statistical.**  Both are recorded here because they are new, not
 because they carry information:
@@ -212,20 +217,70 @@ named next measurement.
    number under 1e-8 and the arm-like case would acquire five ladders it has not been measured
    with.  Next: express the test as a comparison against the *structural* scale of the pair
    rather than an absolute tolerance, or measure the fast-`dt` arm directly.
-4. **Cost where a ladder switches on.**  Member count multiplies by the rung count (24): the
-   scalar rig goes 3.2 -> 88 ms/step.  Inside the gate, which is stated on the demo rig, but
-   whether the `(phi, s)` box still earns fifteen members once a ladder spans the split is
-   untested — and if it does not, the ladder is close to free there too.
-5. **Multi-group and non-random-walk structures are untested.**  Every measurement here has
-   exactly one confounded group, on a rig where `F = I`.  The code handles several groups and a
-   general `F`, and nothing has exercised either.
+4. **Cost where a ladder switches on**, and it is the largest practical cost of this work.  The
+   member count is multiplied by the number of split vectors, which the node budget holds at **at
+   most 24 whatever the pair count** — so the scalar hero rig goes 3.2 -> 88 ms/step and stays
+   there.  Linear-in-pairs was not enough on its own: at full resolution per pair a pots-only
+   5-DOF arm (five pairs) built 1740 members and ran at 1.5 s/step, which is why the budget is
+   shared; with it that rig is 315 members and 0.28 s/step.  Inside the gate, which is stated on
+   the demo rig, where no pair qualifies and nothing changes at all — but a factor of 21 is not
+   free.  What the budget costs is ladder RESOLUTION per pair, not coverage: the grid stays
+   complete.
 
-**Planned probes not run** (the ladder in the brief; both slots were reassigned to what the
-evidence demanded, and that is recorded in the probe ladder below):
+   **The obvious lever was tried and it does not work.**  0037 says the `(phi, s)` ridge is flat
+   for tracking and that one to three members lose nothing there, so thinning the box ought to
+   pay for the ladder several times over.  On the hero rig with the ladder on it does not — it
+   breaks the *calibration* gate, which is not what 0037 was about:
 
-6. **The moving-ratio case** — 0003 as originally scoped.  A schedule where the true split drifts,
+   | `(phi, s)` box | ss | regime C | rise | calib A | members | ms/step |
+   |---|---|---|---|---|---|---|
+   | **15 cells (shipped)** | 1.035x | **1.138x** | 3 | **1.43** | 360 | 92 |
+   | 9 cells | 1.038x | 1.163x | 3 | 1.53 ✗ | 216 | 53 |
+   | 6 cells | 1.030x | 1.174x | 3 | 1.51 ✗ | 144 | 36 |
+   | 3 cells | 1.065x | 1.216x | 3 | 1.60 ✗ | 72 | 17 |
+   | 4 cells, `phi (0.70, 0.95) x s (0.40, 1.60)` | **1.022x** | 1.263x | 3 | **1.28** | 96 | 22 |
+
+   Three of the four thinnings put `E[e²/S]` over the 1.5 ceiling outright.  The fourth — dropping
+   the box's *extreme* `s` values rather than its middle — is the best filter measured anywhere in
+   this workstream on steady state (1.022x) and on calibration headroom (1.28), at a quarter of
+   the cost, and it is the worst on regime C (1.263x).  So the box is load-bearing, it is
+   load-bearing for calibration rather than for tracking, and which box is best depends on which
+   gate one is trying to close.  The shipped fifteen is the one that is best on the gate that is
+   still open; that is the reason for it, and it is a choice rather than a derivation.
+5. **More than one confounded pair: handled, and measured on two.**  A rung index cannot mean a
+   different split for each of several pairs, and the joint set of split vectors is `J ** G`, so
+   the ladder is enumerated the way this filter enumerates every other scale grid — as the
+   **caltrop star** (research 0013): one reference vector, plus one pair moved off it at a time,
+   `1 + G (J - 1)` vectors, linear in the pair count.  With one pair that IS the whole ladder, so
+   the scalar case is not a special case of anything and there is one code path.  Measured on two
+   independent channels whose true splits are *opposite* (`q = 0.02` and `q = 50`), against the
+   per-channel oracle:
+
+   | | opposite splits | same split | members |
+   |---|---|---|---|
+   | no ladder | 2.218x | 1.818x | 15 |
+   | one rung index shared by both pairs (rejected) | 2.234x | – | 360 |
+   | the caltrop star at full resolution per pair | 1.324x | 1.102x | 705 |
+   | **the star at the shared node budget (shipped)** | **1.412x** | **1.147x** | **345** |
+
+   Tying the pairs to a common split is not merely inelegant, it is worthless — slightly worse
+   than no ladder at all, even though a common split is *right* in one of these two cases.  The
+   star is the mechanism working, and it is working harder here than on the scalar rig.  Halving
+   the resolution per pair to pay for the node budget costs 1.324x -> 1.412x and 1.102x -> 1.147x,
+   which is a small fraction of what the ladder is buying and half the members.  What it gives up is what the star
+   always gives up: the corners, where two pairs are simultaneously far from the reference; on
+   the scale axes a walking centre recovers them, here the members are anchored and nothing does.
+   Three or more pairs is untested.
+6. **Non-random-walk structures are untested.**  Every measurement here is on a rig with `F = I`.
+   The group test and the split map are written for a general `F`, and nothing has exercised one.
+7. **The ladder has never been measured with the dynamics channel on.**  It reaches every member
+   the same way — the split is applied to the `(Q0, R0)` a member is built from, so it rides into
+   a departure walker's augmented state through `augment` without anything having to know it is
+   one, and each member reads its own anchor back off its own base.  That is uniform by
+   construction and it is not the same thing as measured: no rig has run both at once.
+8. **The moving-ratio case** — 0003 as originally scoped.  A schedule where the true split drifts,
    to see what breaks the static ladder and whether walk-on-total plus ladder-on-split holds.
-7. **The arm's collinear accel-jerk pair** — 0005 as originally scoped, and the workstream's
+9. **The arm's collinear accel-jerk pair** — 0005 as originally scoped, and the workstream's
    *prize*.  No pair on the arm is exactly degenerate, so the ladder does not switch on and the
    SENSOR/PROCESS chips are exactly as coupled as 0052 left them.  Measuring the attribution leak
    under a relaxed activation, against 0052's chips with BOTH watched against its 0033 floor, is
