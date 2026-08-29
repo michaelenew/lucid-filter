@@ -118,6 +118,62 @@ this repository's own rigs (x9 on the hero rig, x225 and x400 on the arm), so no
 represent them.  The default is now a geometric `0.2 .. 3.2` at the same member count.  That is what
 takes the jump from 7 steps to 3, and it also improves the settled part of regime C.
 
+### The parameter ledger — what this cost in free numbers
+
+The house rule is that every gain is derived from a class or a structure.  Audited against the
+diff rather than asserted; the public constructor signature is **unchanged**, and the two new
+public attributes (`groups`, `split_arr`) are read-only diagnostics.
+
+**Derived, no new freedom.**  Every quantity the mechanism runs on comes from something already
+in the filter:
+
+| quantity | where it comes from |
+|---|---|
+| rung *spacing* | `_GAP_FACTOR * sqrt(2 (1 - forget))` — the engine's own Sparrow factor (finding 11) on the resolution the declared `forget` memory supports |
+| rung *span* | none needed: the split acts only through the gain, and `t = arccos(1 - K)` is bounded on `[0, pi/2]`.  The ladder is COMPLETE, so no span constant exists to tune |
+| rung *coordinate* | the MA(1) Whittle divergence `0.5 dt^2` — the unit-curvature chart, not a choice |
+| the split map | the exact null flow of the per-step scale-Fisher, `dQ = -dR`.  Algebra, not a setting |
+| which axes form a group | the structure `(F, H, Q0, R0)` alone, once, at construction |
+| the null-excursion revert rate | `phi` — the member's own class |
+| the anchor of each rung | absolute, and no rung refers to the supplied base |
+
+**Two new named numbers, neither statistical.**  Both are recorded here because they are new, not
+because they carry information:
+
+- `_RANK_TOL = 1e-8` — a **numerical rank tolerance**, and the same value the engine already used
+  inline for structural activation (`hv_norm > 1e-8`).  Its only job is "is this 2x2 block exactly
+  rank 1 in floating point".  Swept over ten orders (1e-3 … 1e-14) the group decision does not
+  move on the hero rig (always one group, whose degeneracy is *exactly* zero).  On the 5-DOF arm
+  it flips from five groups to none between 1e-4 and 1e-5, because the arm's near-degeneracy sits
+  at a **structural** value, `dt^2/6 = 1.7e-5` — the ratio of the jerk mode's pot footprint to its
+  accelerometer footprint.  So the shipped value has three to four orders of margin below the
+  nearest structural feature and unbounded margin above the exact zero, but it is **not scale
+  free**: see the opens.
+- `_LADDER_MEM = 1000.0` — a **node budget**, in the same sense as `_SPAN_S`.  It caps the memory
+  entering the rung resolution so that the member count cannot grow without bound (`forget = 1`
+  is accepted by the constructor and asked for an infinite grid; `forget = 0.9999` asked for 74
+  rungs).  Measured: **inactive at and below the default** — `forget = 0.999` implies exactly 1000
+  and yields the same 24 rungs with or without it; it binds only above 0.999.
+
+**One behaviour-relevant default moved, and it is a labelled budget, not a derivation.**  The
+`(phi, s)` box's `s` values went from an irregular `(0.20, 0.30, 0.45, 0.60, 0.80)` to a geometric
+`(0.20, 0.40, 0.80, 1.60, 3.20)` — same member count, same floor, doubling.  Stating it plainly:
+
+- it is a **coverage** choice of the same kind as `_SPAN_S = 3.0`, not a fitted value.  `s` is the
+  SD of a log-variance, so `3 s` is the largest scale change a window can represent in one step;
+  the old box topped out at a factor of 11 while this repository's own rigs contain x9, x225 and
+  x400.  A box that cannot represent the regimes it is shown is not a broad box;
+- no value in it was numerically optimised — the rule (double from the existing floor, keep the
+  count) fixes all five once the rule is chosen, and the rule replaces a list that had no rule;
+- but the *decision to widen* was prompted by the hero rig, so it is fair to call it
+  benchmark-informed rather than derived.  It was then validated where it could regress and did
+  not: the 4-seed arm guard above, where the hardest regime improves by more than 2 SE on both
+  angle and velocity;
+- and the alternative is on the record, so nothing is hidden by the choice: **the mechanism
+  without the box change** measures steady state 1.031x, regime C 1.101x, jump rise 7.  Keeping
+  the old box buys a slightly better regime C and costs the jump gate, which the workstream's own
+  brief forbids regressing.
+
 ### Cost
 
 On the demo rig the LADDER is free: no pair on the arm is exactly degenerate, so no member changes
@@ -127,6 +183,54 @@ is untouched.  Where a ladder does switch on, the member count is multiplied by 
 (24) and the scalar hero rig goes 3.2 → 88 ms/step.  That is inside the gate (which is stated on
 the demo rig) but it is not free, and whether the `(phi, s)` box still earns fifteen members once a
 ladder spans the split is untested.
+
+### Open items, complete
+
+Everything this workstream leaves undone, in one place.  Nothing below is blocked; each has a
+named next measurement.
+
+**Gates.**
+
+1. **Regime C, 1.138x against a 1.05x gate.**  The whole miss is the fifty steps after the sensor
+   triples; the settled filter is already past the comparator.  Cause measured
+   ([`0005`](exploration/0005_reach_and_restraint.md)): the star's two axial windows are tied at
+   the step the change happens and split it between them.  Next: a second banked coordinate for
+   the EXCURSION (anchored "this departure is process" against "this departure is sensor",
+   carried by members with their own means), which is the same mechanism as the ladder at a
+   two-to-three-step timescale instead of a two-to-three-hundred-step one.
+
+**Mechanism.**
+
+2. **The verdict's memory.**  ~1000 steps is right for holding a verdict and wrong for revising
+   one; in regime C the regime-A verdict keeps a ~17-nat lead that 300 steps of a 0.015-nat/step
+   signal cannot overturn.  `theory/02`'s `L*` derivation is the natural candidate and fails for
+   a stated reason ([`0004`](exploration/0004_four_negatives.md) §3).  Banking the memory instead
+   is structurally suspect and untested: members with shorter memories adapt faster and therefore
+   score better, which is self-reinforcing rather than informative.
+3. **`_RANK_TOL` is not scale free.**  The arm stays out of the ladder because its near-degeneracy
+   sits at `dt^2/6 = 1.7e-5`.  A rig sampled fast enough (`dt < 2.4e-4`) would push that structural
+   number under 1e-8 and the arm-like case would acquire five ladders it has not been measured
+   with.  Next: express the test as a comparison against the *structural* scale of the pair
+   rather than an absolute tolerance, or measure the fast-`dt` arm directly.
+4. **Cost where a ladder switches on.**  Member count multiplies by the rung count (24): the
+   scalar rig goes 3.2 -> 88 ms/step.  Inside the gate, which is stated on the demo rig, but
+   whether the `(phi, s)` box still earns fifteen members once a ladder spans the split is
+   untested — and if it does not, the ladder is close to free there too.
+5. **Multi-group and non-random-walk structures are untested.**  Every measurement here has
+   exactly one confounded group, on a rig where `F = I`.  The code handles several groups and a
+   general `F`, and nothing has exercised either.
+
+**Planned probes not run** (the ladder in the brief; both slots were reassigned to what the
+evidence demanded, and that is recorded in the probe ladder below):
+
+6. **The moving-ratio case** — 0003 as originally scoped.  A schedule where the true split drifts,
+   to see what breaks the static ladder and whether walk-on-total plus ladder-on-split holds.
+7. **The arm's collinear accel-jerk pair** — 0005 as originally scoped, and the workstream's
+   *prize*.  No pair on the arm is exactly degenerate, so the ladder does not switch on and the
+   SENSOR/PROCESS chips are exactly as coupled as 0052 left them.  Measuring the attribution leak
+   under a relaxed activation, against 0052's chips with BOTH watched against its 0033 floor, is
+   the next step and is untouched.  Note the cost: a laddered arm is ~24x, so that probe needs a
+   reduced rung count or the per-cluster factorisation first.
 
 ---
 
