@@ -8,151 +8,114 @@ dynamics online**, converging back to oracle-grade state tracking without a refi
 or a tuning constant.  Same house rules as everything else here: no theoretically relevant free
 parameters; compute budgets allowed; every claim measured against an oracle told the truth.
 
-The two named scenarios are the acceptance targets, because they bracket the problem:
+**Status: the research ladder (exploration/0001–0006) is complete and both named acceptance
+rigs pass.**  What remains is integration engineering (the shipped-`LucidFilter` wiring, the
+0052 profiler regimes, the demo) — see the opens at the bottom.
 
-- **Weight attached to a drone**: a *persistent, structured* change — mass/inertia enter `F` and
-  the control effectiveness `B` (and add a gravity bias), all through a low-dimensional physical
-  parameter.  The vehicle remains controllable; the change is large but smooth in the parameter.
-- **Tire blowout**: a *sudden, asymmetric* change — one wheel's radius/friction collapses, so one
-  row/block of the dynamics changes discontinuously, and the change is adversarial to a
-  symmetric prior.  Detection latency is safety-critical here; a filter that takes 100 steps to
-  notice has already put the state estimate somewhere dangerous.
+## The settled design (each element pinned by a numbered probe)
 
-## What already exists in the record (build on it, do not rediscover it)
+The class commitment: a dynamics fault is a **jump process** — rare, large, persistent — with
+one labeled prior, the hazard `rho` (~1/mission), and a class scale (the cap).  Every gain,
+drift rate, restart width, and spawn mass derives from `(rho, cap)`.  Zero tuning constants.
 
-1. **The scalar dynamics channel is shipped** (`odefilter`, research/ode-filter): `alpha` is
-   fitted once and then *tracked* online through `g_t = 1 + lamA_t`, an AR(1) log-style channel
-   along the fitted departure-from-flat direction, with the parent's flat model as an explicit
-   bank member.  Its two recorded limits are the map for this workstream: *"`g` is one scalar,
-   along one direction ... it cannot express a change of frequency.  That is the obvious next
-   axis"* — and it needs a `fit()`.  This workstream is the multivariate, fit-free lift.
+1. **Detect by hazard-mixed bank of anchored full filters** (0001).  The hazard-mixed bank is
+   Shiryaev's rule; its delay frontier is `D(rho) = log(1/rho) / KL-rate` with the KL rate
+   between member filters' predictive densities computable exactly (linear rigs: a joint
+   (state, filter-error) covariance recursion; nonlinear rigs: Monte-Carlo mean llr).  The bank
+   sits ON the frontier — verified by an optional-stopping audit (the llr it accumulates to
+   detect equals the theoretical KL budget) — and the frontier is excitation-dependent exactly
+   as required.  The random-walk/AR(1) parameter surrogate (augmented EKF or regression walk)
+   is **dominated at every drift setting** for detection: the class shape, not the estimator,
+   is what matters.  "Detection" is a reporting convention (a marginal crossing ½); the filter
+   itself only ever mixes.
+2. **The nominal member never leaves the bank** (0001).  A false detection then costs ~nothing
+   (calm ratio 1.0004 scalar, 1.0003 drone), which is what makes the aggressive end of the
+   false-alarm/delay frontier affordable — the hedge is a detection-speed subsidy.
+3. **The noise machinery lives in the same bank, from day one** (0002).  A joint
+   {dynamics} × {noise-scale} grid of anchored members splits the Q↔F confound through
+   per-member MEANS alone (the 0053 §1 mechanism; no whiteness statistic) at derived pairwise
+   KL rates.  A dynamics-only bank false-fires on every noise burst; a noise-only bank eats a
+   real fault (settled P(noise) 0.98 under a pure dynamics change).  The operative masking case
+   is burst-THEN-fault: the fault must win the slow duel against the elevated-noise member
+   (KL 0.20 vs 0.49 nats/step there), and the joint bank pays exactly that derived price and
+   still settles at oracle-grade state cost.  **The detection frontier of a full bank is the
+   anchor's llr edge over its BEST wrong member** — usually the high-Q nominal — not over the
+   plain nominal (0004; measured 28.9 ± 1.7 steps on a D* = 29.6 frontier).
+4. **Refine by a jump-class departure walker, variance-restarted on detection** (0003).  The
+   walker (KF on the departure with `q_theta = cap·rho`, capped, floored — never frozen) is
+   miscalibrated ~10× right after a jump on its own; restarting its covariance to the class cap
+   on the bank's detection edge makes it ride the derived information-rate recovery curve at
+   every excitation, calibrated (cal 0.6–1.4 early).  The restart treats a fault as ONE event:
+   it re-prices ignorance on **every** axis, excited or not — unexcited axes stand at honest
+   cap width ("I cannot know the new roll inertia until you roll") and converge at their fresh
+   information rate when excitation arrives.  The latched freeze (pruning an "unidentifiable"
+   parameter during a quiet stretch) reproduces the 0052 bug for dynamics: 20× state regression
+   when excitation returns, 6× overconfident reports.  Floor + cap, never freeze — reconfirmed.
+5. **Under partial observation the walker must be the augmented filter** (0004).  With
+   position-only sensing a parameter's effect reaches the measurements only through
+   integration; an instantaneous innovation-regression has a zero regressor, and the
+   cross-covariance P_x,theta carries the multi-step sensitivity.  (0001's scalar
+   "cross-covariance worth nothing" was a relative-degree-0 artifact.)
+6. **Two deployment constraints found by measurement** (0004): the control input must be
+   **measurable from the filter's information set** (an autopilot flying on the true state
+   correlates u with unseen process noise and biased Î by +50% — classic closed-loop bias;
+   flying on measurements removes it exactly), and the walker should use the **linearizing
+   parameter coordinates** the physics offers (Newton is linear in 1/m, 1/I; wheel radii are
+   already effectiveness gains).
+7. **Anchors in parameter space when faults are nameable; anchors in TIME when not** (0006).
+   `dynamics=None` proper has no F0 and no fault classes, hence no detection edge; the jump
+   class's Bayes posterior is then a mixture over jump times, realized as pruned run-length
+   (BOCPD-style) spawn hypotheses at the same hazard.  Measured on a full-state-observed rig
+   the spawns are only marginally engaged — with relative degree 0 even the plain surrogate
+   re-learns in ~100–200 steps — so they are kept as cheap, correct, and *dormant*; the rigs
+   where they should bind (partial observation + low hazard + a latency consumer) are an open.
 
-2. **Per-hypothesis filters carry sequence evidence through their means** (0053, after
-   0050/0051): a hypothesis running its own KF mispredicts its own innovation statistics when it
-   is wrong.  For noise-scale hypotheses that signal is second-order (variance-level) and the
-   walking-window realization regressed (0053 §2 — read it before building).  **For dynamics
-   hypotheses the signal is FIRST-order**: a wrong `F` biases the innovation *mean* through the
-   state — `e_t ≈ (F_true − F_hyp) x_{t-1} + noise` — which is (a) much stronger per step, and
-   (b) *correlated with the known regressor* `x_{t-1}` (and `u_t` for a wrong `B`).  This is the
-   classic system-identification signal, and it is exactly what the noise-scale walk cannot see.
-   Expect hypothesis banks to work *better* for dynamics than they did for scales — but verify,
-   and heed 0053's anchoring lesson: hypotheses must be stable anchors, not slots on a walking
-   centre.
+## Acceptance results (the SUMMARY's definition of done, measured)
 
-3. **The detection-delay frontier is derived, not tuned** (0041): for a given false-alarm rate
-   the confirmation delay is information-limited (Lorden); the EMA/CUSUM frontiers coincide.
-   Re-derive that frontier for a *dynamics* change: the per-step KL between innovation
-   distributions under `F_true` vs `F_hyp` scales with state/input excitation, so the delay
-   bound is excitation-dependent — state it, measure against it, and report when the filter sits
-   on it (then stop trying to beat it).
+- **0004 drone** (planar quadrotor, mocap-only sensing, payload m ×1.30 / I ×1.15 mid-flight,
+  20 seeds): detection 28.9 ± 1.7 steps on a derived D* = 29.6; recovery 1.13 ± 0.01 at
+  [50,200), settled 1.075 ± 0.004 (≤1.2 ✓); m̂ 1.303/1.300, Î 0.0233/0.0230; CALM 1.0003; GUST
+  (process ×4) 1.0017 with no persistent false fault; never worse than frozen anywhere; ~1
+  ms/step numpy for the whole 6-member machine.  A hovering quadrotor is never torque-quiet —
+  the autopilot's own dither identifies I even at hover (the zero-excitation honesty case is
+  0003's, not this vehicle's).
+- **0005 blowout** (differential drive at 50 Hz, left wheel → 0.30 r0, 20 seeds): detection
+  **0.9 ± 0.1 steps = 18 ms** on a 1.2-step frontier (a blowout is a ~29 nats/step event; the
+  30× KL buys the 30× speed, per the frontier scaling); side pinned instantly, 0% wrong-side
+  in the attribution window; healthy wheel comes home to 1.010 r0 (leak ~1%); settled
+  1.011 ± 0.001; CALM 1.0001, GUST 1.0024.
+- **0006 dynamics=None** (n=2 rotation-decay, told nothing): within 7% of a supplied-dynamics
+  oracle from an identity prior in a few hundred steps; a mid-run **frequency doubling** — the
+  odefilter's recorded limit — re-learned in ~100–200 steps; never above the told-nothing
+  parent in any window.
 
-4. **The Q↔F confound is the central identifiability obstacle, and whiteness splits it.**  A
-   wrong `F` inflates innovations; so does elevated process noise `Q`.  The 0052/0053 arc shows
-   what happens when a filter can explain a disturbance with the wrong knob (the 82× runaway).
-   The split is structural: wrong-`F` innovations are *predictably* wrong — correlated with
-   `x_{t-1}`/`u_t` (a regression signal with a known regressor) — while process noise is white
-   given the state.  The noise machinery must coexist with the dynamics machinery from day one;
-   a dynamics-only probe that ignores Q will look better than it is.
+Known residuals, filed with analyses: the drone's settled 1.075 (localized to the thrust·(1/m)
+channels; the q_theta-floor hypothesis tested and REFUTED — the remaining suspect is the cost
+of carrying P_theta in the gain; the exact jump-hold theta-prior is the candidate fix); the
+0001 su=2 optional-stopping audit gap (small-τ statistic); the side-readout sub-competition
+goes vestigial after the walker takes over (read attribution from the refined walker; give the
+diagnostic a validity flag).
 
-5. **Structural observability discipline** (0024/0052): only walk what the data can see, bound
-   what it cannot (floor + cap, never a hard freeze that locks out later evidence — that exact
-   bug cost this repo an 82× regression).  For dynamics: an unexcited direction's coefficients
-   are unidentifiable *now* but may light up later; hold them at the prior with bounded drift.
+## The exploration record
 
-6. **The embedded budget** (0053 §5): per-step cost must stay a handful of small dense ops per
-   cluster; the bank multiplier is the first thing to spend, the last thing to keep.
+`exploration/0001` scalar race + the derived frontier and its audit · `0002` Q↔F split and
+masking · `0003` information-rate recovery, calibration, the freeze bug at 20× · `0004` the
+drone rig (acceptance) · `0005` the blowout rig (acceptance) · `0006` dynamics=None proper.
+Each note carries its measured tables, error bars, and the constants' derivations; every
+negative result (the simultaneous-BOTH non-mask, the refuted q_theta-floor hypothesis, the
+dissolved hover-honesty scenario, the dormant spawns) is filed in place.
 
-## The model commitments to decide (in order of increasing ambition)
+## Opens (the integration rung — what 0006-the-plan still needs)
 
-Let the supplied dynamics be `F0, B0` (possibly callables — see the API note below), and the
-truth `F(t), B(t)`.
-
-- **(a) Enumerated fault bank.**  When the failure modes are nameable (nominal / +mass /
-  blown-left / blown-right ...), a small bank of full filters, one per hypothesis, weights by
-  prequential likelihood with the bank `forget`.  Fastest possible detection (first-order
-  evidence, no search), trivially embedded, and the natural first probe.  Limits: recovery only
-  up to the enumerated set; the interesting part is what "hypothesis half-way between" costs.
-
-- **(b) Low-rank departure channel** — the odefilter `g` lifted: `F = F0 + Σ_j g_j U_j`, with
-  departure directions `U_j` either supplied (physics: mass enters here, friction there — the
-  robotics caller KNOWS these) or learned from the innovation-regression evidence (the
-  rank-one outer product `e_t ⊗ x_{t-1}` accumulates the departure direction — derive the
-  estimator, it is a Fisher-style accumulation like finding-18).  Each `g_j` gets the
-  walk/window machinery the noise scales already have.  This is the expected production form:
-  a drone's mass change is one `g` along a known `U`.
-
-- **(c) Full row/block walk.**  `F` entries walked directly (n² axes, structurally truncated to
-  the reachable/excited subspace).  The identifiability and cost analysis (persistency of
-  excitation; which entries the data pins) is the research content; a tire blowout is a
-  one-block change, so block-sparse priors fit.  This subsumes (b) but likely pays for it.
-
-- **(d) The class question**: a *step* change (blowout) is not an AR(1) wander.  The scale
-  machinery's class is AR(1)-with-swing; a dynamics fault is closer to a jump process — rare,
-  large, persistent.  Decide whether the dynamics channel's class is (i) AR(1) like the scales
-  (wrong shape, but the bank's `forget` may cover it), (ii) a two-state jump/hold class with a
-  derived hazard, or (iii) hypothesis-bank-plus-walk (detect by bank, refine by walk — the
-  odefilter precedent).  Whichever: derive its gains from the class the way K* = (1−φ)/4 was
-  derived, not by tuning.
-
-## Research questions the probes must answer
-
-1. **Detection latency vs the derived frontier.**  For a mass-change of size δ under excitation
-   level X, the per-step KL is computable in closed form; the Lorden bound gives the achievable
-   delay.  Where does each mechanism (bank / g-walk / block-walk) sit on that frontier?  A
-   mechanism off the frontier by a constant factor is fixable; one off by a *scaling* is wrong.
-
-2. **The Q↔F split under simultaneous stress.**  Inject a dynamics change AND a process-noise
-   burst (the analogue of 0052's process+pot).  Does the innovation-regression evidence keep the
-   dynamics channel from eating the noise burst and vice versa?  Measure the misattribution and
-   its state cost; compare against a filter given the true split.
-
-3. **Recovery speed and its excitation dependence.**  After detection, the coefficient error
-   should contract at the information rate (per-step Fisher ∝ excitation); an unexcited
-   direction must NOT converge (and must not pretend to — its variance stays honest).  Probe
-   with rich vs poor commanded trajectories; consider whether the filter should *report* the
-   unexcited subspace (the diagnostic: "I cannot know the new roll inertia until you roll").
-
-4. **Never-worse-than-F0 hedging.**  The nominal filter must remain a bank member with enough
-   floor weight that a false detection costs ~nothing (the odefilter already does this for `g`;
-   port the guarantee).  Quantify the calm-regime cost of carrying the dynamics machinery — the
-   target is the 0052 pattern: CALM ratio ≈ 1.00.
-
-5. **Interaction with the noise walk.**  The full filter runs scale walks AND dynamics channels.
-   Freeze-out order, shared vs separate windows, and the combined cost.  0053 §5's budget: the
-   whole thing must still cluster.
-
-6. **Nonlinear/callable dynamics.**  Real F, B arrive as *functions* (linearized per step, per
-   operating point) — so departures live on top of a moving linearization, block structure
-   cannot be precomputed, and a "changed dynamics" must be separated from "moved operating
-   point".  Start linear (the rigs below), but carry the callable API from the first probe so
-   the machinery never assumes a constant F0.
-
-## The probe ladder (numbered, in the house style — each answers one question)
-
-- **0001**: scalar decay `x_t = a x_{t-1} + b u_t + w`, step change in `a` (0.9 → 0.6) mid-run.
-  Four contenders on the same data: oracle-switch KF; 2-member bank {a0, a-post}; augmented-state
-  EKF (a as a state); the innovation-regression walk (accumulate `Σ e x / Σ x²` with finding-18
-  gains).  Report detection delay (vs the derived frontier), recovery RMSE curve, calm cost.
-- **0002**: same rig + process-noise burst instead of / on top of the `a` change — the Q↔F
-  confound measured; the regression-evidence split validated (or refuted).
-- **0003**: excitation dependence — recovery rate vs input richness; the unexcited-direction
-  honesty check.
-- **0004**: the drone rig — planar quadrotor (n≈6), mass +30% at t*, `F(θ), B(θ)` callables with
-  θ = (m, I); mechanism (b) with physical departure directions.  Acceptance: detect within the
-  frontier's delay at that excitation, recover to ≤1.2× the refit-oracle RMSE within the
-  system's memory, calm ≈ 1.00, per-step cost within the embedded budget.
-- **0005**: the blowout rig — differential-drive or bicycle model, one wheel's parameter steps
-  to 30% at t*; asymmetric block change; bank-detect + walk-refine; same acceptance frame.
-- **0006**: unification — the dynamics channel inside `LucidFilter` (`dynamics=None` and
-  `dynamics=(F0 approximate)` both), scale walks live, the 0052 profiler extended with dynamics
-  regimes (WEIGHT, BLOWOUT next to SENSOR/PROCESS/...), and the arm/drone demo gif updated to
-  show a dynamics fault being caught and re-learned live.
-
-## Success criteria (the definition of done for the cell)
-
-On rigs 0004/0005, over ≥20 seeds: detection delay on the derived frontier (report the frontier
-alongside); post-recovery state RMSE ≤ 1.2× a refit oracle; CALM ≤ 1.02× the supplied-dynamics
-filter; no regime worse than the frozen-`F0` filter (the hedge guarantee); zero tuning
-constants introduced (every gain derived from a class or a structure); per-step cost compatible
-with per-cluster embedded execution.  Plus the honest-record requirements: every negative
-result filed, every constant's derivation written down.
+- Wire the machinery into `LucidFilter` (`dynamics=None` and `dynamics≈F0`): the real 0052
+  scale-walk engine in place of the probes' {q, 4q} toy noise axis; the callable F/B API is
+  already carried by every probe.
+- The 0052 profiler extended with WEIGHT / BLOWOUT regimes next to SENSOR/PROCESS/...; the
+  arm/drone demo gif showing a dynamics fault caught and re-learned live.
+- The exact jump-hold theta-prior (two-state: "jumped recently" vs "holding") in place of the
+  diffusion surrogate — the candidate for the drone's last 7% and for post-jump calibration
+  without an explicit restart.
+- Time-anchored spawns under partial observation with a latency consumer (drone rig with
+  `dynamics=None`) — where BOCPD anchors should finally bind.
+- Per-cluster factorization with callable (operating-point-dependent) block structure — the
+  0053 §5 caveat, unchanged.
