@@ -20,7 +20,8 @@ Configure by the give-what-you-know / infer-the-rest rule -- for each input pass
     LucidFilter(dynamics=F, process=Q0, ...)     # you also know the base noise magnitudes
 
 Everything is vector; a scalar problem is length 1.  `dynamics=None` (learn the dynamics) is the one
-open cell -- it belongs to the ODE-learning filter and raises `NotImplementedError` for now.
+open cell -- it belongs to the ODE-learning filter and raises `NotImplementedError` for now; the
+opening document for that workstream is `research/dynamics-learning/SUMMARY.md`.
 
 This is a benchmark toy: the RMSE for a given amount of supplied knowledge is the bound a real
 implementation can aim at.  The mechanism (per-component walk, axial GPB1, structural axis

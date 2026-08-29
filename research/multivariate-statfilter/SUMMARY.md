@@ -374,6 +374,29 @@ that.** See `exploration/0029_reprofile.md`.
 - **Unify the diagnostic de-mix into the production filter.** The Fisher-eigenbasis walk
   (0018–0023) gives the faithful which-sensor/which-mode attribution; run it *within* each
   whiteness-gated block so the production filter reports per-component diagnostics too.
+  **Update (0053): the no-EMA mechanism is identified but its realization is open.** Per-node
+  FULL Kalman filters (means, not just P) carry the lag-1 evidence that splits the collinear
+  accel↔jerk pair — validated on a static joint grid (leak ÷2.5–3.5); per-node P alone does
+  nothing. The walking-window + pair-window realization regressed 4 of 6 regimes (velocity
+  runaways, +1.4–1.9σ) and was reverted; a working realization needs stable hypothesis anchors
+  (per-cluster static grids, 0051), the sequence memory on the bank-`forget` timescale rather
+  than the scale kernel's 1/(1−φ), and a bound tying far-node means to the collapse. See
+  `exploration/0053_pernode_demix.md`.
+- **Lean / embedded execution.** The public filter's cost is three multiplicative levers
+  (0053 §5): the 15-member (φ,s) bank (~15×; the ridge is flat for tracking, 0037 — a 1–3
+  member profile loses nothing on state), the coupled n³ state update (robotics models are
+  block-diagonal per joint; factoring into per-cluster sub-filters — 0051 — is exact when the
+  blocks are exact: 0.6 ms/joint/step in numpy, tens of µs in C), and the interpreter (numpy→C
+  10–50×). Open: (a) a derived lean profile (which members, when clustering is admissible);
+  (b) block-structure handling when `F`/`B` are supplied as *callables* (linearized nonlinear
+  dynamics) — structure cannot be detected statically, so it must be declared by the caller or
+  probed numerically at the linearization point, and it can change with the operating point.
+- **Online learned dynamics (`dynamics=None`).** Promoted to its own workstream with a full
+  opening document: [`../dynamics-learning/SUMMARY.md`](../dynamics-learning/SUMMARY.md) —
+  fast detection of dynamics changes (a drone with a weight attached, a tire blowout) and
+  fast recovery of the true dynamics, building on the odefilter dynamics channel, the 0053
+  per-hypothesis-filter finding (first-order for dynamics), the 0041 detection frontier, and
+  the Q↔F confound split via innovation–regressor correlation.
 - **Adaptation timescale / lag.** A burst is caught over `~1/β` steps; very brief bursts are
   under-corrected. `β` and the process-drive rate are labeled responsiveness budgets — derive
   them from the class `(φ, s)` where possible.

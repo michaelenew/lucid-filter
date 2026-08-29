@@ -51,14 +51,27 @@ F = np.kron(np.eye(NJ), Fb)
 Q0 = np.kron(np.eye(NJ), JERK ** 2 * np.outer(G, G) + 1e-12 * np.eye(ORDER))
 B = np.kron(np.eye(NJ), G[:, None])
 GJ = np.kron(np.eye(NJ), G[:, None])
-rows, rvar = [], []
-for d in range(NJ):
-    for name, di, v in (("pos", 0, POT ** 2), ("acc", 2, ACC ** 2)):
-        e = np.zeros(ORDER * NJ); e[d * ORDER + di] = 1.0
-        rows.append(e); rvar.append(v)
-H = np.array(rows)          # (10, 15): per joint, a pot row then an accel row
-R0 = np.array(rvar)
-N, M = ORDER * NJ, 2 * NJ
+N = ORDER * NJ
+_SPECS = {"potacc": (("pot", 0, POT), ("acc", 2, ACC)),   # per joint: which sensors exist
+          "acc": (("acc", 2, ACC),),
+          "pot": (("pot", 0, POT),)}
+LAYOUT = "potacc"
+H = R0 = KIND = None; M = 0
+
+
+def set_layout(layout):
+    """Sensor layout: 'potacc' (default), 'acc' (accelerometers only), 'pot' (pots only)."""
+    global LAYOUT, H, R0, KIND, M
+    rows, rvar, kind = [], [], []
+    for d in range(NJ):
+        for name, di, sd in _SPECS[layout]:
+            e = np.zeros(N); e[d * ORDER + di] = 1.0
+            rows.append(e); rvar.append(sd ** 2); kind.append(name)
+    LAYOUT, H, R0 = layout, np.array(rows), np.array(rvar)
+    KIND = np.array(kind); M = len(rows)
+
+
+set_layout("potacc")
 
 
 def build():
@@ -83,7 +96,7 @@ def sim(seed, regime):
     s = np.zeros(N); S = np.zeros((T, N)); Y = np.zeros((T, M))
     for k in range(T):
         s = F @ s + B @ U[k] + GJ @ (jstd[k] * rng.standard_normal(NJ)); S[k] = s
-        sd = np.empty(M); sd[0::2] = pot[k]; sd[1::2] = acc[k]
+        sd = np.where(KIND == "pot", pot[k], acc[k])
         Y[k] = H @ s + sd * rng.standard_normal(M)
     return U, S, Y, jstd, pot, acc
 
@@ -103,13 +116,14 @@ def schedules(jstd, pot, acc):
     Qs = [j ** 2 * (GJ @ GJ.T) for j in jstd]
     Rs = []
     for k in range(T):
-        sd = np.empty(M); sd[0::2] = pot[k]; sd[1::2] = acc[k]
+        sd = np.where(KIND == "pot", pot[k], acc[k])
         Rs.append(np.diag(sd ** 2))
     return Qs, Rs
 
 
-def rms(est, S):
-    tt = S.reshape(T, NJ, ORDER)[ON, :, 0]; ee = est.reshape(T, NJ, ORDER)[ON, :, 0]
+def rms(est, S, d=0):
+    """RMSE on derivative ``d`` (0 = angle, 1 = velocity) in the burst window."""
+    tt = S.reshape(T, NJ, ORDER)[ON, :, d]; ee = est.reshape(T, NJ, ORDER)[ON, :, d]
     return float(np.sqrt(((ee - tt) ** 2).mean()))
 
 
@@ -117,33 +131,45 @@ def diagnostics(res, regime):
     """Mean learned log-scale, burst window vs calm prefix, on the channels the regime touches."""
     ms, ps = res.measurement_scale, res.process_scale
     calm_w, on_w = slice(100, ON.start), slice(ON.start + 50, ON.stop)
-    pots, accs = ms[:, 0::2], ms[:, 1::2]
+    nanpair = (float("nan"), float("nan"))
+    pots, accs = ms[:, KIND == "pot"], ms[:, KIND == "acc"]
     # top-NJ Q eigenmodes (eigh sorts ascending; the NJ jerk directions are the last NJ)
     proc = ps[:, -NJ:]
     return {
-        "pot":  (float(pots[calm_w].mean()), float(pots[on_w].mean())),
-        "acc":  (float(accs[calm_w].mean()), float(accs[on_w].mean())),
+        "pot":  nanpair if pots.shape[1] == 0 else
+                (float(pots[calm_w].mean()), float(pots[on_w].mean())),
+        "acc":  nanpair if accs.shape[1] == 0 else
+                (float(accs[calm_w].mean()), float(accs[on_w].mean())),
         "proc": (float(proc[calm_w].mean()), float(proc[on_w].mean())),
     }
+
+
+def regimes():
+    """Regimes that exist under the current layout (pot regimes need pots)."""
+    if "pot" not in KIND:
+        return [(r, t) for r, t in REGIMES if r not in ("pot", "procpot")]
+    return REGIMES
 
 
 def save(label, n_seeds):
     data = {}
     f = build()
     eng = f._members[0]
-    print(f"LucidFilter on the 5-DOF rig: n={N}, m={M}, D={N + M}; "
-          f"star nodes per member <= {1 + (eng._nn - 1) * eng.D} (linear)")
-    for regime, tag in REGIMES:
+    print(f"LucidFilter on the 5-DOF rig [{LAYOUT}]: n={N}, m={M}, D={N + M}; "
+          f"bank nodes per member = {eng._G} (linear in D)")
+    for regime, tag in regimes():
         lu = np.zeros(n_seeds); oc = np.zeros(n_seeds); fx = np.zeros(n_seeds)
+        luv = np.zeros(n_seeds); ocv = np.zeros(n_seeds)
         dg = {"pot": [], "acc": [], "proc": []}
         for seed in range(n_seeds):
             U, S, Y, jstd, pot, acc = sim(seed, regime)
             t0 = time.time()
             res = build().filter(Y, U=U)
             el = time.time() - t0
-            lu[seed] = rms(res.mean, S)
+            lu[seed] = rms(res.mean, S); luv[seed] = rms(res.mean, S, d=1)
             Qs, Rs = schedules(jstd, pot, acc)
-            oc[seed] = rms(kf(U, Y, Qs, Rs), S)
+            ockf = kf(U, Y, Qs, Rs)
+            oc[seed] = rms(ockf, S); ocv[seed] = rms(ockf, S, d=1)
             Q0s, R0s = schedules(np.full(T, JERK), np.full(T, POT), np.full(T, ACC))
             fx[seed] = rms(kf(U, Y, Q0s, R0s), S)
             for kk, v in diagnostics(res, regime).items():
@@ -151,15 +177,18 @@ def save(label, n_seeds):
             if seed == 0:
                 print(f"  [{tag}: {el:.1f}s/{T} steps = {1e3 * el / T:.1f} ms/step]")
         data[f"{regime}_lucid"] = lu; data[f"{regime}_oracle"] = oc; data[f"{regime}_fixed"] = fx
-        rl, rf = lu / oc, fx / oc
+        data[f"{regime}_lucid_vel"] = luv; data[f"{regime}_oracle_vel"] = ocv
+        rl, rf, rv = lu / oc, fx / oc, luv / ocv
         d = {kk: np.array(v).mean(0) for kk, v in dg.items()}
         print(f"  {tag:12s} lucid/oracle {rl.mean():.3f} +/- {rl.std(ddof=1)/math.sqrt(n_seeds):.3f}"
               f"   fixed/oracle {rf.mean():.3f}"
+              f"   vel {rv.mean():.3f}"
+              f"   angle-RMSE oracle {oc.mean():.4f}"
               f"   scales calm->burst: pot {d['pot'][0]:+.2f}->{d['pot'][1]:+.2f}"
               f"  acc {d['acc'][0]:+.2f}->{d['acc'][1]:+.2f}"
               f"  proc {d['proc'][0]:+.2f}->{d['proc'][1]:+.2f}")
     np.savez(os.path.join(HERE, f"0052_{label}.npz"), **data)
-    print(f"saved 0052_{label}.npz  ({n_seeds} seeds)")
+    print(f"saved 0052_{label}.npz  ({n_seeds} seeds, layout {LAYOUT})")
 
 
 def compare(a, b):
@@ -176,6 +205,8 @@ def compare(a, b):
 
 if __name__ == "__main__":
     if sys.argv[1] == "save":
+        if len(sys.argv) > 4:
+            set_layout(sys.argv[4])
         save(sys.argv[2], int(sys.argv[3]) if len(sys.argv) > 3 else N_SEEDS_DEFAULT)
     elif sys.argv[1] == "compare":
         compare(sys.argv[2], sys.argv[3])
