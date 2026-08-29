@@ -148,7 +148,7 @@ research/    the iceberg   — every probe, proof and figure behind it
 alone and never read another word. See [its README](lucid/README.md) for the
 API.
 
-**[`research/`](research/README.md) is why any of it is true.** Six
+**[`research/`](research/README.md) is why any of it is true.** Seven
 workstreams, each a `SUMMARY.md` that is kept falsifiable and the numbered
 probes that produced it:
 
@@ -160,6 +160,7 @@ probes that produced it:
 | [`optimality-proof/`](research/optimality-proof/SUMMARY.md) | one layer proved, one measured, one open — where "optimal" does and does not hold, and why the *class* of processes was the hard part |
 | [`oracle-gap/`](research/oracle-gap/SUMMARY.md) | how far the filter is from an oracle told the noise schedule exactly, decomposed line by line — and the repair that closed most of it |
 | [`fractional-filter/`](research/fractional-filter/SUMMARY.md) | **in progress** — model order made continuous: $\nu$ is learnable from both sides with an error bar, recovers the parent at $\hat\nu\approx1$, and one coordinate beats $p$ free ones at fractional orders |
+| [`dynamics-learning/`](research/dynamics-learning/SUMMARY.md) | **delivered** — `LucidFilter(dynamics=None)` and `faults=`: the dynamics themselves learned and re-learned online, detection on the derived information frontier (a wheel blowout in 18 ms), recovery to oracle grade with the nominal kept as a free hedge |
 
 Probes in `research/` import the package from `lucid/` by relative path, so the
 dependency runs one way only: the product never reaches into the research.
@@ -232,11 +233,43 @@ size — a gust *is* process noise — and departs from 0 when the dynamics
 themselves no longer fit. It is cumulative, so it is a smoke alarm, not a
 controller; `dynamics` is the controller.
 
-Two honest caveats. $g$ is one scalar along one direction: it says how much of
-the fitted departure-from-flat is in force, and **it cannot express a change of
-frequency**. And nothing here has been flown. The mechanism is measured on
-synthetic systems with known ground truth; hardware validation is not part of
-this repository.
+That is `odefilter`'s scalar version of the idea. $g$ is one scalar along one
+direction — it says how much of the fitted departure-from-flat is in force, and
+**it cannot express a change of frequency**. `LucidFilter` lifts it to the full
+multivariate case, and that limit is what the lift removes.
+
+```python
+f = LucidFilter(dynamics=None)                     # learn F (and B) from nothing
+f = LucidFilter(dynamics=F0, faults=1e-4)          # supplied F0 that may CHANGE
+f = LucidFilter(dynamics=F0, faults=1e-4,          # ... with the failure modes named,
+                anchors=[F_blown_left, F_blown_right])      # the fastest detector there is
+
+r = f.filter(Y, U)
+r.dynamics       # (T, n, n) the dynamics as currently believed
+r.fault          # (T,) posterior probability they have left the nominal
+```
+
+A dynamics fault is a **jump process** — rare, large, persistent — so its one
+labeled prior is the hazard $\rho$, and everything else is derived from it: the
+departure's drift is $\sigma^2\rho$, its variance is capped at the class size
+$\sigma^2$ (bounded, never frozen — an axis the data cannot see today must still
+move when excitation arrives), and the detection delay the hazard buys is
+$\log(1/\rho)\,/\,\mathrm{KL}$, computed rather than tuned. The nominal model
+never leaves the bank, which is what makes a false alarm cost almost nothing —
+and *that* is what makes the fast end of the frontier affordable.
+
+Measured on the two acceptance rigs: a quadrotor that has a payload attached
+mid-flight is caught in $28.9\pm1.7$ steps against a derived frontier of 29.6,
+and recovers its mass and inertia to three figures; a differential drive whose
+wheel blows out is caught in **18 ms** against a 25 ms frontier, with the side
+pinned immediately and the healthy wheel's estimate returning home to within 1%.
+Both hold calm-regime cost at 1.00× and never do worse than the frozen-model
+filter in any regime
+([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
+
+One honest caveat throughout: nothing here has been flown. The mechanism is
+measured on synthetic systems with known ground truth; hardware validation is
+not part of this repository.
 
 ---
 
