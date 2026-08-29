@@ -58,7 +58,7 @@ def rig(ndof, T, seed):
     return F, H, X, Y
 
 
-def agreement(ndof, T=250, seed=11):
+def agreement(ndof, T=150, seed=11):
     F, H, X, Y = rig(ndof, T, seed)
     m = H.shape[0]
     j = LucidFilter(dynamics=F, H=H).filter(Y)
@@ -76,7 +76,9 @@ def agreement(ndof, T=250, seed=11):
                 loglik_joint=float(j.loglik), loglik_pointwise=float(s.loglik))
 
 
-def cost(ndof, T=120, seed=11, reps=1):
+def cost(ndof, T=30, seed=11, reps=1):
+    # Both columns are per-instant RATES, so the horizon only sets their precision.
+    # It is short because the exact-Q path costs real time per event.
     F, H, X, Y = rig(ndof, T, seed)
     m = H.shape[0]
     f = LucidFilter(dynamics=F, H=H)
