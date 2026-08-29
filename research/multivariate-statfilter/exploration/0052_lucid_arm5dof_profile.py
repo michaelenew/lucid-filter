@@ -132,7 +132,7 @@ def save(label, n_seeds):
     f = build()
     eng = f._members[0]
     print(f"LucidFilter on the 5-DOF rig: n={N}, m={M}, D={N + M}; "
-          f"star nodes per member <= {1 + (eng._nn - 1) * eng.D} (linear)")
+          f"bank nodes per member <= {eng._nn * eng.D} (linear)")
     for regime, tag in REGIMES:
         lu = np.zeros(n_seeds); oc = np.zeros(n_seeds); fx = np.zeros(n_seeds)
         dg = {"pot": [], "acc": [], "proc": []}

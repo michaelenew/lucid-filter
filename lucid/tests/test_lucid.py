@@ -129,8 +129,10 @@ def test_five_dof_arm_polynomial():
     H = np.kron(np.eye(n_dof), np.array([[1.0, 0.0]]))
     f = LucidFilter(dynamics=F, H=H)
     for eng in f._members:
-        assert eng._G <= 1 + (eng._nn - 1) * eng.D, (
-            f"star has {eng._G} nodes; must be linear in D={eng.D}")
+        # 1-D windows are nn nodes, paired (mode, sensor) windows nn^2 -- linear in D
+        # either way, never the nn^D tensor grid
+        assert eng._G <= eng._nn ** 2 * eng.D, (
+            f"bank has {eng._G} nodes; must be linear in D={eng.D}")
     r = rng(5)
     T = 60
     x = np.zeros(2 * n_dof)
