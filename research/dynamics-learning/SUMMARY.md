@@ -1,16 +1,18 @@
 # dynamics-learning: the `dynamics=None` cell — online learned dynamics
 
-**The goal.** `LucidFilter(dynamics=None)` currently raises `NotImplementedError`.  This
-workstream fills that cell: a filter that is told the dynamics *approximately or not at all*,
+**The goal.** `LucidFilter(dynamics=None)` used to raise `NotImplementedError`.  This
+workstream filled that cell: a filter that is told the dynamics *approximately or not at all*,
 detects **as fast as information allows** that the true dynamics have changed — a drone that
 just had a weight attached, a vehicle with a tire blowout — and **recovers the new true
 dynamics online**, converging back to oracle-grade state tracking without a refit, a threshold,
 or a tuning constant.  Same house rules as everything else here: no theoretically relevant free
 parameters; compute budgets allowed; every claim measured against an oracle told the truth.
 
-**Status: the research ladder (exploration/0001–0006) is complete and both named acceptance
-rigs pass.**  What remains is integration engineering (the shipped-`LucidFilter` wiring, the
-0052 profiler regimes, the demo) — see the opens at the bottom.
+**Status: delivered.**  The research ladder (exploration/0001–0006) is complete, both named
+acceptance rigs pass, and the mechanism is **shipped in `LucidFilter`** — `dynamics=None`
+learns `F` (and `B`) online, `faults=rho` says supplied dynamics may change.  0007 re-measures
+the shipped object on the research rigs.  What remains is the 0052 profiler regimes and the
+demo — see the opens at the bottom.
 
 ## The settled design (each element pinned by a numbered probe)
 
@@ -96,22 +98,49 @@ of carrying P_theta in the gain; the exact jump-hold theta-prior is the candidat
 goes vestigial after the walker takes over (read attribution from the refined walker; give the
 diagnostic a validity flag).
 
+## Shipped (`lucid/statfilter/lucid.py`, measured in 0007)
+
+```python
+LucidFilter(dynamics=None)                       # learn F (and B) from nothing
+LucidFilter(dynamics=F0, faults=1e-4)            # supplied F0 that may CHANGE
+LucidFilter(dynamics=F0, faults=..., anchors=[F_left, F_right])   # named fault modes
+LucidFilter(dynamics=linearise, departures=[...])  # callables: moving linearisation,
+                                                   # and directions that rotate with it
+r.dynamics    # (T, n, n) the dynamics as currently believed
+r.control     # (T, n, p) the learned B
+r.fault       # (T,) posterior probability they have left the nominal
+```
+
+Realised as the state augmentation `(x, g)` with `F = F0 + sum_j g_j A_j`, so the noise
+machinery runs on top unchanged — which is what 0002 requires.  On the 0001 scalar rig the
+shipped filter detects in **15.7 ± 1.7** steps against the derived frontier of **15**; on the
+0005 blowout rig, driven entirely through the public API (state-dependent `B(x)` plus the two
+physical wheel-radius directions as callables), it detects in 43 ms, recovers the blown radius
+to 0.303 ± 0.018 (true 0.30) and the healthy one to 1.043 ± 0.021, and settles at 1.037× the
+refit oracle where the frozen nominal pays 5.06×.
+
+0007 also records the one real defect the wiring exposed: scaling departure directions to unit
+Frobenius norm assumes O(1) entries, which holds for `F` and fails for `B` — the class size is
+now scale-free ("this part of the dynamics changed by about its own magnitude").  The failure
+was silent (confident fault, wrong parameter), and only an end-to-end run of the shipped object
+against ground truth caught it.
+
 ## The exploration record
 
 `exploration/0001` scalar race + the derived frontier and its audit · `0002` Q↔F split and
 masking · `0003` information-rate recovery, calibration, the freeze bug at 20× · `0004` the
-drone rig (acceptance) · `0005` the blowout rig (acceptance) · `0006` dynamics=None proper.
+drone rig (acceptance) · `0005` the blowout rig (acceptance) · `0006` dynamics=None proper ·
+`0007` the shipped filter on the research rigs, and the class-scaling defect.
 Each note carries its measured tables, error bars, and the constants' derivations; every
 negative result (the simultaneous-BOTH non-mask, the refuted q_theta-floor hypothesis, the
 dissolved hover-honesty scenario, the dormant spawns) is filed in place.
 
-## Opens (the integration rung — what 0006-the-plan still needs)
+## Opens
 
-- Wire the machinery into `LucidFilter` (`dynamics=None` and `dynamics≈F0`): the real 0052
-  scale-walk engine in place of the probes' {q, 4q} toy noise axis; the callable F/B API is
-  already carried by every probe.
 - The 0052 profiler extended with WEIGHT / BLOWOUT regimes next to SENSOR/PROCESS/...; the
   arm/drone demo gif showing a dynamics fault caught and re-learned live.
+- Anchors and physical departures together on one rig (0007 ran them separately), and the
+  drone rig through the shipped API (it needs a constant input channel to carry gravity).
 - The exact jump-hold theta-prior (two-state: "jumped recently" vs "holding") in place of the
   diffusion surrogate — the candidate for the drone's last 7% and for post-jump calibration
   without an explicit restart.
