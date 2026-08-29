@@ -12,7 +12,46 @@ does two things a Kalman filter does not: it GPB1-collapses the caltrop star bac
 **The prediction was that the two would agree to within a small fraction of the filter's
 own error. The first run said otherwise**, and the miss was the useful part of this probe.
 
-## The failure, and where it was
+## What the decomposition costs, on the current engine
+
+| n = m | RMSE joint | RMSE pointwise | ratio | Δ log-likelihood over the run |
+|---|---|---|---|---|
+| 2 | 0.08024 | 0.10192 | **1.270** | −8.4 nats |
+| 4 | 0.09169 | 0.10232 | **1.116** | −26.3 |
+| 6 | 0.11884 | 0.12617 | **1.062** | −48.2 |
+| 10 | 0.10552 | 0.11637 | **1.103** | −97.0 |
+
+A synchronous row delivered as `m` points costs **6–27% of state RMSE**, and the reason is
+not numerical: it is that the two routes have different information. A joint row identifies
+the process/sensor split because a process mode reaches several entries of `S` while a
+sensor reaches one. Each point's `S` is a **scalar**, in which the two are exactly
+proportional, so the filter holds the split rather than guessing it
+([`SUMMARY.md`](../SUMMARY.md) item 8). The state is what survives that — it only ever
+needed the total — and the log-likelihood ledger is what does not.
+
+**So the honest claim is not "the same filter".** It is that the pointwise route tracks what
+the row tracks and declines to learn what the row learns, and the gap between them is the
+identifiability a row has and a point does not. Which is precisely why the route is safe on
+a stream that has no rows to begin with: there is nothing there to decline.
+
+## Cost per instant
+
+| n = m | ms/instant joint | ms/instant pointwise | multiply-adds joint | pointwise | ratio |
+|---|---|---|---|---|---|
+| 2 | 25.9 | 49.5 | 680 | 442 | 0.65 |
+| 4 | 78.7 | 217.3 | 10,560 | 5,412 | 0.51 |
+| 6 | 175.3 | 623.6 | 52,920 | 24,990 | 0.47 |
+| 10 | 770.4 | 3851.5 | 405,000 | 179,010 | **0.44** |
+
+The **arithmetic falls** — the joint `G(2n²m + 2nm² + m³)` becomes `m · G(2n² + 2n + 1)`,
+the `m³` solve is gone, and the advantage grows with `m`. The **wall time rises**, and by
+more than it used to (1.9–5.0× against 1.7–3.8× before the exact process accumulation
+landed): `m` python-level events replace one, and each now carries an exact `Q(a)` instead of
+a scalar multiply. Both numbers are real and they point opposite ways — in a compiled
+implementation the first column governs, in numpy today the second does. It sharpens the
+standing open on a lean profile rather than answering it.
+
+## The failure this probe found first, and where it was
 
 | n = m | ratio pointwise/joint | Δ log-likelihood over the run |
 |---|---|---|
@@ -61,25 +100,15 @@ already working changes by even a bit; at a zero gap it restores the leading ter
 | 6 | 1.309 | **1.066** | −1347 | **−29.7** |
 | 10 | 1.377 | **1.100** | −2323 | **−42.6** |
 
-The ledger now telescopes to within 40–50× of where it was, and the residual 2–10% sits
-just above the 0.6–2.0% floor the frozen-walk control measured — i.e. what is left is the
-`m` successive collapses and the walk taking `m` smaller steps on the same information,
-which is a property of the caltrop-plus-GPB1 construction and not of the decomposition.
-**Recorded as the residual, not claimed as zero.**
+The ledger telescoped to within 40–50× of where it was, and the residual 2–10% sat just
+above the 0.6–2.0% floor the frozen-walk control measured.
 
-## Cost per instant
+**Both numbers are historical.** They were taken before the split-holding rule
+([`SUMMARY.md`](../SUMMARY.md) item 8), which came out of
+[`0005`](0005_the_asynchronous_rig.md) and deliberately widened this gap: a partial event
+now declines to move a split it cannot see, so a row delivered as points no longer converges
+to the row's attribution at all. The live numbers are at the top of this file. The
+zero-gap fix recorded here is still load-bearing — it is what stops the process-scale
+evidence of an instant being handed to whichever sensor happened to arrive first — it is
+simply no longer the last word on how close the two routes get.
 
-| n = m | ms/instant joint | ms/instant pointwise | multiply-adds joint | pointwise | ratio |
-|---|---|---|---|---|---|
-| 2 | 5.8 | 9.7 | 680 | 442 | 0.65 |
-| 4 | 9.8 | 26.7 | 10,560 | 5,412 | 0.51 |
-| 6 | 15.2 | 51.6 | 52,920 | 24,990 | 0.47 |
-| 10 | 34.6 | 133.4 | 405,000 | 179,010 | **0.44** |
-
-The **arithmetic falls** — the joint `G(2n²m + 2nm² + m³)` becomes `m · G(2n² + 2n + 1)`,
-and the `m³` solve is gone, so a pointwise instant is 0.44–0.65× the multiply-adds of the
-joint one and the advantage grows with `m`. The **wall time rises**, 1.7–3.8×, because `m`
-python-level events replace one and this is pure numpy: the same interpreter-overhead
-story the repo's cost model already tells (`0053` §5, README). Both numbers are real and
-they point opposite ways — in a compiled implementation the first column is the one that
-governs, in numpy today the second is.

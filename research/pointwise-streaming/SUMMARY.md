@@ -135,11 +135,14 @@ general case.** Everything else follows from taking that seriously.
   readings used against 32. The **diagnosis is what it does not cost**: a sensor failing ×8
   is named at 3.34 of a true 4.16 nats at one row in ten, and the leak onto the healthy
   sensor is *smaller* under partial delivery (+0.03) than under complete rows (+0.48).
-- **The pointwise decomposition is the same filter** (0003). One row fed as `m` points at
-  one timestamp: ratio to the joint row **1.018–1.100** across n = m = 2…10, against a
-  frozen-walk floor of 1.006–1.020, with the log-likelihood ledger telescoping to within
-  12–43 nats over a 250-step run. Arithmetic per instant falls to 0.44–0.65× (the `m³`
-  solve is gone); numpy wall time rises 1.7–3.8× on the extra interpreter passes.
+- **The pointwise decomposition tracks the joint row and declines to learn what it learns**
+  (0003). One row fed as `m` points at one timestamp costs **6–27% of state RMSE**
+  (ratio 1.062–1.270 across n = m = 2…10) and 8–97 nats of predictive density — not
+  numerical error but the identifiability a row has and a point does not, by item 8.
+  ~~The same filter, 1.018–1.100~~ — that was measured before the split-holding rule, which
+  widened this deliberately. Arithmetic per instant falls to 0.44–0.65× (the `m³` solve is
+  gone); numpy wall time rises 1.9–5.0×, more than before, because each event now carries an
+  exact `Q(a)` as well as its own interpreter pass.
 - **The clock is worth what it costs** (0004). Under irregular arrivals with the same mean
   rate, supplying the timestamps puts the filter **on** an oracle Kalman filter told the
   true schedule *and* the true noise — ratio 1.001, 1.001, 1.003 at gap spreads 0.25, 0.5,
