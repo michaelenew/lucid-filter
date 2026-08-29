@@ -78,15 +78,53 @@ def schedule():
     return jstd, pot_s, acc_s
 
 
+# ---- the job: slow minimum-jerk waypoint moves with holds, servo-tracked ----------------
+# The arm follows a deliberate pick-and-place-style cycle (move, hold, move, ... , return),
+# driven by a per-joint jerk-level servo (feed-forward + pole-placed feedback).  The commanded
+# jerk (feed-forward + feedback) is the KNOWN forcing the filter receives; disturbances show
+# as bounded vibration the servo fights, not free flight -- an arm with a job to do.
+_POSES = [np.zeros(NJ),
+          np.array([0.50, 0.30, -0.30, 0.25, 0.60]),
+          np.array([-0.40, 0.45, 0.25, -0.30, -0.50]),
+          np.array([0.20, -0.25, 0.40, 0.35, 0.30]),
+          np.zeros(NJ)]
+_SEGS = [(0.0, 1.5, 0, 0), (1.5, 4.0, 0, 1), (4.0, 5.5, 1, 1), (5.5, 8.0, 1, 2),
+         (8.0, 9.5, 2, 2), (9.5, 12.0, 2, 3), (12.0, 13.5, 3, 3), (13.5, 16.0, 3, 4),
+         (16.0, 19.0, 4, 4)]
+_LAM = 8.0                                    # servo pole (triple, s = -LAM): tau ~ 0.12 s
+
+
+def _reference():
+    """Minimum-jerk reference theta/omega/alpha/jerk arrays, (T, NJ) each."""
+    th = np.zeros((T, NJ)); om = np.zeros((T, NJ)); al = np.zeros((T, NJ)); jk = np.zeros((T, NJ))
+    t = np.arange(T) * DT
+    for (t0, t1, ia, ib) in _SEGS:
+        a, b = _POSES[ia], _POSES[ib]
+        sel = (t >= t0) & (t < t1)
+        if not sel.any():
+            continue
+        Tm = t1 - t0
+        tau = (t[sel] - t0) / Tm
+        s0 = 10 * tau ** 3 - 15 * tau ** 4 + 6 * tau ** 5
+        s1 = (30 * tau ** 2 - 60 * tau ** 3 + 30 * tau ** 4) / Tm
+        s2 = (60 * tau - 180 * tau ** 2 + 120 * tau ** 3) / Tm ** 2
+        s3 = (60 - 360 * tau + 360 * tau ** 2) / Tm ** 3
+        d = (b - a)[None, :]
+        th[sel] = a[None, :] + d * s0[:, None]
+        om[sel] = d * s1[:, None]
+        al[sel] = d * s2[:, None]
+        jk[sel] = d * s3[:, None]
+    return th, om, al, jk
+
+
 def simulate(seed=0):
-    rng = np.random.default_rng(seed); t = np.arange(T) * DT
-    U = np.zeros((T, NJ))
-    for j in range(NJ):
-        for (a, w, ph) in [(2.0, 0.35 + 0.1 * j, j), (1.2, 0.7 + 0.13 * j, 2 * j)]:
-            U[:, j] += a * np.sin(2 * np.pi * w * t + ph)
+    rng = np.random.default_rng(seed)
+    rth, rom, ral, rjk = _reference()
     jstd, pot_s, acc_s = schedule()
-    s = np.zeros(N); S = np.zeros((T, N)); Y = np.zeros((T, M))
+    s = np.zeros(N); S = np.zeros((T, N)); Y = np.zeros((T, M)); U = np.zeros((T, NJ))
     for k in range(T):
+        e1 = rth[k] - s[0::ORDER]; e2 = rom[k] - s[1::ORDER]; e3 = ral[k] - s[2::ORDER]
+        U[k] = rjk[k] + _LAM ** 3 * e1 + 3 * _LAM ** 2 * e2 + 3 * _LAM * e3
         s = F @ s + B @ U[k] + B @ (jstd[k] * rng.standard_normal(NJ)); S[k] = s
         std = np.empty(M); std[0::2] = pot_s[k]; std[1::2] = acc_s[k]
         Y[k] = H @ s + std * rng.standard_normal(M)
@@ -137,11 +175,12 @@ def az_at(i):                                     # full turn over the loop -> s
 BG, PANEL, LINE, INK, MUT = "#0e1217", "#161c24", "#2a3542", "#dbe3ec", "#7c8a99"
 C_TRUE, C_POT, C_LU, C_FIX, C_WARN = "#c3d0de", "#e2607b", "#33e0a6", "#8fa2ff", "#f5b23d"
 
-PHASE_TXT = {"calm": ("○ calm — nominal noise", MUT),
-             "SENSOR": ("⚠ SENSOR — accelerometers swamped ×15", C_WARN),
-             "PROCESS": ("⚠ PROCESS — disturbance torque ×20", C_WARN),
-             "POTFAIL": (f"⚠ POT FAILURE — joint {FAIL_J + 1} potentiometer dies", C_WARN),
-             "BOTH": ("⚠ BOTH — sensor + process at once", C_WARN)}
+# plain-language regime names, intelligible from the animation alone (fit the label width)
+PHASE_TXT = {"calm": ("calm — everything nominal", MUT),
+             "SENSOR": ("all accelerometers get noisy", C_WARN),
+             "PROCESS": ("vibration shakes the arm itself", C_WARN),
+             "POTFAIL": (f"position sensor J{FAIL_J + 1} starts failing", C_WARN),
+             "BOTH": ("vibration + noisy accelerometers", C_WARN)}
 
 
 def phase_at(i):
@@ -183,8 +222,11 @@ def render():
                          "axes.edgecolor": LINE, "xtick.color": MUT, "ytick.color": MUT})
     fig = plt.figure(figsize=(9.6, 4.9), dpi=110); fig.patch.set_facecolor(BG)
     ax_arm = fig.add_axes([0.005, 0.03, 0.47, 0.80]); ax_arm.set_facecolor(PANEL)
-    ax_diag = fig.add_axes([0.55, 0.47, 0.43, 0.33]); ax_diag.set_facecolor(PANEL)
+    ax_diag = fig.add_axes([0.55, 0.50, 0.43, 0.30]); ax_diag.set_facecolor(PANEL)
     ax_scope = fig.add_axes([0.55, 0.11, 0.43, 0.25]); ax_scope.set_facecolor(PANEL)
+    # the evolving-regime label, between the channel grid and the error scope
+    regime_lbl = fig.text(0.55, 0.425, "", fontsize=9.5, weight="bold", family="monospace",
+                          va="center", ha="left")
 
     fig.text(0.005, 0.94, "LucidFilter — a 5-DOF arm, all noise inferred online", color=INK,
              fontsize=15, weight="bold", family="sans-serif")
@@ -192,15 +234,14 @@ def render():
              "trajectory · nothing tuned · from lucid import LucidFilter",
              color=MUT, fontsize=8.2)
 
-    # arm panel: fixed workspace box over all frames and cameras
-    half = float(np.abs(np.concatenate([P_true, P_pot, P_lu])).max()) * 1.02
+    # arm panel: fixed workspace box over all frames and cameras -- sized to the true and
+    # lucid arms; the raw-pot arm may clip out of frame when its sensor is failing (the point)
+    half = float(np.abs(np.concatenate([P_true, P_lu])).max()) * 1.06
     ax_arm.set_xlim(-half, half); ax_arm.set_ylim(-half * 0.72, half * 1.05)
     ax_arm.set_aspect("equal"); ax_arm.axis("off")
     for lx, lab, c in [(0.02, "true", C_TRUE), (0.18, "raw pot", C_POT), (0.40, "lucid", C_LU)]:
         ax_arm.text(lx, 0.02, "● " + lab, transform=ax_arm.transAxes, color=c, fontsize=8.5,
                     va="bottom")
-    banner = ax_arm.text(0.5, 0.99, "", transform=ax_arm.transAxes, ha="center", va="top",
-                         fontsize=10.5, weight="bold", family="monospace")
     # floor grid (re-projected per frame -- the rotation cue)
     gl = []
     for _ in range(14):
@@ -271,7 +312,8 @@ def render():
         lo = max(0, i - 70)
         tr = project(P_lu[lo:i + 1, -1], az)
         trail.set_data(tr[:, 0], tr[:, 1])
-        txt, col = PHASE_TXT[phase_at(i)]; banner.set_text(txt); banner.set_color(col)
+        txt, col = PHASE_TXT[phase_at(i)]
+        regime_lbl.set_text("ACTIVE REGIME: " + txt); regime_lbl.set_color(col)
         for r in range(3):
             for j in range(NJ):
                 chips[(r, j)].set_facecolor(heat(chip[i, r, j]))
@@ -282,15 +324,33 @@ def render():
 
     print("rendering", len(frames), "frames...")
     fig.canvas.draw()
-    imgs = []
+    imgs, raws = [], []
     for i in frames:
         draw(i); fig.canvas.draw()
-        imgs.append(Image.fromarray(np.asarray(fig.canvas.buffer_rgba())).convert(
-            "P", palette=Image.ADAPTIVE, colors=64))
+        rgb = np.asarray(fig.canvas.buffer_rgba())[..., :3].copy()
+        raws.append(rgb)
+        imgs.append(Image.fromarray(rgb).convert("P", palette=Image.ADAPTIVE, colors=64))
     imgs[0].save(OUT, save_all=True, append_images=imgs[1:], duration=60, loop=0,
                  disposal=2, optimize=True)
     print("wrote", os.path.relpath(OUT), "-", os.path.getsize(OUT) // 1024, "KB,",
           len(frames), "frames")
+    # the same animation as an H.264 video: GitHub's player gives pause / scrub / 0.25-2x speed
+    try:
+        import imageio
+        h, w = raws[0].shape[:2]
+        if h % 2 or w % 2:                       # yuv420p needs even dimensions -- pad with BG
+            H2, W2 = h + h % 2, w + w % 2
+            bg = np.array([14, 18, 23], dtype=np.uint8)   # BG "#0e1217"
+            raws = [np.pad(r, ((0, H2 - h), (0, W2 - w), (0, 0)),
+                           constant_values=0) + 0 for r in raws]
+            for r in raws:
+                r[h:, :] = bg; r[:, w:] = bg
+        mp4 = OUT[:-4] + ".mp4"
+        imageio.mimwrite(mp4, raws, fps=17, codec="libx264", quality=8,
+                         pixelformat="yuv420p")
+        print("wrote", os.path.relpath(mp4), "-", os.path.getsize(mp4) // 1024, "KB")
+    except ImportError:
+        print("imageio not installed -- skipped the .mp4 (pip install imageio imageio-ffmpeg)")
     # numbers for the README claim
     on = np.zeros(T, bool)
     for nm, a, b in PHASES:

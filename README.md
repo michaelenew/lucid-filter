@@ -17,18 +17,42 @@
 > and failure modes.
 
 
-**Adaptive filters with no theoretically relevant free parameters.**
+**An adaptive state estimator with no tuning parameters.** You supply what you
+know about a system — its dynamics, which sensor reads what, rough noise
+magnitudes. Everything about the *noise* it infers online, per component, per
+step: which sensor is failing, which mechanical mode is being disturbed, and by
+how much. No thresholds, no forgetting factors, no changepoint detectors, no
+windows to pick, and nothing to fit.
 
-![a 5-DOF robotic arm in 3D, tracked live through five noise regimes — calm, swamped accelerometers, a disturbance torque, a dead potentiometer, and both at once; the raw potentiometer estimate flails, a chip grid of learned noise scales lights up to show which component is hot, and the lucid estimate stays locked on the true arm](research/multivariate-statfilter/figures/arm5dof-lucid.gif)
+The animation below is real output of the filter. A 5-DOF robotic arm works
+through a slow pick-and-place cycle while its operating conditions change out
+from under it, regime after regime: a calm stretch, the accelerometers turning
+noisy, **vibration shaking the arm itself** (the arm moves — the sensors are
+fine), a position sensor **failing outright**, and vibration and sensor noise
+together. The filter is told nothing about any of this. It does two things,
+live:
 
-This is the public filter, live on a 5-DOF arm in 3D. Every joint fuses a **bad
-potentiometer** (angle, σ ≈ 0.06 rad ≈ 3.4°) with a **good accelerometer**
-(angular acceleration, σ ≈ 0.02) while the arm runs a commanded trajectory — and
-the noise never sits still: the accelerometers get swamped (×15), a disturbance
-torque shakes the whole arm (×20), one joint's potentiometer **dies outright**,
-and then sensor and process noise hit at once. The filter is told the dynamics
-and which sensor reads what — **nothing about the noise**. Every noise scale is
-inferred online, per component, per step:
+1. **It finds the regime almost instantly.** The top-right grid is the filter's
+   learned noise scale for every channel of every joint; a chip turning orange
+   means the filter has decided *that channel* is hot right now. The
+   `ACTIVE REGIME` line names the ground truth as it evolves, so you can watch
+   the chips find it.
+2. **It keeps the state estimate locked** (bottom right). Because it knows which
+   channel to stop trusting, the tip-error trace stays flat through conditions
+   that send the raw sensor readout off the chart and degrade a fixed-noise
+   Kalman filter given the very same model.
+
+![a 5-DOF robotic arm in 3D working a slow pick-and-place cycle, tracked live through five noise regimes — calm, noisy accelerometers, vibration shaking the arm, a failing position sensor, and both at once; an ACTIVE REGIME label names each phase, a chip grid of learned noise scales turns orange on the hot channel, the raw potentiometer estimate flails while the lucid estimate stays locked on the true arm](research/multivariate-statfilter/figures/arm5dof-lucid.gif)
+
+*Want to pause or change speed? The same animation as
+[an MP4](research/multivariate-statfilter/figures/arm5dof-lucid.mp4) — open it
+on GitHub for a player with pause, scrubbing, and 0.25×–2× playback.*
+
+The rig: every joint fuses a **bad potentiometer** (angle, σ ≈ 0.06 rad ≈ 3.4°)
+with a **good accelerometer** (angular acceleration, σ ≈ 0.02); the arm's servo
+tracks minimum-jerk waypoint moves, and the commanded forcing is the known input
+`U`. The regimes: accelerometers ×15, vibration (disturbance torque) ×20, one
+joint's potentiometer ×15, then both at once.
 
 ```python
 from lucid import LucidFilter
@@ -41,669 +65,216 @@ r.measurement_scale     # (T, m) which sensor is hot, per step — the chip grid
 r.process_scale         # (T, n) which dynamics mode is hot
 ```
 
-Through the bursts the lucid tip estimate holds **0.011 m RMSE**. The raw
-potentiometer reads 0.209 m — **19× worse** — and a fixed-noise Kalman filter
-given the *same model* reads 0.020 m (1.8× worse), with most of its remaining gap
+Through the bursts the lucid tip estimate holds **0.017 m RMSE**. The raw
+potentiometer reads 0.316 m — **19× worse** — and a fixed-noise Kalman filter
+given the *same model* reads 0.034 m (2× worse), with most of its remaining gap
 in the calm stretches after each burst, where the lucid filter re-converges
-faster (0.013 m vs 0.028 m). The learned scales double as a live diagnosis: the
+faster (0.014 m vs 0.037 m). The learned scales double as a live diagnosis: the
 chip grid pinpoints *which joint's* potentiometer died. The accelerometer and
 process chips light together — the accelerometer reads the very state the
 disturbance drives, so those two channels are collinear, and the filter tracks
 their total, which is exactly what the state estimate needs
 ([`0027`](research/multivariate-statfilter/exploration/0027_confound.md),
 [`0052`](research/multivariate-statfilter/exploration/0052_lucid_arm5dof_profile.md)).
-All of it in polynomial time: the scale posterior lives on an axial star, linear
-in the number of components, never a tensor grid.
 
-Where does the mechanism come from? Start with the scalar case.
+**What one update costs.** Per bank member, per step, the arithmetic is one
+small Kalman update per scale-window node:
 
-Real-world data is noisy, and regimes change. Look at this graph.
+$$\text{cost} \approx G\,(2n^2m + 2nm^2 + m^3) \quad\text{multiply-adds},
+\qquad G = 1 + 4r,$$
 
-![the lucid filter against an oracle-tuned Kalman filter](research/random-walk-filter/figures/hero-lucid-vs-kalman.png)
-
-The true value is jittery and its measurements are noisy — a sensor operating
-under vibration, a drone on a windy day. Then the level jumps, and later the
-sensor itself degrades.
-
-On the steady stretch the lucid filter tracks the truth to **within a few
-percent** of the Kalman filter's error — and the Kalman filter is *provably
-optimal* there, because it was **told** the true process and measurement
-variances. The lucid filter was told nothing.
-
-Then the level jumps. The lucid filter absorbs it in **1 step**; the Kalman
-filter takes **16**, because a fixed gain must average a jump away over its own
-memory. And when the sensor degrades, the two filters' point accuracy is a wash
-— but their honesty is not. Scored against its own claim, the Kalman filter's
-error is **4.6× larger than the uncertainty it reports**: its error bars are
-half the width they should be, and it has no way to notice. The lucid filter's
-are right. **It knows what it doesn't know, and reports the gap.**
-
-**None of that comes from the training run.** It is worth being exact about
-what `fit()` does, because it is easy to mistake for the whole story. It is
-called once, and what it picks is a *class* — how fast each noise scale is
-allowed to move, and roughly how big it is. It does **not** pick the operating
-point. Where the scales actually are at time *t* is a posterior recomputed from
-evidence at **every single step**; `update()` never touches the parameters at
-all. Everything above happens online, on one pass, with no refitting and no
-lookahead.
-
-Which is why the fit does not have to be good. Sweeping each fitted coordinate
-across its range and rerunning the whole series
-([`README-003`](research/random-walk-filter/scripts/README-003-the-fit-is-an-envelope.py)):
-five of the six can be wrong by factors of two to ten and almost nothing moves —
-the process persistence $\varphi_P$ is flat anywhere from 0 to 0.8, and $Q$
-tolerates two decades. A **deliberately careless** vector, every coordinate set
-to a wrong round number, tracks the steady stretch to **+0.5% of the oracle-tuned
-Kalman** — better than the properly fitted vector does. The fit is choosing a
-point on a cheap trade-off, not a setting that has to be right.
-
-The one coordinate that is not forgiving, $s_P$, is not a precision setting
-either — it is closer to a switch. It has to be large enough for the process
-channel to exist at all; below about 2 the channel is effectively off, the jump
-takes hundreds of steps instead of one, and the reported uncertainty stops
-meaning anything. That is the same boundary the
-[`oracle-gap`](research/oracle-gap/SUMMARY.md) workstream found and priced, and
-it is the reason the training history has to contain the kind of disturbance the
-deployment will actually see. Fitted on quiet data, $s_P$ pins at zero and takes
-the channel with it.
-
-*(Numbers and figure: [`README-001`](research/random-walk-filter/scripts/README-001-hero-lucid-vs-kalman.py)
-and [`README-003`](research/random-walk-filter/scripts/README-003-the-fit-is-an-envelope.py),
-which regenerate both. Neither filter is refitted on the series shown.)*
+where $n$ is the state dimension, $m$ the sensor count, and $r \le n+m$ the
+number of active noise axes ($G$ is the node count of the axial scale windows —
+linear in the axes; a joint grid would be $5^r$). For the arm above
+($n{=}15$, $m{=}10$, $r{=}25$, $G{=}101$, and the default bank of 15 members)
+that is **≈ 14 million multiply-adds per update — measured 40 ms/step in pure
+numpy**, where profiling attributes most of the wall time to interpreter
+overhead rather than flops. The two levers that matter for embedded use: the
+bank multiplier (a 1–3 member bank tracks the same — the bank exists to average
+away the class choice, not for accuracy; pass `phis=`/`ss=`), and structure —
+when the model is block-diagonal (independent joints), five separate per-joint
+filters ($n{=}3$, $m{=}2$, $G{=}21$) cost ≈ 30 k multiply-adds each per update,
+microsecond-scale in a compiled implementation.
 
 ---
 
-A *lucid filter* is a state estimator — an observer, in the control-engineering
-sense — for systems whose dynamics can change while they are running. It is a
-Kalman filter at every node of a quadrature grid, and exactly one ordinary
-Kalman filter when the scale channels are off. The family is named by its model
-class: the **lucid random walk filter**, the **lucid ODE filter**, and the
-in-progress **lucid fractional filter**.
+## What a lucid filter is
 
-The handful of numbers these filters need are learned from data by maximum
-marginal likelihood, once. There are no thresholds, no forgetting factors, no
-changepoint detectors, no windows to pick, and no hyperparameters to tune. You
-hand a filter a stretch of history to fix its class, and from then on it runs
-online — one causal pass, no refitting, no lookahead.
+A state estimator — an observer, in the control-engineering sense — for systems
+whose noise environment changes while they are running. The model:
 
-A *compute budget* is not a free parameter: it trades a real-world cost (time)
-against theoretical accuracy and nothing else, so it is allowed and is always
-labelled as such. Quadrature resolutions are budgets. Model order is a
-commitment. Everything else is fitted.
+```
+theta_t = F theta_{t-1} + B u_t + w_t,   w_t ~ N(0, Q(t))
+y_t     = H theta_t          + v_t,      v_t ~ N(0, R(t))
+Q(t) = V diag(lam_k e^{xi_k(t)}) V^T     R(t) = diag(rho_i e^{eta_i(t)})
+```
 
----
+Every process eigenmode and every sensor carries its own log-scale
+(`xi_k`, `eta_i`), and each scale is **walked online with unbounded reach**: a
+window of scale hypotheses per axis, each hypothesis a Kalman update, the
+window centre following the evidence with a critically-damped gain derived from
+the scale's assumed persistence class. A sensor that fails by ×200 is reached
+in tens of steps; a sensor that recovers is re-trusted the same way. Axes are
+activated by structural observability (a process mode is walked iff it carries
+base variance and is seen by `H`); what the data cannot identify is bounded,
+never guessed.
 
-## What is in here
+There is no `fit()`. The one assumption a scale walk needs — how fast a
+log-scale may move — is not estimated but **averaged over**: the filter runs a
+small bank across a broad `(phi, s)` box and lets each member's running
+predictive likelihood weight it. The single residual knob is `forget`
+(default 0.999), the bank's weight memory; tracking is insensitive to any value
+near 1.
 
-The repository is split in two, because the two halves have different
-audiences and should not constrain each other.
+**The dynamics can be learned too.** `dynamics=None` learns `F` (and `B`) from the
+random-walk prior; `dynamics=F0, faults=rho` says the supplied dynamics may
+*change* — a payload attached to a drone, a tire blown out — and the filter
+detects the change and recovers the new dynamics with no refit and no threshold.
+It is the same construction one level up: the departure from nominal is carried
+as extra state, so the noise machinery above runs on top of it unchanged, which
+is what separating a wrong `F` from elevated `Q` requires — the two compete as
+hypotheses under a live noise walk rather than through a whiteness statistic
+bolted on the side. A fault is a **jump process**, so its one labeled prior is
+the hazard `rho` and everything else follows: the departure's drift is
+`sigma^2 rho`, its variance is bounded at the class size (bounded, never frozen
+— an axis the data cannot see today must still move when excitation arrives),
+and the detection delay is `log(1/rho) / KL`, computed rather than tuned. The
+nominal model never leaves the bank, so a false alarm costs almost nothing —
+and that is what makes the fast end of the frontier affordable.
+
+Configure by **give-what-you-know**; every argument has a working default:
+
+| argument | meaning | default |
+|---|---|---|
+| `dynamics` | state transition `F`; `None` learns it, a callable re-linearises it | `0` → random-walk level |
+| `control` | known-forcing map `B` (pass `u`/`U` at update) | none |
+| `H` | measurement matrix | identity |
+| `process` | base process covariance `Q0` | identity |
+| `measurement` | base per-sensor variances `R0` | ones |
+| `faults` | hazard `rho`: the supplied dynamics may **change** | none → they are fixed |
+| `departures`, `anchors` | the directions the dynamics may move in; named fault modes | full basis; none |
+
+A rough base is fine — the walk breathes around it (a base wrong by 5× costs
+~16% of oracle RMSE on the scalar benchmark below). Outputs per step: posterior
+mean and covariance, innovation, predictive log-likelihood, and the
+per-component log-scales.
+
+## Measured behaviour
+
+On the arm rig (4 seeds, RMSE ratio to an oracle Kalman filter told the true
+noise schedule; `fixed` is the same model frozen at the base noise —
+[`0052`](research/multivariate-statfilter/exploration/0052_lucid_arm5dof_profile.py)):
+
+| regime | lucid / oracle | fixed / oracle |
+|---|---|---|
+| calm | 0.98 | 1.00 |
+| accelerometers ×15 | 1.14 | 2.58 |
+| one potentiometer ×15 | 1.20 | 5.48 |
+| vibration ×20 | 1.09 | 1.01 |
+| vibration + accels | 1.11 | 2.42 |
+| vibration + potentiometer | 1.21 | 5.48 |
+
+Near-oracle in every regime, with the fixed filter paying 2.4–5.5× wherever a
+sensor degrades. Sensor redundancy is what the filter converts into accuracy:
+with the potentiometers removed (accelerometers only), the joint angle is
+unobservable — even the oracle drifts — and adaptation has nowhere to shift
+trust, so it buys nothing
+([`0053` §4](research/multivariate-statfilter/exploration/0053_pernode_demix.md)).
+Fusing one bad absolute sensor with one good dynamic sensor per joint is the
+use case.
+
+On the dynamics channel (`0007`, the shipped filter re-measured on the research
+rigs): a scalar step change in `F` is detected in **15.7 ± 1.7 steps against a
+derived frontier of 15** — on the frontier, not near it. On a differential drive
+whose wheel blows out, driven entirely through the public API, it detects in
+**43 ms**, recovers the blown radius to 0.303 ± 0.018 (true 0.30) and the healthy
+one to 1.043 ± 0.021 (true 1.00), and settles at 1.037× a refit oracle where the
+frozen model pays 5.06×. The research prototypes that fixed the design go
+further where the failure modes are *named*: the same blowout in 18 ms, and a
+quadrotor that has a payload attached mid-flight in 28.9 ± 1.7 steps against a
+frontier of 29.6, recovering its mass and inertia to three figures. Calm-regime
+cost is 1.00× throughout
+([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
+
+## Current limits, measured
+
+- **A single channel cannot split process from sensor noise.** With one sensor
+  and one state (the scalar case), "the level moved" and "the sensor glitched"
+  are indistinguishable within a step, so the filter learns the *total* noise
+  but holds the process/measurement ratio at its base. Measured on a scalar
+  benchmark against a Kalman filter told the truth
+  ([`README-004`](research/random-walk-filter/scripts/README-004-hero-lucidfilter.py)):
+  told nothing at all, the lucid filter still absorbs a level jump in **4 steps
+  to the Kalman filter's 16** and keeps its error bars honest when the sensor
+  degrades ($E[e^2/S] = 1.3$ vs the Kalman filter's **4.6× overconfidence**) —
+  but it pays 84% on steady-state RMSE, falling to 16% with a base within 5× and
+  to parity with the true base. A sensor-noise regime change in the scalar case
+  is partly mis-attributed to process (the same per-step ambiguity), costing
+  RMSE while calibration holds. The evidence that splits the two lives in the
+  innovation *sequence*; the mechanism is identified and its stable realization
+  is the top open
+  ([`0053`](research/multivariate-statfilter/exploration/0053_pernode_demix.md)).
+- **Collinear channels are tracked as a total.** A sensor that directly reads
+  the state a disturbance drives (the accelerometer/vibration pair above)
+  shares one identifiable total with it; the state estimate needs exactly that
+  total and is unaffected, but the *attribution* between the two is partly
+  shared.
+- **Nothing here has been flown.** Every number is from synthetic rigs with
+  known ground truth; hardware validation is not part of this repository.
+
+## The research behind it
 
 ```
 lucid/       the product   — the installable package and its tests
 research/    the iceberg   — every probe, proof and figure behind it
 ```
 
-**[`lucid/`](lucid/README.md) is self-contained.** It is one distribution
-(`lucid-filter`) with no dependency on anything in `research/`; you can take it
-alone and never read another word. See [its README](lucid/README.md) for the
-API.
-
-**[`research/`](research/README.md) is why any of it is true.** Seven
-workstreams, each a `SUMMARY.md` that is kept falsifiable and the numbered
-probes that produced it:
+Each workstream keeps a falsifiable `SUMMARY.md` and the numbered probes that
+produced it. Earlier public filters (the fitted scalar/vector/ODE family) are
+preserved as specimens in
+[`research/multivariate-statfilter/specimens/`](research/multivariate-statfilter/specimens/)
+and their workstreams remain the record of why the mechanisms are what they
+are:
 
 | workstream | state |
 |---|---|
-| [`random-walk-filter/`](research/random-walk-filter/SUMMARY.md) | **delivered** — `statfilter`, a tuning-free filter for an unbiased random walk observed with noise |
-| [`ode-filter/`](research/ode-filter/SUMMARY.md) | **candidate shipped** — `odefilter`, the same idea for processes locally described by a linear ODE, plus the offset channel for the lead/lag between two series |
-| [`multivariate-statfilter/`](research/multivariate-statfilter/SUMMARY.md) | **delivered** — `AdaptiveKalmanFilter`, a supplied-dynamics/supplied-`H` vector filter that learns per-component process and sensor noise online (the robotics/derivative mode) |
-| [`optimality-proof/`](research/optimality-proof/SUMMARY.md) | one layer proved, one measured, one open — where "optimal" does and does not hold, and why the *class* of processes was the hard part |
-| [`oracle-gap/`](research/oracle-gap/SUMMARY.md) | how far the filter is from an oracle told the noise schedule exactly, decomposed line by line — and the repair that closed most of it |
-| [`fractional-filter/`](research/fractional-filter/SUMMARY.md) | **in progress** — model order made continuous: $\nu$ is learnable from both sides with an error bar, recovers the parent at $\hat\nu\approx1$, and one coordinate beats $p$ free ones at fractional orders |
-| [`dynamics-learning/`](research/dynamics-learning/SUMMARY.md) | **delivered** — `LucidFilter(dynamics=None)` and `faults=`: the dynamics themselves learned and re-learned online, detection on the derived information frontier (a wheel blowout in 18 ms), recovery to oracle grade with the nominal kept as a free hedge |
-
-Probes in `research/` import the package from `lucid/` by relative path, so the
-dependency runs one way only: the product never reaches into the research.
-
----
-
-## Why this matters
-
-### Near-oracle accuracy at a cost you can afford
-
-The strongest benchmark available is an **oracle**: a filter handed the true
-noise schedule, the true parameters, or both. That is the ceiling nothing
-causal can beat.
-
-- Against a noise-schedule oracle, the ODE filter's **causal ceiling is 96.3%
-  of the oracle's advantage**, and the decomposition says exactly where each
-  piece goes: 80.0% the shipped channel, 9.5% the covariance collapse
-  (repairable, and repaired), 6.8% the channel model, and **3.7% irreducible
-  detection lag** — you cannot react to a regime before evidence of it exists.
-  Almost nothing about this gap is fundamental
-  ([`oracle-gap/0007`](research/oracle-gap/0007_decomposing_the_remaining_gap.py)).
-  At the tier the no-regression gate constructs, the shipped filter measures
-  81–90% across seeds.
-- Against a true-parameter oracle, the fitted filters sit **under 1% of the
-  oracle's negative log-likelihood on their own class** (0.07%–0.70% for the
-  fractional face filter; residual 0.34%–0.47% for the parent's gate)
-  ([`fractional-filter/0010`](research/fractional-filter/0010_the_oracle_gap_in_two_currencies.py)).
-- Against a constant-gain Kalman filter *tuned in hindsight per series*, the
-  random-walk filter's error ratio has a geometric mean of **0.678** over a
-  9-probe battery, worst case **1.017**, and lands within 0.5% of optimal on
-  stationary diffusions where the Kalman filter is provably optimal.
-
-The cost of that is a small mixture over a quadrature grid. Filtering and
-streaming are cheap — a handful of small matrix operations per sample, no
-sampling, no backward pass, no optimiser in the loop. The expensive step is
-the one-off offline `fit()`, and it is expensive only because the likelihood
-replays a sequential recursion in Python — one that cannot be vectorised,
-because it is sequential in time. For the parent filter the per-step arithmetic
-is a 5×5 grid, and profiling attributes almost all of the cost to numpy call
-overhead rather than flops; a compiled implementation is estimated at roughly
-**40× faster**. That is a language cost, not an algorithmic one.
-
-So the deployment shape is: `fit()` once, offline, to fix the class — then
-stream forever, fully online, at near-oracle accuracy on a budget an embedded
-target can carry. Nothing after the fit is a batch operation, and nothing after
-the fit revisits the parameters: the adaptation is the scale posterior moving,
-step by step, on evidence.
-
-### Physical systems whose dynamics change while you are flying them
-
-A second-order linear ODE is the local model of essentially every mechanical
-system: a mass with a restoring force and damping. The interesting case is when
-the ODE *changes* mid-run — a drone that loses part of a propeller, a joint that
-develops friction, a payload that shifts, a wing that ices. The airframe's modes
-move, and every filter tuned to the old modes is now confidently wrong.
-
-Most systems handle this with a forgetting factor, a sliding window, or a
-changepoint detector — each one a tuning knob, and each one a way to throw away
-good evidence in order to be able to react to bad news. This filter has none of
-them. Instead, **"the dynamics have stopped governing" is a member of the model
-family with its own likelihood.** The `dynamics` output is the posterior mean of
-a scalar $g$: how much of the fitted ODE is in force right now, where $g=0$ is
-*exactly* the parent random-walk model and $g=1$ is the fitted ODE. The filter
-falls toward $g=0$ on affirmative evidence and comes back when the evidence
-does — no decay, no threshold, nothing to tune.
-
-Alongside it, `whiteness` (the running lag-1 innovation autocorrelation) is a
-free always-on residual check that stays at ~0 for a one-off disturbance of any
-size — a gust *is* process noise — and departs from 0 when the dynamics
-themselves no longer fit. It is cumulative, so it is a smoke alarm, not a
-controller; `dynamics` is the controller.
-
-That is `odefilter`'s scalar version of the idea. $g$ is one scalar along one
-direction — it says how much of the fitted departure-from-flat is in force, and
-**it cannot express a change of frequency**. `LucidFilter` lifts it to the full
-multivariate case, and that limit is what the lift removes.
-
-```python
-f = LucidFilter(dynamics=None)                     # learn F (and B) from nothing
-f = LucidFilter(dynamics=F0, faults=1e-4)          # supplied F0 that may CHANGE
-f = LucidFilter(dynamics=F0, faults=1e-4,          # ... with the failure modes named,
-                anchors=[F_blown_left, F_blown_right])      # the fastest detector there is
-
-r = f.filter(Y, U)
-r.dynamics       # (T, n, n) the dynamics as currently believed
-r.fault          # (T,) posterior probability they have left the nominal
-```
-
-A dynamics fault is a **jump process** — rare, large, persistent — so its one
-labeled prior is the hazard $\rho$, and everything else is derived from it: the
-departure's drift is $\sigma^2\rho$, its variance is capped at the class size
-$\sigma^2$ (bounded, never frozen — an axis the data cannot see today must still
-move when excitation arrives), and the detection delay the hazard buys is
-$\log(1/\rho)\,/\,\mathrm{KL}$, computed rather than tuned. The nominal model
-never leaves the bank, which is what makes a false alarm cost almost nothing —
-and *that* is what makes the fast end of the frontier affordable.
-
-Measured, with the shipped filter separated from the research prototypes that
-designed it. **Shipped**: on a scalar step change it detects in $15.7\pm1.7$
-steps against a derived frontier of **15** — on the frontier; on a differential
-drive whose wheel blows out it detects in **43 ms**, recovers the blown radius to
-$0.303\pm0.018$ (true 0.30) and the healthy one to $1.043\pm0.021$ (true 1.00),
-and settles at $1.037\times$ a refit oracle where the frozen model pays
-$5.06\times$. **Prototypes** (the ladder that fixed the design): the same blowout
-with its failure modes *named* is caught in 18 ms, and a quadrotor that has a
-payload attached mid-flight in $28.9\pm1.7$ steps against a frontier of 29.6,
-recovering its mass and inertia to three figures. Calm-regime cost is 1.00×
-throughout, and no configuration does worse than the frozen-model filter in any
-regime ([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
-
-One honest caveat throughout: nothing here has been flown. The mechanism is
-measured on synthetic systems with known ground truth; hardware validation is
-not part of this repository.
-
----
-
-## Performance
-
-*Every figure below is regenerated by the numbered script next to it; nothing is
-drawn by hand.*
-
-### The ODE filter against the random-walk parent
-
-![forecast battery](research/ode-filter/figures/fig18-forecast-battery.png)
-
-Forecast MSE ratio, filter over parent, lower is better. On its target class it
-forecasts **1.5–3.7× better** at short horizons. On a plain random walk — the
-parent's *own* model, where a strict extension has everything to lose — it costs
-within ±5%.
-
-The gain decaying with horizon is not a defect; it was predicted before the
-filter existed. The oscillator's memory is $1/(1-|z|)$, here 19.6 steps, so by
-$h=20$ only the unit root is left and the parent models that too.
-
-| data | $\kappa$ | $h{=}1$ | $h{=}5$ | $h{=}20$ |
-|---|---|---|---|---|
-| **ODE** (target class) | 0.25 | **0.273** | **0.457** | 0.885 |
-| **ODE** | 1.00 | **0.663** | **0.616** | 0.914 |
-| WALK (the parent's own model) | 0.25 | 0.996 | 0.983 | 0.954 |
-| WALK | 1.00 | 1.005 | 1.013 | 1.054 |
-
-### Dynamics that stop, and come back
-
-![dynamics reversion](research/ode-filter/figures/fig24-dynamics-reversion.png)
-
-The damaged-propeller case in miniature. The ODE governs, then stops (shaded),
-then resumes. The middle panel is the filter's own belief about whether its
-fitted dynamics apply: it falls to $g\approx0.33$ within a few dozen samples of
-the change, holds there, and snaps back the moment the dynamics return. **No
-forgetting factor is involved** — the flat model is a hypothesis with a
-likelihood, so evidence alone moves the posterior, in both directions.
-
-The bottom panel is the price and the payoff: adaptive beats static throughout
-the regime it detects, and pays a brief, visible spike at the return — the
-detection lag, which is the part of the oracle gap that is genuinely
-irreducible.
-
-### Being wrong versus being wrong *and confident*
-
-![distributional score](research/ode-filter/figures/fig22-distributional-score.png)
-
-Point error is the wrong lens for a filter whose job is to say what it does not
-know. On a series whose assumptions expire mid-run, the two filters' point
-forecasts are level — but the ODE filter's forecast *distribution* is better by
-**0.289 nats/point**, and it is calibrated ($E[e^2/S]\approx1$) exactly where
-the parent is **1.6–2.9× overconfident**. The right-hand panel is the summary:
-points below the line are honest about their own error even when the point
-forecast is worse.
-
-### How fast a change can possibly be detected
-
-![detection latency](research/ode-filter/figures/fig23-detection-latency.png)
-
-Evidence for a velocity mode accumulates as $n^3$ and for an acceleration mode
-as $n^5$, so the number of samples needed to notice a change of dynamics is
-small and sharply bounded. From a cold start the posterior converges to its
-steady state within about 10 measurements in all three coordinates. This is the
-budget that sets how quickly the `dynamics` channel in the previous figure can
-possibly react.
-
-### Order as a continuous, estimable coordinate
-
-![nu profiles](research/fractional-filter/figures/fig01-nu-profiles.png)
-
-The integer order $p$ was the one genuinely categorical axis left in the filter
-— learnable from below, nearly blind from above. Replacing it with a fractional
-order $\nu$ makes it a coordinate with a two-sided likelihood profile and an
-honest error bar: $\hat\nu = 1.03/1.04$ at a truth of 1.0 with a profile SE of
-0.02–0.05, and prequentially **one fractional coordinate beats $p$ free integer
-ones** by +0.024 nats/pt at $\nu=1.3$ and +0.117 at $\nu=1.7$.
-
----
-
-## The filters
-
-### `statfilter` — the random-walk parent
-[`lucid/statfilter/`](lucid/statfilter/README.md)
-
-```
-theta_t = theta_{t-1} + w_t,   w_t ~ N(0, Q  * exp(lamP_t))
-x_t     = theta_t     + v_t,   v_t ~ N(0, s2 * exp(lamM_t))
-lam_t   = phi * lam_{t-1} + noise      (per channel: P = process, M = measurement)
-```
-
-Six learned numbers: `Q, s2, phi_P, phi_M, s_P, s_M`. The four classical
-deviation modes — level jump, outlier, drift-rate change, noise-level change —
-are **not four detectors**. They are two channels crossed with the two ends of
-each channel's persistence ($\varphi\to0$ impulsive, $\varphi\to1$ persistent):
-one continuous state, reported every step, no thresholds anywhere.
-
-```python
-from statfilter import AdaptiveFilter
-f = AdaptiveFilter.fit(x)     # x: a 1-D array
-r = f.filter(x)
-```
-
-### `odefilter` — locally linear ODE dynamics
-[`lucid/odefilter/`](lucid/odefilter/README.md)
-
-```
-x_t = alpha(g_t) . (x_{t-1}, ..., x_{t-p}) + w_t
-y_t = x_t + v_t
-```
-
-A strict extension: at `p = 1, alpha = 1` it is `statfilter` bit-for-bit, and
-the test suite asserts the two agree to 1e-8. `p + 8` learned numbers. The
-roots of the characteristic polynomial are the ODE's modes, and **each root is
-a channel** — so choosing `p` is the same act as counting channels.
-
-```python
-from odefilter import OdeFilter
-f = OdeFilter.fit(y, p=3)     # once: fixes the class, not the operating point
-r = f.filter(y)               # r.mean, r.var, r.whiteness, ...
-f.reset()
-for v in stream:              # then stream — everything here is online
-    step = f.update(v)
-f.predict(20)                 # mean and variance 20 steps out
-
-g = OdeFilter.fit(y, p=4, unit_roots=2)   # pin a LINEAR offset: a climbing or
-                                          # declining bias is part of the state
-```
-
-`f.params.roots` are the modes. `f.params.memory()` is $1/(1-|z|_{\max})$ — the
-horizon over which dynamics affect a forecast, and therefore the number of steps
-of genuine predictive power you have. `f.derivatives()` returns the posterior in
-$(x,\dot x,\ddot x)$ coordinates via a fixed involutive integer change of basis,
-so nothing is created or lost.
-
-### `AdaptiveKalmanFilter` — supplied dynamics, learned noise
-[`lucid/statfilter/adaptive.py`](lucid/statfilter/adaptive.py)
-
-![a robotic arm holds station beside an industrial crusher; when the crusher fires and swamps the encoders, the raw and fixed-noise estimates jitter while the adaptive filter stays locked on the true tip](research/multivariate-statfilter/figures/crusher-adaptive.gif)
-
-The multivariate, robotics-ready member. You supply the (linearised) dynamics `F`
-and the measurement matrix `H`; it learns the per-component process and sensor
-noise **online**, at polynomial cost in the number of active noise axes — no
-exponential grid.
-
-```python
-from statfilter import AdaptiveKalmanFilter
-f = AdaptiveKalmanFilter.kinematic(n_dof=2, order=2, dt=0.04,   # (position, velocity) per joint
-                                   measured=("pos",), control=True)
-r = f.filter(Y, U=a_cmd)     # Y encoders (T, m); a_cmd commanded accel (T, n_dof)
-r.mean                       # tracked state; f.derivatives(r.mean) → (T, n_dof, [pos, vel, acc])
-r.measurement_scale          # (T, m): which sensor is noisy, per step
-```
-
-The animation above is real filter output. A robotic arm holds station beside an
-industrial crusher; when the crusher fires it **swamps the joint encoders** (×250).
-Three estimates of the arm's tip race the truth — the raw encoder, a fixed-noise
-filter that never learns, and the adaptive filter. Three things make it work, none
-of which the earlier local-level filters had:
-
-- **A general transition `F` — the derivative mode.** Position, velocity and
-  acceleration are *coupled* by the integrator (`x' = v`), not free axes; a random
-  walk (`F = I`) has nothing to *coast on* when a sensor burst hits. A kinematic model
-  is **~10–40×** better on position RMSE than a fixed random walk. `kinematic()` builds
-  the position/velocity(/acceleration) `F`, fuses encoders, gyros **and accelerometers**
-  into all the derivatives, and `derivatives()` reads them back per DOF.
-- **Known forcing `B·u`.** Without the commanded input the estimate *lags* while the
-  arm is driven — a constant-velocity model can't anticipate a commanded acceleration.
-  Supply `B` and `u` and the prediction becomes `Fθ + B·u`; the lag collapses (velocity
-  error **~3×+** smaller, tracked to the sensor floor mid-swing).
-- **Whiteness-gated noise learning.** A single innovation is explained equally by
-  more process *or* more sensor noise, so a one-step filter cannot separate them and
-  will down-weight a good sensor to zero and diverge. The innovation *sequence* can
-  (Mehra 1970): process noise makes the filter lag (autocorrelated errors), sensor
-  noise stays white. Each process scale whitens its own lag-1 correlation; each
-  sensor scale matches the white residual — gated at the 2σ significance of the
-  estimate. Through the crusher burst above the adaptive tip estimate is **1.87×**
-  tighter than the fixed-noise filter, with no false alarm when the crusher is idle.
-
-**A harder, more realistic case** — a 5-DOF arm in 3D with a *really bad* potentiometer
-and a *good* accelerometer per joint (IMU-style fusion), driven along a commanded
-trajectory, with noise arriving in phases (sensor → process → both):
-
-![a 5-DOF arm tracked through phased sensor/process/both noise; the learned scales light up to show which noise is hot, the raw potentiometer jitters wildly and the adaptive estimate stays locked](research/multivariate-statfilter/figures/arm5dof-adaptive.gif)
-
-The filter fuses the bad absolute sensor (σ≈0.06 rad) with the good dynamic one down to
-**0.006–0.015 rad** joint-angle RMSE — 4–6× tighter than the raw pot, beating a
-fixed-noise filter in every phase and *recovering faster* after each burst — and its
-learned per-component scales **diagnose which noise is hot** (the amber bars: accelerometers
-during the sensor phase, process during the disturbance, both together), while the
-constant-noise potentiometer stays flat. No divergence. Details:
-[`research/multivariate-statfilter/`](research/multivariate-statfilter/SUMMARY.md).
-
-The per-component *diagnostic* under a mixing `H` is solved separately in the Fisher
-eigenbasis (same workstream); the remaining known limit (simultaneous process+sensor
-bursts) is recorded there and in the module docstring.
-
-### `OffsetFilter` — two series, one clock
-[`lucid/odefilter/offset.py`](lucid/odefilter/offset.py)
-
-Detects and tracks the **lead/lag between two series sharing one latent
-process**, online, as a posterior over a time-valued offset `tau` — fractional,
-signed, possibly moving — together with the evidence that the two series are
-related at all.
-
-```python
-from odefilter import OdeFilter, OffsetFilter, cross_anchor
-base = OdeFilter.fit(y1_history)          # the latent, as seen through y1
-null = OdeFilter.fit(y2_history)          # y2 alone: the matched null
-f = OffsetFilter(base.params, s2_2=..., window=(-2, 3), null=null)
-step = f.update(a, b)
-step.tau_mean, step.p_lead, step.trust
-```
-
-`trust` is a directed-information reading — how much y1's history predicts y2
-*beyond y2's own past* — and it requires the matched null; without one it
-returns `nan` rather than a number against a strawman. The sign of the lead is
-decided, not assumed. Two measured guarantees carry: errors in the dynamics
-**provably cannot bias `tau`** (it is the symmetry center of the
-cross-covariance), and the lead time is exactly the horizon out to which y1
-forecasts y2 at tracking grade.
-
-### The fractional face filter — exploration, not yet shipped
-[`fractional-filter/`](research/fractional-filter/SUMMARY.md)
-
-$(1-B)^{\nu}x_t = w_t$ with $\nu$ real. The integer faces are exact members of
-the existing ladder: $\nu=1$ is the parent, $\nu=2$ the double unit root (a
-linear offset). For $0<\nu<1$ the impulse response is *exactly* a continuous
-mixture of AR(1) decays, verified to machine precision — so "how many channels"
-becomes "what exponent", and the memory law $1/(1-|z|)$ generalises from
-exponential to hyperbolic, $h_k \sim k^{\nu-1}/\Gamma(\nu)$, with no
-characteristic scale.
-
----
-
-## Assumptions, and what they bought
-
-### The founding insight: the four failure modes are one square
-
-Monitoring systems usually ship four detectors — one for outliers, one for
-level jumps, one for drift changes, one for noise-level changes — each with a
-threshold, each able to fire when it shouldn't.
-
-They are not four things.
-
-![the deviation square](research/random-walk-filter/figures/hero-mode-square.png)
-
-Each noise channel carries a log-scale that is an AR(1), and an AR(1) has two
-ends: impulsive ($\varphi\to0$, a one-off excursion) and persistent
-($\varphi\to1$, a carried-over level). **Two channels crossed with the two
-ends of persistence gives four corners of one continuous square**, and the
-filter reports a point inside it at every step. There are no thresholds because
-nothing is ever being decided.
-
-The trajectory above is real, from the hero figure's data: the step where the
-level jumped lands on the process-anomaly corner, the degraded-sensor steps
-cluster on the measurement-regime corner, and the quiet steps spread through
-the interior — where no named mode lives and a four-detector system has nothing
-to say.
-
-This is what generalises. **The count is channels × 2, not a fixed four**: the
-ODE filter adds a third channel for the dynamics, so its square becomes a prism
-with six corners, and every further channel doubles again. The measured version
-of the square — shading the exact expected posterior over $(a,\varphi)$ — is
-[`fig14`](research/random-walk-filter/figures/fig14-deviation-square.png), from
-[`THEORY-005`](research/random-walk-filter/scripts/THEORY-005-gradient-allocation.py).
-
-### What must be true for these filters to be right
-
-- **The observation model is additive:** $y_t = x_t + v_t$, uniformly sampled.
-- **The latent evolution is locally a linear recurrence** — a random walk for
-  the parent, an order-$p$ recurrence for `odefilter`. A second-order linear ODE
-  with a constant offset is annihilated by $(z-1)(z-z_1)(z-z_2)$, so **the
-  constant offset is a root at $z=1$, not an extra state**: it costs one order
-  like any other mode and carries its own uncertainty automatically.
-- **Noise scales move slowly, on the log scale.** This is not a convenience —
-  it is forced. Proposition 1 of the optimality workstream shows that if the
-  variances may move unpredictably, then "the level jumped" and "the sensor
-  glitched" are *identically distributed* at every step, and no causal estimator
-  has a bounded competitive ratio. The class must constrain how fast the scales
-  move; by scale equivariance the constraint must live on the log scale; two
-  numbers per channel suffice (magnitude $s_c$, persistence $\varphi_c$).
-  **The filter's scale parameters are the definition of the class, not
-  parameters within it.**
-- **$\mathbb E[e^{\lambda}] < \infty$.** Silently assumed for a long time, and
-  necessary: without it the actual noise variance can have infinite mean while
-  every stated constraint holds, and the minimax problem under log-loss is
-  vacuous.
-- **The injection direction is pinned** to $u = e_1$, and the unit disc is a
-  modelling commitment rather than a numerical wall — `unit_roots` is how you
-  assert the boundary cases exactly.
-- **`p` is a commitment.** It is learnable from below (a 0.40 nats/point climb
-  from $p{=}1$ to $p{=}3$ on ODE data, and it recovers $p{=}1$ on random-walk
-  data) but nearly blind above. Run several orders in parallel and let each
-  one's tracked predictive likelihood decide — that is the same grid-the-nuisance
-  architecture the filter already uses one level down.
-
-### Insights worth carrying to any filter, not just these
-
-- **MSE is the wrong lens.** A filter's job includes saying what it does not
-  know. Log-loss sees the whole predictive distribution; squared error sees a
-  point and leaves variance-only directions unidentified. Both layers of the
-  optimality proof now read under code length, and it is the same loss `fit()`
-  optimises.
-- **Collapsing covariances destroys the evidence you most need.** Handing every
-  grid node one shared covariance (GPB1) makes the likelihood *flat along the
-  ridge* $Q\,e^{s_P^2/2} = \text{const}$: it can measure the mean process
-  variance but cannot split it into a constant level and a wandering scale.
-  Keeping one $(m,P)$ per node — same model, no new parameters, ~1.4× the cost —
-  moved ridge relief from 0.0022 to 0.0101 nats/pt and put the argmin back on
-  the generating value.
-- **A zero is an absolute claim.** Fisher information in a spread parameter
-  vanishes at zero spread, so a fitted $s_P \approx 0$ is ill-posed for *any*
-  point estimator, not just this search. Read a small fitted $s_P$ as cheap
-  insurance, not as a finding; the principled fix is to marginalise it like
-  every other nuisance.
-- **Some parameters must never be believed from moments.** $Q$ is under 1% of
-  the residual variance for a smooth process (amplification ×151), so the
-  closed-form estimate is a scale hint and the likelihood does the rest.
-- **Distinguish evidence from a threshold.** Every adaptive behaviour here — a
-  regime change, a dynamics failure, an offset flip — is a hypothesis with a
-  likelihood inside a family, so it reverts *and returns* on evidence. That is
-  what removes the forgetting factor.
-- **Compute budgets are not free parameters,** and saying so out loud keeps the
-  two kinds of knob from being confused.
-
----
-
-## Extending this to your own problem
-
-The construction generalises more readily than the specific models suggest.
-The recipe:
-
-1. **Write the local dynamics as a linear recurrence.** If your system is
-   governed by a linear ODE of order $k$, sample it uniformly and it is
-   annihilated by an order-$k$ recurrence; add one root at $z=1$ per constant of
-   integration you want carried as state. Set `p` accordingly — for a damped
-   oscillator with a constant offset, `p = 3`.
-2. **Assert the offsets you know about.** `fit(unit_roots=1)` asserts a constant
-   offset, `unit_roots=2` a linear one (a climbing or declining bias whose *rate*
-   is a state). A free fit cannot represent that bias: its ML unit root lands at
-   $1\pm\epsilon$, which forecasts a drift that decays or compounds
-   geometrically instead of one that continues. This is the internal form of
-   "fit the differenced series", and it beats it — differencing pushes iid
-   measurement noise out of the model class, pinning leaves it alone. Which `d`
-   is right is itself a hypothesis, decided by the same prequential density the
-   filter uses everywhere else; it chose correctly in every section of the probe
-   built to break it.
-3. **Do not choose the order if you can avoid choosing.** Fit several `p` and
-   let each one's tracked predictive likelihood say which fits. Marginal
-   likelihood pins a floor on `p` reliably and is nearly blind above it, so
-   running the plausible orders in parallel costs little and removes the one
-   remaining categorical choice.
-4. **Read the right output for the question.** `predict(h)` is where the
-   dynamics earn their keep — tracking error is nearly blind to them, forecast
-   error is not. `dynamics` is the controller for "does my model still apply".
-   `whiteness` is the free smoke alarm. `memory()` tells you how far ahead
-   there is anything to predict.
-5. **Two sensors on one latent → `OffsetFilter`.** Any pair of series sharing a
-   process — a leading indicator, a duplicated sensor, an upstream and
-   downstream measurement — is the offset problem, and `trust` tells you whether
-   to believe the relationship at all.
-6. **Heavy tails are already covered.** The increments are Gaussian scale
-   mixtures with the mixing scale constrained only in magnitude and persistence,
-   so excess kurtosis is inside the class, not an outlier problem bolted onto it.
-
-What you should *not* do without new work: change the observation map to
-something nonlinear, sample non-uniformly, or expect $g$ to track a change of
-*frequency* rather than a change of *degree*.
-
----
+| [`multivariate-statfilter/`](research/multivariate-statfilter/SUMMARY.md) | **delivered** — the per-component noise machinery behind `LucidFilter` |
+| [`dynamics-learning/`](research/dynamics-learning/SUMMARY.md) | **delivered** — online learned dynamics (`dynamics=None`, `faults=`): detects a dynamics change (a weight attached, a tire blowout) on the derived information frontier and recovers the new dynamics online |
+| [`random-walk-filter/`](research/random-walk-filter/SUMMARY.md) | delivered (specimen) — the scalar parent and the scale-walk theory |
+| [`ode-filter/`](research/ode-filter/SUMMARY.md) | candidate (specimen) — locally-linear-ODE dynamics, the tracked dynamics channel |
+| [`optimality-proof/`](research/optimality-proof/SUMMARY.md) | where "optimal" does and does not hold; the per-step process/sensor ambiguity is Proposition 1 here |
+| [`oracle-gap/`](research/oracle-gap/SUMMARY.md) | the distance to an oracle told the noise schedule, decomposed |
+| [`adaptive-grid/`](research/adaptive-grid/SUMMARY.md), [`convergence-proofs/`](research/convergence-proofs/SUMMARY.md), [`fractional-filter/`](research/fractional-filter/SUMMARY.md), [`wall-correspondence/`](research/wall-correspondence/SUMMARY.md) | supporting theory and exploratory threads |
+
+Probes import the package by relative path; the product never reaches into the
+research.
 
 ## Open directions
 
-The two major targets, in order of intended attack.
-
-### 1. PDEs of a specific structure
-
-The natural next class is linear PDEs that reduce, under semi-discretisation in
-space (method of lines), to a linear ODE system in time — diffusion, wave, and
-advection–diffusion on a fixed grid or in a truncated modal basis. The
-structural bet is that the machinery already in place transfers exactly: each
-spatial mode is a channel, the characteristic roots of the semi-discretised
-operator are the modes, and the scale channels ride on top unchanged.
-
-What has to be built is the bookkeeping the univariate case never needed —
-boundary conditions as constraints on the root structure (the way a constant
-offset is already a pinned root at $z=1$), and a compute budget for how many
-spatial modes are kept. This was deliberately out of scope for the ODE
-workstream and is recorded there as deferred.
-
-### 2. Multivariate, for three or more variables
-
-`OffsetFilter` handles the two-series case — two observations of one latent
-process, with a learned lead/lag between them. Three or more variables is a
-genuinely different object: a vector-valued state with per-mode injection
-directions (the direction $u$ is currently pinned to $e_1$, which is one of the
-three commitments the free-variable audit found binding), a coupling structure
-to identify, and the trust object generalised from a scalar to a posterior over
-a vector-valued nuisance grid — sketched already in
-[`0042` §6](research/ode-filter/0042_the_offset_frame.md).
-
-The identifiability question is the interesting one: the univariate budget is
-$2p+1$ numbers, and how that scales with dimension decides whether "each mode
-gets its own noise channel" is estimable in practice or only in principle.
-
-### Also open, and smaller
-
-- **Fractional order**, in progress in
-  [`fractional-filter/`](research/fractional-filter/SUMMARY.md) — the continuous
-  replacement for the categorical $p$.
-- **Marginalising $(\varphi_P, s_P)$** over a small grid, like every other
-  nuisance here, which is the principled fix for the ill-posed zero.
-- **The injection direction as a free parameter**, and **a second dynamics axis
-  for frequency** — both measured to be real, neither yet measured to be worth
-  its cost.
-- **The oscillator phase channel**, and the diffusion/kinetic $(\tau,\dot\tau)$
-  kernels for the offset channel (worth ~5 millinats/point to forecast
-  consumers).
-
----
+- **The dynamics channel's remaining rungs** — the `dynamics=None` cell is
+  filled; what is left is the live-demo work (dynamics-fault regimes in the arm
+  profiler) and two measured opens: the exact jump-hold prior for the departure's
+  hold phase, and time-anchored (run-length) hypotheses, which measured *dormant*
+  on a fully-observed rig and so stay in the record rather than the product
+  ([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
+- **The sequence-evidence de-mix** — per-hypothesis filters carry the lag-1
+  evidence that splits collinear noise channels; the mechanism is validated and
+  its stable in-engine realization is open:
+  [`research/sequence-demix/SUMMARY.md`](research/sequence-demix/SUMMARY.md)
+  is the opening document, with the scalar hero gate and the 5-DOF guard as its
+  acceptance benchmarks.
+- **A lean/embedded profile** — the bank multiplier and per-cluster execution,
+  including block structure when `F`/`B` arrive as callables (see the
+  [SUMMARY opens](research/multivariate-statfilter/SUMMARY.md#open-items)).
 
 ## Install
 
 ```bash
-pip install -e 'lucid[fit]'
+pip install -e .
 ```
 
-One distribution, `lucid-filter`, providing both `statfilter` and `odefilter`.
-`numpy` is always required; `scipy` only if you will call `fit()`.
+One distribution, `lucid-filter`; `numpy` is the only runtime dependency.
+Python ≥ 3.10. `from lucid import LucidFilter`.
 
 ## A note on reading this repository
 

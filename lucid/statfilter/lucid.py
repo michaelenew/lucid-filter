@@ -380,8 +380,8 @@ class _WalkEngine:
         m_new = mpred + Kbar @ e
         mpost = mpred[None] + np.einsum("gil,l->gi", K, e)
         dm = mpost - m_new
-        KH = np.einsum("gil,lj->gij", K, H)
-        Ppost = Ppred - np.einsum("gij,gjk->gik", KH, Ppred)
+        HPp = np.einsum("ij,gjk->gik", H, Ppred)
+        Ppost = Ppred - np.einsum("gil,glk->gik", K, HPp)   # K(H Ppred): n^2 m per node, not n^3
         P_new = np.einsum("g,gij->ij", pi, Ppost) + np.einsum("g,gi,gj->ij", pi, dm, dm)
         P_new = self._cap_P(0.5 * (P_new + P_new.T))
         # finding-18 walk per active axis, score/Fisher averaged over that axis's window
