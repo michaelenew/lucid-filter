@@ -105,6 +105,7 @@ def fixed_kf(U, Y):
 
 # ---------------------------------------------------------------- 3D arm + rotating camera
 AXES = ["z", "y", "y", "y", "x"]; L = [0.30, 0.50, 0.40, 0.25, 0.15]
+HOME = np.array([0.25, 0.55, -0.95, 0.55, 0.0])   # articulated home pose; theta is the deviation
 EL = math.radians(22)
 
 
@@ -116,7 +117,8 @@ def joints3d(theta):
         return np.array([[1.0, 0, 0], [0, c, -s], [0, s, c]])
     Rm = np.eye(3); pos = np.zeros(3); pts = [pos.copy()]
     for j in range(NJ):
-        Rm = Rm @ rot(AXES[j], theta[j]); pos = pos + Rm @ np.array([0, 0, L[j]]); pts.append(pos.copy())
+        Rm = Rm @ rot(AXES[j], HOME[j] + theta[j])
+        pos = pos + Rm @ np.array([0, 0, L[j]]); pts.append(pos.copy())
     return np.array(pts)
 
 
@@ -135,11 +137,11 @@ def az_at(i):                                     # full turn over the loop -> s
 BG, PANEL, LINE, INK, MUT = "#0e1217", "#161c24", "#2a3542", "#dbe3ec", "#7c8a99"
 C_TRUE, C_POT, C_LU, C_FIX, C_WARN = "#c3d0de", "#e2607b", "#33e0a6", "#8fa2ff", "#f5b23d"
 
-PHASE_TXT = {"calm": ("o calm -- nominal noise", MUT),
-             "SENSOR": ("! SENSOR -- accelerometers swamped x15", C_WARN),
-             "PROCESS": ("! PROCESS -- disturbance torque x20", C_WARN),
-             "POTFAIL": (f"! POT FAILURE -- joint {FAIL_J + 1} potentiometer dies", C_WARN),
-             "BOTH": ("! BOTH -- sensor + process at once", C_WARN)}
+PHASE_TXT = {"calm": ("○ calm — nominal noise", MUT),
+             "SENSOR": ("⚠ SENSOR — accelerometers swamped ×15", C_WARN),
+             "PROCESS": ("⚠ PROCESS — disturbance torque ×20", C_WARN),
+             "POTFAIL": (f"⚠ POT FAILURE — joint {FAIL_J + 1} potentiometer dies", C_WARN),
+             "BOTH": ("⚠ BOTH — sensor + process at once", C_WARN)}
 
 
 def phase_at(i):
@@ -184,10 +186,10 @@ def render():
     ax_diag = fig.add_axes([0.55, 0.47, 0.43, 0.33]); ax_diag.set_facecolor(PANEL)
     ax_scope = fig.add_axes([0.55, 0.11, 0.43, 0.25]); ax_scope.set_facecolor(PANEL)
 
-    fig.text(0.005, 0.94, "LucidFilter -- a 5-DOF arm, all noise inferred online", color=INK,
+    fig.text(0.005, 0.94, "LucidFilter — a 5-DOF arm, all noise inferred online", color=INK,
              fontsize=15, weight="bold", family="sans-serif")
-    fig.text(0.005, 0.885, "bad potentiometer + good accelerometer per joint . commanded "
-             "trajectory . nothing tuned . from lucid import LucidFilter",
+    fig.text(0.005, 0.885, "bad potentiometer + good accelerometer per joint · commanded "
+             "trajectory · nothing tuned · from lucid import LucidFilter",
              color=MUT, fontsize=8.2)
 
     # arm panel: fixed workspace box over all frames and cameras
@@ -195,7 +197,7 @@ def render():
     ax_arm.set_xlim(-half, half); ax_arm.set_ylim(-half * 0.72, half * 1.05)
     ax_arm.set_aspect("equal"); ax_arm.axis("off")
     for lx, lab, c in [(0.02, "true", C_TRUE), (0.18, "raw pot", C_POT), (0.40, "lucid", C_LU)]:
-        ax_arm.text(lx, 0.02, "* " + lab, transform=ax_arm.transAxes, color=c, fontsize=8.5,
+        ax_arm.text(lx, 0.02, "● " + lab, transform=ax_arm.transAxes, color=c, fontsize=8.5,
                     va="bottom")
     banner = ax_arm.text(0.5, 0.99, "", transform=ax_arm.transAxes, ha="center", va="top",
                          fontsize=10.5, weight="bold", family="monospace")
@@ -214,7 +216,7 @@ def render():
     # diagnostics: 3 x NJ chip grid of the learned per-component log-scales
     ax_diag.set_xlim(-1.6, NJ); ax_diag.set_ylim(-0.75, 2.6); ax_diag.invert_yaxis()
     ax_diag.set_xticks([]); ax_diag.set_yticks([]); ax_diag.axis("off")
-    ax_diag.set_title("which noise is hot -- learned online, per component", color=MUT,
+    ax_diag.set_title("which noise is hot — learned online, per component", color=MUT,
                       fontsize=9, loc="left", pad=6)
     chips = {}
     for r, lab in enumerate(["pots", "accels", "process"]):
@@ -229,7 +231,9 @@ def render():
     # scope
     tt = np.arange(T) * DT
     ax_scope.set_xlim(0, T * DT)
-    EM = max(float(err_pot.max()), float(err_fx.max()), 0.09) * 1.05
+    # cap the scope so lucid-vs-fixed stays readable; the raw pot going off-chart
+    # during the pot failure is the story, not an axis bug
+    EM = min(max(float(err_pot.max()), float(err_fx.max()), 0.09) * 1.05, 0.40)
     ax_scope.set_ylim(0, EM)
     for nm, a, b in PHASES:
         if nm != "calm":
