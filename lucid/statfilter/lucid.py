@@ -439,13 +439,13 @@ class _Departure:
       comment in ``__init__``.
     """
 
-    def __init__(self, base, B0, dirs, rho, n, p):
-        self.base, self.B0, self.n, self.p = base, B0, n, p
+    def __init__(self, base, dirs, rho, n, p):
+        self.base, self.n, self.p = base, n, p
         # A direction may itself be a callable of the state: on a real vehicle the direction a
         # physical parameter pushes in ROTATES with the operating point (a wheel radius acts
         # along the heading; a drone's mass acts along the tilted thrust axis).  Such a
-        # direction is scaled by its norm at the origin -- once, so the coefficient keeps a
-        # fixed meaning in class units instead of drifting with the state.
+        # direction is scaled ONCE, at the origin, so its coefficient keeps a fixed meaning
+        # rather than drifting with the state.
         self._dirs = [d if callable(d) else (lambda x, _d=d: _d) for d in dirs]
         self.moving = any(callable(d) for d in dirs)
         self.k = len(self._dirs)
@@ -472,7 +472,7 @@ class _Departure:
         self.A = np.stack([a for a, _ in ref]) / self._div[:, None, None]
         self.C = np.stack([c for _, c in ref]) / self._div[:, None, None]
         self.na = n + self.k
-        sig2 = np.ones(self.k)                      # unit-Frobenius directions -> class size 1
+        sig2 = np.ones(self.k)                      # directions are in class units, so 1
         self.cap = np.concatenate([np.full(n, np.inf), sig2])
         self.q_g = sig2 * rho
         self.gidx = np.arange(n, self.na)
@@ -725,7 +725,7 @@ class LucidFilter:
                           None if Ba is None else np.atleast_2d(np.asarray(Ba, float)), None))
         if learn:
             specs.append((base, F, B,
-                          _Departure(const, B, _basis(n, self.p, departures),
+                          _Departure(const, _basis(n, self.p, departures),
                                      rho, n, self.p)))
 
         self._members, self._pidx, self._specs = [], [], specs

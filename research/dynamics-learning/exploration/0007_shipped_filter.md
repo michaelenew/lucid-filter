@@ -33,6 +33,7 @@ reduction is worth stating rather than just implementing:
 | 0005 blowout, `rL` recovered | true 0.30 | **0.303 ± 0.018** |
 | 0005 blowout, `rR` (healthy) | true 1.00 | **1.043 ± 0.021** |
 | 0005 blowout, settled RMSE / refit-oracle | prototype 1.011 | **1.037 ± 0.008** (frozen nominal: 5.06) |
+| 0005 blowout, pre-fault steps flagged | — | **0.07%** (the hazard's false-alarm side) |
 
 The shipped filter sits on the derived frontier on the scalar rig.  On the blowout it is
 ~2.4× slower to detect than the prototype and ~3% further from the oracle, both for stated
@@ -40,7 +41,9 @@ reasons: this configuration carries **no named anchors** (it is mechanism (b), t
 departure channel, not (a) — and 0005 already measured anchors as the fastest detector), and
 every dynamics hypothesis is competing against a live 15-cell noise bank rather than a
 2-point toy noise axis, which is 0004's masking rule applying to the shipped object.  43 ms
-is still inside one control period of the thing it protects.
+is still inside one control period of the thing it protects.  The false-alarm side of the
+hazard shows up as 0.07% of pre-fault steps flagged, and costs nothing measurable because the
+nominal never leaves the bank.
 
 **The blowout rig is expressible in the shipped API at all** because the wheel radii enter a
 *state-dependent control map*: `F = I` and `B(x)` rotates with the heading.  That needs two

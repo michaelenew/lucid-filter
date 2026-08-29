@@ -11,7 +11,7 @@ and it is where one real defect in the first wiring was caught (s3).
       living in a state-dependent control map B(x), and the two physical departure
       directions supplied as callables (they rotate with heading).
 
-Run: python 0007_shipped_filter.py    (~10 min; the (phi,s) bank is 15x per hypothesis)
+Run: python 0007_shipped_filter.py    (~26 min; the (phi,s) bank is 15x per hypothesis)
 """
 from __future__ import annotations
 
