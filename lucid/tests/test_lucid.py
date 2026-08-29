@@ -118,6 +118,48 @@ def test_dynamics_none_is_implemented():
     assert f._learn and f._nd == 2          # the nominal hedge plus the departure walker
 
 
+def test_bank_matches_the_looped_members():
+    """The stacked executor is the same recursion as ``_WalkEngine.update`` -- pinned.
+
+    `LucidFilter` runs its members stacked (`_EngineBank`, one leading member axis) because the
+    split ladder multiplies the member count and per-member numpy dispatch was 99% of the step
+    cost.  This pins the stack to the looped reference on every path it has: a fresh start, a
+    missing observation, the multi-pair star, the dynamics channel with its fault kernel and
+    reprice, and a control input.
+    """
+    from lucid.statfilter.lucid import _WalkEngine
+
+    class _Looped(_WalkEngine):
+        def update(self, y, u=None):
+            return _WalkEngine.update(self, y, u=u)
+
+    r = rng(3)
+    box = {"phis": (0.70, 0.95), "ss": (0.30, 0.80)}
+    Y1 = r.standard_normal((40, 1)); Y1[7] = np.nan
+    rigs = [
+        (dict(box), Y1),
+        (dict(n=2, H=np.eye(2), **box), r.standard_normal((30, 2))),
+        (dict(dynamics=[[0.9]], process=[[0.09]], measurement=[0.25], faults=1 / 100, **box),
+         np.concatenate([r.standard_normal((20, 1)), 4 + 0.3 * r.standard_normal((20, 1))])),
+    ]
+    for kw, Y in rigs:
+        a = LucidFilter(**kw)
+        b = LucidFilter(**kw)
+        for f in b._members:
+            f.__class__ = _Looped
+        b.reset()
+        assert all(type(bk).__name__ == "_EngineBank" for bk in a._banks)
+        assert all(type(bk).__name__ == "_LoopBank" for bk in b._banks)
+        ra, rb = a.filter(Y), b.filter(Y)
+        assert np.allclose(ra.mean, rb.mean, atol=1e-9, equal_nan=True)
+        assert np.allclose(ra.var, rb.var, atol=1e-9)
+        assert np.allclose(ra.process_scale, rb.process_scale, atol=1e-8)
+        assert np.allclose(ra.measurement_scale, rb.measurement_scale, atol=1e-8)
+        assert abs(ra.loglik - rb.loglik) < 1e-6
+        if ra.fault is not None:
+            assert np.allclose(ra.fault, rb.fault, atol=1e-9)
+
+
 def test_five_dof_arm_polynomial():
     """A 5-DOF arm (n=10 pos/vel, m=5 pots, D=15) must construct and run.
 

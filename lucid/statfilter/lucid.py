@@ -94,17 +94,17 @@ _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sens
 
 
 # --------------------------------------------------- the per-step-blind directions
-def _scale_fisher(eng, lam, rho):
-    """Full per-step scale-Fisher ``I_ab = 0.5 tr(Si dS_a Si dS_b)`` at the steady state.
+def _steady_Si(eng, lam, rho):
+    """The steady-state innovation precision at the base ``(lam, rho)`` -- the one Riccati solve.
 
-    ONE solve answers both questions a member has to ask about the model it runs: the DIAGONAL is
-    the characteristic Fisher that sets the walk's drift, and the off-diagonals are where a
-    degenerate pair shows itself.  It is evaluated at the base ``(lam, rho)`` handed in -- the
-    split-balanced one -- so that neither answer depends on which split hypothesis the member
-    happens to be carrying.  The structure of a model is not a function of the hypothesis under
-    test, and read at an extreme rung it would not even look like itself.
+    Everything the Fisher needs from the recursion is in here, and it depends only on
+    ``(F, H, cap)`` and the base MATRICES -- not on the class ``(phi, s)``, and not on which
+    split hypothesis a member carries, because it is evaluated at the split-BALANCED base and
+    balancing undoes every split exactly (a split moves along ``dQ = -dR`` at fixed totals).
+    So one spec needs ONE solve however many members it has; `LucidFilter` computes it once per
+    spec and hands it to every member.
     """
-    H, F, n, m = eng.H, eng.F, eng.n, eng.m
+    H, F, n = eng.H, eng.F, eng.n
     P = np.eye(n) * (lam.max() + rho.max())
     Q0 = eng.V @ np.diag(lam) @ eng.V.T
     R0 = np.diag(rho)
@@ -113,7 +113,21 @@ def _scale_fisher(eng, lam, rho):
         K = Pp @ H.T @ np.linalg.inv(H @ Pp @ H.T + R0)
         P = Pp - K @ H @ Pp
     Pp = eng._cap_P(F @ P @ F.T + Q0)
-    Si = np.linalg.inv(H @ Pp @ H.T + R0)
+    return np.linalg.inv(H @ Pp @ H.T + R0)
+
+
+def _scale_fisher(eng, lam, rho, Si):
+    """Full per-step scale-Fisher ``I_ab = 0.5 tr(Si dS_a Si dS_b)`` at the steady state.
+
+    ONE solve answers both questions a member has to ask about the model it runs: the DIAGONAL is
+    the characteristic Fisher that sets the walk's drift, and the off-diagonals are where a
+    degenerate pair shows itself.  It is evaluated at the base ``(lam, rho)`` handed in -- the
+    split-balanced one -- so that neither answer depends on which split hypothesis the member
+    happens to be carrying.  The structure of a model is not a function of the hypothesis under
+    test, and read at an extreme rung it would not even look like itself.  ``Si`` is the base's
+    steady-state innovation precision from `_steady_Si`.
+    """
+    n, m = eng.n, eng.m
     dS = [lam[k] * np.outer(eng.HV[:, k], eng.HV[:, k]) for k in range(n)]
     for i in range(m):
         E = np.zeros((m, m)); E[i, i] = rho[i]
@@ -310,7 +324,8 @@ class _WalkEngine:
     the class ``(phi, s)``; no EMA, no tuned constant.
     """
 
-    def __init__(self, Q0, R0, H, F, B, phi, s, walk_axes=None, cap=None, group_class=None):
+    def __init__(self, Q0, R0, H, F, B, phi, s, walk_axes=None, cap=None, group_class=None,
+                 fisher_Si=None):
         self._revert = float(phi)         # rate the walk's null excursion returns to that
                                           # hypothesis; the class's own persistence.  Named so
                                           # research can vary it -- both bounds are load-bearing
@@ -360,7 +375,11 @@ class _WalkEngine:
         # member is anchored by construction rather than by being told -- which is what makes the
         # rule uniform across the bank, whatever dynamics hypothesis a member carries and whether
         # or not its state has been augmented.
-        _I = _scale_fisher(self, *self._balanced_base())
+        lam_b, rho_b = self._balanced_base()
+        if fisher_Si is None:
+            fisher_Si = _steady_Si(self, lam_b, rho_b)
+        self._fisher_Si = fisher_Si
+        _I = _scale_fisher(self, lam_b, rho_b, fisher_Si)
         self._groups = tuple(_split_groups(self, _I))
         self._anchor_lo = np.array([lo for _, lo in self._group_read(np.zeros(self.D))])
         self.phi_ax = np.full(self.D, self.phi)
@@ -487,16 +506,6 @@ class _WalkEngine:
 
     def _R_of(self, eta):
         return np.diag(self.rho * np.exp(np.clip(eta, -60, 60)))
-
-    def _dS_list(self, scale):
-        out = []
-        for k in range(self.n):
-            hv = self.HV[:, k]
-            out.append(self.lam[k] * math.exp(min(scale[k], 60)) * np.outer(hv, hv))
-        for i in range(self.m):
-            E = np.zeros((self.m, self.m)); E[i, i] = self.rho[i] * math.exp(min(scale[self.n + i], 60))
-            out.append(E)
-        return out
 
     def _balanced_base(self):
         """This member's base with every confounded pair's noise divided evenly.
@@ -669,6 +678,249 @@ class _WalkEngine:
         wmean = self._wmean(pi_ax)
         return LucidStep(m_new.copy(), P_new.copy(), e.copy(), ll,
                          self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
+
+
+# ------------------------------------------------- stacked execution of the bank
+def _bank_key(f):
+    """Members that can run as one stacked recursion: same shapes, same index tables, same
+    model objects -- they differ only in parameters and state."""
+    return (type(f).update is _WalkEngine.update, f.n, f.m, f.D, f._G,
+            tuple(f._act), tuple((k, i) for k, i, _ in f._groups),
+            f._dyn is None, id(f.H), id(f.F),
+            None if f._cap is None else id(f._cap), f._revert is None)
+
+
+class _LoopBank:
+    """Fallback executor: members whose class overrides ``update`` (research subclasses) run
+    looped, exactly as before.  Same stacked outputs as `_EngineBank`, so the mixing above is
+    one code path."""
+
+    def __init__(self, members):
+        self.members = members
+
+    def update(self, y, u=None):
+        st = [f.update(y, u=u) for f in self.members]
+        return (np.stack([t.mean for t in st]), np.stack([t.var for t in st]),
+                np.stack([t.innovation for t in st]), np.array([t.loglik for t in st]),
+                np.stack([t.process_scale for t in st]),
+                np.stack([t.measurement_scale for t in st]))
+
+
+class _EngineBank:
+    """Stacked execution of ``_WalkEngine.update`` over structurally identical members.
+
+    The split ladder multiplies the member count, and almost all of a member's per-step cost is
+    numpy dispatch on tiny arrays, not arithmetic (measured on the scalar hero rig: 360 members,
+    135 ms/step, ~140k interpreter/numpy calls per step).  Members of one dynamics spec share
+    every shape and every index table -- they differ only in parameters and state -- so the same
+    recursion runs ONCE with a leading member axis.  Identical math step for step, pinned by
+    ``test_bank_matches_the_looped_members``; each member's state arrays are views into the
+    stack (all bank updates are in-place), so everything a member exposes -- ``mu``, ``_P``,
+    ``reprice`` -- stays live for the dynamics channel and for research instrumentation.
+    """
+
+    def __init__(self, members):
+        e0 = members[0]
+        self.members = members
+        M = len(members)
+        self.M, self.n, self.m, self.D = M, e0.n, e0.m, e0.D
+        self._nn, self._c, self._G = e0._nn, e0._c, e0._G
+        self._act, self._axwin = list(e0._act), e0._axwin
+        self.H, self.B, self.F = e0.H, e0.B, e0.F
+        self._dyns = None if e0._dyn is None else [f._dyn for f in members]
+        self._cap = e0._cap
+        self._groups = e0._groups
+        st = lambda name: np.ascontiguousarray(np.stack([getattr(f, name) for f in members]))
+        self.V, self.lam, self.rho, self.HV = st("V"), st("lam"), st("rho"), st("HV")
+        self.gap, self._qmu, self._Pmu_cap = st("gap"), st("_qmu"), st("_Pmu_cap")
+        self._off, self._w1 = st("_off"), st("_w1")
+        self._T1a = np.ascontiguousarray(np.stack([f._T1[f._act] for f in members]))
+        self._star_off = st("_star_off")
+        sa = e0._star_axis
+        self._gp = np.flatnonzero((sa >= 0) & (sa < self.n))
+        self._kp = sa[self._gp]
+        self._gs = np.flatnonzero(sa >= self.n)
+        self._is = sa[self._gs] - self.n
+        self._Vout = np.einsum("bik,bjk->bkij", self.V, self.V)
+        self._Hout = np.einsum("bik,bjk->bkij", self.HV, self.HV)
+        ng = len(self._groups)
+        self._h2 = (np.stack([[h for _, _, h in f._groups] for f in members])
+                    if ng else np.zeros((M, 0)))
+        self._anchor = st("_anchor_lo") if ng else np.zeros((M, 0))
+        self._revert = np.array([f._revert for f in members], float)
+        # state, stacked -- and handed back to the members as views
+        self.mu, self._Pmu = st("mu"), st("_Pmu")
+        self._m = np.zeros((M, self.n))
+        self._P = np.zeros((M, self.n, self.n))
+        self._pi = np.zeros((M, len(self._act), self._nn))
+        self._ll = np.zeros(M)
+        self._fresh = True
+        for j, f in enumerate(members):
+            f.mu, f._Pmu = self.mu[j], self._Pmu[j]
+            f._m, f._P, f._pi_ax = self._m[j], self._P[j], self._pi[j]
+
+    def _cap_P(self, P):
+        if self._cap is None:
+            return P
+        d = np.einsum("bii->bi", P)
+        sc = np.ones_like(d)
+        cap = np.broadcast_to(self._cap, d.shape)
+        over = d > cap
+        sc[over] = np.sqrt(cap[over] / np.maximum(d[over], 1e-300))
+        P *= sc[:, :, None] * sc[:, None, :]
+        return P
+
+    def _star_QR(self):
+        n, M, G = self.n, self.M, self._G
+        le = self.lam * np.exp(np.clip(self.mu[:, :n], -60, 60))
+        Qc = np.einsum("bk,bkij->bij", le, self._Vout)
+        rc = self.rho * np.exp(np.clip(self.mu[:, n:], -60, 60))
+        Qg = np.repeat(Qc[:, None], G, 1)
+        rg = np.repeat(rc[:, None], G, 1)
+        if self._gp.size:
+            kp = self._kp
+            mu_k = self.mu[:, kp]
+            dlam = self.lam[:, kp] * (
+                np.exp(np.minimum(mu_k + self._star_off[:, self._gp], 60.0))
+                - np.exp(np.minimum(mu_k, 60.0)))
+            Qg[:, self._gp] += dlam[:, :, None, None] * self._Vout[:, kp]
+        if self._gs.size:
+            rg[:, self._gs, self._is] = self.rho[:, self._is] * np.exp(
+                np.minimum(self.mu[:, n + self._is] + self._star_off[:, self._gs], 60.0))
+        Rg = np.zeros((M, G, self.m, self.m))
+        Rg[:, :, np.arange(self.m), np.arange(self.m)] = rg
+        return Qg, Rg
+
+    def _star_w(self, pi, alpha):
+        r = len(self._act)
+        w = np.zeros((self.M, self._G))
+        if r == 0:
+            w[:, 0] = 1.0
+            return w
+        a = np.full((self.M, r), 1.0 / r) if alpha is None else alpha
+        for i, k in enumerate(self._act):
+            w[:, self._axwin[k]] += a[:, i, None] * pi[:, i]
+        return w
+
+    def _wmean(self, pi):
+        w = np.zeros((self.M, self.D))
+        for i, k in enumerate(self._act):
+            w[:, k] = np.einsum("bn,bn->b", pi[:, i], self._off[:, k])
+        return w
+
+    def _dS_axis(self, k):
+        a = np.exp(np.minimum(self.mu[:, k, None] + self._off[:, k], 60.0))
+        if k < self.n:
+            return (self.lam[:, k, None] * a)[:, :, None, None] * self._Hout[:, k, None]
+        out = np.zeros((self.M, self._nn, self.m, self.m))
+        i = k - self.n
+        out[:, :, i, i] = self.rho[:, i, None] * a
+        return out
+
+    def _revert_groups(self):
+        n = self.n
+        for gi, (k, i, _h) in enumerate(self._groups):
+            h2 = self._h2[:, gi]
+            a = self.lam[:, k] * h2 * np.exp(np.minimum(self.mu[:, k], 60.0))
+            b = self.rho[:, i] * np.exp(np.minimum(self.mu[:, n + i], 60.0))
+            tot = a + b
+            lo = np.log(np.maximum(a, 1e-300)) - np.log(np.maximum(b, 1e-300))
+            anc = self._anchor[:, gi]
+            back = np.clip(anc + self._revert * (lo - anc), -80.0, 80.0)
+            a2 = tot / (1.0 + np.exp(-back))
+            b2 = tot - a2
+            self.mu[:, k] = np.log(np.maximum(a2, 1e-300) / (self.lam[:, k] * h2))
+            self.mu[:, n + i] = np.log(np.maximum(b2, 1e-300) / self.rho[:, i])
+
+    def update(self, y, u=None):
+        M, n, m, H = self.M, self.n, self.m, self.H
+        y = np.atleast_1d(np.asarray(y, dtype=float))
+        ok = bool(np.all(np.isfinite(y)))
+        r = len(self._act)
+        Qg, Rg = self._star_QR()
+        if self._fresh:
+            self._pi[:] = self._w1[:, self._act]
+            self._m[:] = (np.linalg.lstsq(H, y, rcond=None)[0] if ok else np.zeros(n))
+            scal = (Rg.reshape(M, -1).max(1) + Qg.reshape(M, -1).max(1)) * n
+            self._P[:] = np.eye(n)[None] * scal[:, None, None]
+            self._cap_P(self._P)
+            self._fresh = False
+        pi = np.einsum("bai,baij->baj", self._pi, self._T1a)
+        if self._dyns is None:
+            F = np.broadcast_to(self.F, (M, n, n))
+            mpred = self._m @ self.F.T + ((self.B @ u) if self.B is not None else 0.0)
+        else:
+            F = np.empty((M, n, n)); mpred = np.empty((M, n))
+            for j in range(M):
+                F[j], mpred[j] = self._dyns[j](self._m[j], u)
+        FPFt = np.einsum("bij,bjk,blk->bil", F, self._P, F)
+        if not ok:
+            self._pi[:] = pi
+            w = self._star_w(pi, None)
+            self._P[:] = FPFt + np.einsum("bg,bgij->bij", w, Qg)
+            self._cap_P(self._P)
+            self._m[:] = mpred
+            sc = self.mu + self._wmean(pi)
+            return (self._m.copy(), self._P.copy(), np.full((M, m), np.nan),
+                    np.zeros(M), sc[:, :n], sc[:, n:])
+        Ppred = FPFt[:, None] + Qg
+        e = y[None] - mpred @ H.T
+        PHt = np.einsum("bgij,kj->bgik", Ppred, H)
+        S = np.einsum("ij,bgjk->bgik", H, PHt) + Rg
+        Si = np.linalg.inv(S)
+        _, logdet = np.linalg.slogdet(S)
+        maha = np.einsum("bi,bgij,bj->bg", e, Si, e)
+        lg = -0.5 * (m * _LOG2PI + logdet + maha)
+        if r:
+            logZ = np.empty((M, r))
+            for a, k in enumerate(self._act):
+                lgi = lg[:, self._axwin[k]]
+                mi = lgi.max(1)
+                wk = pi[:, a] * np.exp(lgi - mi[:, None])
+                Zi = wk.sum(1)
+                pi[:, a] = wk / Zi[:, None]
+                logZ[:, a] = mi + np.log(Zi)
+            mz = logZ.max(1)
+            aw = np.exp(logZ - mz[:, None])
+            ll = mz + np.log(aw.mean(1))
+            alpha = aw / aw.sum(1, keepdims=True)
+        else:
+            ll = lg[:, 0].copy()
+            alpha = None
+        w = self._star_w(pi, alpha)
+        K = np.einsum("bgik,bgkl->bgil", PHt, Si)
+        Kbar = np.einsum("bg,bgil->bil", w, K)
+        m_new = mpred + np.einsum("bil,bl->bi", Kbar, e)
+        mpost = mpred[:, None] + np.einsum("bgil,bl->bgi", K, e)
+        dm = mpost - m_new[:, None]
+        HPp = np.einsum("ij,bgjk->bgik", H, Ppred)
+        Ppost = Ppred - np.einsum("bgil,bglk->bgik", K, HPp)
+        P_new = (np.einsum("bg,bgij->bij", w, Ppost)
+                 + np.einsum("bg,bgi,bgj->bij", w, dm, dm))
+        P_new = self._cap_P(0.5 * (P_new + np.swapaxes(P_new, 1, 2)))
+        for a, k in enumerate(self._act):
+            idx = self._axwin[k]
+            dpk = self._dS_axis(k)
+            Sik = Si[:, idx]
+            Sie = np.einsum("bgij,bj->bgi", Sik, e)
+            score = 0.5 * (np.einsum("bgi,bgij,bgj->bg", Sie, dpk, Sie)
+                           - np.einsum("bgij,bgji->bg", Sik, dpk))
+            SidS = np.einsum("bgij,bgjk->bgik", Sik, dpk)
+            info_g = 0.5 * np.einsum("bgij,bgji->bg", SidS, SidS)
+            info = np.einsum("bg,bg->b", pi[:, a], info_g) + _RIDGE
+            grad = np.einsum("bg,bg->b", pi[:, a], score)
+            Kmu = self._Pmu[:, k] / (self._Pmu[:, k] + 1.0 / info)
+            self.mu[:, k] += np.clip(Kmu * (grad / info), -self.gap[:, k], self.gap[:, k])
+            self._Pmu[:, k] = np.minimum((1.0 - Kmu) * self._Pmu[:, k] + self._qmu[:, k],
+                                         self._Pmu_cap[:, k])
+        self._pi[:] = pi
+        self._m[:] = m_new
+        self._P[:] = P_new
+        if self._groups:
+            self._revert_groups()
+        self._ll += ll
+        sc = self.mu + self._wmean(pi)
+        return (m_new, P_new, e, ll, sc[:, :n], sc[:, n:])
 
 
 # ------------------------------------------------------- the dynamics channel
@@ -1028,8 +1280,12 @@ class LucidFilter:
         self._members, self._pidx, self._specs = [], [], specs
         for bs, Fs, Bs, dep in specs:
             if dep is None:
-                eng = [_WalkEngine(bq, br, Hm, Fs, Bs, ph, sv)
-                       for ph, sv, bq, br in cells]
+                Si_c = probe._fisher_Si if Fs is F else None
+                eng = []
+                for ph, sv, bq, br in cells:
+                    e = _WalkEngine(bq, br, Hm, Fs, Bs, ph, sv, fisher_Si=Si_c)
+                    Si_c = e._fisher_Si
+                    eng.append(e)
                 if bs is not None:
                     for e in eng:
                         e._dyn = _fixed_hook(bs)
@@ -1044,9 +1300,12 @@ class LucidFilter:
             Fa[:n, :n] = Fs                     # the Jacobian at g = 0, x = 0: the
             Ba = (None if Bs is None                     # characteristic linearisation the
                   else np.vstack([Bs, np.zeros((dep.k, self.p))]))   # steady Fisher wants
+            Si_c = None
             for ph, sv, bq, br in cells:   # the split rides into the augmentation with the base
                 Qa, Ra, _Ha, _w = dep.augment(bq, br, Hm)
-                e = _WalkEngine(Qa, Ra, Ha, Fa, Ba, ph, sv, walk_axes=walk, cap=dep.cap)
+                e = _WalkEngine(Qa, Ra, Ha, Fa, Ba, ph, sv, walk_axes=walk, cap=dep.cap,
+                                fisher_Si=Si_c)
+                Si_c = e._fisher_Si
                 e._dyn = dep.callable_for()
                 self._members.append(e)
                 self._pidx.append(xmode)
@@ -1066,6 +1325,29 @@ class LucidFilter:
     def reset(self):
         for f in self._members:
             f.reset()
+        # Group structurally-identical members into stacked executors -- same recursion, one
+        # leading member axis (see `_EngineBank`).  Grouping is by structure, NOT by position:
+        # `eigh` orders a base's eigenmodes by value, so rungs of one spec can carry the same
+        # physics under permuted labels, and grouping contiguously would shatter the bank into
+        # slivers (measured: 225 banks on a five-pair rig).  Each bank scatters its outputs
+        # back through the member indices it holds, so the member ORDER the dynamics channel's
+        # reshape depends on is untouched.  A member whose class overrides ``update``
+        # (research subclasses) runs looped, unchanged.
+        order, index = [], {}
+        for i, f in enumerate(self._members):
+            key = (_bank_key(f), tuple(np.asarray(self._pidx[i]).tolist()))
+            if key not in index:
+                index[key] = len(order)
+                order.append((key, []))
+            order[index[key]][1].append(i)
+        banks = []
+        for (key, _), idx in order:
+            mem = [self._members[i] for i in idx]
+            bank = _EngineBank(mem) if key[0] else _LoopBank(mem)
+            bank.pidx = self._pidx[idx[0]]
+            bank.idx = np.array(idx)
+            banks.append(bank)
+        self._banks = banks
         self._logw = np.zeros(len(self._members))
         self.loglik = 0.0
         self._alarm = False
@@ -1119,24 +1401,29 @@ class LucidFilter:
         prior = self._logw - _logsumexp(self._logw)
         if self._nd > 1:
             prior = self._hazard_mix(prior)
-        steps = [f.update(y, u=u) for f in self._members]
-        ll = np.array([st.loglik for st in steps])
+        n = self.n
+        mn = np.empty((M, n)); vr = np.empty((M, n, n)); inn = np.empty((M, self.m))
+        llv = np.empty(M); psc = np.empty((M, n)); msc = np.empty((M, self.m))
+        for bank in self._banks:
+            bm, bv, bi, bl, bp, bms = bank.update(y, u=u)
+            ix = bank.idx
+            mn[ix] = bm[:, :n]; vr[ix] = bv[:, :n, :n]; inn[ix] = bi
+            llv[ix] = bl; psc[ix] = bp[:, bank.pidx]; msc[ix] = bms
         yv = np.atleast_1d(np.asarray(y, float))
         if np.all(np.isfinite(yv)):
-            bank_ll = _logsumexp(prior + ll)
-            self._logw = self.forget * prior + ll
+            bank_ll = _logsumexp(prior + llv)
+            self._logw = self.forget * prior + llv
         else:
             bank_ll = 0.0
             self._logw = prior
         post = np.exp(self._logw - _logsumexp(self._logw))
-        n = self.n
-        mn = [st.mean[:n] for st in steps]
-        mean = sum(post[i] * mn[i] for i in range(M))
-        var = sum(post[i] * (steps[i].var[:n, :n] + np.outer(mn[i] - mean, mn[i] - mean))
-                  for i in range(M))
-        ps = sum(post[i] * steps[i].process_scale[self._pidx[i]] for i in range(M))
-        ms = sum(post[i] * steps[i].measurement_scale for i in range(M))
-        innov = sum(post[i] * steps[i].innovation for i in range(M))
+        mean = post @ mn
+        dmn = mn - mean
+        var = (np.einsum("b,bij->ij", post, vr)
+               + np.einsum("b,bi,bj->ij", post, dmn, dmn))
+        ps = post @ psc
+        ms = post @ msc
+        innov = post @ inn
         self.loglik += bank_ll
         if not self._report:
             return LucidStep(mean, var, innov, bank_ll, ps, ms)

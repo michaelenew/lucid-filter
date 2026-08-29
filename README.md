@@ -220,12 +220,12 @@ cost is 1.00× throughout
   the base — costing 14% on regime-C RMSE while calibration holds. That, and why
   it is the *same* problem as the jump, is stated with its measurements in
   [`0005`](research/sequence-demix/exploration/0005_reach_and_restraint.md).
-- **The de-mix costs a bank multiplier.** Where a process mode is read by exactly one
-  sensor, the filter carries the split as anchored hypotheses, each a complete filter, so
-  the member count is multiplied by up to 24. A scalar problem goes from 3.2 to 88 ms per
-  step. Nothing changes where no such pair exists — the 5-DOF arm demo is bit-identical and
-  the same speed — but the scalar case is not cheap, and the levers are measured and
-  recorded in
+- **The de-mix multiplies the bank, and the bank runs stacked.** Where a process mode is
+  read by exactly one sensor, the filter carries the split as up to 24 anchored hypotheses,
+  each a complete filter — and structurally identical members execute as one stacked
+  recursion, so the scalar problem runs at ~1 ms/step with the full ladder (faster than the
+  pre-ladder engine did without it). The stack is pinned to the looped reference at machine
+  precision by a suite test; the measured costs and residuals are recorded in
   [`sequence-demix`](research/sequence-demix/SUMMARY.md#open-items-complete).
 - **Collinear channels are tracked as a total.** A sensor that directly reads
   the state a disturbance drives (the accelerometer/vibration pair above)
