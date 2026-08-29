@@ -774,15 +774,23 @@ class _WalkEngine:
         # ``Q`` diverges the filter outright.  It also reduces to ``V diag(lam e^xi) V'``
         # exactly at ``a = 1``, since ``D`` and ``Q0`` share the eigenbasis -- so this is one
         # formula through the nominal step, not two that happen to agree at it.
-        XI = np.repeat(xi[None], self._G, 0)
+        half = self.V @ np.diag(np.exp(0.5 * xi)) @ self.V.T
+        Qc = half @ self._base_Q(a) @ half
+        Qg = np.repeat(Qc[None], self._G, 0)
+        # A node differs from the centre in ONE coordinate, so its congruence differs from the
+        # centre's by a RANK-2 update -- ``(c-1)(v w' + w v') + (c-1)^2 (v'Qv) v v'`` with
+        # ``w = Q v``.  That is O(n^2) a node instead of O(n^3), and at ``a = 1``, where
+        # ``Q v_k = lam_k e^xi_k v_k``, it collapses to exactly the ``dlam v v'`` the nominal
+        # branch above adds.  One formula, two costs.
         for g in range(1, self._G):
             k = int(self._star_axis[g]); o = float(self._star_off[g])
-            if k < n:
-                XI[g, k] = min(self.mu[k] + o, 60.0)
-            else:
+            if k >= n:
                 rg[g, k - n] = self.rho[k - n] * math.exp(min(self.mu[k] + o, 60.0))
-        half = np.einsum("ik,gk,jk->gij", self.V, np.exp(0.5 * XI), self.V)
-        Qg = np.einsum("gij,jk,gkl->gil", half, self._base_Q(a), half)
+                continue
+            c = math.exp(0.5 * (min(self.mu[k] + o, 60.0) - xi[k])) - 1.0
+            v = self.V[:, k]
+            w = Qc @ v
+            Qg[g] = Qc + c * (np.outer(v, w) + np.outer(w, v)) + (c * c * float(v @ w)) * np.outer(v, v)
         return Qg, rg
 
     def _kernel(self, a):
@@ -1277,13 +1285,22 @@ class _EngineBank:
                     - np.exp(np.minimum(mu_k, 60.0)))
                 Qg[:, self._gp] += dlam[:, :, None, None] * self._Vout[:, kp]
             return Qg, rg
-        XI = np.repeat(xi[:, None], G, 1)          # the congruence -- see _WalkEngine._star_QR
-        if self._gp.size:
-            XI[:, self._gp, self._kp] = np.minimum(
-                self.mu[:, self._kp] + self._star_off[:, self._gp], 60.0)
-        half = np.einsum("bik,bgk,bjk->bgij", self.V, np.exp(0.5 * XI), self.V)
+        half = np.einsum("bik,bk,bjk->bij", self.V, np.exp(0.5 * xi), self.V)
         base = np.stack([f._base_Q(a) for f in self.members])
-        Qg = np.einsum("bgij,bjk,bgkl->bgil", half, base, half)
+        Qc = np.einsum("bij,bjk,bkl->bil", half, base, half)
+        Qg = np.repeat(Qc[:, None], G, 1)
+        if self._gp.size:                          # the rank-2 form -- see _WalkEngine._star_QR
+            kp = self._kp
+            c = np.exp(0.5 * (np.minimum(self.mu[:, kp] + self._star_off[:, self._gp], 60.0)
+                              - xi[:, kp])) - 1.0
+            v = np.einsum("bik,gk->bgi", self.V, np.eye(n)[kp])
+            w = np.einsum("bij,bgj->bgi", Qc, v)
+            vw = np.einsum("bgi,bgi->bg", v, w)
+            Qg[:, self._gp] += (c[:, :, None, None]
+                                * (np.einsum("bgi,bgj->bgij", v, w)
+                                   + np.einsum("bgi,bgj->bgij", w, v))
+                                + (c * c * vw)[:, :, None, None]
+                                * np.einsum("bgi,bgj->bgij", v, v))
         return Qg, rg
 
     def _kernel(self, a):
