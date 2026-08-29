@@ -101,6 +101,19 @@ class _WalkEngine:
         self.B = B
         self.p = 0 if B is None else B.shape[1]
         self.HV = H @ V
+        # Each Fisher direction is a scalar times a channel-fixed matrix:
+        #   dS_k(scale) = _dsbase[k] * exp(min(scale[k], 60)) * _dsM[k]
+        # (process k: lam[k] * outer(HV[:,k], HV[:,k]); sensor i: rho[i] * e_i e_i^T)
+        # so the whole grid of dS matrices is one broadcast, not a per-node loop.
+        self._dsM = np.zeros((self.D, self.m, self.m))
+        self._dsbase = np.empty(self.D)
+        for k in range(n):
+            hv = self.HV[:, k]
+            self._dsM[k] = np.outer(hv, hv)
+            self._dsbase[k] = self.lam[k]
+        for i in range(self.m):
+            self._dsM[n + i, i, i] = 1.0
+            self._dsbase[n + i] = self.rho[i]
         self.phi, self.s = float(phi), float(s)
         self.gap = _GAP_FACTOR * self.s
         self._Kstar = (1.0 - self.phi) / 4.0
@@ -112,28 +125,66 @@ class _WalkEngine:
         self._build_window()
         self.reset()
 
-    # -- grid window (unchanged from WalkingVectorFilter) --
+    # -- grid window: an axial stencil, not the tensor product --
     def _build_window(self):
+        """Lay one 1-D grid along each identifiable channel's axis through ``mu``.
+
+        The tensor product over the D channels needs ``(2K+1)**A`` nodes for A
+        active channels -- 5**25 for a 5-DOF arm in one block, which cannot be
+        formed.  The scale posterior is carried instead as a product of
+        per-channel marginals, and every expectation the step needs is taken on
+        the axial stencil: one 1-D grid per active channel, ``(2K+1) * A`` nodes,
+        linear in the number of channels.  With one active channel the stencil
+        *is* the tensor grid, so that case is unchanged.
+        """
         K = int(math.ceil(_SPAN_S / _GAP_FACTOR))
         off1 = self.gap * np.arange(-K, K + 1)
         w1 = np.exp(-0.5 * (off1 / self.s) ** 2); w1 /= w1.sum()
         nu = max(self.s * self.s * (1.0 - self.phi ** 2), 1e-12)
         T1 = np.exp(np.clip(-0.5 * (off1[None, :] - self.phi * off1[:, None]) ** 2 / nu, -700.0, 700.0))
         T1 /= T1.sum(1, keepdims=True)
-        offsets = [off1 if a else np.array([0.0]) for a in self.active]
-        weights = [w1 if a else np.array([1.0]) for a in self.active]
-        trans = [T1 if a else np.array([[1.0]]) for a in self.active]
-        self._mesh = np.array(np.meshgrid(*offsets, indexing="ij")).reshape(self.D, -1).T
-        pi0 = weights[0]; Tj = trans[0]
-        for k in range(1, self.D):
-            pi0 = np.kron(pi0, weights[k]); Tj = np.kron(Tj, trans[k])
-        self._pi0, self._T, self._G = pi0, Tj, pi0.size
+        self._off1, self._T1 = off1, T1
+        self._axes = np.flatnonzero(self.active)
+        A, nk = self._axes.size, off1.size
+        if A == 0:                          # nothing identifiable -- a single node at mu
+            self._mesh = np.zeros((1, self.D))
+            self._pim0, self._G = np.ones((0, nk)), 1
+            return
+        mesh = np.zeros((A, nk, self.D))
+        for a, k in enumerate(self._axes):
+            mesh[a, :, k] = off1
+        self._mesh = mesh.reshape(A * nk, self.D)
+        self._pim0, self._G = np.tile(w1, (A, 1)), A * nk
+
+    def _scale_mean(self, pim):
+        """Posterior mean offset per channel, from the marginals."""
+        wmean = np.zeros(self.D)
+        for a, k in enumerate(self._axes):
+            wmean[k] = float(pim[a] @ self._off1)
+        return wmean
 
     def _Q_of(self, xi):
         return self.V @ np.diag(self.lam * np.exp(np.clip(xi, -60, 60))) @ self.V.T
 
     def _R_of(self, eta):
         return np.diag(self.rho * np.exp(np.clip(eta, -60, 60)))
+
+    def _Q_grid(self, scales):
+        """(G, n, n) stack of ``V diag(lam e^xi) V^T`` -- the per-node loop, vectorised."""
+        d = self.lam[None, :] * np.exp(np.clip(scales[:, :self.n], -60, 60))
+        return np.matmul(self.V * d[:, None, :], self.V.T)
+
+    def _R_grid(self, scales):
+        """(G, m, m) stack of ``diag(rho e^eta)``."""
+        Rg = np.zeros((scales.shape[0], self.m, self.m))
+        i = np.arange(self.m)
+        Rg[:, i, i] = self.rho[None, :] * np.exp(np.clip(scales[:, self.n:], -60, 60))
+        return Rg
+
+    def _dS_grid(self, scales, k):
+        """(G, m, m) stack of the channel-``k`` Fisher direction over the grid."""
+        c = self._dsbase[k] * np.exp(np.minimum(scales[:, k], 60.0))
+        return c[:, None, None] * self._dsM[k]
 
     def _dS_list(self, scale):
         out = []
@@ -160,7 +211,7 @@ class _WalkEngine:
         return np.array([0.5 * np.trace(Si @ d @ Si @ d) for d in dS]) + _RIDGE
 
     def reset(self, mean=None, scale=None):
-        self._pi = None
+        self._pim = None
         self._m = None if mean is None else np.asarray(mean, float)
         self._P = None
         self.mu = np.zeros(self.D) if scale is None else np.asarray(scale, float).copy()
@@ -172,25 +223,30 @@ class _WalkEngine:
         n, m, H, F = self.n, self.m, self.H, self.F
         bu = (self.B @ u) if self.B is not None else 0.0
         y = np.atleast_1d(np.asarray(y, dtype=float))
+        A, nk = self._pim0.shape
         scales = self.mu[None, :] + self._mesh
-        Qg = np.stack([self._Q_of(sc[:n]) for sc in scales])
-        Rg = np.stack([self._R_of(sc[n:]) for sc in scales])
-        if self._pi is None:
-            self._pi = self._pi0.copy()
+        Qg = self._Q_grid(scales)
+        Rg = self._R_grid(scales)
+        if self._pim is None:
+            self._pim = self._pim0.copy()
             if self._m is None:
                 self._m = (np.linalg.lstsq(H, y, rcond=None)[0]
                            if np.all(np.isfinite(y)) else np.zeros(n))
             if self._P is None:
                 self._P = np.eye(n) * float(Rg.reshape(self._G, -1).max()
                                             + Qg.reshape(self._G, -1).max()) * n
-        pi = self._pi @ self._T
+        # walk each channel's marginal, then weight the axial nodes by it.  The
+        # node weights are the marginal mixture pim/A: a proper distribution over
+        # the stencil, and exactly pim when there is a single axis.
+        pim = self._pim @ self._T1 if A else self._pim
+        pi = (pim / A).ravel() if A else np.ones(1)
         mpred = F @ self._m + bu
         FPFt = F @ self._P @ F.T
         if not np.all(np.isfinite(y)):
-            self._pi = pi
+            self._pim = pim
             self._P = FPFt + np.einsum("g,gij->ij", pi, Qg)
             self._m = mpred
-            wmean = pi @ self._mesh
+            wmean = self._scale_mean(pim)
             return LucidStep(self._m.copy(), self._P.copy(), np.full(m, np.nan), 0.0,
                              self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
         Ppred = FPFt[None] + Qg
@@ -205,6 +261,10 @@ class _WalkEngine:
         w = pi * np.exp(lg - mx); Z = float(w.sum())
         ll = math.log(Z) + mx
         pi = w / Z
+        if A:                     # mean-field coordinate update of each marginal
+            lgm = lg.reshape(A, nk)
+            wm = pim * np.exp(lgm - lgm.max(1, keepdims=True))
+            pim = wm / wm.sum(1, keepdims=True)
         K = np.einsum("gik,gkl->gil", PHt, Si)
         Kbar = np.einsum("g,gil->il", pi, K)
         m_new = mpred + Kbar @ e
@@ -215,22 +275,24 @@ class _WalkEngine:
         P_new = np.einsum("g,gij->ij", pi, Ppost) + np.einsum("g,gi,gj->ij", pi, dm, dm)
         P_new = 0.5 * (P_new + P_new.T)
         Sie = np.einsum("gij,j->gi", Si, e)
-        for k in range(self.D):
-            if not self.active[k]:
-                continue
-            dpk = np.stack([self._dS_list(sc)[k] for sc in scales])
-            score_g = 0.5 * (np.einsum("gi,gij,gj->g", Sie, dpk, Sie)
-                             - np.einsum("gij,gji->g", Si, dpk))
-            SidS = np.einsum("gij,gjk->gik", Si, dpk)
+        # each channel's score and information are taken on its own 1-D grid,
+        # against its own marginal -- the mean-field expectation for that channel
+        for a, k in enumerate(self._axes):
+            sl = slice(a * nk, (a + 1) * nk)
+            Si_k, Sie_k, pk = Si[sl], Sie[sl], pim[a]
+            dpk = self._dS_grid(scales[sl], k)
+            score_g = 0.5 * (np.einsum("gi,gij,gj->g", Sie_k, dpk, Sie_k)
+                             - np.einsum("gij,gji->g", Si_k, dpk))
+            SidS = np.einsum("gij,gjk->gik", Si_k, dpk)
             info_g = 0.5 * np.einsum("gij,gji->g", SidS, SidS)
-            info = float(pi @ info_g) + _RIDGE
-            grad = float(pi @ score_g)
+            info = float(pk @ info_g) + _RIDGE
+            grad = float(pk @ score_g)
             K_mu = self._Pmu[k] / (self._Pmu[k] + 1.0 / info)
             self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap, self.gap))
             self._Pmu[k] = (1.0 - K_mu) * self._Pmu[k] + self._qmu[k]
-        self._pi, self._m, self._P = pi, m_new, P_new
+        self._pim, self._m, self._P = pim, m_new, P_new
         self.loglik += ll
-        wmean = pi @ self._mesh
+        wmean = self._scale_mean(pim)
         return LucidStep(m_new.copy(), P_new.copy(), e.copy(), ll,
                          self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
 
@@ -251,7 +313,10 @@ class LucidFilter:
         Measurement matrix.  Defaults to the identity.
     process, measurement : arrays, optional
         Base noise magnitudes ``Q0`` (n, n, PD) and ``R0`` (m, diagonal).  Default to identity/unit --
-        the walk breathes around them with unbounded reach, so a rough base is fine.
+        the walk breathes around them with unbounded reach.  The base is not merely cosmetic,
+        though: the per-channel identifiability gate (``active``) is evaluated once at the base,
+        and a base wrong by ~10x in the Q/R *ratio* can freeze exactly the channels that would
+        walk back to the truth.  Give the right order of magnitude.
     n : int, optional
         State dimension, when it cannot be inferred from ``dynamics``/``process``/``H`` (default 1).
     phis, ss : sequences, optional
