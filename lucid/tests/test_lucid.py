@@ -117,6 +117,33 @@ def test_dynamics_none_raises():
         LucidFilter(dynamics=None)
 
 
+def test_five_dof_arm_polynomial():
+    """A 5-DOF arm (n=10 pos/vel, m=5 pots, D=15) must construct and run.
+
+    Pins the polynomial-cost property: the scale window is the caltrop axial star
+    (research 0013), linear in the component count.  The joint tensor grid is
+    ``(2K+1)**D`` nodes (~3e10 here) and would hang this test.
+    """
+    n_dof, dt = 5, 0.1
+    F = np.kron(np.eye(n_dof), np.array([[1.0, dt], [0.0, 1.0]]))
+    H = np.kron(np.eye(n_dof), np.array([[1.0, 0.0]]))
+    f = LucidFilter(dynamics=F, H=H)
+    for eng in f._members:
+        assert eng._G <= 1 + (eng._nn - 1) * eng.D, (
+            f"star has {eng._G} nodes; must be linear in D={eng.D}")
+    r = rng(5)
+    T = 60
+    x = np.zeros(2 * n_dof)
+    Y = np.empty((T, n_dof))
+    for t in range(T):
+        x = F @ x + r.standard_normal(2 * n_dof) * 0.05
+        Y[t] = H @ x + r.standard_normal(n_dof) * 0.3
+    res = f.filter(Y)
+    assert res.mean.shape == (T, 2 * n_dof)
+    assert np.all(np.isfinite(res.mean))
+    assert np.all(np.isfinite(res.var))
+
+
 def test_meas_scale_rises_on_burst():
     """Measurement log-scale should be higher during a sensor burst than in calm."""
     r = rng(99)
