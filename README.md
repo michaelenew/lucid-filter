@@ -19,14 +19,31 @@
 
 **Adaptive filters with no theoretically relevant free parameters.**
 
-![a 5-DOF robotic arm in 3D, tracked live through five noise regimes — calm, swamped accelerometers, a disturbance torque, a dead potentiometer, and both at once; the raw potentiometer estimate flails, a chip grid of learned noise scales lights up to show which component is hot, and the lucid estimate stays locked on the true arm](research/multivariate-statfilter/figures/arm5dof-lucid.gif)
+The animation below is real output of the public filter. A 5-DOF robotic arm
+works through a slow pick-and-place cycle while its operating conditions change
+out from under it, regime after regime: a calm stretch, the accelerometers
+turning noisy, **vibration shaking the arm itself** (the arm moves — the sensors
+are fine), a position sensor **failing outright**, and vibration and sensor
+noise together. The filter is told nothing about any of this. It does two
+things, live:
 
-This is the public filter, live on a 5-DOF arm in 3D. Every joint fuses a **bad
-potentiometer** (angle, σ ≈ 0.06 rad ≈ 3.4°) with a **good accelerometer**
-(angular acceleration, σ ≈ 0.02) while the arm runs a commanded trajectory — and
-the noise never sits still: the accelerometers get swamped (×15), a disturbance
-torque shakes the whole arm (×20), one joint's potentiometer **dies outright**,
-and then sensor and process noise hit at once. The filter is told the dynamics
+1. **It finds the regime almost instantly.** The top-right grid is the filter's
+   learned noise scale for every channel of every joint; a chip turning orange
+   means the filter has decided *that channel* is hot right now. The
+   `ACTIVE REGIME` line names the ground truth as it evolves, so you can watch
+   the chips find it.
+2. **It keeps the state estimate locked** (bottom right). Because it knows which
+   channel to stop trusting, the tip-error trace stays flat through conditions
+   that send the raw sensor readout off the chart and degrade a fixed-noise
+   Kalman filter given the very same model.
+
+![a 5-DOF robotic arm in 3D working a slow pick-and-place cycle, tracked live through five noise regimes — calm, noisy accelerometers, vibration shaking the arm, a failing position sensor, and both at once; an ACTIVE REGIME label names each phase, a chip grid of learned noise scales turns orange on the hot channel, the raw potentiometer estimate flails while the lucid estimate stays locked on the true arm](research/multivariate-statfilter/figures/arm5dof-lucid.gif)
+
+The rig: every joint fuses a **bad potentiometer** (angle, σ ≈ 0.06 rad ≈ 3.4°)
+with a **good accelerometer** (angular acceleration, σ ≈ 0.02); the arm's servo
+tracks minimum-jerk waypoint moves, and the commanded forcing is the known input
+`U`. The regimes: accelerometers ×15, vibration (disturbance torque) ×20, one
+joint's potentiometer ×15, then both at once. The filter is told the dynamics
 and which sensor reads what — **nothing about the noise**. Every noise scale is
 inferred online, per component, per step:
 
@@ -41,11 +58,11 @@ r.measurement_scale     # (T, m) which sensor is hot, per step — the chip grid
 r.process_scale         # (T, n) which dynamics mode is hot
 ```
 
-Through the bursts the lucid tip estimate holds **0.011 m RMSE**. The raw
-potentiometer reads 0.209 m — **19× worse** — and a fixed-noise Kalman filter
-given the *same model* reads 0.020 m (1.8× worse), with most of its remaining gap
+Through the bursts the lucid tip estimate holds **0.017 m RMSE**. The raw
+potentiometer reads 0.316 m — **19× worse** — and a fixed-noise Kalman filter
+given the *same model* reads 0.034 m (2× worse), with most of its remaining gap
 in the calm stretches after each burst, where the lucid filter re-converges
-faster (0.013 m vs 0.028 m). The learned scales double as a live diagnosis: the
+faster (0.014 m vs 0.037 m). The learned scales double as a live diagnosis: the
 chip grid pinpoints *which joint's* potentiometer died. The accelerometer and
 process chips light together — the accelerometer reads the very state the
 disturbance drives, so those two channels are collinear, and the filter tracks
