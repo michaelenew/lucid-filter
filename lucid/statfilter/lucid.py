@@ -190,6 +190,44 @@ def _split_groups(eng, I):
     return out
 
 
+def _subset_groups(eng, obs):
+    """The pairs a PARTIAL event's own observed subset confounds.
+
+    `_split_groups` asks whether ``H v_k`` lies along one sensor axis -- a question about the
+    whole row.  An event that carries a subset of the sensors asks the same question of
+    ``H[obs] v_k``, and gets a bigger answer: the fewer sensors report, the more pairs are
+    proportional in that event's score.  In the limit that matters most -- ONE sensor, which
+    is what a ``(sensor, timestamp, value)`` stream delivers -- ``S`` is a scalar, every
+    process mode that sensor sees enters it additively alongside the sensor's own noise, and
+    the split between them is invisible **at every such step**.  That is Proposition 1 again,
+    reached not through the model but through the packetisation.
+
+    The structural test is exact here and needs no Fisher solve: with a single observed
+    sensor the two ``dS`` are proportional by construction.  What is still asked of the full
+    model is that both axes carry information at all (``_Ichar``), so a ridge-regularised
+    ``Q0``'s null modes stay out, exactly as in `_split_groups`.
+
+    Returns the same ``(process axis, sensor axis, (H v)_i^2)`` triples, with GLOBAL indices.
+    """
+    dg = eng._Ichar
+    info = dg > _RANK_TOL * dg.max()
+    out = []
+    for k in range(eng.n):
+        if not (eng.active[k] and info[k]):
+            continue
+        hv = np.abs(eng.HV[obs, k])
+        if hv.max() <= 0.0:
+            continue
+        nz = np.flatnonzero(hv > _RANK_TOL * hv.max())
+        if nz.size != 1:
+            continue
+        i = int(obs[nz[0]])
+        if not info[eng.n + i]:
+            continue
+        out.append((k, i, float(eng.HV[i, k] ** 2)))
+    return out
+
+
 def _apply_split(eng, lo_vec):
     """Divide each confounded pair's noise between process and sensor at a FIXED TOTAL.
 
@@ -422,6 +460,15 @@ class _Propagator:
         self._Pinv = None
         self._key = None
         self._val = None
+        self._qcache = {}
+
+    def factor(self):
+        """Force the generator, returning False when there is none (rather than raising)."""
+        try:
+            self._factor()
+        except ValueError:
+            return False
+        return True
 
     def _factor(self):
         if self._A is not None:
@@ -449,6 +496,68 @@ class _Propagator:
             self._Pinv = np.linalg.solve(Phi1, self._I)
         except np.linalg.LinAlgError:               # int_0^1 exp(A t) dt singular: only
             self._Pinv = None                       # when A has a 2*pi*i*k eigenvalue
+
+    # -- the exact process accumulation over an elapsed gap --
+    def _vanloan(self, Qc, a):
+        """``int_0^a exp(A s) Qc exp(A' s) ds`` -- Van Loan's block exponential."""
+        n = self.n
+        M = np.zeros((2 * n, 2 * n))
+        M[:n, :n] = -self._A
+        M[:n, n:] = Qc
+        M[n:, n:] = self._A.T
+        E = _expm(M * a)
+        Fa = E[n:, n:].T
+        Q = Fa @ E[:n, n:]
+        return 0.5 * (Q + Q.T)
+
+    def spectral(self, Q0):
+        """The continuous spectral density whose ONE-STEP accumulation is ``Q0``.
+
+        ``Q0`` is what the caller supplied: the process covariance of one nominal step.  The
+        map ``Qc -> int_0^1 exp(As) Qc exp(A's) ds`` is linear and symmetric-preserving, so it
+        is inverted once, on the symmetric basis, and the answer is what makes ``Q(a)`` exact
+        at every gap rather than only at ``a = 1``.
+
+        Returns ``None`` when the inverse is not usable -- an ``A`` the map is singular for,
+        or a recovered density that is not positive semidefinite.  The caller then falls back
+        to scaling ``Q0`` linearly, which is what this replaced and is still exact for the
+        random-walk default.
+        """
+        n = self.n
+        idx = [(i, j) for i in range(n) for j in range(i, n)]
+        cols = []
+        for (i, j) in idx:                       # the symmetric basis, unit-weighted
+            E = np.zeros((n, n)); E[i, j] = E[j, i] = 1.0
+            cols.append(np.array([self._vanloan(E, 1.0)[p_] for p_ in idx]))
+        L = np.stack(cols, axis=1)
+        rhs = np.array([Q0[p_] for p_ in idx])
+        try:
+            sol = np.linalg.solve(L, rhs)
+        except np.linalg.LinAlgError:
+            return None
+        Qc = np.zeros((n, n))
+        for v, (i, j) in zip(sol, idx):
+            Qc[i, j] = Qc[j, i] = v
+        if not np.all(np.isfinite(Qc)):
+            return None
+        w = np.linalg.eigvalsh(0.5 * (Qc + Qc.T))
+        scale = max(float(np.abs(Qc).max()), 1e-300)
+        if w.min() < -1e-8 * scale:
+            return None
+        if not np.allclose(self._vanloan(Qc, 1.0), Q0, rtol=1e-6,
+                           atol=1e-12 * max(float(np.abs(Q0).max()), 1e-300)):
+            return None
+        return Qc
+
+    def accumulate(self, Qc, a):
+        """``Q(a)`` for a recovered spectral density -- exact, cached per gap."""
+        key = (id(Qc), a)
+        got = self._qcache.get(key)
+        if got is None:
+            got = self._vanloan(Qc, a)
+            if len(self._qcache) < 512:
+                self._qcache[key] = got
+        return got
 
     def at(self, a):
         """``(F(a), Psi(a))`` with ``mpred = F(a) x + Psi(a) B u``."""
@@ -519,6 +628,9 @@ class _WalkEngine:
         self._dyn = None            # optional (mean, u) -> (Jacobian, predicted mean) callable
         self._prop = prop if prop is not None else _Propagator(F)
         self._Tcache = {}           # the AR(1) scale kernel per elapsed time (D x nn x nn)
+        self._subcache = {}         # (groups, anchors) per observed subset -- see _subset_groups
+        self._Q0 = np.array(Q0, float)
+        self._Qc = False            # the spectral density, recovered lazily: see _base_Q
         # ACTIVATE structurally-observable axes -- NOT by the delocalisation floor (research 0024,
         # ported from AdaptiveKalmanFilter): a quiet process mode next to a loud sensor would be
         # frozen and then coast rigidly on a wrong velocity when that sensor is down-weighted --
@@ -602,6 +714,33 @@ class _WalkEngine:
             w[arm] = 1 + i * (self._nn - 1) + np.arange(self._nn - 1)
             self._axwin[k] = w
 
+    def _base_Q(self, a):
+        """The base process covariance accumulated over ``a`` nominal steps.
+
+        ``Q0`` is the caller's ONE-STEP covariance, so ``Q(1) = Q0`` by definition and the
+        nominal step needs nothing.  Off it, scaling ``Q0`` linearly is exact only when the
+        transition is the identity -- for a random walk `Q` really is proportional to elapsed
+        time.  It is badly wrong for an integrator: a double integrator accumulates position
+        variance as ``t**3``, so a half-length gap gets FOUR times the position noise it
+        should and a tenth-length gap a HUNDRED times.  That reads as a filter that cannot
+        trust its own propagation and over-fits every reading, and it is not something the
+        scale walk can absorb, because the misfit is a different multiple at every gap
+        (research/pointwise-streaming/0005 measured 15x oracle on the asynchronous rig).
+
+        So the base is the exact accumulation, recovered once from the generator the
+        propagator already holds.  Where that recovery is unavailable -- dynamics with no real
+        generator, a singular Van Loan map, a density that comes back non-PSD, or a per-step
+        linearisation which has no fixed generator at all -- it falls back to the linear
+        scaling, which is exactly what the caller would otherwise have had.
+        """
+        if self._Qc is False:
+            self._Qc = None
+            if self._dyn is None and self._prop.factor():
+                self._Qc = self._prop.spectral(self._Q0)
+        if self._Qc is None:
+            return a * self._Q0
+        return self._prop.accumulate(self._Qc, a)
+
     def _star_QR(self, a=1.0):
         """(Q_g, r_g) at every star node: the centre pair plus a per-node one-axis change.
 
@@ -611,7 +750,13 @@ class _WalkEngine:
         without ever forming the (m, m) block.
         """
         n = self.n
-        Qc = self.V @ np.diag(a * self.lam * np.exp(np.clip(self.mu[:n], -60, 60))) @ self.V.T
+        e = np.exp(np.clip(self.mu[:n], -60, 60))
+        if a == 1.0:
+            Qc = self.V @ np.diag(self.lam * e) @ self.V.T
+        else:
+            # base exact, the scale's DEPARTURE from it linear in the gap -- so dQ/dxi is
+            # unchanged and the walk tracks the same object it always did
+            Qc = self._base_Q(a) + self.V @ np.diag(a * self.lam * (e - 1.0)) @ self.V.T
         rc = self.rho * np.exp(np.clip(self.mu[n:], -60, 60))
         Qg = np.repeat(Qc[None], self._G, 0)
         rg = np.repeat(rc[None], self._G, 0)
@@ -745,15 +890,15 @@ class _WalkEngine:
 
     # -- a confounded group's two coordinates: its contribution to S (identifiable per step)
     #    and its log-odds (in the exact null space of the per-step scale-Fisher) --
-    def _group_read(self, mu):
+    def _group_read(self, mu, groups=None):
         out = []
-        for (k, i, h2) in self._groups:
+        for (k, i, h2) in (self._groups if groups is None else groups):
             a = self.lam[k] * h2 * math.exp(min(mu[k], 60.0))
             b = self.rho[i] * math.exp(min(mu[self.n + i], 60.0))
             out.append((a + b, math.log(max(a, 1e-300)) - math.log(max(b, 1e-300))))
         return out
 
-    def _group_write(self, mu, tots, los):
+    def _group_write(self, mu, tots, los, groups=None):
         """Put each group's total back with the given log-odds -- the exact null flow.
 
         The null direction is ``(R, -Q)`` up to scale at every operating point, and integrating
@@ -762,7 +907,7 @@ class _WalkEngine:
         coordinate the one-step likelihood cannot see, and touches nothing that it can.
         """
         out = mu.copy()
-        for gi, (k, i, h2) in enumerate(self._groups):
+        for gi, (k, i, h2) in enumerate(self._groups if groups is None else groups):
             lo = float(np.clip(los[gi], -80.0, 80.0))
             a = tots[gi] / (1.0 + math.exp(-lo))
             b = tots[gi] - a
@@ -779,6 +924,26 @@ class _WalkEngine:
         self._Pmu = self.s_ax ** 2
         self.loglik = 0.0
         return self
+
+    def event_groups(self, obs, mo):
+        """``(groups, anchor log-odds)`` for an event carrying the sensors ``obs``.
+
+        A FULL row is the model's own question and gets the model's own answer, unchanged --
+        so nothing about row-wise filtering passes through here.  A partial event gets the
+        pairs its subset confounds, cached per subset (there are ``m`` singletons and the
+        full row, so the cache is tiny and warm after the first pass).
+        """
+        if mo == self.m:
+            return self._groups, self._anchor_lo
+        key = obs.tobytes()
+        got = self._subcache.get(key)
+        if got is None:
+            g = _subset_groups(self, obs)
+            anc = np.array([lo for _, lo in self._group_read(np.zeros(self.D), g)])
+            got = (g, anc)
+            if len(self._subcache) < 256:
+                self._subcache[key] = got
+        return got
 
     def reprice(self, idx):
         """A detected jump re-prices ignorance: variance back to the class cap on ``idx``,
@@ -904,6 +1069,12 @@ class _WalkEngine:
         # profile carries the axis's evidence at linear cost).  An axis this event carries no
         # evidence for -- an unobserved sensor, or a mode none of the reporting sensors sees --
         # has dS = 0 identically, and only drifts.
+        # The walk's step budget is ONE grid spacing per nominal step OF A FULL ROW: it is
+        # what keeps a single Newton step against a near-singular Fisher from becoming a
+        # verdict.  An event carrying part of the row carries part of the evidence that would
+        # contradict such a step -- with one sensor reporting, nothing contradicts it at all
+        # -- so it gets that part of the budget.  A full row is unchanged by construction.
+        budget = self.gap if mo == m else self.gap * (mo / m)
         for i, k in enumerate(self._act):
             idx = self._axwin[k]
             dpk = self._dS_axis(k, obs, aQ if k < n else a)
@@ -919,10 +1090,11 @@ class _WalkEngine:
             info = float(pi_ax[i] @ info_g) + _RIDGE
             grad = float(pi_ax[i] @ score_g)
             K_mu = self._Pmu[k] / (self._Pmu[k] + 1.0 / info)
-            self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap[k], self.gap[k]))
+            self.mu[k] += float(np.clip(K_mu * (grad / info), -budget[k], budget[k]))
             self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k] * a, self._Pmu_cap[k])
         self._pi_ax, self._m, self._P = pi_ax, m_new, P_new
-        if self._groups and self._revert is not None:
+        ev_groups, ev_anchor = self.event_groups(obs, mo)
+        if ev_groups and self._revert is not None:
             # The per-axis Newton walk steps by ``score/info``, which is ~1/Q on a process axis
             # and ~1/R on a sensor axis; where the two are confounded, that step is almost
             # entirely along the NULL direction, in which the score carries no information at
@@ -932,14 +1104,23 @@ class _WalkEngine:
             # it is a TRANSIENT and not a verdict: it reverts to this member's hypothesis at the
             # class's own rate ``phi``, at the total the walk just established.  The verdict is
             # the bank's, on the ``forget`` timescale (research 0053's lesson b).
+            #
+            # Under a PARTIAL event the confounded set is the one that event's own sensors
+            # make (`_subset_groups`), which is larger: with a single sensor reporting, every
+            # process mode it sees is confounded with its noise, because ``S`` is then a
+            # scalar and the two enter it additively.  Without this the null excursion has
+            # nothing pulling it back and simply accumulates -- measured on the asynchronous
+            # rig as the rate sensor being driven 20x over-trusted and the process inflated
+            # to match (research/pointwise-streaming/0005).  A full row asks the model's own
+            # question and gets the model's own answer, so nothing here reaches row-wise use.
             # The revert is a RATE -- an exponential relaxation of the log-odds toward this
             # member's hypothesis at the class's own persistence per NOMINAL STEP -- so over
             # a gap of ``a`` it composes to ``revert**a``.  At ``a = 0`` that is 1: two
             # sensors reporting the same instant must not revert twice for arriving twice.
             rev = self._revert if a == 1.0 else self._revert ** a
-            tots, los = zip(*self._group_read(self.mu))
-            back = [an + rev * (lo - an) for an, lo in zip(self._anchor_lo, los)]
-            self.mu = self._group_write(self.mu, list(tots), back)
+            tots, los = zip(*self._group_read(self.mu, ev_groups))
+            back = [an + rev * (lo - an) for an, lo in zip(ev_anchor, los)]
+            self.mu = self._group_write(self.mu, list(tots), back, ev_groups)
         self.loglik += ll
         wmean = self._wmean(pi_ax)
         innov = e
@@ -1026,7 +1207,9 @@ class _EngineBank:
         self._h2 = (np.stack([[h for _, _, h in f._groups] for f in members])
                     if ng else np.zeros((M, 0)))
         self._anchor = st("_anchor_lo") if ng else np.zeros((M, 0))
-        self._revert = np.array([f._revert for f in members], float)
+        self._revert_on = e0._revert is not None
+        self._revert = np.array([f._revert if f._revert is not None else np.nan
+                                 for f in members], float)
         # state, stacked -- and handed back to the members as views
         self.mu, self._Pmu = st("mu"), st("_Pmu")
         self._m = np.zeros((M, self.n))
@@ -1053,8 +1236,12 @@ class _EngineBank:
         """The stacked twin of ``_WalkEngine._star_QR``: ``Q`` carries the elapsed factor, ``r``
         does not, and ``r`` comes back as the (M, G, m) diagonal for sub-selection."""
         n, M, G = self.n, self.M, self._G
-        le = a * self.lam * np.exp(np.clip(self.mu[:, :n], -60, 60))
-        Qc = np.einsum("bk,bkij->bij", le, self._Vout)
+        e = np.exp(np.clip(self.mu[:, :n], -60, 60))
+        if a == 1.0:
+            Qc = np.einsum("bk,bkij->bij", self.lam * e, self._Vout)
+        else:                       # base exact, scale departure linear -- see _base_Q
+            Qc = (np.stack([f._base_Q(a) for f in self.members])
+                  + np.einsum("bk,bkij->bij", a * self.lam * (e - 1.0), self._Vout))
         rc = self.rho * np.exp(np.clip(self.mu[:, n:], -60, 60))
         Qg = np.repeat(Qc[:, None], G, 1)
         rg = np.repeat(rc[:, None], G, 1)
@@ -1119,9 +1306,10 @@ class _EngineBank:
             out[:, :, j, j] = self.rho[:, i, None] * e
         return out
 
-    def _revert_groups(self, a=1.0):
+    def _revert_groups(self, gap=1.0):
+        """The model's own confounded pairs, stacked -- the full-row path, untouched."""
         n = self.n
-        rev = self._revert if a == 1.0 else self._revert ** a
+        rev = self._revert if gap == 1.0 else self._revert ** gap
         for gi, (k, i, _h) in enumerate(self._groups):
             h2 = self._h2[:, gi]
             a = self.lam[:, k] * h2 * np.exp(np.minimum(self.mu[:, k], 60.0))
@@ -1134,6 +1322,20 @@ class _EngineBank:
             b2 = tot - a2
             self.mu[:, k] = np.log(np.maximum(a2, 1e-300) / (self.lam[:, k] * h2))
             self.mu[:, n + i] = np.log(np.maximum(b2, 1e-300) / self.rho[:, i])
+
+    def _revert_subset(self, obs, mo, gap):
+        """The pairs a PARTIAL event's subset confounds -- per member, because the pairing
+        reads each member's own eigenbasis.  Only partial events reach here, and a partial
+        event is already the cheap one (its correction is ``m_o`` wide, not ``m``), so the
+        loop costs what the stacked path saves everywhere else."""
+        rev = self._revert if gap == 1.0 else self._revert ** gap
+        for j, f in enumerate(self.members):
+            groups, anc = f.event_groups(obs, mo)
+            if not groups:
+                continue
+            tots, los = zip(*f._group_read(self.mu[j], groups))
+            back = [an + rev[j] * (lo - an) for an, lo in zip(anc, los)]
+            self.mu[j] = f._group_write(self.mu[j], list(tots), back, groups)
 
     def update(self, y, u=None, a=1.0):
         """The stacked twin of ``_WalkEngine.update`` -- same event model, same partial
@@ -1221,6 +1423,7 @@ class _EngineBank:
         P_new = (np.einsum("bg,bgij->bij", w, Ppost)
                  + np.einsum("bg,bgi,bgj->bij", w, dm, dm))
         P_new = self._cap_P(0.5 * (P_new + np.swapaxes(P_new, 1, 2)))
+        budget = self.gap if mo == m else self.gap * (mo / m)   # see _WalkEngine.update
         for ax, k in enumerate(self._act):
             idx = self._axwin[k]
             dpk = self._dS_axis(k, obs, aQ if k < n else a)
@@ -1237,14 +1440,18 @@ class _EngineBank:
             info = np.einsum("bg,bg->b", pi[:, ax], info_g) + _RIDGE
             grad = np.einsum("bg,bg->b", pi[:, ax], score)
             Kmu = self._Pmu[:, k] / (self._Pmu[:, k] + 1.0 / info)
-            self.mu[:, k] += np.clip(Kmu * (grad / info), -self.gap[:, k], self.gap[:, k])
+            self.mu[:, k] += np.clip(Kmu * (grad / info), -budget[:, k], budget[:, k])
             self._Pmu[:, k] = np.minimum((1.0 - Kmu) * self._Pmu[:, k] + self._qmu[:, k] * a,
                                          self._Pmu_cap[:, k])
         self._pi[:] = pi
         self._m[:] = m_new
         self._P[:] = P_new
-        if self._groups:
-            self._revert_groups(a)
+        if self._revert_on:
+            if mo == m:
+                if self._groups:
+                    self._revert_groups(a)
+            else:
+                self._revert_subset(obs, mo, a)
         self._ll += ll
         sc = self.mu + self._wmean(pi)
         innov = e
