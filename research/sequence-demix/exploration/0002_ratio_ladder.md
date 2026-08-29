@@ -37,6 +37,7 @@ carried by a bank, not by a score.  Candidate A, realized as a **bank dimension*
 | retired FITTED filter | 0.394 | 1.056x | 0.784 | 1.012x | 1 | – / 0.66 |
 | shipped `LucidFilter()` | 0.692 | 1.837x | 1.845 | 2.382x | 4 | 1.38 / 1.29 |
 | **ladder, told nothing** | **0.388** | **1.031x** | 0.853 | 1.101x | 7 | 1.44 / 0.78 |
+| ... with a geometric `s` box | 0.390 | 1.035x | 0.882 | 1.138x | **3** | 1.43 / 0.81 |
 
 Steady state passes and **beats the retired fitted filter** — a filter that was handed
 `fit()`-learned `(Q, s2, phi_P, phi_M, s_P, s_M)`.  Calibration passes.  Regime C and the jump
@@ -75,7 +76,13 @@ score 0.547, far inside the 0.814 gate, so this is worth chasing rather than tri
 The jump is a reach problem, not a mechanism problem.  With the split correctly at `q ~ 0.02` the
 base gain is 0.13, so a 9-sigma jump has to be absorbed by a *split excursion*; the star's window
 half-span is `3 s`, and the shipped `s` box tops out at 0.8 — a factor of 11, where the jump needs
-~1000.  Widening the box to `s = 2.4` gives rise 3 immediately.  Note what the retired filter had:
+~1000.  Widening the box to a geometric `0.2 .. 3.2` (same member count) gives rise 3 immediately, and
+improves the settled part of regime C as well (750-900 goes 0.766 -> 0.738, past the comparator's
+0.751), because a window that can reach absorbs the level jump instead of letting it bias the
+ladder's verdict.  What it costs is the first fifty steps after the sensor degrades: 1.173 ->
+1.415, which is where the whole remaining regime-C miss now sits.  Adding an impulsive corner to
+`phi` on top (0.05, the retired filter's `phi_P ~ 0`) changes nothing at all -- those members take
+no weight, twice measured.  Note what the retired filter had:
 `fit()` handed it `s_P = 3.69` with `phi_P ~ 0` — an impulsive process channel with enormous
 reach, the top-left cell of the class's own 2x2 table.  The shipped box contains no such corner;
 `phi` in (0.70, 0.85, 0.95) is all persistent and `s <= 0.8` is all small.  A box is supposed to
