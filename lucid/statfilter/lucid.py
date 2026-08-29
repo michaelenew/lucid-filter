@@ -23,8 +23,8 @@ Everything is vector; a scalar problem is length 1.  `dynamics=None` (learn the 
 open cell -- it belongs to the ODE-learning filter and raises `NotImplementedError` for now.
 
 This is a benchmark toy: the RMSE for a given amount of supplied knowledge is the bound a real
-implementation can aim at.  The mechanism (per-component walk, axial GPB1, derived spectral
-truncation, finding-18 loop) is the parameter-free `WalkingVectorFilter` (now moved to research/ as
+implementation can aim at.  The mechanism (per-component walk, axial GPB1, structural axis
+activation, finding-18 loop) is the parameter-free `WalkingVectorFilter` (now moved to research/ as
 a specimen), lifted with a supplied `F` and wrapped in the `(phi, s)` bank of `WalkingBank` -- with
 one structural change: the specimen's exact tensor-product scale grid is ``(2K+1)**(n+m)`` nodes,
 EXPONENTIAL in the component count (a 5-DOF arm is out of reach), and is retired to research as the
@@ -101,8 +101,12 @@ class _WalkEngine:
     through the 1-D kernel, reweighted by the per-node likelihood); the state KF is GPB1-collapsed
     over the star as the evidence-weighted mixture of the axial windows; and the centre walks by
     the finding-18 loop per axis (score/Fisher averaged over the axial profile), so reach stays
-    unbounded.  Parameter-free: gain ``K* = (1-phi)/4``, drift ``q_mu`` and the spectral-freeze
-    floor are all derived from the class ``(phi, s)``; no EMA, no tuned constant.
+    unbounded.  Axes are active by STRUCTURAL observability (research 0024): a process eigenmode
+    is live iff it carries base variance and is seen by ``H``; a sensor is always live.  The
+    delocalisation the 0010 spectral freeze prevented is bounded instead of frozen out: ``q_mu``'s
+    Fisher is floored at the 0010 threshold and the walk covariance is capped at the window.
+    Parameter-free: gain ``K* = (1-phi)/4``, drift ``q_mu``, floor and cap are all derived from
+    the class ``(phi, s)``; no EMA, no tuned constant.
     """
 
     def __init__(self, Q0, R0, H, F, B, phi, s):
@@ -120,9 +124,20 @@ class _WalkEngine:
         self._Kstar = (1.0 - self.phi) / 4.0
         self._Ichar = self._steady_fisher()
         self._Ifloor = (1.0 - self.phi) / (4.0 * (_SPAN_S * self.s) ** 2)
-        self.active = self._Ichar >= self._Ifloor
-        with np.errstate(divide="ignore"):
-            self._qmu = self._Kstar ** 2 / (self._Ichar * (1.0 - self._Kstar))
+        # ACTIVATE structurally-observable axes -- NOT by the delocalisation floor (research 0024,
+        # ported from AdaptiveKalmanFilter): a quiet process mode next to a loud sensor would be
+        # frozen and then coast rigidly on a wrong velocity when that sensor is down-weighted --
+        # the process+pot runaway.  A process eigenmode is live iff it carries base variance AND
+        # is seen by H; a sensor is always live.  The delocalisation the 0010 freeze prevented is
+        # bounded instead: q_mu's Fisher is floored at the 0010 threshold and the walk covariance
+        # is capped at the window (Var(mu) <= L^2 -- the 0010 localisation condition as a bound).
+        hv_norm = np.linalg.norm(self.HV, axis=0)
+        self.active = np.ones(self.D, dtype=bool)
+        for k in range(n):
+            self.active[k] = self.lam[k] > 1e-12 * self.lam.max() and hv_norm[k] > 1e-8
+        self._qmu = self._Kstar ** 2 / (np.maximum(self._Ichar, self._Ifloor)
+                                        * (1.0 - self._Kstar))
+        self._Pmu_cap = (_SPAN_S * self.s) ** 2
         self._build_window()
         self.reset()
 
@@ -317,7 +332,7 @@ class _WalkEngine:
             grad = float(pi_ax[i] @ score_g)
             K_mu = self._Pmu[k] / (self._Pmu[k] + 1.0 / info)
             self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap, self.gap))
-            self._Pmu[k] = (1.0 - K_mu) * self._Pmu[k] + self._qmu[k]
+            self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k], self._Pmu_cap)
         self._pi_ax, self._m, self._P = pi_ax, m_new, P_new
         self.loglik += ll
         wmean = self._wmean(pi_ax)
