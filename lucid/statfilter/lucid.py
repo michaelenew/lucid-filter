@@ -20,7 +20,8 @@ Configure by the give-what-you-know / infer-the-rest rule -- for each input pass
     LucidFilter(dynamics=F, process=Q0, ...)     # you also know the base noise magnitudes
 
 Everything is vector; a scalar problem is length 1.  `dynamics=None` (learn the dynamics) is the one
-open cell -- it belongs to the ODE-learning filter and raises `NotImplementedError` for now.
+open cell -- it belongs to the ODE-learning filter and raises `NotImplementedError` for now; the
+opening document for that workstream is `research/dynamics-learning/SUMMARY.md`.
 
 This is a benchmark toy: the RMSE for a given amount of supplied knowledge is the bound a real
 implementation can aim at.  The mechanism (per-component walk, axial GPB1, structural axis
@@ -94,22 +95,14 @@ class _WalkEngine:
 
     Same model and walk as the research `WalkingVectorFilter`, with the state prediction being the
     supplied linear dynamics ``mpred = F m + B u``, ``Ppred = F P F^T + Q`` (F defaults to the
-    identity -> random walk) -- but the scale posterior lives on caltrop windows (research 0013,
-    0050-0053), not the exact tensor grid: the centre ``mu`` plus one small window per GROUP of
-    axes, linear in the axis count where the tensor grid is exponential.  Grouping (0043/0051):
-    the process<->sensor confound is LOCAL, so each process eigenmode is paired with its
-    best-reading sensor (argmax Fisher weight ``(H v_k)_i^2 / rho_i`` -- structural, no
-    threshold) and the pair shares a JOINT 2-D window; every other active axis keeps a 1-D
-    axial window.  The joint window restores the corners the axial star lacks -- (low Q, high
-    R) competes with (high Q, low R) directly -- which is what the collinear de-mix needs.
-    Each window is a bank of FULL per-node Kalman filters (0053): every scale hypothesis runs
-    its own filter, so a high-Q node chases white sensor noise and mispredicts its own
-    innovation statistics -- the lag-1 sequence evidence enters through the per-node means,
-    with no EMA and no whiteness statistic (per-node P alone does not de-mix: a shared mean
-    shows every hypothesis the same innovations, 0053).  The AR(1) kernel mixes each bank
-    IMM-style, the state output is the evidence-weighted collapse over the windows, and the
-    centre walks by the finding-18 loop per axis (score/Fisher over the window posterior, so
-    a winning corner pulls the centre off the ridge), with unbounded reach.  Axes are active by STRUCTURAL observability (research 0024): a process eigenmode
+    identity -> random walk) -- but the scale posterior lives on the caltrop star (research 0013),
+    not the exact tensor grid: the window centre ``mu`` plus one axial window per active axis,
+    ``1 + 2K * r`` nodes where the tensor grid is ``(2K+1)**r`` (exponential in the active-axis
+    count ``r``; theory-only).  Per-axis window posteriors carry the AR(1) memory (propagated
+    through the 1-D kernel, reweighted by the per-node likelihood); the state KF is GPB1-collapsed
+    over the star as the evidence-weighted mixture of the axial windows; and the centre walks by
+    the finding-18 loop per axis (score/Fisher averaged over the axial profile), so reach stays
+    unbounded.  Axes are active by STRUCTURAL observability (research 0024): a process eigenmode
     is live iff it carries base variance and is seen by ``H``; a sensor is always live.  The
     delocalisation the 0010 spectral freeze prevented is bounded instead of frozen out: ``q_mu``'s
     Fisher is floored at the 0010 threshold and the walk covariance is capped at the window.
@@ -160,92 +153,68 @@ class _WalkEngine:
         T1 /= T1.sum(1, keepdims=True)
         self._w1, self._T1 = w1, T1
         self._act = [int(k) for k in np.flatnonzero(self.active)]
-        # -- group the axes (research 0043/0051): each active process eigenmode pairs with its
-        # best-reading sensor (argmax structural Fisher weight (H v_k)_i^2 / rho_i); a sensor
-        # claimed by several modes takes the strongest (lam-weighted); everything else is a
-        # 1-D axial window.  The pair's JOINT window carries the corners the de-mix needs.
-        n = self.n
-        best = {}
-        for k in range(n):
-            if not self.active[k]:
-                continue
-            fish = self.HV[:, k] ** 2 / self.rho
-            i = int(np.argmax(fish))
-            if fish[i] <= 0:
-                continue
-            strength = self.lam[k] * fish[i]
-            if i not in best or strength > best[i][1]:
-                best[i] = (k, strength)
-        mode_of = {n + i: k for i, (k, _) in best.items()}
-        paired = set(mode_of.values()) | set(mode_of.keys())
-        self._groups = []
-        pos = 0
-        for k in self._act:
-            if k in paired and k < n:
-                continue                                   # emitted with its sensor below
-            if k in mode_of:                               # sensor with a paired mode
-                axes = (mode_of[k], k)
-                off = np.stack(np.meshgrid(off1, off1, indexing="ij"), -1).reshape(-1, 2)
-                w0 = np.kron(w1, w1); Tg = np.kron(T1, T1)
-            else:                                          # 1-D axial window
-                axes = (k,)
-                off = off1[:, None]
-                w0 = w1.copy(); Tg = T1
-            ng = off.shape[0]
-            self._groups.append({"axes": axes, "off": off, "w0": w0, "T": Tg,
-                                 "sl": slice(pos, pos + ng)})
-            pos += ng
-        self._G = max(pos, 1)
+        # star node table: node 0 is the centre (all axes at mu); then, per active axis, the
+        # 2K off-centre offsets along that axis alone.  1 + 2K*r nodes -- linear in the axes.
+        arm = np.delete(np.arange(self._nn), self._c)
+        self._star_axis = np.concatenate(
+            [np.full(1, -1)] + [np.full(self._nn - 1, k) for k in self._act]).astype(int)
+        self._star_off = np.concatenate(
+            [np.zeros(1)] + [off1[arm] for _ in self._act])
+        self._G = self._star_axis.size
+        self._axwin = {}
+        for i, k in enumerate(self._act):
+            w = np.empty(self._nn, dtype=int)
+            w[self._c] = 0
+            w[arm] = 1 + i * (self._nn - 1) + np.arange(self._nn - 1)
+            self._axwin[k] = w
 
-    def _node_QR(self):
-        """(Q_g, R_g) at every bank node: the centre pair plus that node's per-axis changes."""
+    def _star_QR(self):
+        """(Q_g, R_g) at every star node: the centre pair plus a per-node one-axis change."""
         n = self.n
         Qc = self.V @ np.diag(self.lam * np.exp(np.clip(self.mu[:n], -60, 60))) @ self.V.T
         rc = self.rho * np.exp(np.clip(self.mu[n:], -60, 60))
         Qg = np.repeat(Qc[None], self._G, 0)
         rg = np.repeat(rc[None], self._G, 0)
-        for g in self._groups:
-            sl = g["sl"]
-            for ai, k in enumerate(g["axes"]):
-                offs = g["off"][:, ai]
-                if k < n:
-                    dlam = self.lam[k] * (np.exp(np.minimum(self.mu[k] + offs, 60.0))
-                                          - math.exp(min(self.mu[k], 60.0)))
-                    Qg[sl] += dlam[:, None, None] * np.outer(self.V[:, k], self.V[:, k])[None]
-                else:
-                    rg[sl, k - n] = self.rho[k - n] * np.exp(
-                        np.minimum(self.mu[k] + offs, 60.0))
+        for g in range(1, self._G):
+            k = int(self._star_axis[g]); o = float(self._star_off[g])
+            if k < n:
+                dlam = self.lam[k] * (math.exp(min(self.mu[k] + o, 60.0))
+                                      - math.exp(min(self.mu[k], 60.0)))
+                Qg[g] += dlam * np.outer(self.V[:, k], self.V[:, k])
+            else:
+                i = k - n
+                rg[g, i] = self.rho[i] * math.exp(min(self.mu[k] + o, 60.0))
         Rg = np.zeros((self._G, self.m, self.m))
         Rg[:, np.arange(self.m), np.arange(self.m)] = rg
         return Qg, Rg
 
-    def _bank_weights(self, pis, alpha=None):
-        """One distribution over the bank: the group windows mixed with weights ``alpha``
-        (uniform when no evidence)."""
-        ngr = len(self._groups)
-        if ngr == 0:
-            return np.ones(1)
+    def _star_weights(self, pi_ax, alpha=None):
+        """One distribution over the star: the axial windows mixed with weights ``alpha``
+        (uniform when no evidence).  The shared centre accumulates every axis's centre mass."""
         w = np.zeros(self._G)
-        a = np.full(ngr, 1.0 / ngr) if alpha is None else alpha
-        for gi, g in enumerate(self._groups):
-            w[g["sl"]] = a[gi] * pis[gi]
+        r = len(self._act)
+        if r == 0:
+            w[0] = 1.0
+            return w
+        a = np.full(r, 1.0 / r) if alpha is None else alpha
+        for i, k in enumerate(self._act):
+            w[self._axwin[k]] += a[i] * pi_ax[i]
         return w
 
-    def _wmean(self, pis):
+    def _wmean(self, pi_ax):
         """Posterior mean window offset per component (frozen axes sit at 0)."""
         w = np.zeros(self.D)
-        for gi, g in enumerate(self._groups):
-            for ai, k in enumerate(g["axes"]):
-                w[k] = float(pis[gi] @ g["off"][:, ai])
+        for i, k in enumerate(self._act):
+            w[k] = float(pi_ax[i] @ self._off1)
         return w
 
-    def _dS_axis(self, k, offs):
-        """dS/dxi_k at scale offsets ``offs`` on axis k (dS_k depends only on the k-coordinate)."""
-        a = np.exp(np.minimum(self.mu[k] + offs, 60.0))
+    def _dS_axis(self, k):
+        """dS/dxi_k at each of axis k's window nodes (dS_k depends only on the k-coordinate)."""
+        a = np.exp(np.minimum(self.mu[k] + self._off1, 60.0))
         if k < self.n:
             hv = self.HV[:, k]
             return (self.lam[k] * a)[:, None, None] * np.outer(hv, hv)[None]
-        out = np.zeros((offs.size, self.m, self.m))
+        out = np.zeros((self._nn, self.m, self.m))
         i = k - self.n
         out[:, i, i] = self.rho[i] * a
         return out
@@ -281,11 +250,9 @@ class _WalkEngine:
         return np.array([0.5 * np.trace(Si @ d @ Si @ d) for d in dS]) + _RIDGE
 
     def reset(self, mean=None, scale=None):
-        self._pis = None
+        self._pi_ax = None
         self._m = None if mean is None else np.asarray(mean, float)
         self._P = None
-        self._mg = None
-        self._Pg = None
         self.mu = np.zeros(self.D) if scale is None else np.asarray(scale, float).copy()
         self._Pmu = np.full(self.D, self.s * self.s)
         self.loglik = 0.0
@@ -295,70 +262,44 @@ class _WalkEngine:
         n, m, H, F = self.n, self.m, self.H, self.F
         bu = (self.B @ u) if self.B is not None else 0.0
         y = np.atleast_1d(np.asarray(y, dtype=float))
-        ngr = len(self._groups)
-        Qg, Rg = self._node_QR()
-        if self._pis is None:
-            self._pis = [g["w0"].copy() for g in self._groups]
+        r = len(self._act)
+        Qg, Rg = self._star_QR()
+        if self._pi_ax is None:
+            self._pi_ax = np.tile(self._w1, (r, 1))
             if self._m is None:
                 self._m = (np.linalg.lstsq(H, y, rcond=None)[0]
                            if np.all(np.isfinite(y)) else np.zeros(n))
             if self._P is None:
                 self._P = np.eye(n) * float(Rg.reshape(self._G, -1).max()
                                             + Qg.reshape(self._G, -1).max()) * n
-            # PER-NODE Kalman filters (research 0053, after 0050/0051): each scale hypothesis
-            # runs its OWN filter.  A high-Q node chases white sensor noise and mispredicts
-            # its own innovation statistics, so the lag-1 sequence evidence that separates
-            # process from sensor noise enters through the per-node means -- no EMA, no
-            # whiteness statistic.  (Per-node P alone does NOT de-mix: with a shared mean
-            # every hypothesis sees the same innovations -- measured in 0053.)
-            self._mg = np.repeat(self._m[None], self._G, 0)
-            self._Pg = np.repeat(self._P[None], self._G, 0)
-        # IMM mixing per group through its AR(1) kernel: hypotheses exchange state mass the
-        # way the scale itself moves, which also keeps a far node's filter from wandering.
-        pis = []
-        for gi, g in enumerate(self._groups):
-            sl, Tg = g["sl"], g["T"]
-            pi_prev = self._pis[gi]
-            c = pi_prev @ Tg
-            mixp = (pi_prev[:, None] * Tg) / np.maximum(c[None, :], 1e-300)
-            mg = self._mg[sl]; Pg = self._Pg[sl]
-            m_mix = np.einsum("ij,in->jn", mixp, mg)
-            dmix = mg[:, None, :] - m_mix[None, :, :]
-            self._Pg[sl] = (np.einsum("ij,ikl->jkl", mixp, Pg)
-                            + np.einsum("ij,ijk,ijl->jkl", mixp, dmix, dmix))
-            self._mg[sl] = m_mix
-            pis.append(c)
-        mpred_g = np.einsum("ij,gj->gi", F, self._mg) + bu
-        Ppred = np.einsum("ij,gjk,lk->gil", F, self._Pg, F) + Qg
-        mpred_c = F @ self._m + bu
+        pi_ax = self._pi_ax @ self._T1
+        mpred = F @ self._m + bu
+        FPFt = F @ self._P @ F.T
         if not np.all(np.isfinite(y)):
-            self._pis = pis
-            self._mg, self._Pg = mpred_g, Ppred
-            w = self._bank_weights(pis)
-            self._m = np.einsum("g,gi->i", w, mpred_g)
-            dmv = mpred_g - self._m
-            self._P = (np.einsum("g,gij->ij", w, Ppred)
-                       + np.einsum("g,gi,gj->ij", w, dmv, dmv))
-            wmean = self._wmean(pis)
+            self._pi_ax = pi_ax
+            w = self._star_weights(pi_ax)
+            self._P = FPFt + np.einsum("g,gij->ij", w, Qg)
+            self._m = mpred
+            wmean = self._wmean(pi_ax)
             return LucidStep(self._m.copy(), self._P.copy(), np.full(m, np.nan), 0.0,
                              self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
-        eg = y[None, :] - np.einsum("ij,gj->gi", H, mpred_g)
-        e_rep = y - H @ mpred_c
+        Ppred = FPFt[None] + Qg
+        e = y - H @ mpred
         PHt = np.einsum("gij,kj->gik", Ppred, H)
         S = np.einsum("ij,gjk->gik", H, PHt) + Rg
         Si = np.linalg.inv(S)
         sgn, logdet = np.linalg.slogdet(S)
-        maha = np.einsum("gi,gij,gj->g", eg, Si, eg)
+        maha = np.einsum("i,gij,j->g", e, Si, e)
         lg = -0.5 * (m * _LOG2PI + logdet + maha)
-        if ngr:
-            logZ = np.empty(ngr)
-            for gi, g in enumerate(self._groups):
-                lgi = lg[g["sl"]]
+        if r:
+            logZ = np.empty(r)
+            for i, k in enumerate(self._act):
+                lgi = lg[self._axwin[k]]
                 mi = float(lgi.max())
-                wk = pis[gi] * np.exp(lgi - mi)
+                wk = pi_ax[i] * np.exp(lgi - mi)
                 Zi = float(wk.sum())
-                pis[gi] = wk / Zi
-                logZ[gi] = mi + math.log(Zi)
+                pi_ax[i] = wk / Zi
+                logZ[i] = mi + math.log(Zi)
             mz = float(logZ.max())
             aw = np.exp(logZ - mz)
             ll = mz + math.log(float(aw.mean()))
@@ -366,39 +307,37 @@ class _WalkEngine:
         else:
             ll = float(lg[0])
             alpha = None
+        pi = self._star_weights(pi_ax, alpha)
         K = np.einsum("gik,gkl->gil", PHt, Si)
-        mg_new = mpred_g + np.einsum("gil,gl->gi", K, eg)
+        Kbar = np.einsum("g,gil->il", pi, K)
+        m_new = mpred + Kbar @ e
+        mpost = mpred[None] + np.einsum("gil,l->gi", K, e)
+        dm = mpost - m_new
         KH = np.einsum("gil,lj->gij", K, H)
         Ppost = Ppred - np.einsum("gij,gjk->gik", KH, Ppred)
-        Ppost = 0.5 * (Ppost + np.transpose(Ppost, (0, 2, 1)))
-        w = self._bank_weights(pis, alpha)
-        m_new = np.einsum("g,gi->i", w, mg_new)
-        dm = mg_new - m_new
-        P_new = np.einsum("g,gij->ij", w, Ppost) + np.einsum("g,gi,gj->ij", w, dm, dm)
+        P_new = np.einsum("g,gij->ij", pi, Ppost) + np.einsum("g,gi,gj->ij", pi, dm, dm)
         P_new = 0.5 * (P_new + P_new.T)
-        # finding-18 walk per axis, score/Fisher weighted by its GROUP's window posterior:
-        # in a joint pair window a winning corner turns the other axis's weighted score
-        # negative, so the centre walks off the confound ridge instead of along it.
-        for gi, g in enumerate(self._groups):
-            sl = g["sl"]
-            Sik = Si[sl]
-            Sie = np.einsum("gij,gj->gi", Sik, eg[sl])
-            for ai, k in enumerate(g["axes"]):
-                dpk = self._dS_axis(k, g["off"][:, ai])
-                score_g = 0.5 * (np.einsum("gi,gij,gj->g", Sie, dpk, Sie)
-                                 - np.einsum("gij,gji->g", Sik, dpk))
-                SidS = np.einsum("gij,gjk->gik", Sik, dpk)
-                info_g = 0.5 * np.einsum("gij,gji->g", SidS, SidS)
-                info = float(pis[gi] @ info_g) + _RIDGE
-                grad = float(pis[gi] @ score_g)
-                K_mu = self._Pmu[k] / (self._Pmu[k] + 1.0 / info)
-                self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap, self.gap))
-                self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k], self._Pmu_cap)
-        self._pis, self._m, self._P = pis, m_new, P_new
-        self._mg, self._Pg = mg_new, Ppost
+        # finding-18 walk per active axis, score/Fisher averaged over that axis's window
+        # posterior only (the caltrop: dS_k depends only on the k-coordinate, so the axial
+        # profile carries the axis's evidence at linear cost).
+        for i, k in enumerate(self._act):
+            idx = self._axwin[k]
+            dpk = self._dS_axis(k)
+            Sik = Si[idx]
+            Sie = np.einsum("gij,j->gi", Sik, e)
+            score_g = 0.5 * (np.einsum("gi,gij,gj->g", Sie, dpk, Sie)
+                             - np.einsum("gij,gji->g", Sik, dpk))
+            SidS = np.einsum("gij,gjk->gik", Sik, dpk)
+            info_g = 0.5 * np.einsum("gij,gji->g", SidS, SidS)
+            info = float(pi_ax[i] @ info_g) + _RIDGE
+            grad = float(pi_ax[i] @ score_g)
+            K_mu = self._Pmu[k] / (self._Pmu[k] + 1.0 / info)
+            self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap, self.gap))
+            self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k], self._Pmu_cap)
+        self._pi_ax, self._m, self._P = pi_ax, m_new, P_new
         self.loglik += ll
-        wmean = self._wmean(pis)
-        return LucidStep(m_new.copy(), P_new.copy(), e_rep.copy(), ll,
+        wmean = self._wmean(pi_ax)
+        return LucidStep(m_new.copy(), P_new.copy(), e.copy(), ll,
                          self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
 
 
