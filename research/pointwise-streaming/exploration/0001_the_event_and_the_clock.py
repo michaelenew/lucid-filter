@@ -29,7 +29,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 sys.path.insert(0, ROOT)
 from lucid import LucidFilter                                             # noqa: E402
-from lucid.statfilter.lucid import _Propagator, _expm, _logm              # noqa: E402
+from lucid.statfilter.lucid import (_Propagator, _WalkEngine,             # noqa: E402
+                                    _expm, _logm)
 
 OUT = os.path.join(HERE, "figures", "pw0001.json")
 # The filter as it stood before this workstream: the commit this branch was measured
@@ -201,8 +202,10 @@ def the_no_information_limit():
     information IS ``P_mu + q_mu``; (ii) what applying it on the all-missing path costs,
     which is the honest price of removing the discontinuity.
     """
-    f = LucidFilter()
-    e = f._members[0]
+    # A STANDALONE engine: a member pulled out of a LucidFilter has its state arrays as
+    # views into the stacked bank (`_EngineBank`), which owns their initialisation, so it
+    # cannot be stepped on its own.
+    e = _WalkEngine(np.eye(1), np.ones(1), np.eye(1), np.eye(1), None, 0.85, 0.30)
     e.update(np.array([0.4]))                       # give it a state to walk from
     Pmu0 = e._Pmu.copy()
     k = 0

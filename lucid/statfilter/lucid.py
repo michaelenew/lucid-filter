@@ -963,7 +963,11 @@ def _bank_key(f):
 class _LoopBank:
     """Fallback executor: members whose class overrides ``update`` (research subclasses) run
     looped, exactly as before.  Same stacked outputs as `_EngineBank`, so the mixing above is
-    one code path."""
+    one code path.
+
+    The elapsed gap is passed on as ``a``, so an overriding subclass must take it.  That is
+    deliberate: a subclass that silently dropped it would keep running, and would quietly
+    treat every gap as nominal -- a wrong answer is worse than a TypeError."""
 
     def __init__(self, members):
         self.members = members

@@ -18,15 +18,15 @@ filter told the true schedule **and** the true noise. 6 seeds, T = 400.
 | gap spread | timestamped | assumed uniform | oracle | uniform / ts | ts / oracle |
 |---|---|---|---|---|---|
 | 0.00 | 0.1350 ± 0.0028 | 0.1350 ± 0.0028 | 0.1347 | 1.00× | 1.002 |
-| 0.25 | 0.1240 ± 0.0058 | 0.1364 ± 0.0076 | 0.1240 | 1.10× | **1.000** |
-| 0.50 | 0.1232 ± 0.0047 | 0.1729 ± 0.0120 | 0.1231 | 1.40× | **1.000** |
-| 1.00 | 0.1228 ± 0.0013 | 0.1883 ± 0.0143 | 0.1224 | 1.53× | **1.003** |
+| 0.25 | 0.1241 ± 0.0058 | 0.1365 ± 0.0075 | 0.1240 | 1.10× | **1.001** |
+| 0.50 | 0.1232 ± 0.0047 | 0.1728 ± 0.0116 | 0.1231 | 1.40× | **1.001** |
+| 1.00 | 0.1228 ± 0.0013 | 0.1887 ± 0.0145 | 0.1224 | 1.54× | **1.003** |
 
 *position RMSE*
 
 At zero spread the two filters are the same filter — the check that the clock is a
 generalisation and not a second code path. From there, ignoring the timestamps costs
-10%, 40%, 53%. What is worth more than the penalty column is the last one: **the
+10%, 40%, 54%. What is worth more than the penalty column is the last one: **the
 timestamped filter sits on the oracle to three decimal places at every irregularity
 level**, an oracle that was told both the schedule and the noise. Irregular sampling is
 not a source of loss for this filter once it is told the times; it is only a source of

@@ -193,7 +193,7 @@ two-sensor rig where the coarse absolute sensor reports one row in 25, keeping t
 partial rows holds the velocity estimate at its all-sensors value while dropping
 incomplete rows costs **6.8×**; under irregular arrivals, supplying the timestamps
 puts the filter **on** an oracle told the true schedule and the true noise
-(ratio 1.000–1.003) where assuming uniformity costs 1.1–1.5×.
+(ratio 1.001–1.003) where assuming uniformity costs 1.1–1.5×.
 
 ## Measured behaviour
 

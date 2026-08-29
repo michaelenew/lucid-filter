@@ -63,7 +63,15 @@ general case.** Everything else follows from taking that seriously.
    *magnitude* online is the scale walk's whole job. Bounded and measured: 3.8% at
    `‖A‖a = 0.025`, 45% at 1.2. Its honest limit is that the error is *gap-dependent*, so
    the walk can absorb its average but not its variation — an open, below.
-7. **The process-scale score uses the LIVE process time, not the gap** (0003). The engine's
+7. **Every rate in the engine composes over the gap, including the ones that arrived
+   later.** The split ladder's group revert
+   ([`sequence-demix`](../sequence-demix/SUMMARY.md)) relaxes a confounded pair's log-odds
+   toward its member's hypothesis at the class's persistence *per nominal step*, so over a
+   gap it is `revert**a` and at `a = 0` it is the identity. Left per-arrival it would
+   revert `m` times for one instant delivered as `m` points, which is the same category of
+   error as item 4 and was caught by the same rule: **if it is a rate, it takes the gap's
+   power; if it is a property of the reading, it does not.**
+8. **The process-scale score uses the LIVE process time, not the gap** (0003). The engine's
    score is the local one: it keeps `Q`'s dependence on `xi` and drops the prior
    covariance's. At a zero gap `Q(0) = 0`, so that score is not small but *structurally
    absent*, and the first-arriving reading of an instant took all of the process-scale
@@ -92,8 +100,8 @@ general case.** Everything else follows from taking that seriously.
   solve is gone); numpy wall time rises 1.7–3.8× on the extra interpreter passes.
 - **The clock is worth what it costs** (0004). Under irregular arrivals with the same mean
   rate, supplying the timestamps puts the filter **on** an oracle Kalman filter told the
-  true schedule *and* the true noise — ratio 1.000, 1.000, 1.003 at gap spreads 0.25, 0.5,
-  1.0 — while assuming uniformity costs 1.10×, 1.40×, 1.53×. At zero spread the two are
+  true schedule *and* the true noise — ratio 1.001, 1.001, 1.003 at gap spreads 0.25, 0.5,
+  1.0 — while assuming uniformity costs 1.10×, 1.40×, 1.54×. At zero spread the two are
   the same filter.
 - **The asynchronous rig** (0005), the acceptance benchmark — a 100 Hz rate gyro, a 5 Hz
   absolute fix and a 12 Hz jittered second absolute, none phase-locked, one failing ×10
@@ -104,6 +112,23 @@ general case.** Everything else follows from taking that seriously.
   rises +4.49 nats on a truth of 4.61. **The old API's route — bin onto the fast grid,
   drop any incomplete row — keeps 11 of 1600 rows (0.7%) and pays 21.2×**, and that number
   gets worse as sensor rates get less commensurable, not better.
+
+## A note on the second engine
+
+`LucidFilter` runs its members through **two** copies of the same recursion: the looped
+`_WalkEngine.update` and the stacked `_EngineBank.update` that main added, which runs
+structurally-identical members as one batched pass and is the path a default filter
+actually takes. Everything above is implemented in both, and `test_bank_matches_the_looped_members`
+pins them to each other — now on partial rows and non-nominal gaps as well as the paths it
+already covered.
+
+That guard earned its keep immediately. The stacked copy's axial-reweight loop used `a` as
+its loop variable, which the elapsed gap now also uses; after the rename the gap read
+`len(act) - 1` for the whole rest of the step, so `Q`, the walk drift and the scale scores
+were all scaled by a small integer. The looped copy uses `i` there and was unaffected —
+which is exactly the shape of bug a two-implementation guard exists to catch, and exactly
+the shape one loses by trusting that "the stacked path is the same arithmetic" without
+checking.
 
 ## Open items
 
