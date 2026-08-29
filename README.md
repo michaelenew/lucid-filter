@@ -39,6 +39,10 @@ things, live:
 
 ![a 5-DOF robotic arm in 3D working a slow pick-and-place cycle, tracked live through five noise regimes — calm, noisy accelerometers, vibration shaking the arm, a failing position sensor, and both at once; an ACTIVE REGIME label names each phase, a chip grid of learned noise scales turns orange on the hot channel, the raw potentiometer estimate flails while the lucid estimate stays locked on the true arm](research/multivariate-statfilter/figures/arm5dof-lucid.gif)
 
+*Want to pause or change speed? The same animation as
+[an MP4](research/multivariate-statfilter/figures/arm5dof-lucid.mp4) — open it
+on GitHub for a player with pause, scrubbing, and 0.25×–2× playback.*
+
 The rig: every joint fuses a **bad potentiometer** (angle, σ ≈ 0.06 rad ≈ 3.4°)
 with a **good accelerometer** (angular acceleration, σ ≈ 0.02); the arm's servo
 tracks minimum-jerk waypoint moves, and the commanded forcing is the known input
