@@ -225,8 +225,10 @@ research.
   is the opening document.
 - **The sequence-evidence de-mix** — per-hypothesis filters carry the lag-1
   evidence that splits collinear noise channels; the mechanism is validated and
-  its stable in-engine realization is open
-  ([`0053`](research/multivariate-statfilter/exploration/0053_pernode_demix.md)).
+  its stable in-engine realization is open:
+  [`research/sequence-demix/SUMMARY.md`](research/sequence-demix/SUMMARY.md)
+  is the opening document, with the scalar hero gate and the 5-DOF guard as its
+  acceptance benchmarks.
 - **A lean/embedded profile** — the bank multiplier and per-cluster execution,
   including block structure when `F`/`B` arrive as callables (see the
   [SUMMARY opens](research/multivariate-statfilter/SUMMARY.md#open-items)).

@@ -382,6 +382,11 @@ that.** See `exploration/0029_reprofile.md`.
   (per-cluster static grids, 0051), the sequence memory on the bank-`forget` timescale rather
   than the scale kernel's 1/(1−φ), and a bound tying far-node means to the collapse. See
   `exploration/0053_pernode_demix.md`.
+  **Promoted to its own workstream**, with benchmarks (the scalar hero gate + the 5-DOF
+  no-impingement guard), the full evidence trail, and a candidate ladder:
+  [`../sequence-demix/SUMMARY.md`](../sequence-demix/SUMMARY.md). The scalar lockstep found in
+  the README pass (both scale axes walk identically — the single-channel instance of the same
+  confound) is recorded there.
 - **Lean / embedded execution.** The public filter's cost is three multiplicative levers
   (0053 §5): the 15-member (φ,s) bank (~15×; the ridge is flat for tracking, 0037 — a 1–3
   member profile loses nothing on state), the coupled n³ state update (robotics models are
