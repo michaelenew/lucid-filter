@@ -324,15 +324,33 @@ def render():
 
     print("rendering", len(frames), "frames...")
     fig.canvas.draw()
-    imgs = []
+    imgs, raws = [], []
     for i in frames:
         draw(i); fig.canvas.draw()
-        imgs.append(Image.fromarray(np.asarray(fig.canvas.buffer_rgba())).convert(
-            "P", palette=Image.ADAPTIVE, colors=64))
+        rgb = np.asarray(fig.canvas.buffer_rgba())[..., :3].copy()
+        raws.append(rgb)
+        imgs.append(Image.fromarray(rgb).convert("P", palette=Image.ADAPTIVE, colors=64))
     imgs[0].save(OUT, save_all=True, append_images=imgs[1:], duration=60, loop=0,
                  disposal=2, optimize=True)
     print("wrote", os.path.relpath(OUT), "-", os.path.getsize(OUT) // 1024, "KB,",
           len(frames), "frames")
+    # the same animation as an H.264 video: GitHub's player gives pause / scrub / 0.25-2x speed
+    try:
+        import imageio
+        h, w = raws[0].shape[:2]
+        if h % 2 or w % 2:                       # yuv420p needs even dimensions -- pad with BG
+            H2, W2 = h + h % 2, w + w % 2
+            bg = np.array([14, 18, 23], dtype=np.uint8)   # BG "#0e1217"
+            raws = [np.pad(r, ((0, H2 - h), (0, W2 - w), (0, 0)),
+                           constant_values=0) + 0 for r in raws]
+            for r in raws:
+                r[h:, :] = bg; r[:, w:] = bg
+        mp4 = OUT[:-4] + ".mp4"
+        imageio.mimwrite(mp4, raws, fps=17, codec="libx264", quality=8,
+                         pixelformat="yuv420p")
+        print("wrote", os.path.relpath(mp4), "-", os.path.getsize(mp4) // 1024, "KB")
+    except ImportError:
+        print("imageio not installed -- skipped the .mp4 (pip install imageio imageio-ffmpeg)")
     # numbers for the README claim
     on = np.zeros(T, bool)
     for nm, a, b in PHASES:
