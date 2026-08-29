@@ -112,9 +112,10 @@ def test_missing_obs():
     assert np.all(np.isnan(r.innovation[30:35]))
 
 
-def test_dynamics_none_raises():
-    with pytest.raises(NotImplementedError):
-        LucidFilter(dynamics=None)
+def test_dynamics_none_is_implemented():
+    """The cell is filled: dynamics=None learns F online (see the block at the bottom)."""
+    f = LucidFilter(dynamics=None)
+    assert f._learn and f._nd == 2          # the nominal hedge plus the departure walker
 
 
 def test_five_dof_arm_polynomial():
@@ -157,3 +158,195 @@ def test_meas_scale_rises_on_burst():
     calm = float(res.measurement_scale[50:130].mean())
     burst = float(res.measurement_scale[150:180].mean())
     assert burst > calm, f"burst scale {burst:.2f} not above calm {calm:.2f}"
+
+
+# ------------------------------------------------- the dynamics channel (dynamics=None)
+
+def ar1(T=1200, a=0.6, q=0.09, r=0.25, seed=0, a2=None, switch=None):
+    """Scalar AR(1), optionally with a step change in `a` at `switch`."""
+    g = rng(seed)
+    x = np.zeros(T)
+    for t in range(1, T):
+        at = a if (a2 is None or t < switch) else a2
+        x[t] = at * x[t - 1] + math.sqrt(q) * g.standard_normal()
+    y = x + math.sqrt(r) * g.standard_normal(T)
+    return y[:, None], x
+
+
+def _rmse(est, truth, lo=300):
+    return float(np.sqrt(np.mean((est[lo:] - truth[lo:]) ** 2)))
+
+
+def test_fixed_dynamics_reports_no_channel():
+    """Supplied, fixed dynamics: the channel is off and the report says so."""
+    Y, _ = ar1()
+    r = LucidFilter(dynamics=[[0.6]], process=[[0.09]], measurement=[0.25]).filter(Y)
+    assert r.dynamics is None and r.control is None and r.fault is None
+    st = LucidFilter(dynamics=[[0.6]]).update(Y[0])
+    assert st.dynamics is None and st.fault == 0.0
+
+
+def test_dynamics_none_shapes():
+    Y, _ = ar1(T=400)
+    f = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25])
+    r = f.filter(Y)
+    assert r.dynamics.shape == (400, 1, 1)
+    assert r.fault.shape == (400,)
+    assert np.all(np.isfinite(r.dynamics)) and np.all(np.isfinite(r.mean))
+    assert np.all((r.fault >= 0.0) & (r.fault <= 1.0))
+
+
+def test_dynamics_none_beats_the_random_walk_it_starts_from():
+    """Told nothing, it must learn its way past its own F = I prior."""
+    Y, x = ar1(T=1200, a=0.3, seed=2)
+    learned = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25]).filter(Y)
+    walk = LucidFilter(dynamics=[[1.0]], process=[[0.09]], measurement=[0.25]).filter(Y)
+    assert _rmse(learned.mean[:, 0], x) < _rmse(walk.mean[:, 0], x)
+    assert learned.fault[-1] > 0.5           # the nominal F = I is decisively beaten
+    assert abs(learned.dynamics[-1, 0, 0]) < 0.8      # and F has moved well off 1
+
+
+def test_dynamics_none_tracks_near_the_oracle():
+    """Within a few percent of a Kalman filter told the true dynamics."""
+    Y, x = ar1(T=1200, a=0.6, seed=1)
+    learned = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25]).filter(Y)
+    oracle = LucidFilter(dynamics=[[0.6]], process=[[0.09]], measurement=[0.25]).filter(Y)
+    assert _rmse(learned.mean[:, 0], x) < 1.15 * _rmse(oracle.mean[:, 0], x)
+
+
+def test_fault_is_detected_and_not_before_it_happens():
+    Y, x = ar1(T=2400, a=0.9, a2=0.3, switch=1200, seed=5)
+    f = LucidFilter(dynamics=[[0.9]], process=[[0.09]], measurement=[0.25], faults=1 / 2400)
+    r = f.filter(Y)
+    assert r.fault[300:1200].max() < 0.5      # no false alarm in the calm stretch
+    assert r.fault[-200:].mean() > 0.5        # and the fault is found
+    assert r.dynamics[-1, 0, 0] < 0.75        # F has moved toward the new truth
+
+
+def test_fault_recovery_beats_the_frozen_filter():
+    Y, x = ar1(T=2400, a=0.9, a2=0.3, switch=1200, seed=5)
+    kw = dict(process=[[0.09]], measurement=[0.25])
+    live = LucidFilter(dynamics=[[0.9]], faults=1 / 2400, **kw).filter(Y)
+    frozen = LucidFilter(dynamics=[[0.9]], **kw).filter(Y)
+    post = slice(1600, 2400)
+    assert (_rmse(live.mean[:, 0], x, 1600) < _rmse(frozen.mean[:, 0], x, 1600))
+
+
+def test_calm_costs_nothing():
+    """The hedge: carrying the channel through a run with no fault is ~free."""
+    Y, x = ar1(T=1500, a=0.9, seed=7)
+    kw = dict(dynamics=[[0.9]], process=[[0.09]], measurement=[0.25])
+    live = LucidFilter(faults=1 / 1500, **kw).filter(Y)
+    fixed = LucidFilter(**kw).filter(Y)
+    assert _rmse(live.mean[:, 0], x) < 1.02 * _rmse(fixed.mean[:, 0], x)
+    assert live.fault[300:].max() < 0.9       # no confident false detection
+
+
+def test_named_anchor_pins_the_new_dynamics():
+    """A nameable fault mode is carried as its own filter and recovers F closely."""
+    Y, x = ar1(T=2400, a=0.9, a2=0.3, switch=1200, seed=5)
+    r = LucidFilter(dynamics=[[0.9]], process=[[0.09]], measurement=[0.25],
+                    faults=1 / 2400, anchors=[[[0.3]]]).filter(Y)
+    assert abs(r.dynamics[-1, 0, 0] - 0.3) < 0.2
+
+
+def test_low_rank_departures():
+    """Mechanism (b): supplying the departure directions is cheaper and still learns."""
+    Y, x = ar1(T=800, a=0.3, seed=2)
+    kw = dict(dynamics=None, process=[[0.09]], measurement=[0.25])
+    full = LucidFilter(**kw)
+    low = LucidFilter(departures=[np.array([[1.0]])], **kw)
+    assert low._specs[-1][3].k == 1
+    r = low.filter(Y)
+    assert np.all(np.isfinite(r.dynamics)) and r.dynamics[-1, 0, 0] < 0.8
+
+
+def test_control_map_is_learned():
+    """B is learned alongside F when a control input is supplied."""
+    g = rng(11)
+    T = 1200
+    u = g.standard_normal((T, 1))
+    x = np.zeros(T)
+    for t in range(1, T):
+        x[t] = 0.5 * x[t - 1] + 1.5 * u[t, 0] + 0.2 * g.standard_normal()
+    Y = (x + 0.3 * g.standard_normal(T))[:, None]
+    r = LucidFilter(dynamics=None, control=[[1.0]], process=[[0.04]],
+                    measurement=[0.09]).filter(Y, u)
+    assert r.control.shape == (T, 1, 1)
+    assert abs(r.control[-1, 0, 0] - 1.5) < 0.5
+
+
+def test_departure_variance_is_bounded_never_frozen():
+    """The class cap bounds the departure's variance; the gain stays live."""
+    Y, _ = ar1(T=400)
+    f = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25])
+    f.filter(Y)
+    dep = f._specs[-1][3]
+    eng = f._members[(f._nd - 1) * f._nc]
+    assert np.all(np.diag(eng._P)[dep.gidx] <= dep.cap[dep.gidx] * (1 + 1e-9))
+    assert np.all(np.diag(eng._P)[dep.gidx] > 0.0)      # never frozen at zero
+    eng.reprice(dep.gidx)                                # the detection restart
+    assert np.allclose(np.diag(eng._P)[dep.gidx], dep.cap[dep.gidx])
+
+
+def test_vector_dynamics_learned():
+    """n = 2 oscillator, told nothing, both components observed."""
+    g = rng(4)
+    T = 1500
+    lam, phi = 0.97, 0.25
+    F = lam * np.array([[math.cos(phi), -math.sin(phi)], [math.sin(phi), math.cos(phi)]])
+    x = np.zeros((T, 2))
+    for t in range(1, T):
+        x[t] = F @ x[t - 1] + 0.2 * g.standard_normal(2)
+    Y = x + 0.3 * g.standard_normal((T, 2))
+    learned = LucidFilter(dynamics=None, process=np.eye(2) * 0.04,
+                          measurement=[0.09, 0.09]).filter(Y)
+    walk = LucidFilter(dynamics=np.eye(2), process=np.eye(2) * 0.04,
+                       measurement=[0.09, 0.09]).filter(Y)
+    lr = float(np.sqrt(np.mean((learned.mean[300:] - x[300:]) ** 2)))
+    wr = float(np.sqrt(np.mean((walk.mean[300:] - x[300:]) ** 2)))
+    assert lr < wr
+    assert np.linalg.norm(learned.dynamics[-1] - F) < np.linalg.norm(np.eye(2) - F)
+
+
+def test_faults_hazard_validated():
+    with pytest.raises(ValueError):
+        LucidFilter(dynamics=[[0.5]], faults=1.5)
+    with pytest.raises(ValueError):
+        LucidFilter(dynamics=[[0.5]], faults=0.0)
+    with pytest.raises(ValueError):
+        LucidFilter(dynamics=[[0.5]], faults=1e-4, anchors=[np.eye(2)])
+
+
+def test_callable_dynamics_relinearises():
+    """Real F/B arrive linearised per operating point, so `dynamics` may be a callable."""
+    g = rng(9)
+    T = 800
+    x = np.zeros(T)
+    for t in range(1, T):                       # a state-dependent (nonlinear) decay
+        a = 0.9 - 0.3 * math.tanh(x[t - 1])
+        x[t] = a * x[t - 1] + 0.2 * g.standard_normal()
+    Y = (x + 0.3 * g.standard_normal(T))[:, None]
+
+    def linearised(state):
+        return np.array([[0.9 - 0.3 * math.tanh(float(state[0]))]])
+
+    kw = dict(process=[[0.04]], measurement=[0.09])
+    moving = LucidFilter(dynamics=linearised, n=1, **kw).filter(Y)
+    frozen = LucidFilter(dynamics=[[0.9]], **kw).filter(Y)
+    assert moving.dynamics.shape == (T, 1, 1)   # a moving model is reported, not None
+    assert moving.fault is not None
+    assert _rmse(moving.mean[:, 0], x) <= _rmse(frozen.mean[:, 0], x)
+    # a CONSTANT callable must reduce to the matrix it returns
+    same = LucidFilter(dynamics=lambda s: np.array([[0.9]]), n=1, **kw).filter(Y)
+    assert np.allclose(same.mean, frozen.mean, atol=1e-8)
+
+
+def test_callable_dynamics_with_faults():
+    """The departure channel rides on top of a moving linearisation."""
+    Y, x = ar1(T=1200, a=0.6, seed=3)
+    f = LucidFilter(dynamics=lambda s: np.array([[0.6]]), n=1, faults=1e-3,
+                    process=[[0.09]], measurement=[0.25])
+    r = f.filter(Y)
+    assert np.all(np.isfinite(r.dynamics)) and r.dynamics.shape == (1200, 1, 1)
+    assert abs(r.dynamics[-1, 0, 0] - 0.6) < 0.4

@@ -396,12 +396,13 @@ that.** See `exploration/0029_reprofile.md`.
   (b) block-structure handling when `F`/`B` are supplied as *callables* (linearized nonlinear
   dynamics) — structure cannot be detected statically, so it must be declared by the caller or
   probed numerically at the linearization point, and it can change with the operating point.
-- **Online learned dynamics (`dynamics=None`).** Promoted to its own workstream with a full
-  opening document: [`../dynamics-learning/SUMMARY.md`](../dynamics-learning/SUMMARY.md) —
-  fast detection of dynamics changes (a drone with a weight attached, a tire blowout) and
-  fast recovery of the true dynamics, building on the odefilter dynamics channel, the 0053
-  per-hypothesis-filter finding (first-order for dynamics), the 0041 detection frontier, and
-  the Q↔F confound split via innovation–regressor correlation.
+- **Online learned dynamics (`dynamics=None`).** ~~Open~~ — **delivered** in
+  [`../dynamics-learning/SUMMARY.md`](../dynamics-learning/SUMMARY.md).  It built on exactly
+  the pieces this workstream expected it to: the 0053 per-hypothesis-filter finding (the
+  evidence is first-order for dynamics), the 0041 detection frontier (re-derived for a
+  dynamics change and measured against), and the Q↔F split — which turned out to need no
+  explicit innovation–regressor correlation at all, because per-hypothesis MEANS competing
+  under a live noise walk already carry it.  Shipped as `dynamics=None` / `faults=rho`.
 - **Adaptation timescale / lag.** A burst is caught over `~1/β` steps; very brief bursts are
   under-corrected. `β` and the process-drive rate are labeled responsiveness budgets — derive
   them from the class `(φ, s)` where possible.

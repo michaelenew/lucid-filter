@@ -126,15 +126,33 @@ predictive likelihood weight it. The single residual knob is `forget`
 (default 0.999), the bank's weight memory; tracking is insensitive to any value
 near 1.
 
+**The dynamics can be learned too.** `dynamics=None` learns `F` (and `B`) from the
+random-walk prior; `dynamics=F0, faults=rho` says the supplied dynamics may
+*change* — a payload attached to a drone, a tire blown out — and the filter
+detects the change and recovers the new dynamics with no refit and no threshold.
+It is the same construction one level up: the departure from nominal is carried
+as extra state, so the noise machinery above runs on top of it unchanged, which
+is what separating a wrong `F` from elevated `Q` requires — the two compete as
+hypotheses under a live noise walk rather than through a whiteness statistic
+bolted on the side. A fault is a **jump process**, so its one labeled prior is
+the hazard `rho` and everything else follows: the departure's drift is
+`sigma^2 rho`, its variance is bounded at the class size (bounded, never frozen
+— an axis the data cannot see today must still move when excitation arrives),
+and the detection delay is `log(1/rho) / KL`, computed rather than tuned. The
+nominal model never leaves the bank, so a false alarm costs almost nothing —
+and that is what makes the fast end of the frontier affordable.
+
 Configure by **give-what-you-know**; every argument has a working default:
 
 | argument | meaning | default |
 |---|---|---|
-| `dynamics` | state transition `F` | `0` → random-walk level |
+| `dynamics` | state transition `F`; `None` learns it, a callable re-linearises it | `0` → random-walk level |
 | `control` | known-forcing map `B` (pass `u`/`U` at update) | none |
 | `H` | measurement matrix | identity |
 | `process` | base process covariance `Q0` | identity |
 | `measurement` | base per-sensor variances `R0` | ones |
+| `faults` | hazard `rho`: the supplied dynamics may **change** | none → they are fixed |
+| `departures`, `anchors` | the directions the dynamics may move in; named fault modes | full basis; none |
 
 A rough base is fine — the walk breathes around it (a base wrong by 5× costs
 ~16% of oracle RMSE on the scalar benchmark below). Outputs per step: posterior
@@ -164,6 +182,19 @@ trust, so it buys nothing
 ([`0053` §4](research/multivariate-statfilter/exploration/0053_pernode_demix.md)).
 Fusing one bad absolute sensor with one good dynamic sensor per joint is the
 use case.
+
+On the dynamics channel (`0007`, the shipped filter re-measured on the research
+rigs): a scalar step change in `F` is detected in **15.7 ± 1.7 steps against a
+derived frontier of 15** — on the frontier, not near it. On a differential drive
+whose wheel blows out, driven entirely through the public API, it detects in
+**43 ms**, recovers the blown radius to 0.303 ± 0.018 (true 0.30) and the healthy
+one to 1.043 ± 0.021 (true 1.00), and settles at 1.037× a refit oracle where the
+frozen model pays 5.06×. The research prototypes that fixed the design go
+further where the failure modes are *named*: the same blowout in 18 ms, and a
+quadrotor that has a payload attached mid-flight in 28.9 ± 1.7 steps against a
+frontier of 29.6, recovering its mass and inertia to three figures. Calm-regime
+cost is 1.00× throughout
+([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
 
 ## Current limits, measured
 
@@ -208,7 +239,7 @@ are:
 | workstream | state |
 |---|---|
 | [`multivariate-statfilter/`](research/multivariate-statfilter/SUMMARY.md) | **delivered** — the per-component noise machinery behind `LucidFilter` |
-| [`dynamics-learning/`](research/dynamics-learning/SUMMARY.md) | **opened** — online learned dynamics (`dynamics=None`): detect a dynamics change (a weight attached, a tire blowout) and recover the new dynamics at the information rate |
+| [`dynamics-learning/`](research/dynamics-learning/SUMMARY.md) | **delivered** — online learned dynamics (`dynamics=None`, `faults=`): detects a dynamics change (a weight attached, a tire blowout) on the derived information frontier and recovers the new dynamics online |
 | [`random-walk-filter/`](research/random-walk-filter/SUMMARY.md) | delivered (specimen) — the scalar parent and the scale-walk theory |
 | [`ode-filter/`](research/ode-filter/SUMMARY.md) | candidate (specimen) — locally-linear-ODE dynamics, the tracked dynamics channel |
 | [`optimality-proof/`](research/optimality-proof/SUMMARY.md) | where "optimal" does and does not hold; the per-step process/sensor ambiguity is Proposition 1 here |
@@ -220,9 +251,12 @@ research.
 
 ## Open directions
 
-- **Online learned dynamics** — the `dynamics=None` cell:
-  [`research/dynamics-learning/SUMMARY.md`](research/dynamics-learning/SUMMARY.md)
-  is the opening document.
+- **The dynamics channel's remaining rungs** — the `dynamics=None` cell is
+  filled; what is left is the live-demo work (dynamics-fault regimes in the arm
+  profiler) and two measured opens: the exact jump-hold prior for the departure's
+  hold phase, and time-anchored (run-length) hypotheses, which measured *dormant*
+  on a fully-observed rig and so stay in the record rather than the product
+  ([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
 - **The sequence-evidence de-mix** — per-hypothesis filters carry the lag-1
   evidence that splits collinear noise channels; the mechanism is validated and
   its stable in-engine realization is open:
