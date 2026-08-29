@@ -81,7 +81,9 @@ class LucidStep:
     measurement_scale: np.ndarray  #: per-sensor log-scale (m,)
     dynamics: np.ndarray = None    #: posterior-mean ``F`` (n, n) -- ``None`` when supplied fixed
     control: np.ndarray = None     #: posterior-mean ``B`` (n, p) -- ``None`` when fixed or absent
-    fault: float = 0.0             #: posterior probability the dynamics have left the nominal
+    fault: float = 0.0             #: posterior probability the dynamics have left the NOMINAL --
+    #: which is the supplied ``F`` under ``faults=``, and the random walk ``F = I`` under
+    #: ``dynamics=None`` (where it therefore reads "the dynamics are not a random walk")
 
     @property
     def scale(self) -> np.ndarray:
@@ -431,22 +433,65 @@ class _Departure:
       not a live noise scale.  (Structural, per 0024 -- ``[H | 0]`` cannot see ``g`` directly,
       so the engine's own activation rule already reaches this conclusion; the mask makes it
       exact under eigenvalue degeneracy.)
-    * ``sigma = 1`` per unit-Frobenius direction: the entries of a stable discrete transition
-      are O(1), so "F moves by one in Frobenius norm" is the class-size statement.  A supplied
-      direction is normalised, so its coefficient is in class units by construction.
+    * ``sigma = 1`` in CLASS UNITS, where a direction is scaled so that a unit coefficient
+      moves that part of the dynamics by about its own magnitude.  That is the only scale-free
+      statement of "how big is a fault", and the only dimensionally sound one -- see the
+      comment in ``__init__``.
     """
 
-    def __init__(self, F0, B0, dirs, rho, n, p):
-        self.F0, self.B0, self.n, self.p = F0, B0, n, p
-        self.A = np.stack([a for a, _ in dirs]) if dirs else np.zeros((0, n, n))
-        self.C = (np.stack([c for _, c in dirs]) if dirs and p
-                  else np.zeros((0, n, max(p, 1))))
-        self.k = self.A.shape[0]
+    def __init__(self, base, B0, dirs, rho, n, p):
+        self.base, self.B0, self.n, self.p = base, B0, n, p
+        # A direction may itself be a callable of the state: on a real vehicle the direction a
+        # physical parameter pushes in ROTATES with the operating point (a wheel radius acts
+        # along the heading; a drone's mass acts along the tilted thrust axis).  Such a
+        # direction is scaled by its norm at the origin -- once, so the coefficient keeps a
+        # fixed meaning in class units instead of drifting with the state.
+        self._dirs = [d if callable(d) else (lambda x, _d=d: _d) for d in dirs]
+        self.moving = any(callable(d) for d in dirs)
+        self.k = len(self._dirs)
+        ref = [self._pair(f(np.zeros(n)), n, p) for f in self._dirs]
+        # CLASS SIZE.  A unit coefficient must mean "this part of the dynamics changed by
+        # about its own magnitude" -- the only scale-free statement available, and the only
+        # one that is dimensionally sound: F's entries are O(1) for a stable discrete
+        # transition, but B's are in the input's units and can be arbitrarily small (a 50 Hz
+        # differential drive has |B| ~ 5e-3).  Normalising directions to unit Frobenius norm
+        # instead would put the true coefficient orders of magnitude inside the prior and the
+        # departure would never move.
+        F_rep, B_rep = base(np.zeros(n))
+        fn = float(np.linalg.norm(F_rep)) or 1.0
+        bn = float(np.linalg.norm(B_rep)) if B_rep is not None else 0.0
+        bn = bn or fn
+        div = []
+        for a, c in ref:
+            aN, cN = float(np.linalg.norm(a)), float(np.linalg.norm(c))
+            dn = math.hypot(aN, cN)
+            if dn == 0.0:
+                raise ValueError("a departure direction must be non-zero")
+            div.append(dn * dn / math.hypot(aN * fn, cN * bn))
+        self._div = np.array(div)
+        self.A = np.stack([a for a, _ in ref]) / self._div[:, None, None]
+        self.C = np.stack([c for _, c in ref]) / self._div[:, None, None]
         self.na = n + self.k
         sig2 = np.ones(self.k)                      # unit-Frobenius directions -> class size 1
         self.cap = np.concatenate([np.full(n, np.inf), sig2])
         self.q_g = sig2 * rho
         self.gidx = np.arange(n, self.na)
+
+    @staticmethod
+    def _pair(d, n, p):
+        A, C = d if isinstance(d, tuple) else (d, None)
+        A = np.zeros((n, n)) if A is None else np.atleast_2d(np.asarray(A, float))
+        C = (np.zeros((n, max(p, 1))) if C is None
+             else np.atleast_2d(np.asarray(C, float)))
+        return A, C
+
+    def at(self, x):
+        """The departure directions at the operating point ``x``."""
+        if not self.moving:
+            return self.A, self.C
+        ref = [self._pair(f(x), self.n, self.p) for f in self._dirs]
+        return (np.stack([a for a, _ in ref]) / self._div[:, None, None],
+                np.stack([c for _, c in ref]) / self._div[:, None, None])
 
     def augment(self, Q0, R0, H):
         """(Q0_aug, R0, H_aug, walk_axes) -- walk_axes in EIGENMODE space, so it is exact even
@@ -461,20 +506,22 @@ class _Departure:
         walk[:self.na] = np.linalg.norm(V[self.n:], axis=0) < 0.5
         return Qa, R0, Ha, walk
 
-    def dynamics_of(self, g):
-        F = self.F0 + np.einsum("j,jab->ab", g, self.A) if self.k else self.F0
-        if self.B0 is None:
-            return F, None
-        B = self.B0 + np.einsum("j,jab->ab", g, self.C) if self.k else self.B0
-        return F, B
+    def dynamics_of(self, x, g):
+        """The dynamics as currently believed, at the operating point ``x``."""
+        F0, B0 = self.base(x)
+        if not self.k:
+            return F0, B0
+        A, C = self.at(x)
+        F = F0 + np.einsum("j,jab->ab", g, A)
+        return F, (None if B0 is None else B0 + np.einsum("j,jab->ab", g, C))
 
-    def callable_for(self, engine):
+    def callable_for(self):
         """The (mean, u) -> (Jacobian, predicted mean) hook the engine calls each step."""
         n, k = self.n, self.k
 
         def _dyn(m, u):
             x, g = m[:n], m[n:]
-            F, B = self.dynamics_of(g)
+            F, B = self.dynamics_of(x, g)
             mp = np.empty_like(m)
             mp[:n] = F @ x + (B @ u if B is not None else 0.0)
             mp[n:] = g
@@ -482,17 +529,38 @@ class _Departure:
             J[:n, :n] = F
             J[n:, n:] = np.eye(k)
             if k:
-                J[:n, n:] = np.einsum("jab,b->aj", self.A, x)
+                A, C = self.at(x)
+                J[:n, n:] = np.einsum("jab,b->aj", A, x)
                 if B is not None:
-                    J[:n, n:] += np.einsum("jab,b->aj", self.C, np.atleast_1d(u))
+                    J[:n, n:] += np.einsum("jab,b->aj", C, np.atleast_1d(u))
             return J, mp
 
         return _dyn
 
 
-def _unit(M):
-    nrm = float(np.linalg.norm(M))
-    return M / nrm if nrm > 0 else M
+def _as_base(dynamics, B, n):
+    """Normalise supplied dynamics to ``base(x) -> (F, B)``, plus a constant linearisation.
+
+    A callable is the general robotics case: real ``F``/``B`` arrive linearised per operating
+    point, so the dynamics cannot be a constant matrix and the block structure cannot be
+    precomputed.  It is called with the current state estimate and may return ``F`` or
+    ``(F, B)``.  The returned constant is the linearisation at the origin -- the characteristic
+    transition the steady-state Fisher scale is computed from, not a model commitment.
+    """
+    def base(x):
+        out = dynamics(x)
+        F_, B_ = out if isinstance(out, tuple) else (out, B)
+        return (np.atleast_2d(np.asarray(F_, float)),
+                None if B_ is None else np.atleast_2d(np.asarray(B_, float)))
+    return base, base(np.zeros(n))[0]
+
+
+def _fixed_hook(base):
+    """Engine hook for supplied-but-moving dynamics (no departure channel)."""
+    def _dyn(m, u):
+        F, B = base(m)
+        return F, F @ m + (B @ u if B is not None else 0.0)
+    return _dyn
 
 
 def _basis(n, p, departures):
@@ -501,7 +569,8 @@ def _basis(n, p, departures):
     Default (research mechanism (c), the full walk): every elementary entry of F, and of B when
     a control map is supplied.  Supplying ``departures`` is mechanism (b) -- the low-rank
     physical channel (a drone's added mass moves F AND B through one coefficient), which is the
-    production form and is `n**2 / len(departures)` times cheaper.
+    production form and is `n**2 / len(departures)` times cheaper.  Directions are returned raw;
+    ``_Departure`` puts them in class units.
     """
     if departures is None:
         out = []
@@ -516,6 +585,9 @@ def _basis(n, p, departures):
         return out
     out = []
     for d in departures:
+        if callable(d):
+            out.append(d)                       # a state-dependent direction, scaled in
+            continue                            # _Departure by its norm at the origin
         A, C = d if isinstance(d, tuple) else (d, None)
         A = np.atleast_2d(np.asarray(A, float))
         if A.shape != (n, n):
@@ -524,10 +596,7 @@ def _basis(n, p, departures):
              else np.atleast_2d(np.asarray(C, float)))
         if p and C.shape != (n, p):
             raise ValueError(f"each departure control direction must be ({n}, {p})")
-        nrm = math.sqrt(float(np.sum(A * A) + np.sum(C * C)))
-        if nrm == 0:
-            raise ValueError("a departure direction must be non-zero")
-        out.append((A / nrm, C / nrm))
+        out.append((A, C))
     return out
 
 
@@ -588,7 +657,9 @@ class LucidFilter:
             learn = True                        # named fault hypotheses imply a fault class
         H = None if H is None else np.atleast_2d(np.asarray(H, float))
         B = None if control is None else np.atleast_2d(np.asarray(control, float))
-        Fm = None if np.ndim(dynamics) == 0 else np.atleast_2d(np.asarray(dynamics, float))
+        moving = callable(dynamics)
+        Fm = (None if (moving or np.ndim(dynamics) == 0)
+              else np.atleast_2d(np.asarray(dynamics, float)))
         proc = None if process is None else np.atleast_2d(np.asarray(process, float))
         # resolve n
         if Fm is not None:
@@ -601,9 +672,14 @@ class LucidFilter:
             n = B.shape[0]
         elif n is None:
             n = 1
-        F = np.eye(n) if Fm is None else Fm
+        if moving:
+            base, F = _as_base(dynamics, B, n)
+        else:
+            F = np.eye(n) if Fm is None else Fm
+            base = None
         if F.shape != (n, n):
-            raise ValueError(f"dynamics must be ({n}, {n})")
+            raise ValueError(f"dynamics must be ({n}, {n})"
+                             + (" -- the callable returned the wrong shape" if moving else ""))
         Hm = np.eye(n) if H is None else H
         m = Hm.shape[0]
         if Hm.shape != (m, n):
@@ -638,22 +714,28 @@ class LucidFilter:
         # failure modes can be named, they are the fastest detector there is (0005).  The
         # WALKER refines whatever the anchors only bracket: detection degrades gracefully under
         # a mis-specified anchor set, recovery does not (0001 s4).
-        specs = [(F, B, None)]
+        const = base if base is not None else (lambda x, _F=F, _B=B: (_F, _B))
+        specs = [(base, F, B, None)]
         for a in (anchors or []):
             Fa, Ba = a if isinstance(a, tuple) else (a, B)
             Fa = np.atleast_2d(np.asarray(Fa, float))
             if Fa.shape != (n, n):
                 raise ValueError(f"each anchor must be ({n}, {n})")
-            specs.append((Fa, None if Ba is None else np.atleast_2d(np.asarray(Ba, float)),
-                          None))
+            specs.append((None, Fa,
+                          None if Ba is None else np.atleast_2d(np.asarray(Ba, float)), None))
         if learn:
-            specs.append((F, B, _Departure(F, B, _basis(n, self.p, departures),
-                                           rho, n, self.p)))
+            specs.append((base, F, B,
+                          _Departure(const, B, _basis(n, self.p, departures),
+                                     rho, n, self.p)))
 
         self._members, self._pidx, self._specs = [], [], specs
-        for Fs, Bs, dep in specs:
+        for bs, Fs, Bs, dep in specs:
             if dep is None:
-                self._members += [_WalkEngine(Q0, R0, Hm, Fs, Bs, ph, sv) for ph, sv in cells]
+                eng = [_WalkEngine(Q0, R0, Hm, Fs, Bs, ph, sv) for ph, sv in cells]
+                if bs is not None:
+                    for e in eng:
+                        e._dyn = _fixed_hook(bs)
+                self._members += eng
                 self._pidx += [np.arange(n)] * len(cells)
                 continue
             Qa, Ra, Ha, walk = dep.augment(Q0, R0, Hm)
@@ -666,7 +748,7 @@ class LucidFilter:
                   else np.vstack([Bs, np.zeros((dep.k, self.p))]))   # steady Fisher wants
             for ph, sv in cells:
                 e = _WalkEngine(Qa, Ra, Ha, Fa, Ba, ph, sv, walk_axes=walk, cap=dep.cap)
-                e._dyn = dep.callable_for(e)
+                e._dyn = dep.callable_for()
                 self._members.append(e)
                 self._pidx.append(xmode)
         self._nd, self._nc = len(specs), len(cells)
@@ -678,6 +760,8 @@ class LucidFilter:
         self._Md = (np.eye(k) * (1.0 - rho * k / (k - 1)) + np.ones((k, k)) * (rho / (k - 1))
                     if k > 1 else np.ones((1, 1)))
         self._learn, self.hazard = learn, rho
+        # report the dynamics whenever they are not a fixed matrix the caller already has
+        self._report = learn or base is not None
         self.reset()
 
     def reset(self):
@@ -699,8 +783,8 @@ class LucidFilter:
         W = post.reshape(self._nd, self._nc)
         Fh = np.zeros((self.n, self.n))
         Bh = None if self.B is None else np.zeros((self.n, self.p))
-        for d, (Fs, Bs, dep) in enumerate(self._specs):
-            if dep is None:
+        for d, (bs, Fs, Bs, dep) in enumerate(self._specs):
+            if dep is None and bs is None:
                 w = float(W[d].sum())
                 Fh += w * Fs
                 if Bh is not None and Bs is not None:
@@ -708,8 +792,12 @@ class LucidFilter:
                 continue
             for c in range(self._nc):
                 e = self._members[d * self._nc + c]
-                g = np.zeros(dep.k) if e._m is None else e._m[self.n:]
-                Fg, Bg = dep.dynamics_of(g)
+                x = np.zeros(self.n) if e._m is None else e._m[:self.n]
+                if dep is None:
+                    Fg, Bg = bs(x)
+                else:
+                    g = np.zeros(dep.k) if e._m is None else e._m[self.n:]
+                    Fg, Bg = dep.dynamics_of(x, g)
                 Fh += W[d, c] * Fg
                 if Bh is not None and Bg is not None:
                     Bh += W[d, c] * Bg
@@ -717,7 +805,7 @@ class LucidFilter:
 
     def _reprice(self):
         """Fire the shared-event restart on every walker (research 0003)."""
-        for d, (_, _, dep) in enumerate(self._specs):
+        for d, (_, _, _, dep) in enumerate(self._specs):
             if dep is None:
                 continue
             for c in range(self._nc):
@@ -751,7 +839,7 @@ class LucidFilter:
         ms = sum(post[i] * steps[i].measurement_scale for i in range(M))
         innov = sum(post[i] * steps[i].innovation for i in range(M))
         self.loglik += bank_ll
-        if self._nd == 1:
+        if not self._report:
             return LucidStep(mean, var, innov, bank_ll, ps, ms)
         Fh, Bh = self._dynamics_mean(post)
         # The fault readout is a marginal of the posterior -- the filter itself never
@@ -777,7 +865,7 @@ class LucidFilter:
         T = Y.shape[0]
         mean = np.empty((T, self.n)); var = np.empty((T, self.n, self.n))
         inn = np.empty((T, self.m)); ps = np.empty((T, self.n)); ms = np.empty((T, self.m))
-        live = self._nd > 1
+        live = self._report
         dyn = np.empty((T, self.n, self.n)) if live else None
         ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
         flt = np.empty(T) if live else None

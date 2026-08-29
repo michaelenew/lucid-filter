@@ -256,7 +256,7 @@ def test_low_rank_departures():
     kw = dict(dynamics=None, process=[[0.09]], measurement=[0.25])
     full = LucidFilter(**kw)
     low = LucidFilter(departures=[np.array([[1.0]])], **kw)
-    assert low._specs[-1][2].k == 1
+    assert low._specs[-1][3].k == 1
     r = low.filter(Y)
     assert np.all(np.isfinite(r.dynamics)) and r.dynamics[-1, 0, 0] < 0.8
 
@@ -281,7 +281,7 @@ def test_departure_variance_is_bounded_never_frozen():
     Y, _ = ar1(T=400)
     f = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25])
     f.filter(Y)
-    dep = f._specs[-1][2]
+    dep = f._specs[-1][3]
     eng = f._members[(f._nd - 1) * f._nc]
     assert np.all(np.diag(eng._P)[dep.gidx] <= dep.cap[dep.gidx] * (1 + 1e-9))
     assert np.all(np.diag(eng._P)[dep.gidx] > 0.0)      # never frozen at zero
@@ -316,3 +316,37 @@ def test_faults_hazard_validated():
         LucidFilter(dynamics=[[0.5]], faults=0.0)
     with pytest.raises(ValueError):
         LucidFilter(dynamics=[[0.5]], faults=1e-4, anchors=[np.eye(2)])
+
+
+def test_callable_dynamics_relinearises():
+    """Real F/B arrive linearised per operating point, so `dynamics` may be a callable."""
+    g = rng(9)
+    T = 800
+    x = np.zeros(T)
+    for t in range(1, T):                       # a state-dependent (nonlinear) decay
+        a = 0.9 - 0.3 * math.tanh(x[t - 1])
+        x[t] = a * x[t - 1] + 0.2 * g.standard_normal()
+    Y = (x + 0.3 * g.standard_normal(T))[:, None]
+
+    def linearised(state):
+        return np.array([[0.9 - 0.3 * math.tanh(float(state[0]))]])
+
+    kw = dict(process=[[0.04]], measurement=[0.09])
+    moving = LucidFilter(dynamics=linearised, n=1, **kw).filter(Y)
+    frozen = LucidFilter(dynamics=[[0.9]], **kw).filter(Y)
+    assert moving.dynamics.shape == (T, 1, 1)   # a moving model is reported, not None
+    assert moving.fault is not None
+    assert _rmse(moving.mean[:, 0], x) <= _rmse(frozen.mean[:, 0], x)
+    # a CONSTANT callable must reduce to the matrix it returns
+    same = LucidFilter(dynamics=lambda s: np.array([[0.9]]), n=1, **kw).filter(Y)
+    assert np.allclose(same.mean, frozen.mean, atol=1e-8)
+
+
+def test_callable_dynamics_with_faults():
+    """The departure channel rides on top of a moving linearisation."""
+    Y, x = ar1(T=1200, a=0.6, seed=3)
+    f = LucidFilter(dynamics=lambda s: np.array([[0.6]]), n=1, faults=1e-3,
+                    process=[[0.09]], measurement=[0.25])
+    r = f.filter(Y)
+    assert np.all(np.isfinite(r.dynamics)) and r.dynamics.shape == (1200, 1, 1)
+    assert abs(r.dynamics[-1, 0, 0] - 0.6) < 0.4
