@@ -19,6 +19,44 @@
 
 **Adaptive filters with no theoretically relevant free parameters.**
 
+![a 5-DOF robotic arm in 3D, tracked live through five noise regimes — calm, swamped accelerometers, a disturbance torque, a dead potentiometer, and both at once; the raw potentiometer estimate flails, a chip grid of learned noise scales lights up to show which component is hot, and the lucid estimate stays locked on the true arm](research/multivariate-statfilter/figures/arm5dof-lucid.gif)
+
+This is the public filter, live on a 5-DOF arm in 3D. Every joint fuses a **bad
+potentiometer** (angle, σ ≈ 0.06 rad ≈ 3.4°) with a **good accelerometer**
+(angular acceleration, σ ≈ 0.02) while the arm runs a commanded trajectory — and
+the noise never sits still: the accelerometers get swamped (×15), a disturbance
+torque shakes the whole arm (×20), one joint's potentiometer **dies outright**,
+and then sensor and process noise hit at once. The filter is told the dynamics
+and which sensor reads what — **nothing about the noise**. Every noise scale is
+inferred online, per component, per step:
+
+```python
+from lucid import LucidFilter
+
+f = LucidFilter(dynamics=F, control=B, H=H,      # kinematics + sensor layout
+                process=Q0, measurement=R0)      # rough base magnitudes; the live noise: inferred
+r = f.filter(Y, U=U)
+r.mean                  # tracked state
+r.measurement_scale     # (T, m) which sensor is hot, per step — the chip grid above
+r.process_scale         # (T, n) which dynamics mode is hot
+```
+
+Through the bursts the lucid tip estimate holds **0.011 m RMSE**. The raw
+potentiometer reads 0.209 m — **19× worse** — and a fixed-noise Kalman filter
+given the *same model* reads 0.020 m (1.8× worse), with most of its remaining gap
+in the calm stretches after each burst, where the lucid filter re-converges
+faster (0.013 m vs 0.028 m). The learned scales double as a live diagnosis: the
+chip grid pinpoints *which joint's* potentiometer died. The accelerometer and
+process chips light together — the accelerometer reads the very state the
+disturbance drives, so those two channels are collinear, and the filter tracks
+their total, which is exactly what the state estimate needs
+([`0027`](research/multivariate-statfilter/exploration/0027_confound.md),
+[`0052`](research/multivariate-statfilter/exploration/0052_lucid_arm5dof_profile.md)).
+All of it in polynomial time: the scale posterior lives on an axial star, linear
+in the number of components, never a tensor grid.
+
+Where does the mechanism come from? Start with the scalar case.
+
 Real-world data is noisy, and regimes change. Look at this graph.
 
 ![the lucid filter against an oracle-tuned Kalman filter](research/random-walk-filter/figures/hero-lucid-vs-kalman.png)
