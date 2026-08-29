@@ -50,6 +50,89 @@ _SPAN_S = 3.0               # window half-span in units of s (support budget -> 
 _RIDGE = 1e-4               # Fisher stabiliser
 _PHIS = (0.70, 0.85, 0.95)                 # default (phi, s) box for the bank -- a broad range, not a
 _SS = (0.20, 0.30, 0.45, 0.60, 0.80)       #   fitted value; the data down-weights the unsupported corners
+_RANK_TOL = 1e-8            # numerical rank tolerance (the order used for structural activation)
+
+
+# --------------------------------------------------- the per-step-blind directions
+def _scale_fisher(eng):
+    """Full per-step scale-Fisher ``I_ab = 0.5 tr(Si dS_a Si dS_b)`` at the steady state.
+
+    The engine's own ``_steady_fisher`` keeps only the diagonal, which cannot see a degeneracy.
+    """
+    H, F, n = eng.H, eng.F, eng.n
+    P = np.eye(n) * (eng.lam.max() + eng.rho.max())
+    Q0, R0 = eng._Q_of(np.zeros(n)), eng._R_of(np.zeros(eng.m))
+    for _ in range(400):
+        Pp = F @ P @ F.T + Q0
+        K = Pp @ H.T @ np.linalg.inv(H @ Pp @ H.T + R0)
+        P = Pp - K @ H @ Pp
+    Pp = F @ P @ F.T + Q0
+    Si = np.linalg.inv(H @ Pp @ H.T + R0)
+    dS = eng._dS_list(np.zeros(eng.D))
+    I = np.empty((eng.D, eng.D))
+    for a in range(eng.D):
+        SdA = Si @ dS[a]
+        for b in range(a, eng.D):
+            I[a, b] = I[b, a] = 0.5 * float(np.trace(SdA @ Si @ dS[b]))
+    return I
+
+
+def _split_groups(eng):
+    """Pairs whose SPLIT no per-step score can ever carry -- Proposition 1, in coordinates.
+
+    ``dS_xi_k = lam_k e^xi (H v_k)(H v_k)^T`` and ``dS_eta_i = rho_i e^eta E_ii`` are proportional
+    as matrices exactly when ``H v_k`` lies along ``e_i``: a process eigenmode read by ONE sensor.
+    Then the 2x2 scale-Fisher block is exactly rank 1, the one-step likelihood sees only the SUM of
+    the two contributions to ``S_ii``, and the split between them is invisible at every step, at
+    every operating point (research 0001).  Both axes must carry non-negligible information: an
+    axis whose own scale-Fisher is numerically zero is not half of a confound, it is nothing --
+    which is what keeps a ridge-regularised ``Q0``'s null modes out.
+
+    Returns ``(process axis, sensor axis, (H v)_i^2)`` triples.
+    """
+    I = _scale_fisher(eng)
+    dg = np.diag(I)
+    info = dg > _RANK_TOL * dg.max()
+    out = []
+    for k in range(eng.n):
+        if not (eng.active[k] and info[k]):
+            continue
+        hv = np.abs(eng.HV[:, k])
+        nz = np.flatnonzero(hv > _RANK_TOL * hv.max())
+        if nz.size != 1:
+            continue
+        i = int(nz[0])
+        if not info[eng.n + i]:
+            continue
+        sub = I[np.ix_([k, eng.n + i], [k, eng.n + i])]
+        w = np.linalg.eigvalsh(sub / np.sqrt(np.outer(np.diag(sub), np.diag(sub))))
+        if w[0] < _RANK_TOL * w[-1]:
+            out.append((k, i, float(eng.HV[i, k] ** 2)))
+    return out
+
+
+def _rung_odds(forget):
+    """The ladder of splits: complete, at the bank's own resolution, with no span constant.
+
+    A split acts only through the filter's gain ``K``.  A local-level filter run at gain ``K``
+    models its differenced data as MA(1) with ``theta = 1 - K``, so the per-step Kullback-Leibler
+    divergence between two splits is (Whittle)
+
+        D = 0.5 log[(1 - 2 th th' + th'^2) / (1 - th^2)]  ->  0.5 (dt)^2,
+        dt = d th / sqrt(1 - th^2),   t = arccos(1 - K)  in  [0, pi/2].
+
+    The entire space of splits is therefore an interval of arclength ``pi/2``.  Two rungs are
+    resolvable when the evidence the bank can hold -- ``1/(1 - forget)`` steps -- separates them
+    by order one nat, i.e. ``dt = sqrt(2 (1 - forget))``; spacing them at the grid's own Sparrow
+    factor above that limit leaves no dead zone.  The result COVERS EVERY POSSIBLE SPLIT with a
+    couple of dozen rungs, and no rung refers to the supplied base: told nothing means told
+    nothing.
+    """
+    step = _GAP_FACTOR * math.sqrt(2.0 * (1.0 - forget))
+    J = int(math.ceil((0.5 * math.pi) / step))
+    t = (np.arange(J) + 0.5) * (0.5 * math.pi) / J
+    K = 1.0 - np.cos(t)
+    return K * K / np.maximum(1.0 - K, 1e-12)
 
 
 # --------------------------------------------------------------------- results
@@ -110,7 +193,9 @@ class _WalkEngine:
     the class ``(phi, s)``; no EMA, no tuned constant.
     """
 
-    def __init__(self, Q0, R0, H, F, B, phi, s):
+    def __init__(self, Q0, R0, H, F, B, phi, s, groups=(), anchor_lo=0.0):
+        self._groups = tuple(groups)      # (process axis, sensor axis, (H v)^2) per confound
+        self._anchor_lo = float(anchor_lo)   # this member's hypothesis about each group's split
         n = Q0.shape[0]
         lam, V = np.linalg.eigh(Q0)
         self.n, self.m = n, R0.size
@@ -249,12 +334,42 @@ class _WalkEngine:
         dS = self._dS_list(np.zeros(self.D))
         return np.array([0.5 * np.trace(Si @ d @ Si @ d) for d in dS]) + _RIDGE
 
+    # -- a confounded group's two coordinates: its contribution to S (identifiable per step)
+    #    and its log-odds (in the exact null space of the per-step scale-Fisher) --
+    def _group_read(self, mu):
+        out = []
+        for (k, i, h2) in self._groups:
+            a = self.lam[k] * h2 * math.exp(min(mu[k], 60.0))
+            b = self.rho[i] * math.exp(min(mu[self.n + i], 60.0))
+            out.append((a + b, math.log(max(a, 1e-300)) - math.log(max(b, 1e-300))))
+        return out
+
+    def _group_write(self, mu, tots, los):
+        """Put each group's total back with the given log-odds -- the exact null flow.
+
+        The null direction is ``(R, -Q)`` up to scale at every operating point, and integrating
+        that direction field gives ``da = -db``: the null manifold is the LEVEL SET OF THE TOTAL.
+        So sliding the log-odds and handing the total straight back moves exactly along the
+        coordinate the one-step likelihood cannot see, and touches nothing that it can.
+        """
+        out = mu.copy()
+        for gi, (k, i, h2) in enumerate(self._groups):
+            lo = float(np.clip(los[gi], -80.0, 80.0))
+            a = tots[gi] / (1.0 + math.exp(-lo))
+            b = tots[gi] - a
+            out[k] = math.log(max(a, 1e-300) / (self.lam[k] * h2))
+            out[self.n + i] = math.log(max(b, 1e-300) / self.rho[i])
+        return out
+
     def reset(self, mean=None, scale=None):
         self._pi_ax = None
         self._m = None if mean is None else np.asarray(mean, float)
         self._P = None
         self.mu = np.zeros(self.D) if scale is None else np.asarray(scale, float).copy()
         self._Pmu = np.full(self.D, self.s * self.s)
+        if self._groups:                  # start ON this member's hypothesis, at the base total
+            tots = [t for t, _ in self._group_read(self.mu)]
+            self.mu = self._group_write(self.mu, tots, [self._anchor_lo] * len(self._groups))
         self.loglik = 0.0
         return self
 
@@ -335,6 +450,19 @@ class _WalkEngine:
             self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap, self.gap))
             self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k], self._Pmu_cap)
         self._pi_ax, self._m, self._P = pi_ax, m_new, P_new
+        if self._groups:
+            # The per-axis Newton walk steps by ``score/info``, which is ~1/Q on a process axis
+            # and ~1/R on a sensor axis; where the two are confounded, that step is almost
+            # entirely along the NULL direction, in which the score carries no information at
+            # all.  It is an artefact of taking a per-axis step against a singular Fisher, and it
+            # systematically blames the smaller variance -- the wrong reflex when a sensor
+            # degrades.  The excursion is allowed, because it is what absorbs a level jump, but
+            # it is a TRANSIENT and not a verdict: it reverts to this member's hypothesis at the
+            # class's own rate ``phi``, at the total the walk just established.  The verdict is
+            # the bank's, on the ``forget`` timescale (research 0053's lesson b).
+            tots, los = zip(*self._group_read(self.mu))
+            back = [self._anchor_lo + self.phi * (lo - self._anchor_lo) for lo in los]
+            self.mu = self._group_write(self.mu, list(tots), back)
         self.loglik += ll
         wmean = self._wmean(pi_ax)
         return LucidStep(m_new.copy(), P_new.copy(), e.copy(), ll,
@@ -411,9 +539,24 @@ class LucidFilter:
         self.p = 0 if B is None else B.shape[1]
         self.B = B
         self.forget = float(forget)
-        self.phi_arr = np.array([p for p in phis for _ in ss], float)
-        self.s_arr = np.array([sv for _ in phis for sv in ss], float)
-        self._members = [_WalkEngine(Q0, R0, Hm, F, B, p, sv) for p in phis for sv in ss]
+        # Which directions can no per-step score ever carry?  Where a process eigenmode is read
+        # by exactly one sensor, the two scale derivatives are proportional as matrices and only
+        # their SUM is identifiable per step (research 0001), so the split is carried as a
+        # dimension of the BANK: every member is a complete filter anchored at one rung of the
+        # ladder, the evidence reaches it through its own MEAN (a rung with too much process
+        # chases sensor noise and pays for it in its own predictive likelihood), and its weight
+        # accumulates on the `forget` timescale.  No EMA, no whiteness statistic, and no rung
+        # refers to the supplied base.  A structure with no such pair -- any rig where every
+        # process mode is read by more than one sensor -- gets no ladder and no extra cost.
+        probe = _WalkEngine(Q0, R0, Hm, F, B, phis[0], ss[0])
+        self.groups = _split_groups(probe)
+        los = (np.log(_rung_odds(self.forget)) if self.groups else np.zeros(1))
+        self.phi_arr = np.array([p for p in phis for _ in ss for _ in los], float)
+        self.s_arr = np.array([sv for _ in phis for sv in ss for _ in los], float)
+        self.split_arr = los if self.groups else np.array([])
+        self._members = [_WalkEngine(Q0, R0, Hm, F, B, p, sv,
+                                     groups=self.groups, anchor_lo=lo)
+                         for p in phis for sv in ss for lo in los]
         self.reset()
 
     def reset(self):

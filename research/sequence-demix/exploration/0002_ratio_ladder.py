@@ -150,10 +150,12 @@ def steady_fisher_full(eng):
 class _LadderEngine(_WalkEngine):
     """One bank member: the caltrop engine anchored at a fixed split of every confounded group."""
 
-    def __init__(self, Q0, R0, H, F, B, phi, s, groups=(), lo=0.0, revert="class"):
+    def __init__(self, Q0, R0, H, F, B, phi, s, groups=(), lo=0.0, revert="class",
+                 memoryless=False):
         self._groups = list(groups)
         self._anchor_lo = float(lo)
         self._revert = revert          # "class": at rate phi;  "hard": at once;  None: free
+        self._memoryless = memoryless or "none"   # none | both | proc | sens
         super().__init__(Q0, R0, H, F, B, phi, s)
 
     # the two coordinates of a group: its contribution to S (identifiable) and its log-odds (not)
@@ -184,6 +186,22 @@ class _LadderEngine(_WalkEngine):
 
     def update(self, y, u=None):
         step = super().update(y, u=u)
+        if self._groups and self._memoryless != "none":
+            # A group's two axes span the split, and the split has ZERO per-step Fisher.  A
+            # window posterior on them therefore accumulates something the data never said:
+            # after a sensor degrades, "it was all process" fits every single step exactly as
+            # well as the truth (Proposition 1), so a persistent window locks into it and the
+            # gain runs away.  The only honest kernel on a coordinate with no per-step
+            # information is the prior itself -- the window offers a ONE-STEP hedge (which is
+            # what absorbs a level jump) and carries nothing forward.  The persistent part of
+            # the group lives in the walk (its total) and in the bank (its split).
+            want = {"both": (True, True), "proc": (True, False), "sens": (False, True)}
+            wp, wm = want[self._memoryless]
+            for gi, (k, i, _h2) in enumerate(self._groups):
+                for ax, on in ((k, wp), (self.n + i, wm)):
+                    if on and ax in self._axwin:
+                        j = self._act.index(ax)
+                        self._pi_ax[j] = self._w1
         if self._groups and self._revert is not None:
             # The per-axis Newton walk steps by `score/info`, which on the process axis is ~1/Q
             # and on the sensor axis ~1/R: when Q << R that step is almost entirely along the
@@ -205,6 +223,7 @@ class LadderFilter(LucidFilter):
     def __init__(self, *a, **kw):
         rungs = kw.pop("rungs", True)
         revert = kw.pop("revert", "class")
+        memoryless = kw.pop("memoryless", "none")
         super().__init__(*a, **kw)
         e0 = self._members[0]
         Q0 = e0.V @ np.diag(e0.lam) @ e0.V.T
@@ -216,7 +235,8 @@ class LadderFilter(LucidFilter):
         for p, sv in zip(self.phi_arr, self.s_arr):
             for lo in (self.rung_lo if groups else [0.0]):
                 mem.append(_LadderEngine(Q0, e0.rho, e0.H, e0.F, e0.B, p, sv,
-                                         groups=groups, lo=lo, revert=revert))
+                                         groups=groups, lo=lo, revert=revert,
+                                         memoryless=memoryless))
                 phis.append(p); ss.append(sv); los.append(lo)
         self._members = mem
         self.phi_arr, self.s_arr = np.array(phis), np.array(ss)
