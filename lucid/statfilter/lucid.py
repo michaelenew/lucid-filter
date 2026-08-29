@@ -49,7 +49,13 @@ _GAP_FACTOR = 1.5           # grid spacing gap = 1.5 s (Sparrow resolution limit
 _SPAN_S = 3.0               # window half-span in units of s (support budget -> node count)
 _RIDGE = 1e-4               # Fisher stabiliser
 _PHIS = (0.70, 0.85, 0.95)                 # default (phi, s) box for the bank -- a broad range, not a
-_SS = (0.20, 0.30, 0.45, 0.60, 0.80)       #   fitted value; the data down-weights the unsupported corners
+_SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weights the unsupported corners.
+                                           #   Geometric, and it has to reach: `s` is the SD of a
+                                           #   LOG variance, so the top of the box is the largest
+                                           #   scale change the window can represent in one step
+                                           #   (`3 s` of half-span).  A box ending at 0.8 tops out
+                                           #   at a factor of 11, which is smaller than the regime
+                                           #   changes in this repository's own rigs.
 _RANK_TOL = 1e-8            # numerical rank tolerance (the order used for structural activation)
 
 
@@ -193,9 +199,18 @@ class _WalkEngine:
     the class ``(phi, s)``; no EMA, no tuned constant.
     """
 
-    def __init__(self, Q0, R0, H, F, B, phi, s, groups=(), anchor_lo=0.0):
+    def __init__(self, Q0, R0, H, F, B, phi, s, groups=(), anchor_lo=0.0, group_class=None):
         self._groups = tuple(groups)      # (process axis, sensor axis, (H v)^2) per confound
         self._anchor_lo = float(anchor_lo)   # this member's hypothesis about each group's split
+        # ``group_class`` optionally gives a confounded group's two axes their OWN (phi, s) --
+        # ``((phi_P, s_P), (phi_M, s_M))``.  A shared class cannot express what a confounded pair
+        # needs: a level jump wants a process window that reaches a long way, and a sensor that
+        # degrades wants that same window not to HOLD what it reached, while the sensor's own
+        # window must hold.  Reach and persistence pull opposite ways on one axis and the same
+        # way on two.  This is the structure `fit()` found for the retired filter on this very
+        # rig -- phi_P ~ 0 with s_P = 3.69, phi_M = 0.93 with s_M = 1.62 -- and it is the one
+        # piece of it the shipped bank could not represent.
+        self._group_class = group_class
         n = Q0.shape[0]
         lam, V = np.linalg.eigh(Q0)
         self.n, self.m = n, R0.size
@@ -206,10 +221,16 @@ class _WalkEngine:
         self.p = 0 if B is None else B.shape[1]
         self.HV = H @ V
         self.phi, self.s = float(phi), float(s)
-        self.gap = _GAP_FACTOR * self.s
-        self._Kstar = (1.0 - self.phi) / 4.0
+        self.phi_ax = np.full(self.D, self.phi)
+        self.s_ax = np.full(self.D, self.s)
+        if group_class is not None:
+            for (k, i, _h2) in self._groups:
+                (self.phi_ax[k], self.s_ax[k]) = group_class[0]
+                (self.phi_ax[n + i], self.s_ax[n + i]) = group_class[1]
+        self.gap = _GAP_FACTOR * self.s_ax
+        self._Kstar = (1.0 - self.phi_ax) / 4.0
         self._Ichar = self._steady_fisher()
-        self._Ifloor = (1.0 - self.phi) / (4.0 * (_SPAN_S * self.s) ** 2)
+        self._Ifloor = (1.0 - self.phi_ax) / (4.0 * (_SPAN_S * self.s_ax) ** 2)
         # ACTIVATE structurally-observable axes -- NOT by the delocalisation floor (research 0024,
         # ported from AdaptiveKalmanFilter): a quiet process mode next to a loud sensor would be
         # frozen and then coast rigidly on a wrong velocity when that sensor is down-weighted --
@@ -223,20 +244,26 @@ class _WalkEngine:
             self.active[k] = self.lam[k] > 1e-12 * self.lam.max() and hv_norm[k] > 1e-8
         self._qmu = self._Kstar ** 2 / (np.maximum(self._Ichar, self._Ifloor)
                                         * (1.0 - self._Kstar))
-        self._Pmu_cap = (_SPAN_S * self.s) ** 2
+        self._Pmu_cap = (_SPAN_S * self.s_ax) ** 2
         self._build_window()
         self.reset()
 
     # -- caltrop star window (the 1-D pieces are unchanged from WalkingVectorFilter) --
     def _build_window(self):
+        # One window per axis.  Every axis keeps the same NODE COUNT (so the axial posteriors stay
+        # one rectangular array) and differs only in spacing, prior and kernel -- all three read
+        # off that axis's own class.
         K = int(math.ceil(_SPAN_S / _GAP_FACTOR))
-        off1 = self.gap * np.arange(-K, K + 1)
-        self._off1, self._nn, self._c = off1, off1.size, K
-        w1 = np.exp(-0.5 * (off1 / self.s) ** 2); w1 /= w1.sum()
-        nu = max(self.s * self.s * (1.0 - self.phi ** 2), 1e-12)
-        T1 = np.exp(np.clip(-0.5 * (off1[None, :] - self.phi * off1[:, None]) ** 2 / nu, -700.0, 700.0))
-        T1 /= T1.sum(1, keepdims=True)
-        self._w1, self._T1 = w1, T1
+        node = np.arange(-K, K + 1)
+        self._nn, self._c = node.size, K
+        off = self.gap[:, None] * node[None, :]
+        w1 = np.exp(-0.5 * (off / self.s_ax[:, None]) ** 2)
+        w1 /= w1.sum(1, keepdims=True)
+        nu = np.maximum(self.s_ax ** 2 * (1.0 - self.phi_ax ** 2), 1e-12)
+        T1 = np.exp(np.clip(-0.5 * (off[:, None, :] - self.phi_ax[:, None, None]
+                                    * off[:, :, None]) ** 2 / nu[:, None, None], -700.0, 700.0))
+        T1 /= T1.sum(2, keepdims=True)
+        self._off, self._w1, self._T1 = off, w1, T1
         self._act = [int(k) for k in np.flatnonzero(self.active)]
         # star node table: node 0 is the centre (all axes at mu); then, per active axis, the
         # 2K off-centre offsets along that axis alone.  1 + 2K*r nodes -- linear in the axes.
@@ -244,7 +271,7 @@ class _WalkEngine:
         self._star_axis = np.concatenate(
             [np.full(1, -1)] + [np.full(self._nn - 1, k) for k in self._act]).astype(int)
         self._star_off = np.concatenate(
-            [np.zeros(1)] + [off1[arm] for _ in self._act])
+            [np.zeros(1)] + [off[k][arm] for k in self._act])
         self._G = self._star_axis.size
         self._axwin = {}
         for i, k in enumerate(self._act):
@@ -290,12 +317,12 @@ class _WalkEngine:
         """Posterior mean window offset per component (frozen axes sit at 0)."""
         w = np.zeros(self.D)
         for i, k in enumerate(self._act):
-            w[k] = float(pi_ax[i] @ self._off1)
+            w[k] = float(pi_ax[i] @ self._off[k])
         return w
 
     def _dS_axis(self, k):
         """dS/dxi_k at each of axis k's window nodes (dS_k depends only on the k-coordinate)."""
-        a = np.exp(np.minimum(self.mu[k] + self._off1, 60.0))
+        a = np.exp(np.minimum(self.mu[k] + self._off[k], 60.0))
         if k < self.n:
             hv = self.HV[:, k]
             return (self.lam[k] * a)[:, None, None] * np.outer(hv, hv)[None]
@@ -366,7 +393,7 @@ class _WalkEngine:
         self._m = None if mean is None else np.asarray(mean, float)
         self._P = None
         self.mu = np.zeros(self.D) if scale is None else np.asarray(scale, float).copy()
-        self._Pmu = np.full(self.D, self.s * self.s)
+        self._Pmu = self.s_ax ** 2
         if self._groups:                  # start ON this member's hypothesis, at the base total
             tots = [t for t, _ in self._group_read(self.mu)]
             self.mu = self._group_write(self.mu, tots, [self._anchor_lo] * len(self._groups))
@@ -380,14 +407,14 @@ class _WalkEngine:
         r = len(self._act)
         Qg, Rg = self._star_QR()
         if self._pi_ax is None:
-            self._pi_ax = np.tile(self._w1, (r, 1))
+            self._pi_ax = self._w1[self._act].copy()
             if self._m is None:
                 self._m = (np.linalg.lstsq(H, y, rcond=None)[0]
                            if np.all(np.isfinite(y)) else np.zeros(n))
             if self._P is None:
                 self._P = np.eye(n) * float(Rg.reshape(self._G, -1).max()
                                             + Qg.reshape(self._G, -1).max()) * n
-        pi_ax = self._pi_ax @ self._T1
+        pi_ax = np.einsum("ai,aij->aj", self._pi_ax, self._T1[self._act])
         mpred = F @ self._m + bu
         FPFt = F @ self._P @ F.T
         if not np.all(np.isfinite(y)):
@@ -447,8 +474,8 @@ class _WalkEngine:
             info = float(pi_ax[i] @ info_g) + _RIDGE
             grad = float(pi_ax[i] @ score_g)
             K_mu = self._Pmu[k] / (self._Pmu[k] + 1.0 / info)
-            self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap, self.gap))
-            self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k], self._Pmu_cap)
+            self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap[k], self.gap[k]))
+            self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k], self._Pmu_cap[k])
         self._pi_ax, self._m, self._P = pi_ax, m_new, P_new
         if self._groups:
             # The per-axis Newton walk steps by ``score/info``, which is ~1/Q on a process axis
@@ -554,8 +581,9 @@ class LucidFilter:
         self.phi_arr = np.array([p for p in phis for _ in ss for _ in los], float)
         self.s_arr = np.array([sv for _ in phis for sv in ss for _ in los], float)
         self.split_arr = los if self.groups else np.array([])
-        self._members = [_WalkEngine(Q0, R0, Hm, F, B, p, sv,
-                                     groups=self.groups, anchor_lo=lo)
+        self._build = lambda p, sv, lo, gc=None: _WalkEngine(
+            Q0, R0, Hm, F, B, p, sv, groups=self.groups, anchor_lo=lo, group_class=gc)
+        self._members = [self._build(p, sv, lo)
                          for p in phis for sv in ss for lo in los]
         self.reset()
 
