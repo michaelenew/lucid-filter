@@ -58,12 +58,21 @@ general case.** Everything else follows from taking that seriously.
    `W diag(µ^a) W⁻¹` gets wrong by 5e-2 with no warning. Dynamics with no real generator
    are refused with an error naming the fix, not approximated. The factorisation is lazy,
    so a uniformly-sampled filter never computes a logarithm.
-6. **`Q(a) = Q·a` is the one deliberate approximation, and it is a division of labour**
-   (0004). Exact for the random-walk default and at the nominal gap; first order in
-   `‖A‖a` otherwise. An error in `F` is absorbed by nothing; correcting the process-noise
-   *magnitude* online is the scale walk's whole job. Bounded and measured: 3.8% at
-   `‖A‖a = 0.025`, 45% at 1.2. Its honest limit is that the error is *gap-dependent*, so
-   the walk can absorb its average but not its variation — an open, below.
+6. **`Q(a)` is exact, recovered from the generator the propagator already holds** (0004,
+   0005). ~~`Q(a) = Q·a` is the one deliberate approximation, and it is a division of
+   labour: an error in `F` is absorbed by nothing, while correcting the process-noise
+   magnitude online is the scale walk's whole job.~~ **Retired — it was not a division of
+   labour, it was a bug.** Linear scaling is exact only for `F = I`. A double integrator
+   accumulates position variance as `t³`, so a half-length gap gets **4×** and a
+   tenth-length gap **100×** the position noise it should, and the walk cannot absorb it
+   because the misfit is a different multiple at every gap. The continuous spectral density
+   is now recovered once per member by inverting the Van Loan map on the symmetric basis,
+   and `Q(a)` is exact to 1e-16; the scale's *departure* from it stays linear in the gap, so
+   `dQ/dξ` and the walk are unchanged. Falls back to linear scaling where the recovery is
+   unavailable — no real generator, a singular map, a non-PSD density, or a per-step
+   linearisation, which has no fixed generator at all. **Probe 0004 missed this**: its rig
+   carries a direct position-diffusion term that masks the cubic, so the approximation
+   measured fine there and failed on 0005.
 7. **Every rate in the engine composes over the gap, including the ones that arrived
    later.** The split ladder's group revert
    ([`sequence-demix`](../sequence-demix/SUMMARY.md)) relaxes a confounded pair's log-odds
@@ -72,7 +81,32 @@ general case.** Everything else follows from taking that seriously.
    revert `m` times for one instant delivered as `m` points, which is the same category of
    error as item 4 and was caught by the same rule: **if it is a rate, it takes the gap's
    power; if it is a property of the reading, it does not.**
-8. **The process-scale score uses the LIVE process time, not the gap** (0003). The engine's
+8. **A partial event may move a direction it can see, and may not move one it cannot**
+   (0005). With one sensor reporting, `S` is a **scalar**: a process mode that sensor sees
+   and the sensor's own noise enter it additively, so their scale scores are exactly
+   proportional and the split between them is invisible at every such step. That is
+   Proposition 1 reached through the *packetisation* rather than through the model — a joint
+   row constrains the split because the same process jump would also have to explain the
+   other sensors' small innovations, and a single reading has no such other sensors. So the
+   event moves each confounded pair's **total**, which its scalar `S` does see, and the
+   **split is held** at whatever identifiable evidence already made it. Nothing is chosen
+   here: no anchor, no rate, no threshold — the null direction of this event's score is
+   simply not a direction this event writes to.
+
+   Two things this is *not*. It is not the split ladder's revert
+   ([`sequence-demix`](../sequence-demix/SUMMARY.md)), which relaxes a pair toward the
+   member's **base** split: that is the right anchor for a pair the model confounds, and the
+   wrong one for a pair only this event confounds — when a sensor really is 100× bad,
+   reverting toward the base hands about half of a genuinely elevated total to the process
+   axis, and it sticks (measured: tail 3.61× with it, 1.23× without). And it is not a bound
+   on the walk: the walk's post-burst behaviour is *correct* — with the split held, the
+   scale it settles on is right.
+9. **The walk's step budget is per nominal step OF A FULL ROW** (0005). The clip is one
+   grid spacing — what stops a single Newton step against a near-singular Fisher becoming a
+   verdict. An event carrying `m_o` of `m` sensors carries that share of the evidence that
+   would contradict such a step, so it gets that share of the budget. Worth 15.2× → 2.7× in
+   the acceptance rig's hot window on its own.
+10. **The process-scale score uses the LIVE process time, not the gap** (0003). The engine's
    score is the local one: it keeps `Q`'s dependence on `xi` and drops the prior
    covariance's. At a zero gap `Q(0) = 0`, so that score is not small but *structurally
    absent*, and the first-arriving reading of an instant took all of the process-scale
@@ -133,13 +167,23 @@ checking.
 
 ## Open items
 
-- **A gap-dependent `Q` misfit the walk cannot reach** (0004). `Q(a) = Q·a` is exact at
-  the nominal gap and first order elsewhere; the walk absorbs a constant multiplicative
-  misfit but not one that differs per event. On a stiff generator sampled with wide gaps
-  (`‖A‖a ≳ 1`) that is a real per-event miscalibration. The fix is to let `process=` be
-  declared as a **continuous spectral density** for callers who have one, making `Q(a)`
-  exact by Van Loan; recovering `Qc` from a supplied one-step `Q0` instead is an `n²×n²`
-  inverse with no PSD guarantee, which is why it is not done.
+- ~~**A gap-dependent `Q` misfit the walk cannot reach** (0004) — the fix is to let
+  `process=` be declared as a continuous spectral density; recovering `Qc` from a supplied
+  one-step `Q0` instead is an `n²×n²` inverse with no PSD guarantee, which is why it is not
+  done.~~ **Done, and the reason not to do it was wrong.** The inverse is a solve on the
+  symmetric basis, `n(n+1)/2` square, built from Van Loan on that basis and computed once
+  per member — 3 exponentials at `n = 2`, 120 at `n = 15`, lazily and only when a
+  non-nominal gap actually arrives. It is checked for PSD and round-trip and falls back to
+  the linear scaling when either fails, so the escape hatch the open asked for is the
+  fallback rather than the design. What remains open is only the callable path: a per-step
+  linearisation has no fixed generator, so it keeps the linear map.
+- **The residual on the acceptance rig** (0005). 1.220× oracle overall against 1.147× for
+  the pre-merge filter on the narrower box, and 1.665× in the hot window against 1.247×.
+  Calm is *better* (1.036 vs 1.063) and the tail shows no latch (1.08×), so what is left is
+  concentrated in the burst itself — the price of a wider `(phi, s)` box under evidence
+  that arrives one sensor at a time. Whether the box should be narrower when delivery is
+  pointwise is a question for the box, not for the streaming path, and it is not answered
+  here.
 - **The no-information drift's saturation** (0001 §4). Over a long unobserved gap the walk
   covariance drifts to the window-localisation bound `(3s)²`. The scale's own stationary
   variance is `s²`, and saturating there instead is the alternative; 0001 §4's table is what

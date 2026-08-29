@@ -925,7 +925,7 @@ class _WalkEngine:
         self.loglik = 0.0
         return self
 
-    def event_groups(self, obs, mo):
+    def event_groups(self, obs, mo):   # noqa: D401
         """``(groups, anchor log-odds)`` for an event carrying the sensors ``obs``.
 
         A FULL row is the model's own question and gets the model's own answer, unchanged --
@@ -1075,6 +1075,14 @@ class _WalkEngine:
         # contradict such a step -- with one sensor reporting, nothing contradicts it at all
         # -- so it gets that part of the budget.  A full row is unchanged by construction.
         budget = self.gap if mo == m else self.gap * (mo / m)
+        # What a partial event may move.  The pairs its own subset confounds (`_subset_groups`)
+        # are directions it cannot see AT ALL -- with one sensor reporting, ``S`` is a scalar
+        # and a process mode it sees enters it exactly as that sensor's own noise does.  So the
+        # event is allowed to move each such pair's TOTAL, which it can see, and its split is
+        # held at whatever identifiable evidence already made it.
+        ev_groups, _ = self.event_groups(obs, mo)
+        held = ([lo for _, lo in self._group_read(self.mu, ev_groups)]
+                if (ev_groups and mo != m) else None)
         for i, k in enumerate(self._act):
             idx = self._axwin[k]
             dpk = self._dS_axis(k, obs, aQ if k < n else a)
@@ -1092,9 +1100,11 @@ class _WalkEngine:
             K_mu = self._Pmu[k] / (self._Pmu[k] + 1.0 / info)
             self.mu[k] += float(np.clip(K_mu * (grad / info), -budget[k], budget[k]))
             self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k] * a, self._Pmu_cap[k])
+        if held is not None:
+            tots = [t for t, _ in self._group_read(self.mu, ev_groups)]
+            self.mu = self._group_write(self.mu, tots, held, ev_groups)
         self._pi_ax, self._m, self._P = pi_ax, m_new, P_new
-        ev_groups, ev_anchor = self.event_groups(obs, mo)
-        if ev_groups and self._revert is not None:
+        if self._groups and mo == m and self._revert is not None:
             # The per-axis Newton walk steps by ``score/info``, which is ~1/Q on a process axis
             # and ~1/R on a sensor axis; where the two are confounded, that step is almost
             # entirely along the NULL direction, in which the score carries no information at
@@ -1118,9 +1128,9 @@ class _WalkEngine:
             # a gap of ``a`` it composes to ``revert**a``.  At ``a = 0`` that is 1: two
             # sensors reporting the same instant must not revert twice for arriving twice.
             rev = self._revert if a == 1.0 else self._revert ** a
-            tots, los = zip(*self._group_read(self.mu, ev_groups))
-            back = [an + rev * (lo - an) for an, lo in zip(ev_anchor, los)]
-            self.mu = self._group_write(self.mu, list(tots), back, ev_groups)
+            tots, los = zip(*self._group_read(self.mu))
+            back = [an + rev * (lo - an) for an, lo in zip(self._anchor_lo, los)]
+            self.mu = self._group_write(self.mu, list(tots), back)
         self.loglik += ll
         wmean = self._wmean(pi_ax)
         innov = e
@@ -1323,20 +1333,6 @@ class _EngineBank:
             self.mu[:, k] = np.log(np.maximum(a2, 1e-300) / (self.lam[:, k] * h2))
             self.mu[:, n + i] = np.log(np.maximum(b2, 1e-300) / self.rho[:, i])
 
-    def _revert_subset(self, obs, mo, gap):
-        """The pairs a PARTIAL event's subset confounds -- per member, because the pairing
-        reads each member's own eigenbasis.  Only partial events reach here, and a partial
-        event is already the cheap one (its correction is ``m_o`` wide, not ``m``), so the
-        loop costs what the stacked path saves everywhere else."""
-        rev = self._revert if gap == 1.0 else self._revert ** gap
-        for j, f in enumerate(self.members):
-            groups, anc = f.event_groups(obs, mo)
-            if not groups:
-                continue
-            tots, los = zip(*f._group_read(self.mu[j], groups))
-            back = [an + rev[j] * (lo - an) for an, lo in zip(anc, los)]
-            self.mu[j] = f._group_write(self.mu[j], list(tots), back, groups)
-
     def update(self, y, u=None, a=1.0):
         """The stacked twin of ``_WalkEngine.update`` -- same event model, same partial
         sub-selection, same elapsed-time maps, one leading member axis."""
@@ -1424,6 +1420,12 @@ class _EngineBank:
                  + np.einsum("bg,bgi,bgj->bij", w, dm, dm))
         P_new = self._cap_P(0.5 * (P_new + np.swapaxes(P_new, 1, 2)))
         budget = self.gap if mo == m else self.gap * (mo / m)   # see _WalkEngine.update
+        held = None
+        if mo != m:
+            held = []
+            for j, f in enumerate(self.members):
+                g, _ = f.event_groups(obs, mo)
+                held.append((g, [lo for _, lo in f._group_read(self.mu[j], g)] if g else None))
         for ax, k in enumerate(self._act):
             idx = self._axwin[k]
             dpk = self._dS_axis(k, obs, aQ if k < n else a)
@@ -1446,12 +1448,15 @@ class _EngineBank:
         self._pi[:] = pi
         self._m[:] = m_new
         self._P[:] = P_new
-        if self._revert_on:
-            if mo == m:
-                if self._groups:
-                    self._revert_groups(a)
-            else:
-                self._revert_subset(obs, mo, a)
+        if held is not None:                    # hold each pair's split, keep its total
+            for j, f in enumerate(self.members):
+                g, lo = held[j]
+                if lo is None:
+                    continue
+                tots = [t for t, _ in f._group_read(self.mu[j], g)]
+                self.mu[j] = f._group_write(self.mu[j], tots, lo, g)
+        elif self._revert_on and self._groups:
+            self._revert_groups(a)
         self._ll += ll
         sc = self.mu + self._wmean(pi)
         innov = e
