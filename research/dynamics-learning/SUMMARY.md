@@ -8,11 +8,13 @@ dynamics online**, converging back to oracle-grade state tracking without a refi
 or a tuning constant.  Same house rules as everything else here: no theoretically relevant free
 parameters; compute budgets allowed; every claim measured against an oracle told the truth.
 
-**Status: delivered.**  The research ladder (exploration/0001–0006) is complete, both named
+**Status: delivered.**  The research ladder (exploration/0001–0006) is complete, all three named
 acceptance rigs pass, and the mechanism is **shipped in `LucidFilter`** — `dynamics=None`
 learns `F` (and `B`) online, `faults=rho` says supplied dynamics may change.  0007 re-measures
-the shipped object on the research rigs.  What remains is the 0052 profiler regimes and the
-demo — see the opens at the bottom.
+the shipped object on the research rigs; **0008** is the 3D drone rig and the live demo —
+a crate picked up OFF CENTRE, named from the residual in 28 ms, and put down again
+(`../figures/drone3d-lucid.gif`, the main README's lead animation).  See the opens at the
+bottom for what is left.
 
 ## The settled design (each element pinned by a numbered probe)
 
@@ -90,6 +92,17 @@ drift rate, restart width, and spawn mass derives from `(rho, cap)`.  Zero tunin
   oracle from an identity prior in a few hundred steps; a mid-run **frequency doubling** — the
   odefilter's recorded limit — re-learned in ~100–200 steps; never above the told-nothing
   parent in any window.
+- **0008 the 3D drone** (n=12, m=12, the SHIPPED API throughout, 5 seeds): a 0.42 kg crate
+  taken **off centre** mid-flight (m ×1.38, I ×1.8, the centre of mass 1.63 cm off the thrust
+  axis) and released again, around a gust, a ×12 GPS multipath burst and ×12 gyro vibration.
+  Detection **2.8 ± 0.4 steps = 28 ms**, 5/5 seeds, 0.00% of pre-fault steps flagged; carrying,
+  m̂ 1.528 ± 0.003 (true 1.520) and the off-centre lever arm 1.62 ± 0.01 cm (true 1.63); after
+  the release the same read-out returns to 1.101 ± 0.001 kg and 0.11 ± 0.00 cm.  Position RMSE
+  1.03× an oracle told the true noise schedule AND the true payload, where an oracle told only
+  the noise pays 1.10–1.12× (it is flying the wrong aircraft) and the frozen model 2.1–6.9×.
+  The **off-centre** channel is what a planar rig cannot pose: a displaced centre of mass turns
+  collective thrust into a standing torque, a coupling that is exactly zero on the nominal
+  vehicle, so there is no nominal value for it to move away from.
 
 Known residuals, filed with analyses: the drone's settled 1.075 (localized to the thrust·(1/m)
 channels; the q_theta-floor hypothesis tested and REFUTED — the remaining suspect is the cost
@@ -129,18 +142,31 @@ against ground truth caught it.
 
 `exploration/0001` scalar race + the derived frontier and its audit · `0002` Q↔F split and
 masking · `0003` information-rate recovery, calibration, the freeze bug at 20× · `0004` the
-drone rig (acceptance) · `0005` the blowout rig (acceptance) · `0006` dynamics=None proper ·
-`0007` the shipped filter on the research rigs, and the class-scaling defect.
+planar drone rig (acceptance) · `0005` the blowout rig (acceptance) · `0006` dynamics=None
+proper · `0007` the shipped filter on the research rigs, and the class-scaling defect ·
+`0008` the 3D drone through the shipped API: an off-centre payload, the demo animation, and
+the units control that makes the class-size convention falsifiable.
 Each note carries its measured tables, error bars, and the constants' derivations; every
 negative result (the simultaneous-BOTH non-mask, the refuted q_theta-floor hypothesis, the
 dissolved hover-honesty scenario, the dormant spawns) is filed in place.
 
 ## Opens
 
-- The 0052 profiler extended with WEIGHT / BLOWOUT regimes next to SENSOR/PROCESS/...; the
-  arm/drone demo gif showing a dynamics fault caught and re-learned live.
-- Anchors and physical departures together on one rig (0007 ran them separately), and the
-  drone rig through the shipped API (it needs a constant input channel to carry gravity).
+- ~~The arm/drone demo gif showing a dynamics fault caught and re-learned live; the drone rig
+  through the shipped API (it needs a constant input channel to carry gravity)~~ — **both done
+  in 0008**: `../figures/drone3d-lucid.gif`, and the gravity channel is a constant input
+  `ug = G` with `B[:, 4] = (0, 0, -dt)` on the velocity rows.  Still open: the 0052 arm
+  profiler extended with WEIGHT / BLOWOUT regimes next to SENSOR/PROCESS/...
+- **Anchors that can be callables.** 0008 sharpened the "anchors and physical departures on one
+  rig" open: a named anchor is a fixed `(F, B)` pair, so it cannot carry a `B` that rotates with
+  the operating point, and naming "payload attached" on the 3D drone is therefore not currently
+  expressible.  The drone rig runs the departure walker alone.
+- **A per-direction class size.** The scale-free convention of 0007 ties the class size to
+  `||B0||`, a single global scale, so it says the same thing on every departure direction only
+  when the columns those directions live in are comparable in magnitude.  Choosing input units
+  that make them so is free and is the caller's to do (0008's rig does exactly that); what it
+  costs not to is measured in 0008's `units_control`.  A per-direction class size would remove
+  the requirement but needs a labelled prior per direction, so it is not free.
 - The exact jump-hold theta-prior (two-state: "jumped recently" vs "holding") in place of the
   diffusion surrogate — the candidate for the drone's last 7% and for post-jump calibration
   without an explicit restart.

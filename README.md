@@ -22,12 +22,14 @@
 You supply what you know about a system: its dynamics, which sensor reads what,
 rough noise magnitudes. It works out the rest online — every scale, per
 component, per step — and it works it out *fast*: told nothing at all it lands
-**3.5% above an oracle-tuned Kalman filter** on the scalar benchmark, and it is
-never worse than 1.22× an oracle handed the true noise schedule on the hardest
-of the 5-DOF arm's six regimes, where the same model with fixed noise pays
-2.4–5.5×. A regime change is absorbed in a few steps, not a window. There is no
-`fit()`, no threshold, no forgetting factor, no window and no changepoint
-detector; the single residual knob does nothing near its default.
+**3.5% above an oracle-tuned Kalman filter** on the scalar benchmark, and
+**1.03×** an oracle handed both the true noise schedule and the true payload on
+the drone below. Across every rig here the worst case anywhere is 1.36×, on the
+one window where a sensor degrades by ×12 and the walk is still reaching it;
+the same model with fixed noise pays 2.1–6.9× on those same runs. A regime
+change is absorbed in a few steps, not a window. There is no `fit()`, no
+threshold, no forgetting factor, no window and no changepoint detector; the
+single residual knob does nothing near its default.
 
 It is **lucid** because it tells you what the data is, rather than making you
 tell it. A conventional filter takes your `Q` and your `R` and believes them: if
@@ -62,10 +64,11 @@ Everything in the right-hand column is filter output:
    under multipath, the gyro row under rotor vibration, the wind row under the
    gust. Nothing is told, and the gust is not mistaken for the crate.
 2. **What it says it is carrying** — read straight off `r.control`, the dynamics
-   as currently believed. Two steps after the grab it reports a payload, and it
-   settles at **0.44 kg hung 1.6 cm off centre** against a truth of 0.42 kg and
-   1.63 cm. When the crate is released the same read-out comes home to
-   0.00 kg and 0.1 cm: the original dynamics, recovered, with no refit.
+   as currently believed. Two steps after the grab (2.8 ± 0.4 over five seeds) it
+   reports a payload, and it settles at **0.44 kg hung 1.6 cm off centre** against
+   a truth of 0.42 kg and 1.63 cm. When the crate is released the same read-out
+   comes home to 0.00 kg and 0.1 cm: the original dynamics, recovered, with no
+   refit.
 3. **Position error.** Over the whole mission the lucid estimate holds **2.0 cm**
    RMSE through the bursts where the raw GPS reads 3.7 m and the same model
    frozen at the nominal airframe and base noise reads 4.9 cm.
@@ -146,7 +149,8 @@ microsecond-scale in a compiled implementation.
 ## What a lucid filter is
 
 A state estimator — an observer, in the control-engineering sense — for systems
-whose noise environment changes while they are running. The model:
+whose noise environment, and optionally whose dynamics, change while they are
+running. The model:
 
 ```
 theta_t = F theta_{t-1} + B u_t + w_t,   w_t ~ N(0, Q(t))
@@ -197,7 +201,8 @@ Configure by **give-what-you-know**; every argument has a working default:
 | `process` | base process covariance `Q0` | identity |
 | `measurement` | base per-sensor variances `R0` | ones |
 | `faults` | hazard `rho`: the supplied dynamics may **change** | none → they are fixed |
-| `departures`, `anchors` | the directions the dynamics may move in; named fault modes | full basis; none |
+| `departures` | the directions the dynamics may move along — a matrix, an `(A, C)` pair when one physical parameter moves `F` and `B` together, or a callable of the state when the direction rotates with the operating point | full basis |
+| `anchors` | named fault hypotheses, each carried as its own full filter | none |
 
 A rough base is fine — the walk breathes around it, and where a base is not just
 rough but *silent* about the process/sensor split, the bank learns the split
@@ -242,18 +247,43 @@ trust, so it buys nothing
 Fusing one bad absolute sensor with one good dynamic sensor per joint is the
 use case.
 
-On the dynamics channel (`0007`, the shipped filter re-measured on the research
-rigs): a scalar step change in `F` is detected in **15.7 ± 1.7 steps against a
-derived frontier of 15** — on the frontier, not near it. On a differential drive
-whose wheel blows out, driven entirely through the public API, it detects in
-**43 ms**, recovers the blown radius to 0.303 ± 0.018 (true 0.30) and the healthy
-one to 1.043 ± 0.021 (true 1.00), and settles at 1.037× a refit oracle where the
-frozen model pays 5.06×. The research prototypes that fixed the design go
-further where the failure modes are *named*: the same blowout in 18 ms, and a
-quadrotor that has a payload attached mid-flight in 28.9 ± 1.7 steps against a
-frontier of 29.6, recovering its mass and inertia to three figures. Calm-regime
-cost is 1.00× throughout
-([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
+On the 3D drone rig (5 seeds, position RMSE ratio to an oracle Kalman filter told
+the true noise schedule **and** the true payload; `noise-only` is told the noise
+but flies the nominal airframe, which is what isolates the dynamics channel from
+the noise machinery; `frozen` is told neither —
+[`0008`](research/dynamics-learning/exploration/0008_drone3d_payload.py)):
+
+| window | lucid | noise-only | frozen |
+|---|---|---|---|
+| before the crate | 0.98 | 1.00 | 1.00 |
+| calm, carrying | 1.03 | 1.10 | 3.47 |
+| gust, carrying | 1.03 | 1.11 | 1.29 |
+| GPS multipath ×12, carrying | 1.36 | 1.12 | 6.92 |
+| calm, after the drop | 1.03 | 1.12 | 2.10 |
+| gyro vibration ×12, after the drop | 0.98 | 0.98 | 2.36 |
+
+The crate is detected **2.8 ± 0.4 steps (28 ms)** after the grab, on 5 seeds out
+of 5, with **0.00%** of pre-pick-up steps ever flagged. Run the same mission with
+no crate at all and the cost of carrying the fault hypothesis is 1.024 ± 0.043 —
+indistinguishable from not carrying it — which is what makes the 28 ms end of the
+detection frontier affordable. Carrying, it recovers the
+mass to 1.528 ± 0.003 kg (true 1.520) and the off-centre lever arm to
+1.62 ± 0.01 cm (true 1.63) — the inertias only to −15%, which is the excitation
+limit below. After the release the same read-out returns to 1.101 ± 0.001 kg and
+0.11 ± 0.00 cm. The one place the lucid filter is beaten is the ×12 GPS burst,
+where an oracle *told* the new sensor noise is 1.36/1.12 = 21% better than one
+still walking towards it — the transient-attribution open, on a bigger rig.
+
+On the earlier dynamics rigs (`0007`, the shipped filter re-measured): a scalar
+step change in `F` is detected in **15.7 ± 1.7 steps against a derived frontier
+of 15** — on the frontier, not near it. On a differential drive whose wheel blows
+out, driven entirely through the public API, it detects in **43 ms**, recovers
+the blown radius to 0.303 ± 0.018 (true 0.30) and the healthy one to
+1.043 ± 0.021 (true 1.00), and settles at 1.037× a refit oracle where the frozen
+model pays 5.06×. The research prototypes that fixed the design go further where
+the failure modes are *named*: the same blowout in 18 ms, and a planar quadrotor
+that has a payload attached mid-flight in 28.9 ± 1.7 steps against a frontier of
+29.6 ([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
 
 ## Current limits, measured
 
@@ -289,6 +319,26 @@ cost is 1.00× throughout
   shares one identifiable total with it; the state estimate needs exactly that
   total and is unaffected, but the *attribution* between the two is partly
   shared.
+- **The dynamics read-out comes home; the fault *flag* does not.** Eleven steps
+  after the drone releases the crate the reported payload is already back inside
+  10% of zero, and it settles at 1.101 ± 0.001 kg against a truth of 1.100 and an
+  off-centre lever arm of 0.11 cm against 0.00. `r.fault`, though, stays pinned
+  at 1.0 for the rest of the
+  run. That is what it should do and not what the name suggests: the marginal
+  asks *which member of the bank is flying*, and once the departure walker has
+  re-learned the nominal dynamics the two members predict identically, so no
+  evidence can move probability back to the nominal one. Read `r.fault` as a
+  rising-edge detector for "the dynamics left what you supplied"; read
+  `r.dynamics` / `r.control` for what they are now.
+- **A recovered parameter is only as good as its excitation.** On the same run
+  the mass and the centre-of-mass lever arm come back to within ~1% of the truth,
+  and the three inertias only to roughly ±20–30% — best where the torque channel
+  is exercised, worst while the gyros are swamped by rotor vibration. That is the
+  bounded-never-frozen rule doing its job: a weakly excited axis stands at honest
+  class width instead of reporting a number it has no evidence for. It costs the
+  state estimate nothing here, and it is the reason a recovered parameter should
+  be read next to the excitation that produced it
+  ([`0008`](research/dynamics-learning/exploration/0008_drone3d_payload.md)).
 - **Nothing here has been flown.** Every number is from synthetic rigs with
   known ground truth; hardware validation is not part of this repository.
 
