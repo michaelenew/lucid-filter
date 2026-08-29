@@ -415,8 +415,14 @@ that.** See `exploration/0029_reprofile.md`.
   real Fisher as n grows (0003 shows the weak modes collapsing under correlation).
 - **`R` diagonal vs full in the shipped `VectorFilter` (#6)** — #6 currently fits
   full-symmetric R0; the per-component work assumes diagonal. Reconcile at merge.
-- **Partial missingness.** Only an all-`NaN` row is handled (clean gap: propagate,
-  don't correct). Some-sensors-present rows need per-step sub-selection of `H`, `R`.
+- ~~**Partial missingness.** Only an all-`NaN` row is handled (clean gap: propagate,
+  don't correct). Some-sensors-present rows need per-step sub-selection of `H`, `R`.~~
+  **Delivered, and the framing was wrong.** Partial observation is not a missing-data
+  corner to patch: sensors sharing a schedule is the special case, and the general input
+  is a stream of `(sensor, timestamp, value)` points. Shipped as `observe`/`stream` plus
+  per-event sub-selection of `H`, `R`, with variable elapsed time carried through every
+  class timescale (`timestep=`). A full row at the nominal step is bit-for-bit unchanged.
+  [`../pointwise-streaming/SUMMARY.md`](../pointwise-streaming/SUMMARY.md).
 - **Fit speed.** No batched-over-parameter-vectors kernel yet (the scalar core's
   `_loglik_batch`), and no closed-form concentration of the homoscedastic face, so
   `fit()` is pure-Python-slow for large n, m. Correctness first; both are known

@@ -21,6 +21,22 @@ Configure by the give-what-you-know / infer-the-rest rule -- for each input pass
 
 Everything is vector; a scalar problem is length 1.
 
+**The input is a stream of events, not a matrix of rows.**  The general thing that
+happens is that ONE sensor reports, at some time:
+
+    f.observe(sensor, value, t=timestamp)     # one (sensor, timestamp, value) point
+
+Sensors are not assumed to share a schedule and the gaps are not assumed equal.  A
+partly-observed row is a first-class input (``NaN`` = that sensor did not report, and the
+present ones are sub-selected out of ``H`` and ``R`` rather than the row being discarded);
+a fully synchronous row at a fixed rate is the special case, ``filter(Y)``, and runs the
+arithmetic it always did.  ``timestep`` fixes the time unit: everything supplied about the
+model and every class timescale is per NOMINAL STEP, and an event ``a = dt / timestep``
+steps after the last takes each of them to that power -- ``F(a) = exp(a log F)``,
+``Q -> Q a``, ``phi -> phi**a``, ``forget -> forget**a``, ``rho -> 1 - (1-rho)**a``.
+``R`` alone is not scaled: a measurement variance belongs to the reading, not to the gap
+before it.  See ``research/pointwise-streaming/SUMMARY.md``.
+
 **The dynamics channel.**  `dynamics=None` learns `F` (and `B`) online from the random-walk prior;
 `dynamics=F0, faults=rho` says the supplied dynamics may CHANGE -- a payload attached to a drone, a
 tire blown out -- and the filter detects the change and recovers the new dynamics without a refit, a
@@ -84,6 +100,7 @@ class LucidStep:
     fault: float = 0.0             #: posterior probability the dynamics have left the NOMINAL --
     #: which is the supplied ``F`` under ``faults=``, and the random walk ``F = I`` under
     #: ``dynamics=None`` (where it therefore reads "the dynamics are not a random walk")
+    time: float = math.nan         #: the filter clock after this event (see ``timestep``)
 
     @property
     def scale(self) -> np.ndarray:
@@ -103,6 +120,8 @@ class LucidResult:
     dynamics: np.ndarray = None    #: (T, n, n) learned ``F``, or ``None`` when supplied fixed
     control: np.ndarray = None     #: (T, n, p) learned ``B``, or ``None``
     fault: np.ndarray = None       #: (T,) posterior probability of a dynamics fault
+    time: np.ndarray = None        #: (T,) the filter clock at each event
+    sensor: np.ndarray = None      #: (T,) which sensor each event carried -- streams only
 
     def __len__(self) -> int:
         return len(self.mean)
@@ -111,6 +130,152 @@ class LucidResult:
 def _logsumexp(a: np.ndarray) -> float:
     m = float(np.max(a))
     return m + math.log(float(np.sum(np.exp(a - m))))
+
+
+# ------------------------------------------------------ the elapsed-time map
+# A supplied ``F`` is the ONE-NOMINAL-STEP sampling of a fixed continuous generator
+# ``A = log F``; over an elapsed ``a`` nominal steps the transition is ``exp(a A)``.  The
+# three primitives below are the numpy-only realisation (the package has no scipy
+# dependency): scaling-and-squaring for ``exp``, Denman-Beavers for the square root, and
+# inverse scaling-and-squaring for ``log``.  They are exercised only when a stream actually
+# carries a non-nominal gap -- ``a == 1`` and ``a == 0`` short-circuit to ``F`` and ``I``.
+
+
+def _expm(M):
+    """Matrix exponential by scaling and squaring with a Taylor core."""
+    M = np.asarray(M, float)
+    nrm = float(np.abs(M).sum(1).max())
+    if nrm == 0.0:
+        return np.eye(M.shape[0])
+    k = max(0, int(math.ceil(math.log2(nrm / 0.5))))
+    A = M / (2.0 ** k)
+    E = np.eye(A.shape[0])
+    term = E
+    for j in range(1, 32):              # ||A|| <= 1/2: the tail is below double precision
+        term = term @ A / j
+        E = E + term
+        if np.abs(term).sum(1).max() < 1e-18:
+            break
+    for _ in range(k):
+        E = E @ E
+    return E
+
+
+def _sqrtm(A):
+    """Principal matrix square root (Denman-Beavers), for matrices with no eigenvalue on
+    the closed negative real axis -- which is exactly the condition for ``log A`` to be
+    real, so a failure here and a failure there are the same failure."""
+    Y = np.array(A, float)
+    Z = np.eye(A.shape[0])
+    for _ in range(64):
+        Yn = 0.5 * (Y + np.linalg.inv(Z))
+        Zn = 0.5 * (Z + np.linalg.inv(Y))
+        done = np.abs(Yn - Y).max() <= 1e-14 * max(1.0, float(np.abs(Yn).max()))
+        Y, Z = Yn, Zn
+        if done:
+            break
+    return Y
+
+
+def _logm(F):
+    """Principal matrix logarithm by inverse scaling and squaring.
+
+    Repeated square roots pull ``F`` towards the identity until the ``log(I + X)`` series
+    converges fast, then the result is scaled back.  Defective matrices are fine -- the
+    constant-velocity transition ``[[1, dt], [0, 1]]`` is the common one and has no
+    eigenbasis at all, which is why this is not an eigendecomposition.
+    """
+    n = F.shape[0]
+    I = np.eye(n)
+    A = np.array(F, float)
+    k = 0
+    while np.abs(A - I).sum(1).max() > 0.25 and k < 60:
+        A = _sqrtm(A)
+        k += 1
+    X = A - I
+    L = np.zeros_like(X)
+    term = I
+    for j in range(1, 48):
+        term = term @ X
+        L = L + ((-1.0) ** (j + 1) / j) * term
+        if np.abs(term).sum(1).max() < 1e-18:
+            break
+    return (2.0 ** k) * L
+
+
+class _Propagator:
+    """The elapsed-time transition and forcing map of a FIXED one-nominal-step ``F``.
+
+    ``F`` is read as the ``a = 1`` sampling of a fixed generator ``A = log F``, so over an
+    elapsed ``a`` nominal steps
+
+        F(a) = exp(a A),     Phi(a) = int_0^a exp(A tau) dtau,
+
+    both read off one exponential of ``a * [[A, I], [0, 0]]``.  The supplied ``B`` is the
+    ONE-STEP forcing map (``x_t = F x_{t-1} + B u_t``), so its continuous counterpart is
+    ``Phi(1)^-1 B`` and the elapsed map is ``Phi(a) Phi(1)^-1 B`` -- which is exactly ``B``
+    at ``a = 1`` and ``0`` at ``a = 0``, i.e. continuous THROUGH the nominal step rather
+    than agreeing with it only there.
+
+    The factorisation is LAZY: a filter that is never handed a non-nominal gap never
+    computes a logarithm, and one whose ``F`` has no real logarithm only finds out (with an
+    error naming the fix) if it is actually asked to propagate over a non-nominal gap.
+    """
+
+    def __init__(self, F):
+        self.F = np.asarray(F, float)
+        self.n = self.F.shape[0]
+        self._I = np.eye(self.n)
+        self._Z = np.zeros((self.n, self.n))
+        self._trivial = np.array_equal(self.F, self._I)
+        self._A = None
+        self._Pinv = None
+        self._key = None
+        self._val = None
+
+    def _factor(self):
+        if self._A is not None:
+            return
+        try:
+            A = _logm(self.F)
+            ok = np.all(np.isfinite(A)) and np.allclose(_expm(A), self.F,
+                                                        rtol=1e-6, atol=1e-8)
+        except np.linalg.LinAlgError:
+            ok = False
+        if not ok:
+            raise ValueError(
+                "these dynamics have no real continuous-time generator, so there is no "
+                "transition over a non-nominal time step to compute (a negative real "
+                "eigenvalue is the usual cause -- no continuous system samples to that).  "
+                "Either sample uniformly, or pass `dynamics` as a callable of the state, "
+                "which is propagated by the first-order elapsed map instead.")
+        self._A = A
+        aug = np.zeros((2 * self.n, 2 * self.n))
+        aug[:self.n, :self.n] = A
+        aug[:self.n, self.n:] = self._I
+        self._aug = aug
+        Phi1 = _expm(aug)[:self.n, self.n:]
+        try:
+            self._Pinv = np.linalg.solve(Phi1, self._I)
+        except np.linalg.LinAlgError:               # int_0^1 exp(A t) dt singular: only
+            self._Pinv = None                       # when A has a 2*pi*i*k eigenvalue
+
+    def at(self, a):
+        """``(F(a), Psi(a))`` with ``mpred = F(a) x + Psi(a) B u``."""
+        if a == 1.0:
+            return self.F, self._I
+        if a == 0.0:
+            return self._I, self._Z
+        if self._trivial:
+            return self._I, a * self._I
+        if a == self._key:
+            return self._val
+        self._factor()
+        M = _expm(a * self._aug)
+        Fa, Phi = M[:self.n, :self.n], M[:self.n, self.n:]
+        out = (Fa, a * self._I if self._Pinv is None else Phi @ self._Pinv)
+        self._key, self._val = a, out
+        return out
 
 
 # ------------------------------------------------------- the per-(phi,s) engine
@@ -134,7 +299,7 @@ class _WalkEngine:
     the class ``(phi, s)``; no EMA, no tuned constant.
     """
 
-    def __init__(self, Q0, R0, H, F, B, phi, s, walk_axes=None, cap=None):
+    def __init__(self, Q0, R0, H, F, B, phi, s, walk_axes=None, cap=None, prop=None):
         n = Q0.shape[0]
         lam, V = np.linalg.eigh(Q0)
         self.n, self.m = n, R0.size
@@ -149,6 +314,8 @@ class _WalkEngine:
         self._Kstar = (1.0 - self.phi) / 4.0
         self._cap = None if cap is None else np.asarray(cap, float)
         self._dyn = None            # optional (mean, u) -> (Jacobian, predicted mean) callable
+        self._prop = prop if prop is not None else _Propagator(F)
+        self._Tcache = {}           # AR(1) scale kernel per elapsed time (5x5 -- tiny)
         self._Ichar = self._steady_fisher()
         self._Ifloor = (1.0 - self.phi) / (4.0 * (_SPAN_S * self.s) ** 2)
         # ACTIVATE structurally-observable axes -- NOT by the delocalisation floor (research 0024,
@@ -200,25 +367,52 @@ class _WalkEngine:
             w[arm] = 1 + i * (self._nn - 1) + np.arange(self._nn - 1)
             self._axwin[k] = w
 
-    def _star_QR(self):
-        """(Q_g, R_g) at every star node: the centre pair plus a per-node one-axis change."""
+    def _star_QR(self, a=1.0):
+        """(Q_g, r_g) at every star node: the centre pair plus a per-node one-axis change.
+
+        ``Q`` accumulates over ELAPSED TIME and so carries the factor ``a``; ``r`` does not
+        -- a measurement variance is a property of the reading, not of the gap before it.
+        ``r_g`` is returned as the (G, m) diagonal, so a partial event can sub-select
+        sensors out of it without ever forming the (m, m) block.
+        """
         n = self.n
-        Qc = self.V @ np.diag(self.lam * np.exp(np.clip(self.mu[:n], -60, 60))) @ self.V.T
+        Qc = self.V @ np.diag(a * self.lam * np.exp(np.clip(self.mu[:n], -60, 60))) @ self.V.T
         rc = self.rho * np.exp(np.clip(self.mu[n:], -60, 60))
         Qg = np.repeat(Qc[None], self._G, 0)
         rg = np.repeat(rc[None], self._G, 0)
         for g in range(1, self._G):
             k = int(self._star_axis[g]); o = float(self._star_off[g])
             if k < n:
-                dlam = self.lam[k] * (math.exp(min(self.mu[k] + o, 60.0))
-                                      - math.exp(min(self.mu[k], 60.0)))
+                dlam = a * self.lam[k] * (math.exp(min(self.mu[k] + o, 60.0))
+                                          - math.exp(min(self.mu[k], 60.0)))
                 Qg[g] += dlam * np.outer(self.V[:, k], self.V[:, k])
             else:
                 i = k - n
                 rg[g, i] = self.rho[i] * math.exp(min(self.mu[k] + o, 60.0))
-        Rg = np.zeros((self._G, self.m, self.m))
-        Rg[:, np.arange(self.m), np.arange(self.m)] = rg
-        return Qg, Rg
+        return Qg, rg
+
+    def _kernel(self, a):
+        """The scale class's AR(1) transition over ``a`` nominal steps.
+
+        ``xi`` is AR(1) with persistence ``phi`` and stationary sd ``s`` PER NOMINAL STEP,
+        i.e. an Ornstein-Uhlenbeck process sampled at the nominal rate; over ``a`` steps its
+        persistence is ``phi**a`` and its innovation variance ``s^2 (1 - phi^2a)``.  At
+        ``a = 0`` that is the identity (nothing moves between two readings at one instant);
+        at ``a = 1`` it is the kernel built once at construction, bit for bit.
+        """
+        if a == 1.0:
+            return self._T1
+        T = self._Tcache.get(a)
+        if T is None:
+            pa = self.phi ** a
+            nu = max(self.s * self.s * (1.0 - pa * pa), 1e-12)
+            off1 = self._off1
+            T = np.exp(np.clip(-0.5 * (off1[None, :] - pa * off1[:, None]) ** 2 / nu,
+                               -700.0, 700.0))
+            T /= T.sum(1, keepdims=True)
+            if len(self._Tcache) < 512:
+                self._Tcache[a] = T
+        return T
 
     def _star_weights(self, pi_ax, alpha=None):
         """One distribution over the star: the axial windows mixed with weights ``alpha``
@@ -240,15 +434,35 @@ class _WalkEngine:
             w[k] = float(pi_ax[i] @ self._off1)
         return w
 
-    def _dS_axis(self, k):
-        """dS/dxi_k at each of axis k's window nodes (dS_k depends only on the k-coordinate)."""
-        a = np.exp(np.minimum(self.mu[k] + self._off1, 60.0))
+    def _dS_axis(self, k, obs, a=1.0):
+        """dS/dxi_k at each of axis k's window nodes, over the sensors ``obs`` this event
+        carried (dS_k depends only on the k-coordinate).
+
+        A process mode's entry carries the elapsed factor ``a`` because ``Q`` does; a
+        sensor's does not.  Either can come back identically zero -- a mode this event's
+        sensors cannot see, or a sensor that did not read -- and a zero here is what tells
+        ``update`` to let that axis DRIFT rather than update it on no evidence.
+
+        The ``a`` passed for a process mode is the LIVE process time (``_aQ``), not the
+        gap since the last event.  The two differ only at a zero gap, and there the
+        distinction is the whole ball game: this score is the local one, keeping ``Q``'s
+        own dependence on ``xi`` and dropping the prior covariance's, and at a zero gap
+        the dropped term is the ONLY term.  Zeroing the score there would hand every
+        process-scale axis's evidence to whichever sensor happened to follow the gap and
+        discard what the other sensors at that instant say about the same ``Q`` -- which
+        is measurably what it did (research 0003).  Carrying the live process time keeps
+        the leading term instead, so ``m`` readings of one instant weigh on the process
+        scale whether they arrive as a row or as ``m`` points.
+        """
+        e = np.exp(np.minimum(self.mu[k] + self._off1, 60.0))
         if k < self.n:
-            hv = self.HV[:, k]
-            return (self.lam[k] * a)[:, None, None] * np.outer(hv, hv)[None]
-        out = np.zeros((self._nn, self.m, self.m))
+            hv = self.HV[obs, k]
+            return (a * self.lam[k] * e)[:, None, None] * np.outer(hv, hv)[None]
+        out = np.zeros((self._nn, obs.size, obs.size))
         i = k - self.n
-        out[:, i, i] = self.rho[i] * a
+        j = int(np.searchsorted(obs, i))
+        if j < obs.size and obs[j] == i:
+            out[:, j, j] = self.rho[i] * e
         return out
 
     def _cap_P(self, P):
@@ -298,6 +512,7 @@ class _WalkEngine:
 
     def reset(self, mean=None, scale=None):
         self._pi_ax = None
+        self._aQ = 0.0              # the live process time: see _dS_axis
         self._m = None if mean is None else np.asarray(mean, float)
         self._P = None
         self.mu = np.zeros(self.D) if scale is None else np.asarray(scale, float).copy()
@@ -317,47 +532,88 @@ class _WalkEngine:
         self._P[:, idx] = 0.0
         self._P[idx, idx] = self._cap[idx]
 
-    def update(self, y, u=None):
+    def update(self, y, u=None, a=1.0):
+        """One EVENT: the sensors of ``y`` that are finite, ``a`` nominal steps after the last.
+
+        ``a = 1`` with an all-finite ``y`` is the classical synchronous step and runs the
+        identical arithmetic.  Otherwise:
+
+        * **Partial.** The sensors that read are sub-selected out of ``H`` and ``r`` -- the
+          correction, the predictive density and the scale evidence are all over that subset
+          alone, and the absent sensors are never imputed.  Cost falls with the subset:
+          ``G (2 n^2 m_o + 2 n m_o^2 + m_o^3)``, so a single-sensor event has no ``m^3`` term
+          at all.
+        * **Elapsed.** ``Q`` and the walk's drift accumulate over ``a``; the scale class's
+          AR(1) kernel is taken to the power ``a``; the state transition is the propagator's
+          ``F(a)``.  ``a = 0`` -- two sensors reporting the same instant -- correctly moves
+          nothing but the correction.
+
+        An axis with no evidence in this event DRIFTS: its window relaxes through the kernel
+        and its walk covariance grows by ``q_mu * a``, which is the honest statement that
+        the filter learned nothing about that scale.  It is not frozen and not updated on
+        noise (research 0003's floor-and-cap, never freeze, applied one level down).
+        """
         n, m, H = self.n, self.m, self.H
         y = np.atleast_1d(np.asarray(y, dtype=float))
+        obs = np.flatnonzero(np.isfinite(y))
+        mo = obs.size
         r = len(self._act)
-        Qg, Rg = self._star_QR()
+        # the model uses the true gap; the process-scale SCORE uses the live process
+        # time, which differs from it only at a zero gap (see _dS_axis)
+        aQ = a if a > 0.0 else self._aQ
+        self._aQ = aQ
+        Qg, rg = self._star_QR(a)
         if self._pi_ax is None:
             self._pi_ax = np.tile(self._w1, (r, 1))
             if self._m is None:
-                self._m = (np.linalg.lstsq(H, y, rcond=None)[0]
-                           if np.all(np.isfinite(y)) else np.zeros(n))
+                self._m = (np.linalg.lstsq(H[obs], y[obs], rcond=None)[0]
+                           if mo else np.zeros(n))
             if self._P is None:
+                Q1, r1 = (Qg, rg) if a == 1.0 else self._star_QR(1.0)
                 self._P = self._cap_P(
-                    np.eye(n) * float(Rg.reshape(self._G, -1).max()
-                                      + Qg.reshape(self._G, -1).max()) * n)
-        pi_ax = self._pi_ax @ self._T1
+                    np.eye(n) * float(r1.max() + Q1.reshape(self._G, -1).max()) * n)
+        pi_ax = self._pi_ax @ self._kernel(a)
         # The dynamics are a CALLABLE when they are learned or nonlinear: it returns the
         # linearisation (for the covariance) and the predicted mean (from f, not the
         # Jacobian -- they differ once the transition depends on the state).  Real F/B
         # arrive linearised per operating point, so this is the general path.
         if self._dyn is None:
-            F = self.F
-            mpred = F @ self._m + ((self.B @ u) if self.B is not None else 0.0)
+            F, Psi = self._prop.at(a)
+            mpred = F @ self._m + ((Psi @ (self.B @ u)) if self.B is not None else 0.0)
         else:
-            F, mpred = self._dyn(self._m, u)
+            F1, mp1 = self._dyn(self._m, u)
+            if a == 1.0:
+                F, mpred = F1, mp1
+            else:
+                # A per-step linearisation has no fixed generator to exponentiate -- it is
+                # only ever the truth AT the nominal step -- so the elapsed map is the
+                # first-order one, exact at a = 0 and a = 1 and correct to first order in
+                # the generator between them.  That is the regime a linearised transition
+                # lives in anyway (F ~ I at any sampling fine enough to be asynchronous).
+                F = np.eye(F1.shape[0]) + a * (F1 - np.eye(F1.shape[0]))
+                mpred = self._m + a * (mp1 - self._m)
         FPFt = F @ self._P @ F.T
-        if not np.all(np.isfinite(y)):
+        if mo == 0:
             self._pi_ax = pi_ax
             w = self._star_weights(pi_ax)
             self._P = self._cap_P(FPFt + np.einsum("g,gij->ij", w, Qg))
             self._m = mpred
+            for k in self._act:                     # nothing seen: every scale drifts
+                self._Pmu[k] = min(self._Pmu[k] + self._qmu[k] * a, self._Pmu_cap)
             wmean = self._wmean(pi_ax)
             return LucidStep(self._m.copy(), self._P.copy(), np.full(m, np.nan), 0.0,
                              self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
+        Hs = H if mo == m else H[obs]
+        ys = y if mo == m else y[obs]
         Ppred = FPFt[None] + Qg
-        e = y - H @ mpred
-        PHt = np.einsum("gij,kj->gik", Ppred, H)
-        S = np.einsum("ij,gjk->gik", H, PHt) + Rg
+        e = ys - Hs @ mpred
+        PHt = np.einsum("gij,kj->gik", Ppred, Hs)
+        S = np.einsum("ij,gjk->gik", Hs, PHt)
+        S[:, np.arange(mo), np.arange(mo)] += rg[:, obs]
         Si = np.linalg.inv(S)
         sgn, logdet = np.linalg.slogdet(S)
         maha = np.einsum("i,gij,j->g", e, Si, e)
-        lg = -0.5 * (m * _LOG2PI + logdet + maha)
+        lg = -0.5 * (mo * _LOG2PI + logdet + maha)
         if r:
             logZ = np.empty(r)
             for i, k in enumerate(self._act):
@@ -380,16 +636,21 @@ class _WalkEngine:
         m_new = mpred + Kbar @ e
         mpost = mpred[None] + np.einsum("gil,l->gi", K, e)
         dm = mpost - m_new
-        HPp = np.einsum("ij,gjk->gik", H, Ppred)
+        HPp = np.einsum("ij,gjk->gik", Hs, Ppred)
         Ppost = Ppred - np.einsum("gil,glk->gik", K, HPp)   # K(H Ppred): n^2 m per node, not n^3
         P_new = np.einsum("g,gij->ij", pi, Ppost) + np.einsum("g,gi,gj->ij", pi, dm, dm)
         P_new = self._cap_P(0.5 * (P_new + P_new.T))
         # finding-18 walk per active axis, score/Fisher averaged over that axis's window
         # posterior only (the caltrop: dS_k depends only on the k-coordinate, so the axial
-        # profile carries the axis's evidence at linear cost).
+        # profile carries the axis's evidence at linear cost).  An axis this event carries
+        # no evidence for -- an unobserved sensor, or a mode none of the reporting sensors
+        # sees -- has dS = 0 identically, and only drifts.
         for i, k in enumerate(self._act):
             idx = self._axwin[k]
-            dpk = self._dS_axis(k)
+            dpk = self._dS_axis(k, obs, aQ if k < n else a)
+            if not dpk.any():
+                self._Pmu[k] = min(self._Pmu[k] + self._qmu[k] * a, self._Pmu_cap)
+                continue
             Sik = Si[idx]
             Sie = np.einsum("gij,j->gi", Sik, e)
             score_g = 0.5 * (np.einsum("gi,gij,gj->g", Sie, dpk, Sie)
@@ -400,11 +661,15 @@ class _WalkEngine:
             grad = float(pi_ax[i] @ score_g)
             K_mu = self._Pmu[k] / (self._Pmu[k] + 1.0 / info)
             self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap, self.gap))
-            self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k], self._Pmu_cap)
+            self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k] * a, self._Pmu_cap)
         self._pi_ax, self._m, self._P = pi_ax, m_new, P_new
         self.loglik += ll
         wmean = self._wmean(pi_ax)
-        return LucidStep(m_new.copy(), P_new.copy(), e.copy(), ll,
+        innov = e
+        if mo != m:
+            innov = np.full(m, np.nan)
+            innov[obs] = e
+        return LucidStep(m_new.copy(), P_new.copy(), innov.copy(), ll,
                          self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
 
 
@@ -641,11 +906,26 @@ class LucidFilter:
     phis, ss : sequences, optional  
         The ``(phi, s)`` box the bank averages over.  Defaults to a broad dead-zone-free range;
         not a fitted value.  ``forget`` (default 0.999) is the weight memory -- the one residual.
+    timestep : float, optional
+        How long ONE NOMINAL STEP is, in whatever units the timestamps are in (default 1.0,
+        i.e. time is counted in steps).  Everything supplied about the model -- ``dynamics``,
+        ``process`` -- and every class timescale -- ``phis``, ``ss``, ``forget``, ``faults``
+        -- is per nominal step; ``timestep`` is what lets an event carry a real ``t`` or
+        ``dt``.  Sampling at 100 Hz with timestamps in seconds: ``timestep=0.01``.
+
+    Events
+    ------
+    ``observe(sensor, value, t=)`` is one ``(sensor, timestamp, value)`` point and is the
+    general input; ``stream(points)`` runs a whole stream of them.  ``update(y, t=)`` takes a
+    length-``m`` row in which ``NaN`` means *that sensor did not report*, and ``filter(Y, t=)``
+    a batch of such rows.  Absent sensors are sub-selected out of ``H`` and ``R`` -- never
+    imputed, never a reason to discard the sensors that did report.  With no clock and no
+    absences this is the uniform, fully-observed filter, unchanged.
     """
 
     def __init__(self, dynamics=0, control=None, H=None, process=None, measurement=None,
                  n=None, faults=None, departures=None, anchors=None,
-                 phis=_PHIS, ss=_SS, forget=0.999):
+                 phis=_PHIS, ss=_SS, forget=0.999, timestep=1.0):
         learn = dynamics is None or faults is not None
         if faults is None or faults is True:
             rho = _HAZARD
@@ -698,11 +978,16 @@ class LucidFilter:
             raise ValueError(f"control must have {n} rows")
         if not 0.0 < forget <= 1.0:
             raise ValueError("forget must lie in (0, 1]")
+        timestep = float(timestep)
+        if not timestep > 0.0:
+            raise ValueError("timestep (the duration of one nominal step) must be positive")
 
         self.n, self.m, self.D = n, m, n + m
         self.p = 0 if B is None else B.shape[1]
         self.B = B
         self.forget = float(forget)
+        self.timestep = timestep
+        self._Mdcache = {}
         self.phi_arr = np.array([ph for ph in phis for _ in ss], float)
         self.s_arr = np.array([sv for _ in phis for sv in ss], float)
         cells = [(ph, sv) for ph in phis for sv in ss]
@@ -731,7 +1016,9 @@ class LucidFilter:
         self._members, self._pidx, self._specs = [], [], specs
         for bs, Fs, Bs, dep in specs:
             if dep is None:
-                eng = [_WalkEngine(Q0, R0, Hm, Fs, Bs, ph, sv) for ph, sv in cells]
+                pr = _Propagator(Fs)        # one generator per hypothesis, shared by its
+                eng = [_WalkEngine(Q0, R0, Hm, Fs, Bs, ph, sv, prop=pr)   # (phi, s) cells
+                       for ph, sv in cells]
                 if bs is not None:
                     for e in eng:
                         e._dyn = _fixed_hook(bs)
@@ -770,12 +1057,66 @@ class LucidFilter:
         self._logw = np.zeros(len(self._members))
         self.loglik = 0.0
         self._alarm = False
+        self._t = None
         return self
 
-    def _hazard_mix(self, logw):
+    # ------------------------------------------------------------------ the clock
+    @property
+    def time(self):
+        """The filter clock -- the timestamp of the last event, ``None`` before the first."""
+        return self._t
+
+    def _elapsed(self, t, dt):
+        """Advance the clock and return the gap in NOMINAL STEPS.
+
+        Everything the caller supplied about the model -- ``dynamics``, ``process`` -- and
+        every class timescale -- ``phis``, ``ss``, ``forget``, ``faults`` -- is per nominal
+        step, and ``timestep`` says how long one of those is in the caller's time units.
+        Supplying neither ``t`` nor ``dt`` advances exactly one nominal step, which is the
+        uniform-sampling filter this one generalises.
+        """
+        prev = self._t
+        if t is not None and dt is not None:
+            raise ValueError("pass t (an absolute timestamp) or dt (an elapsed time), not both")
+        if t is not None:
+            now = float(t)
+            a = 1.0 if prev is None else (now - prev) / self.timestep
+        elif dt is not None:
+            a = float(dt) / self.timestep
+            now = (0.0 if prev is None else prev) + float(dt)
+        else:
+            a = 1.0
+            now = (0.0 if prev is None else prev) + self.timestep
+        if not a >= 0.0:
+            raise ValueError(
+                f"time went backwards ({a * self.timestep:.6g} before the last event): a "
+                "stream must arrive in non-decreasing timestamp order (equal timestamps, "
+                "for sensors that read the same instant, are fine)")
+        self._t = now
+        return a
+
+    def _hazard_kernel(self, a):
+        """The fault class's mixing kernel over ``a`` nominal steps: a hazard ``rho`` per
+        nominal step is ``1 - (1 - rho)**a`` over the gap."""
+        if a == 1.0:
+            return self._Md
+        M = self._Mdcache.get(a)
+        if M is None:
+            k = self._nd
+            if k > 1:
+                rho_a = -math.expm1(a * math.log1p(-self.hazard))
+                M = (np.eye(k) * (1.0 - rho_a * k / (k - 1))
+                     + np.ones((k, k)) * (rho_a / (k - 1)))
+            else:
+                M = np.ones((1, 1))
+            if len(self._Mdcache) < 512:
+                self._Mdcache[a] = M
+        return M
+
+    def _hazard_mix(self, logw, a=1.0):
         """Propagate the bank prior through the fault class's kernel."""
         W = np.exp(logw - float(logw.max())).reshape(self._nd, self._nc)
-        out = np.log(np.maximum(self._Md.T @ W, 1e-300)).ravel()
+        out = np.log(np.maximum(self._hazard_kernel(a).T @ W, 1e-300)).ravel()
         return out - _logsumexp(out)
 
     def _dynamics_mean(self, post):
@@ -811,21 +1152,32 @@ class LucidFilter:
             for c in range(self._nc):
                 self._members[d * self._nc + c].reprice(dep.gidx)
 
-    def update(self, y, u=None) -> LucidStep:
+    def update(self, y, u=None, t=None, dt=None) -> LucidStep:
+        """One event: the readings in ``y`` that are finite, at time ``t`` (or ``dt`` after
+        the last event; neither means one nominal step, the uniform case).
+
+        ``y`` is always length ``m`` -- the full sensor suite -- and a ``NaN`` entry means
+        *that sensor did not report at this instant*, which is the ordinary condition of a
+        multi-rate sensor set, not an exception.  Absent sensors are sub-selected out of
+        ``H`` and ``R``; they are never imputed and they never enter the likelihood.
+        """
         if self.B is not None and u is None:
             raise ValueError(f"this filter has a control input; pass u (length {self.p})")
         if self.B is None and u is not None:
             raise ValueError("filter has no control map; do not pass u")
+        a = self._elapsed(t, dt)
         M = len(self._members)
         prior = self._logw - _logsumexp(self._logw)
         if self._nd > 1:
-            prior = self._hazard_mix(prior)
-        steps = [f.update(y, u=u) for f in self._members]
+            prior = self._hazard_mix(prior, a)
+        steps = [f.update(y, u=u, a=a) for f in self._members]
         ll = np.array([st.loglik for st in steps])
         yv = np.atleast_1d(np.asarray(y, float))
-        if np.all(np.isfinite(yv)):
+        if np.any(np.isfinite(yv)):
             bank_ll = _logsumexp(prior + ll)
-            self._logw = self.forget * prior + ll
+            # ``forget`` is a memory PER NOMINAL STEP, so over a gap of ``a`` it is
+            # ``forget**a`` -- the bank's weight memory is a duration, not a count of events.
+            self._logw = (self.forget ** a) * prior + ll
         else:
             bank_ll = 0.0
             self._logw = prior
@@ -840,7 +1192,7 @@ class LucidFilter:
         innov = sum(post[i] * steps[i].innovation for i in range(M))
         self.loglik += bank_ll
         if not self._report:
-            return LucidStep(mean, var, innov, bank_ll, ps, ms)
+            return LucidStep(mean, var, innov, bank_ll, ps, ms, time=self._t)
         Fh, Bh = self._dynamics_mean(post)
         # The fault readout is a marginal of the posterior -- the filter itself never
         # thresholds, it mixes.  Its RISING EDGE re-prices the walkers' ignorance: a jump has
@@ -851,9 +1203,57 @@ class LucidFilter:
         if alarm and not self._alarm:
             self._reprice()
         self._alarm = alarm
-        return LucidStep(mean, var, innov, bank_ll, ps, ms, Fh, Bh, fault)
+        return LucidStep(mean, var, innov, bank_ll, ps, ms, Fh, Bh, fault, self._t)
 
-    def filter(self, Y, U=None) -> LucidResult:
+    def observe(self, sensor, value, t=None, dt=None, u=None) -> LucidStep:
+        """One ``(sensor, timestamp, value)`` point -- the filter's most general input.
+
+        This is the streaming form: sensors are not assumed to share a schedule, so the
+        general thing that happens is that ONE of them reports.  A synchronous row is the
+        special case where ``m`` points share a timestamp, and feeding it as ``m`` points at
+        one ``t`` is legal and means the same thing (``dt = 0`` between them moves no state
+        and accumulates no process noise -- only the corrections land).
+
+            f = LucidFilter(H=H, measurement=R0, timestep=0.01)   # 100 Hz nominal
+            for sensor, t, value in stream:
+                st = f.observe(sensor, value, t=t)
+                st.mean          # the state estimate as of t
+
+        ``sensor`` may also be a sequence of indices with a matching sequence of values,
+        for a device that reports several channels together.
+        """
+        y = np.full(self.m, np.nan)
+        idx = np.atleast_1d(np.asarray(sensor))
+        if idx.size and (idx.min() < -self.m or idx.max() >= self.m):
+            raise ValueError(f"sensor index out of range for m = {self.m}")
+        y[idx] = np.atleast_1d(np.asarray(value, float))
+        return self.update(y, u=u, t=t, dt=dt)
+
+    def _times(self, T, t, dt):
+        """Per-event ``(t, dt)`` arguments for a batch of ``T`` events."""
+        if t is not None and dt is not None:
+            raise ValueError("pass t (absolute timestamps) or dt (elapsed times), not both")
+        if t is not None:
+            t = np.atleast_1d(np.asarray(t, float)).ravel()
+            if t.size != T:
+                raise ValueError(f"t must have {T} entries, one per event")
+            return [(float(v), None) for v in t]
+        if dt is not None:
+            d = np.atleast_1d(np.asarray(dt, float)).ravel()
+            if d.size == 1:
+                d = np.repeat(d, T)
+            if d.size != T:
+                raise ValueError(f"dt must be a scalar or have {T} entries")
+            return [(None, float(v)) for v in d]
+        return [(None, None)] * T
+
+    def filter(self, Y, U=None, t=None, dt=None) -> LucidResult:
+        """Filter a batch of synchronous rows.  ``Y`` is (T, m); a ``NaN`` entry is a sensor
+        that did not report on that row, and a row may be partly or wholly absent.
+
+        ``t`` gives the (T,) absolute timestamps and ``dt`` the elapsed times (a scalar for a
+        uniform but non-nominal rate); neither means one nominal step per row.
+        """
         Y = np.atleast_2d(np.asarray(Y, float))
         if Y.ndim != 2 or Y.shape[1] != self.m:
             raise ValueError(f"Y must be (T, {self.m})")
@@ -863,24 +1263,77 @@ class LucidFilter:
             U = np.atleast_2d(np.asarray(U, float))
         self.reset()
         T = Y.shape[0]
+        when = self._times(T, t, dt)
         mean = np.empty((T, self.n)); var = np.empty((T, self.n, self.n))
         inn = np.empty((T, self.m)); ps = np.empty((T, self.n)); ms = np.empty((T, self.m))
+        clock = np.empty(T)
         live = self._report
         dyn = np.empty((T, self.n, self.n)) if live else None
         ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
         flt = np.empty(T) if live else None
         total = 0.0
         for i, row in enumerate(Y):
-            st = self.update(row, None if U is None else U[i])
+            ti, di = when[i]
+            st = self.update(row, None if U is None else U[i], t=ti, dt=di)
             mean[i] = st.mean; var[i] = st.var; inn[i] = st.innovation
             ps[i] = st.process_scale; ms[i] = st.measurement_scale; total += st.loglik
+            clock[i] = st.time
             if live:
                 dyn[i] = st.dynamics; flt[i] = st.fault
                 if ctl is not None:
                     ctl[i] = st.control
         return LucidResult(mean=mean, var=var, innovation=inn,
                            process_scale=ps, measurement_scale=ms, loglik=total,
-                           dynamics=dyn, control=ctl, fault=flt)
+                           dynamics=dyn, control=ctl, fault=flt, time=clock)
 
-    def loglik_of(self, Y, U=None) -> float:
-        return self.filter(Y, U).loglik
+    def stream(self, points, U=None) -> LucidResult:
+        """Filter a stream of ``(sensor, timestamp, value)`` points -- one sensor at a time.
+
+        ``points`` is any iterable of triples, or an array with those three columns.
+        Timestamps must be non-decreasing; equal ones mean "the same instant".  ``U``, if
+        the filter has a control map, is the known forcing at each point.
+
+        The result is per POINT: ``mean[i]`` is the state as of point ``i``, ``sensor[i]``
+        says which sensor it was and ``time[i]`` when, and ``innovation[i]`` is ``NaN``
+        everywhere except that sensor.
+        """
+        pts = list(points)
+        T = len(pts)
+        if self.B is not None:
+            if U is None:
+                raise ValueError(f"this filter has control input; pass U of shape ({T}, {self.p})")
+            U = np.atleast_2d(np.asarray(U, float))
+        self.reset()
+        mean = np.empty((T, self.n)); var = np.empty((T, self.n, self.n))
+        inn = np.empty((T, self.m)); ps = np.empty((T, self.n)); ms = np.empty((T, self.m))
+        clock = np.empty(T); which = np.empty(T, dtype=int)
+        live = self._report
+        dyn = np.empty((T, self.n, self.n)) if live else None
+        ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
+        flt = np.empty(T) if live else None
+        total = 0.0
+        for i, pt in enumerate(pts):
+            try:
+                sensor, when, value = pt
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"point {i} is not a (sensor, timestamp, value) triple: {pt!r}") from None
+            if float(sensor) != int(sensor):
+                raise ValueError(
+                    f"point {i} has a non-integer sensor index ({sensor!r}) -- a point is "
+                    "(sensor, timestamp, value), in that order")
+            st = self.observe(int(sensor), float(value), t=float(when),
+                              u=None if U is None else U[i])
+            mean[i] = st.mean; var[i] = st.var; inn[i] = st.innovation
+            ps[i] = st.process_scale; ms[i] = st.measurement_scale; total += st.loglik
+            clock[i] = st.time; which[i] = int(sensor)
+            if live:
+                dyn[i] = st.dynamics; flt[i] = st.fault
+                if ctl is not None:
+                    ctl[i] = st.control
+        return LucidResult(mean=mean, var=var, innovation=inn,
+                           process_scale=ps, measurement_scale=ms, loglik=total,
+                           dynamics=dyn, control=ctl, fault=flt, time=clock, sensor=which)
+
+    def loglik_of(self, Y, U=None, t=None, dt=None) -> float:
+        return self.filter(Y, U, t=t, dt=dt).loglik

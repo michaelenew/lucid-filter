@@ -350,3 +350,178 @@ def test_callable_dynamics_with_faults():
     r = f.filter(Y)
     assert np.all(np.isfinite(r.dynamics)) and r.dynamics.shape == (1200, 1, 1)
     assert abs(r.dynamics[-1, 0, 0] - 0.6) < 0.4
+
+
+# ------------------------------------- partial observation, the clock, and streaming
+# The filter's native input is an EVENT -- the sensors that read at one instant, and
+# when.  A synchronous, fully-observed row at the nominal step is the special case, and
+# these first pin that it stayed EXACTLY the special case it was.
+
+def two_sensor(T=300, seed=0, dt=0.1):
+    """Position + velocity, read by a coarse absolute sensor and a precise rate one."""
+    r = rng(seed)
+    F = np.array([[1.0, dt], [0.0, 1.0]])
+    H = np.eye(2)
+    x = np.zeros(2); X = np.empty((T, 2)); Y = np.empty((T, 2))
+    for t in range(T):
+        x = F @ x + r.standard_normal(2) * np.array([0.01, 0.05])
+        X[t] = x
+        Y[t] = x + r.standard_normal(2) * np.array([0.30, 0.02])
+    return F, H, X, Y
+
+
+def test_uniform_full_rows_are_untouched():
+    """Supplying no clock must be the filter that existed before there was one."""
+    F, H, X, Y = two_sensor()
+    base = LucidFilter(dynamics=F, H=H).filter(Y)
+    for kw in (dict(dt=1.0), dict(t=np.arange(len(Y), dtype=float))):
+        got = LucidFilter(dynamics=F, H=H).filter(Y, **kw)
+        assert np.array_equal(base.mean, got.mean)          # bit-for-bit, not "close"
+        assert np.array_equal(base.var, got.var)
+        assert np.array_equal(base.measurement_scale, got.measurement_scale)
+        assert base.loglik == got.loglik
+
+
+def test_partial_row_uses_the_sensors_that_reported():
+    """A NaN entry is one sensor that did not report -- not a lost row."""
+    F, H, X, Y = two_sensor()
+    keep = (np.arange(len(Y)) % 5) == 0
+    part = Y.copy(); part[~keep, 0] = np.nan          # the slow sensor
+    drop = Y.copy(); drop[~keep, :] = np.nan          # what the old filter had to do
+    p = LucidFilter(dynamics=F, H=H).filter(part)
+    d = LucidFilter(dynamics=F, H=H).filter(drop)
+    assert np.all(np.isfinite(p.mean))
+    # the present sensor is corrected on, the absent one reports no innovation
+    assert np.all(np.isnan(p.innovation[~keep, 0]))
+    assert np.all(np.isfinite(p.innovation[~keep, 1]))
+    def rms(a, b): return float(np.sqrt(np.mean((a[40:] - b[40:]) ** 2)))
+    assert rms(p.mean[:, 1], X[:, 1]) < rms(d.mean[:, 1], X[:, 1])
+    assert p.loglik > d.loglik                        # more data, more density explained
+
+
+def test_all_missing_row_still_propagates():
+    Y, _ = local_level(T=100)
+    Y[30:35] = np.nan
+    r = LucidFilter().filter(Y)
+    assert np.all(np.isfinite(r.mean))
+    assert np.all(np.isnan(r.innovation[30:35]))
+
+
+def test_observe_is_one_point():
+    """(sensor, timestamp, value), one sensor at a time."""
+    F, H, X, Y = two_sensor(T=60)
+    f = LucidFilter(dynamics=F, H=H)
+    st = f.observe(1, Y[0, 1], t=0.0)
+    assert isinstance(st, LucidStep) and st.time == 0.0
+    assert np.isnan(st.innovation[0]) and np.isfinite(st.innovation[1])
+    assert f.time == 0.0
+    st = f.observe(0, Y[1, 0], t=1.0)
+    assert st.time == 1.0 and np.isfinite(st.innovation[0])
+    with pytest.raises(ValueError):
+        f.observe(0, 1.0, t=0.5)                      # time may not run backwards
+    with pytest.raises(ValueError):
+        f.observe(7, 1.0)                             # no such sensor
+
+
+def test_pointwise_decomposition_matches_the_joint_row():
+    """m points sharing a timestamp must mean what the row means."""
+    F, H, X, Y = two_sensor(T=200)
+    joint = LucidFilter(dynamics=F, H=H).filter(Y)
+    pts = [(i, float(t), Y[t, i]) for t in range(len(Y)) for i in (0, 1)]
+    s = LucidFilter(dynamics=F, H=H).stream(pts)
+    assert s.mean.shape == (2 * len(Y), 2)
+    assert np.array_equal(s.sensor[:4], np.array([0, 1, 0, 1]))
+    at_instant = s.mean[1::2]
+    def rms(a, b): return float(np.sqrt(np.mean((a[40:] - b[40:]) ** 2)))
+    ratio = rms(at_instant, X) / rms(joint.mean, X)
+    assert 0.95 < ratio < 1.05                        # the same filter, not another one
+
+
+def test_variable_step_beats_assuming_uniformity():
+    """Irregular arrivals, with the timestamps and without them."""
+    r = rng(4)
+    T, nominal = 400, 0.1
+    gaps = np.maximum(r.gamma(4.0, nominal / 4.0, T), 1e-3)
+    t = np.cumsum(gaps)
+    F = np.array([[1.0, nominal], [0.0, 1.0]])
+    H = np.eye(2)
+    x = np.zeros(2); X = np.empty((T, 2)); Y = np.empty((T, 2))
+    for i, a in enumerate(gaps):
+        x = np.array([[1.0, a], [0.0, 1.0]]) @ x + r.standard_normal(2) * np.array(
+            [0.01, 0.05]) * math.sqrt(a / nominal)
+        X[i] = x
+        Y[i] = x + r.standard_normal(2) * np.array([0.30, 0.02])
+    kw = dict(dynamics=F, H=H)
+    told = LucidFilter(timestep=nominal, **kw).filter(Y, t=t)
+    guessed = LucidFilter(**kw).filter(Y)
+    def rms(a, b): return float(np.sqrt(np.mean((a[40:] - b[40:]) ** 2)))
+    assert rms(told.mean[:, 0], X[:, 0]) < rms(guessed.mean[:, 0], X[:, 0])
+    assert np.allclose(told.time, t)
+
+
+def test_zero_gap_moves_no_state():
+    """Two readings at one instant: the second must not re-propagate the first."""
+    F, H, X, Y = two_sensor(T=10)
+    f = LucidFilter(dynamics=F, H=H)
+    f.observe(0, Y[0, 0], t=0.0)
+    a = f.observe(1, Y[0, 1], t=0.0)
+    g = LucidFilter(dynamics=F, H=H)
+    g.observe(0, Y[0, 0], t=0.0)
+    b = g.observe(1, Y[0, 1], dt=0.0)
+    assert np.allclose(a.mean, b.mean)
+    assert a.time == b.time == 0.0
+
+
+def test_timestep_sets_the_unit():
+    """A model clocked in seconds is the same filter as one clocked in step counts.
+
+    Exactly so when the timestep is binary-exact, and to numerical noise otherwise: a
+    decimal rate like 0.01 s does not divide its own differences to exactly 1.0, so the
+    gap arrives as 1 + O(eps) and takes the general propagator rather than the identity
+    short-circuit.  That is a representation fact, not a modelling one, and it must not
+    be papered over with a snap-to-nominal tolerance -- there are no thresholds here.
+    """
+    F, H, X, Y = two_sensor(T=120)
+    steps = LucidFilter(dynamics=F, H=H).filter(Y)
+    exact = LucidFilter(dynamics=F, H=H, timestep=0.25).filter(
+        Y, t=0.25 * np.arange(len(Y)))
+    assert np.array_equal(steps.mean, exact.mean)
+    decimal = LucidFilter(dynamics=F, H=H, timestep=0.01).filter(
+        Y, t=0.01 * np.arange(len(Y)))
+    assert np.abs(decimal.mean - steps.mean).max() < 1e-9
+
+
+def test_matrix_power_handles_the_defective_transition():
+    """A constant-velocity block has one eigenvector for two states; F**a must still be
+    the exact [[1, a dt], [0, 1]] an eigendecomposition would get wrong."""
+    from lucid.statfilter.lucid import _Propagator
+    dt = 0.1
+    p = _Propagator(np.array([[1.0, dt], [0.0, 1.0]]))
+    for a in (0.0, 0.25, 1.0, 2.5):
+        Fa, _ = p.at(a)
+        assert np.allclose(Fa, [[1.0, a * dt], [0.0, 1.0]], atol=1e-12)
+    half, _ = p.at(0.5)
+    assert np.allclose(half @ half, [[1.0, dt], [0.0, 1.0]], atol=1e-12)
+    with pytest.raises(ValueError):                   # no real generator -> say so
+        _Propagator(np.array([[-1.0, 0.0], [0.0, -2.0]])).at(0.5)
+
+
+def test_control_forcing_is_continuous_through_the_nominal_step():
+    """B is the ONE-STEP forcing map, so the elapsed map must equal it at a = 1 and
+    vanish at a = 0 -- continuous through the step, not merely equal at it."""
+    from lucid.statfilter.lucid import _Propagator
+    p = _Propagator(np.array([[0.6, 0.2], [0.0, 0.9]]))
+    assert np.allclose(p.at(1.0)[1], np.eye(2))
+    assert np.allclose(p.at(0.0)[1], np.zeros((2, 2)))
+    near = p.at(1.0 - 1e-6)[1]
+    assert np.abs(near - np.eye(2)).max() < 1e-5
+
+
+def test_stream_with_a_dynamics_channel():
+    """Learned dynamics survive being fed one sensor at a time."""
+    Y, x = ar1(T=400, a=0.6, seed=2)
+    pts = [(0, float(t), Y[t, 0]) for t in range(len(Y))]
+    r = LucidFilter(dynamics=None).stream(pts)
+    assert r.dynamics.shape == (len(Y), 1, 1)
+    assert np.all(np.isfinite(r.mean)) and r.fault is not None
+    assert abs(r.dynamics[-1, 0, 0] - 0.6) < 0.35

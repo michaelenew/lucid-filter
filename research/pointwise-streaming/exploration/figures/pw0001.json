@@ -1,0 +1,124 @@
+{
+ "propagator": [
+  {
+   "case": "constant-velocity dt=0.1",
+   "a": 0.0,
+   "err": 0.0
+  },
+  {
+   "case": "constant-velocity dt=0.1",
+   "a": 0.25,
+   "err": 0.0
+  },
+  {
+   "case": "constant-velocity dt=0.1",
+   "a": 1.0,
+   "err": 0.0
+  },
+  {
+   "case": "constant-velocity dt=0.1",
+   "a": 2.5,
+   "err": 0.0
+  },
+  {
+   "case": "5-DOF arm kinematics",
+   "a": 0.37,
+   "err": 0.0
+  },
+  {
+   "case": "rotation 0.3 rad",
+   "a": 0.5,
+   "err": 1.1102230246251565e-16
+  },
+  {
+   "case": "stable 2x2, a=3",
+   "a": 3.0,
+   "err": 8.881784197001252e-16
+  },
+  {
+   "case": "semigroup F(1/2)^2 = F(1)",
+   "a": 0.5,
+   "err": 3.3306690738754696e-16
+  }
+ ],
+ "naive_eig_err": 0.05,
+ "refused": true,
+ "timescales": {
+  "transition": 2.7755575615628914e-17,
+  "forget": 3.3306690738754696e-16,
+  "hazard": 5.0767766726633745e-17,
+  "process": 2.220446049250313e-16
+ },
+ "regression": [
+  {
+   "rig": "scalar local level",
+   "worst": 0.0,
+   "field": "",
+   "dll": 0.0
+  },
+  {
+   "rig": "kinematic (H, F)",
+   "worst": 0.0,
+   "field": "",
+   "dll": 0.0
+  },
+  {
+   "rig": "with a control map",
+   "worst": 0.0,
+   "field": "",
+   "dll": 0.0
+  },
+  {
+   "rig": "dynamics=None (learned)",
+   "worst": 0.0,
+   "field": "",
+   "dll": 0.0
+  },
+  {
+   "rig": "faults= + a named anchor",
+   "worst": 0.0,
+   "field": "",
+   "dll": 0.0
+  },
+  {
+   "rig": "3-DOF, all sensors",
+   "worst": 0.0,
+   "field": "",
+   "dll": 0.0
+  },
+  {
+   "rig": "3-DOF with whole-row gaps",
+   "worst": 0.1454691787364677,
+   "field": "process_scale",
+   "dll": 0.08518913872319445
+  }
+ ],
+ "no_info_limit": {
+  "K_mu_at_zero_info": 6.916240630742146e-06,
+  "old_recursion": 0.09835159549661066,
+  "pure_drift": 0.09835207384376364,
+  "rel_gap": 4.863620402605735e-06
+ },
+ "price": {
+  "gap5_x1": {
+   "new": 0.37239776539686203,
+   "old": 0.37248814327074165,
+   "se": 3.536770045921998e-05
+  },
+  "gap5_x10": {
+   "new": 3.3300523106705344,
+   "old": 3.2693382955712758,
+   "se": 0.007749123755865023
+  },
+  "gap40_x1": {
+   "new": 0.38158523588875926,
+   "old": 0.38194227708227285,
+   "se": 0.00014351643453431497
+  },
+  "gap40_x10": {
+   "new": 3.5538075149767856,
+   "old": 3.3565253543510014,
+   "se": 0.022751110386554193
+  }
+ }
+}

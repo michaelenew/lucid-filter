@@ -153,11 +153,45 @@ Configure by **give-what-you-know**; every argument has a working default:
 | `measurement` | base per-sensor variances `R0` | ones |
 | `faults` | hazard `rho`: the supplied dynamics may **change** | none → they are fixed |
 | `departures`, `anchors` | the directions the dynamics may move in; named fault modes | full basis; none |
+| `timestep` | how long one nominal step is, in your timestamps' units | `1` → time counted in steps |
 
 A rough base is fine — the walk breathes around it (a base wrong by 5× costs
 ~16% of oracle RMSE on the scalar benchmark below). Outputs per step: posterior
 mean and covariance, innovation, predictive log-likelihood, and the
 per-component log-scales.
+
+## The input is a stream of points, not a matrix of rows
+
+Sensors do not share a schedule and gaps are not equal — a 5 Hz fix beside a
+200 Hz IMU, a camera dropping frames, a bus arbitrating. So the filter's native
+input is one **`(sensor, timestamp, value)`** point:
+
+```python
+f = LucidFilter(dynamics=F, H=H, timestep=0.01)   # 100 Hz is one nominal step
+for sensor, t, value in incoming:                 # any order of sensors, any gaps
+    st = f.observe(sensor, value, t=t)            # st.mean: the state as of t
+```
+
+A partly-observed row is the same thing written differently — `NaN` means *that
+sensor did not report*, and the ones that did are sub-selected out of `H` and `R`
+rather than the row being discarded — and a fully synchronous row at a fixed
+rate is `filter(Y)`, which runs the arithmetic it always did, **bit for bit**.
+
+`timestep` fixes the time unit. Everything you supply about the model and every
+class timescale is per *nominal step*, and an event `a = dt/timestep` steps after
+the last takes each of them to that power: `F(a) = exp(a log F)` (exact — via a
+matrix logarithm, because the commonest transition of all, a constant-velocity
+block, is defective and an eigendecomposition gets it wrong), `Q → Q·a`,
+`phi → phi^a`, `forget → forget^a`, `rho → 1-(1-rho)^a`. `R` alone is not scaled:
+a measurement variance belongs to the reading, not to the gap before it.
+
+What it buys, measured
+([`pointwise-streaming/`](research/pointwise-streaming/SUMMARY.md)): on a
+two-sensor rig where the coarse absolute sensor reports one row in 25, keeping the
+partial rows holds the velocity estimate at its all-sensors value while dropping
+incomplete rows costs **6.8×**; under irregular arrivals, supplying the timestamps
+puts the filter **on** an oracle told the true schedule and the true noise
+(ratio 1.000–1.003) where assuming uniformity costs 1.1–1.5×.
 
 ## Measured behaviour
 
@@ -240,6 +274,7 @@ are:
 |---|---|
 | [`multivariate-statfilter/`](research/multivariate-statfilter/SUMMARY.md) | **delivered** — the per-component noise machinery behind `LucidFilter` |
 | [`dynamics-learning/`](research/dynamics-learning/SUMMARY.md) | **delivered** — online learned dynamics (`dynamics=None`, `faults=`): detects a dynamics change (a weight attached, a tire blowout) on the derived information frontier and recovers the new dynamics online |
+| [`pointwise-streaming/`](research/pointwise-streaming/SUMMARY.md) | **delivered** — the input is a stream of `(sensor, timestamp, value)` points: per-event sub-selection of `H`/`R`, and every class timescale carried to the elapsed gap |
 | [`random-walk-filter/`](research/random-walk-filter/SUMMARY.md) | delivered (specimen) — the scalar parent and the scale-walk theory |
 | [`ode-filter/`](research/ode-filter/SUMMARY.md) | candidate (specimen) — locally-linear-ODE dynamics, the tracked dynamics channel |
 | [`optimality-proof/`](research/optimality-proof/SUMMARY.md) | where "optimal" does and does not hold; the per-step process/sensor ambiguity is Proposition 1 here |
@@ -266,6 +301,14 @@ research.
 - **A lean/embedded profile** — the bank multiplier and per-cluster execution,
   including block structure when `F`/`B` arrive as callables (see the
   [SUMMARY opens](research/multivariate-statfilter/SUMMARY.md#open-items)).
+- **The clock's remaining approximation** — `Q(a) = Q·a` is exact for the
+  random-walk default and at the nominal gap, and first order in `‖A‖a`
+  elsewhere. The walk absorbs a *constant* misfit in the process-noise
+  magnitude but not a *gap-dependent* one, so on a stiff generator sampled with
+  wide gaps a per-event miscalibration is left over (45% of `Q` at `‖A‖a ≈ 1.2`).
+  The fix is to let `process=` be declared as a continuous spectral density
+  ([`pointwise-streaming/`](research/pointwise-streaming/SUMMARY.md#open-items),
+  with out-of-order arrival and per-sensor scale classes).
 
 ## Install
 

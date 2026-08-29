@@ -1,0 +1,94 @@
+{
+ "agreement": [
+  {
+   "ndof": 1,
+   "n": 2,
+   "m": 2,
+   "rmse_joint": 0.1488934014857872,
+   "rmse_pointwise": 0.15163702329217,
+   "ratio": 1.0184267521529131,
+   "max_disagreement": 0.06672340617772227,
+   "disagreement_over_rmse": 0.4481286981954767,
+   "loglik_joint": -17.50772844873393,
+   "loglik_pointwise": -29.346772981141164
+  },
+  {
+   "ndof": 2,
+   "n": 4,
+   "m": 4,
+   "rmse_joint": 0.14987220667660883,
+   "rmse_pointwise": 0.16117366289059928,
+   "ratio": 1.0754072850770557,
+   "max_disagreement": 0.20332075897392476,
+   "disagreement_over_rmse": 1.3566275127492191,
+   "loglik_joint": -57.61885944055176,
+   "loglik_pointwise": -78.0174647043316
+  },
+  {
+   "ndof": 3,
+   "n": 6,
+   "m": 6,
+   "rmse_joint": 0.15875584199868245,
+   "rmse_pointwise": 0.16919653145919158,
+   "ratio": 1.0657657024085816,
+   "max_disagreement": 0.16950624746468224,
+   "disagreement_over_rmse": 1.067716597579376,
+   "loglik_joint": -46.81295733707609,
+   "loglik_pointwise": -76.54991416123171
+  },
+  {
+   "ndof": 5,
+   "n": 10,
+   "m": 10,
+   "rmse_joint": 0.15179765919265073,
+   "rmse_pointwise": 0.1669187695796901,
+   "ratio": 1.09961359396095,
+   "max_disagreement": 0.2832991555156683,
+   "disagreement_over_rmse": 1.866294625506216,
+   "loglik_joint": -65.2475262101126,
+   "loglik_pointwise": -107.86985437099177
+  }
+ ],
+ "cost": [
+  {
+   "ndof": 1,
+   "n": 2,
+   "m": 2,
+   "ms_joint": 5.821120233334417,
+   "ms_pointwise": 9.693513466667506,
+   "flops_joint": 680,
+   "flops_pointwise": 442,
+   "flop_ratio": 0.65
+  },
+  {
+   "ndof": 2,
+   "n": 4,
+   "m": 4,
+   "ms_joint": 9.762624250000348,
+   "ms_pointwise": 26.68520294166683,
+   "flops_joint": 10560,
+   "flops_pointwise": 5412,
+   "flop_ratio": 0.5125
+  },
+  {
+   "ndof": 3,
+   "n": 6,
+   "m": 6,
+   "ms_joint": 15.226626241667418,
+   "ms_pointwise": 51.55533343333142,
+   "flops_joint": 52920,
+   "flops_pointwise": 24990,
+   "flop_ratio": 0.4722222222222222
+  },
+  {
+   "ndof": 5,
+   "n": 10,
+   "m": 10,
+   "ms_joint": 34.64488975833244,
+   "ms_pointwise": 133.38552648333462,
+   "flops_joint": 405000,
+   "flops_pointwise": 179010,
+   "flop_ratio": 0.442
+  }
+ ]
+}
