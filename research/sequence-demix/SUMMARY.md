@@ -217,17 +217,32 @@ named next measurement.
    number under 1e-8 and the arm-like case would acquire five ladders it has not been measured
    with.  Next: express the test as a comparison against the *structural* scale of the pair
    rather than an absolute tolerance, or measure the fast-`dt` arm directly.
-4. **Cost where a ladder switches on**, and it is the largest practical cost of this work.  The
-   member count is multiplied by the number of split vectors, which the node budget holds at **at
-   most 24 whatever the pair count** — so the scalar hero rig goes 3.2 -> 88 ms/step and stays
-   there.  Linear-in-pairs was not enough on its own: at full resolution per pair a pots-only
-   5-DOF arm (five pairs) built 1740 members and ran at 1.5 s/step, which is why the budget is
-   shared; with it that rig is 315 members and 0.28 s/step.  Inside the gate, which is stated on
-   the demo rig, where no pair qualifies and nothing changes at all — but a factor of 21 is not
-   free — and this repository's own fast test suite, which is almost entirely scalar rigs with one
-   confounded pair each, goes from about a minute to about half an hour.  (There is no CI to
-   break.)  What the budget costs is ladder RESOLUTION per pair, not coverage: the grid stays
-   complete.
+4. **Cost where a ladder switches on — CLOSED as the binding constraint** (it was the largest
+   practical cost of this work; the residual is below).  Two things were true at once: the member
+   count is multiplied by the number of split vectors (held at ≤ 24 by the node budget), and —
+   measured, not assumed — **99% of a member's step cost was numpy dispatch on size-one arrays,
+   not arithmetic** (~140k interpreter calls per step on the scalar rig).  Structurally identical
+   members differ only in parameters and state, so the engine now executes them as ONE stacked
+   recursion with a leading member axis (`_EngineBank`), grouped by structure rather than by
+   position (eigh permutes eigenmode labels across rungs; positional grouping shattered a
+   five-pair rig into 225 slivers).  Same math to machine precision, pinned by
+   `test_bank_matches_the_looped_members` against the looped reference on every path — fresh
+   start, missing observation, multi-pair star, fault kernel with reprice, control input.
+
+   | rig | members | before the ladder | ladder, looped | **ladder, stacked** |
+   |---|---|---|---|---|
+   | scalar hero | 360 | 3.2 ms/step | 88 | **1.1** |
+   | `dynamics=None` scalar | 720 | – | 181 | **8.9** |
+   | two channels, two pairs | 345 | – | 24 | **10.1** |
+   | pots-only 5-DOF arm (five pairs) | 315 | – | 280 | **101** |
+   | demo arm (no ladder) | 15 | 45 | 45 | **33** |
+
+   The scalar filter with the full ladder is now FASTER than the pre-ladder engine was, and
+   construction dropped 1.6 s → 0.07 s (one Riccati solve per spec instead of one per member —
+   `_steady_Si` depends on neither the class nor the split, so a spec's members share it).
+   The residual: the pots-only arm is still ~100 ms/step, now genuinely arithmetic-bound
+   (n = 10 state blocks over ~60 star nodes × 315 members), and the per-member `_dyn` loop is
+   what remains of the dynamics channel's step cost.
 
    **The obvious lever was tried and it does not work.**  0037 says the `(phi, s)` ridge is flat
    for tracking and that one to three members lose nothing there, so thinning the box ought to
@@ -242,7 +257,8 @@ named next measurement.
    | 3 cells | 1.065x | 1.216x | 3 | 1.60 ✗ | 72 | 17 |
    | 4 cells, `phi (0.70, 0.95) x s (0.40, 1.60)` | **1.022x** | 1.263x | 3 | **1.28** | 96 | 22 |
 
-   Three of the four thinnings put `E[e²/S]` over the 1.5 ceiling outright.  The fourth — dropping
+   Three of the four thinnings put `E[e²/S]` over the 1.5 ceiling outright.  (Measured before
+   the stacked executor above; the cost motivation is gone, the calibration finding stands.)  The fourth — dropping
    the box's *extreme* `s` values rather than its middle — is the best filter measured anywhere in
    this workstream on steady state (1.022x) and on calibration headroom (1.28), at a quarter of
    the cost, and it is the worst on regime C (1.263x).  So the box is load-bearing, it is
