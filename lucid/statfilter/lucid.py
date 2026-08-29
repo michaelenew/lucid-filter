@@ -46,6 +46,19 @@ the window centre plus an axial window per active axis, ``1 + 2K * (#active axes
 in `n + m`, so the whole filter is polynomial-time.  The star does not represent the joint scale
 density (no corner nodes); it locates its peak by per-axis walking, which 0013 validates as matching
 the exact grid for state tracking at linear cost.
+
+The walk is the right instrument for every scale direction the one-step likelihood can see, and
+there is one it cannot.  Where a process eigenmode is read by exactly ONE sensor, the two scale
+derivatives are proportional as matrices, so the likelihood sees only the SUM of their
+contributions to that channel and the SPLIT between them is invisible at every step, at every
+operating point -- Proposition 1 in coordinates (research/sequence-demix/0001).  The engine finds
+those pairs structurally and carries the split as a dimension of the BANK instead: a ladder of
+anchored hypotheses, each a complete filter, so the sequence evidence reaches it through the
+member's own mean (a rung with too much process chases sensor noise and pays for it in its own
+predictive likelihood) and its weight accumulates on the `forget` timescale.  The rungs are placed
+by their consequence rather than by an offset from the supplied base, which makes the ladder
+COMPLETE -- see `_rung_odds`.  A structure where every process mode is read more than once has no
+such pair, gets no ladder, and costs exactly what it did before.
 """
 from __future__ import annotations
 
@@ -61,11 +74,174 @@ _GAP_FACTOR = 1.5           # grid spacing gap = 1.5 s (Sparrow resolution limit
 _SPAN_S = 3.0               # window half-span in units of s (support budget -> node count)
 _RIDGE = 1e-4               # Fisher stabiliser
 _PHIS = (0.70, 0.85, 0.95)                 # default (phi, s) box for the bank -- a broad range, not a
-_SS = (0.20, 0.30, 0.45, 0.60, 0.80)       #   fitted value; the data down-weights the unsupported corners
+_SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weights the unsupported corners.
+                                           #   Geometric, and it has to reach: `s` is the SD of a
+                                           #   LOG variance, so the top of the box is the largest
+                                           #   scale change the window can represent in one step
+                                           #   (`3 s` of half-span).  A box ending at 0.8 tops out
+                                           #   at a factor of 11, which is smaller than the regime
+                                           #   changes in this repository's own rigs.
 _HAZARD = 1e-4              # default fault rate: ~1 dynamics fault per 10,000 steps.  A LABELED
                             # prior of the same standing as `forget`, not a tuning constant: it is
                             # the operating point on the false-alarm/delay frontier, and the delay
                             # it buys is derived, log(1/rho) / KL-rate (research 0001).
+_RANK_TOL = 1e-8            # numerical rank tolerance (the order used for structural activation)
+_LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sense as _SPAN_S: the
+                            # finest grid the engine will build is the one a thousand-step memory
+                            # supports (24 rungs).  A longer `forget` still sharpens the bank's
+                            # weights; it does not buy a finer ladder, and `forget = 1` would ask
+                            # for an infinite one.
+
+
+# --------------------------------------------------- the per-step-blind directions
+def _scale_fisher(eng, lam, rho):
+    """Full per-step scale-Fisher ``I_ab = 0.5 tr(Si dS_a Si dS_b)`` at the steady state.
+
+    ONE solve answers both questions a member has to ask about the model it runs: the DIAGONAL is
+    the characteristic Fisher that sets the walk's drift, and the off-diagonals are where a
+    degenerate pair shows itself.  It is evaluated at the base ``(lam, rho)`` handed in -- the
+    split-balanced one -- so that neither answer depends on which split hypothesis the member
+    happens to be carrying.  The structure of a model is not a function of the hypothesis under
+    test, and read at an extreme rung it would not even look like itself.
+    """
+    H, F, n, m = eng.H, eng.F, eng.n, eng.m
+    P = np.eye(n) * (lam.max() + rho.max())
+    Q0 = eng.V @ np.diag(lam) @ eng.V.T
+    R0 = np.diag(rho)
+    for _ in range(400):
+        Pp = eng._cap_P(F @ P @ F.T + Q0)
+        K = Pp @ H.T @ np.linalg.inv(H @ Pp @ H.T + R0)
+        P = Pp - K @ H @ Pp
+    Pp = eng._cap_P(F @ P @ F.T + Q0)
+    Si = np.linalg.inv(H @ Pp @ H.T + R0)
+    dS = [lam[k] * np.outer(eng.HV[:, k], eng.HV[:, k]) for k in range(n)]
+    for i in range(m):
+        E = np.zeros((m, m)); E[i, i] = rho[i]
+        dS.append(E)
+    I = np.empty((eng.D, eng.D))
+    for a in range(eng.D):
+        SdA = Si @ dS[a]
+        for b in range(a, eng.D):
+            I[a, b] = I[b, a] = 0.5 * float(np.trace(SdA @ Si @ dS[b]))
+    return I
+
+
+def _split_groups(eng, I):
+    """Pairs whose SPLIT no per-step score can ever carry -- Proposition 1, in coordinates.
+
+    ``dS_xi_k = lam_k e^xi (H v_k)(H v_k)^T`` and ``dS_eta_i = rho_i e^eta E_ii`` are proportional
+    as matrices exactly when ``H v_k`` lies along ``e_i``: a process eigenmode read by ONE sensor.
+    Then the 2x2 scale-Fisher block is exactly rank 1, the one-step likelihood sees only the SUM of
+    the two contributions to ``S_ii``, and the split between them is invisible at every step, at
+    every operating point (research 0001).  Both axes must carry non-negligible information: an
+    axis whose own scale-Fisher is numerically zero is not half of a confound, it is nothing --
+    which is what keeps a ridge-regularised ``Q0``'s null modes out.
+
+    Returns ``(process axis, sensor axis, (H v)_i^2)`` triples.  ``I`` is the scale-Fisher of
+    `_scale_fisher`, already computed for the walk's drift, so this costs a look and no solve.
+    """
+    dg = np.diag(I)
+    info = dg > _RANK_TOL * dg.max()
+    out = []
+    for k in range(eng.n):
+        if not (eng.active[k] and info[k]):
+            continue
+        hv = np.abs(eng.HV[:, k])
+        nz = np.flatnonzero(hv > _RANK_TOL * hv.max())
+        if nz.size != 1:
+            continue
+        i = int(nz[0])
+        if not info[eng.n + i]:
+            continue
+        sub = I[np.ix_([k, eng.n + i], [k, eng.n + i])]
+        w = np.linalg.eigvalsh(sub / np.sqrt(np.outer(np.diag(sub), np.diag(sub))))
+        if w[0] < _RANK_TOL * w[-1]:
+            out.append((k, i, float(eng.HV[i, k] ** 2)))
+    return out
+
+
+def _apply_split(eng, lo_vec):
+    """Divide each confounded pair's noise between process and sensor at a FIXED TOTAL.
+
+    The null direction of the per-step scale-Fisher integrates to ``dQ = -dR`` (research 0001), so
+    this moves exactly along the coordinate the one-step likelihood cannot see and leaves
+    everything it can see alone.  Returns a ``(Q0, R0)`` base, which is the only thing a member
+    ever needs to be told: it reads its own anchor back off it.
+    """
+    lam, rho = eng.lam.copy(), eng.rho.copy()
+    for g, (k, i, h2) in enumerate(eng._groups):
+        a, b = lam[k] * h2, rho[i]
+        tot = a + b
+        lo = float(np.clip(lo_vec[g], -80.0, 80.0))
+        a2 = tot / (1.0 + math.exp(-lo))
+        lam[k] = max(a2, 1e-300) / h2
+        rho[i] = max(tot - a2, 1e-300)
+    return eng.V @ np.diag(lam) @ eng.V.T, rho
+
+
+def _split_star(los, n_pairs):
+    """The split hypotheses: one reference vector, plus one pair moved off it at a time.
+
+    Enumerating a rung for every pair jointly is ``J ** n_pairs``, exponential in the pair count,
+    which is the same wall the scale grid hits and is answered the same way -- the caltrop star of
+    research 0013: the centre plus an axial arm per axis.  With a single pair the star IS the whole
+    ladder, so nothing about the one-pair case is a special case of anything; with none it is the
+    empty vector and the bank is what it was.
+
+    The star is linear in the pair count, and linear is still a multiplier on a bank of complete
+    filters: five pairs at full resolution is 116 vectors, and a pots-only 5-DOF arm measured 1740
+    members and 1.5 s/step.  So the NODE BUDGET is what one pair's resolution costs, and several
+    pairs share it -- the same "support budget -> node count" trade `_SPAN_S` already makes, and
+    it needs no constant of its own because the budget is the resolution `forget` supports.  The
+    grid stays COMPLETE over `[0, pi/2]` at every pair count; what degrades is its resolution, and
+    that is the honest thing to give up when there is more to resolve and the same budget to do it
+    with.
+
+    The reference is the middle of the arclength grid -- the agnostic split, the one the ladder's
+    own uniform prior puts its mass around.  It is not the supplied base: no rung refers to that.
+    """
+    if n_pairs == 0:
+        return np.zeros((1, 0))
+    arms = max(len(los) - 1, 1)                       # the budget: one pair's own arm count
+    per = max(arms // n_pairs, 2)                     # shared out, never below a usable ladder
+    idx = np.unique(np.round(np.linspace(0, len(los) - 1, per + 1)).astype(int))
+    c = int(idx[len(idx) // 2])
+    ref = np.full(n_pairs, los[c])
+    out = [ref]
+    for g in range(n_pairs):
+        for j in idx:
+            if j == c:
+                continue
+            v = ref.copy()
+            v[g] = los[j]
+            out.append(v)
+    return np.array(out)
+
+
+def _rung_odds(forget):
+    """The ladder of splits: complete, at the bank's own resolution, with no span constant.
+
+    A split acts only through the filter's gain ``K``.  A local-level filter run at gain ``K``
+    models its differenced data as MA(1) with ``theta = 1 - K``, so the per-step Kullback-Leibler
+    divergence between two splits is (Whittle)
+
+        D = 0.5 log[(1 - 2 th th' + th'^2) / (1 - th^2)]  ->  0.5 (dt)^2,
+        dt = d th / sqrt(1 - th^2),   t = arccos(1 - K)  in  [0, pi/2].
+
+    The entire space of splits is therefore an interval of arclength ``pi/2``.  Two rungs are
+    resolvable when the evidence the bank can hold -- ``1/(1 - forget)`` steps -- separates them
+    by order one nat, i.e. ``dt = sqrt(2 (1 - forget))``; spacing them at the grid's own Sparrow
+    factor above that limit leaves no dead zone.  The memory entering that resolution is capped at
+    ``_LADDER_MEM``, which is a node budget and not a statistical claim.  The result COVERS EVERY POSSIBLE SPLIT with a
+    couple of dozen rungs, and no rung refers to the supplied base: told nothing means told
+    nothing.
+    """
+    mem = min(1.0 / (1.0 - forget), _LADDER_MEM) if forget < 1.0 else _LADDER_MEM
+    step = _GAP_FACTOR * math.sqrt(2.0 / mem)
+    J = int(math.ceil((0.5 * math.pi) / step))
+    t = (np.arange(J) + 0.5) * (0.5 * math.pi) / J
+    K = 1.0 - np.cos(t)
+    return K * K / np.maximum(1.0 - K, 1e-12)
 
 
 # --------------------------------------------------------------------- results
@@ -134,7 +310,21 @@ class _WalkEngine:
     the class ``(phi, s)``; no EMA, no tuned constant.
     """
 
-    def __init__(self, Q0, R0, H, F, B, phi, s, walk_axes=None, cap=None):
+    def __init__(self, Q0, R0, H, F, B, phi, s, walk_axes=None, cap=None, group_class=None):
+        self._revert = float(phi)         # rate the walk's null excursion returns to that
+                                          # hypothesis; the class's own persistence.  Named so
+                                          # research can vary it -- both bounds are load-bearing
+                                          # (research/sequence-demix/0002 §3), and neither end is
+                                          # a setting anyone should reach for.
+        # ``group_class`` optionally gives a confounded group's two axes their OWN (phi, s) --
+        # ``((phi_P, s_P), (phi_M, s_M))``.  A shared class cannot express what a confounded pair
+        # needs: a level jump wants a process window that reaches a long way, and a sensor that
+        # degrades wants that same window not to HOLD what it reached, while the sensor's own
+        # window must hold.  Reach and persistence pull opposite ways on one axis and the same
+        # way on two.  This is the structure `fit()` found for the retired filter on this very
+        # rig -- phi_P ~ 0 with s_P = 3.69, phi_M = 0.93 with s_M = 1.62 -- and it is the one
+        # piece of it the shipped bank could not represent.
+        self._group_class = group_class
         n = Q0.shape[0]
         lam, V = np.linalg.eigh(Q0)
         self.n, self.m = n, R0.size
@@ -145,12 +335,8 @@ class _WalkEngine:
         self.p = 0 if B is None else B.shape[1]
         self.HV = H @ V
         self.phi, self.s = float(phi), float(s)
-        self.gap = _GAP_FACTOR * self.s
-        self._Kstar = (1.0 - self.phi) / 4.0
         self._cap = None if cap is None else np.asarray(cap, float)
         self._dyn = None            # optional (mean, u) -> (Jacobian, predicted mean) callable
-        self._Ichar = self._steady_fisher()
-        self._Ifloor = (1.0 - self.phi) / (4.0 * (_SPAN_S * self.s) ** 2)
         # ACTIVATE structurally-observable axes -- NOT by the delocalisation floor (research 0024,
         # ported from AdaptiveKalmanFilter): a quiet process mode next to a loud sensor would be
         # frozen and then coast rigidly on a wrong velocity when that sensor is down-weighted --
@@ -168,22 +354,52 @@ class _WalkEngine:
             # This bounds nothing about theta itself -- theta is a state with a live gain and a
             # cap, never frozen (research 0003); only the log-scale WALK of its drift is off.
             self.active &= np.asarray(walk_axes, bool)
+        # Every member answers the same two questions about the model IT runs, and answers them
+        # the same way: which of my scale axes are confounded in pairs, and what split does my
+        # own base already sit at?  That base is where the walk's null excursion returns to, so a
+        # member is anchored by construction rather than by being told -- which is what makes the
+        # rule uniform across the bank, whatever dynamics hypothesis a member carries and whether
+        # or not its state has been augmented.
+        _I = _scale_fisher(self, *self._balanced_base())
+        self._groups = tuple(_split_groups(self, _I))
+        self._anchor_lo = np.array([lo for _, lo in self._group_read(np.zeros(self.D))])
+        self.phi_ax = np.full(self.D, self.phi)
+        self.s_ax = np.full(self.D, self.s)
+        if group_class is not None:
+            for (k, i, _h2) in self._groups:
+                (self.phi_ax[k], self.s_ax[k]) = group_class[0]
+                (self.phi_ax[n + i], self.s_ax[n + i]) = group_class[1]
+        self.gap = _GAP_FACTOR * self.s_ax
+        self._Kstar = (1.0 - self.phi_ax) / 4.0
+        # The DIAGONAL of that same solve is the characteristic Fisher, which sets `q_mu`, the
+        # drift of the scale WALK.  The walk's business is the identifiable directions, not the
+        # split, so taking it at the balanced point is what keeps the bank's hypothesis out of
+        # the walk's tuning -- measured worth 1.230x -> 1.138x on regime C and 0.06 of
+        # calibration headroom (`research/sequence-demix/0002`).
+        self._Ichar = np.diag(_I) + _RIDGE
+        self._Ifloor = (1.0 - self.phi_ax) / (4.0 * (_SPAN_S * self.s_ax) ** 2)
         self._qmu = self._Kstar ** 2 / (np.maximum(self._Ichar, self._Ifloor)
                                         * (1.0 - self._Kstar))
-        self._Pmu_cap = (_SPAN_S * self.s) ** 2
+        self._Pmu_cap = (_SPAN_S * self.s_ax) ** 2
         self._build_window()
         self.reset()
 
     # -- caltrop star window (the 1-D pieces are unchanged from WalkingVectorFilter) --
     def _build_window(self):
+        # One window per axis.  Every axis keeps the same NODE COUNT (so the axial posteriors stay
+        # one rectangular array) and differs only in spacing, prior and kernel -- all three read
+        # off that axis's own class.
         K = int(math.ceil(_SPAN_S / _GAP_FACTOR))
-        off1 = self.gap * np.arange(-K, K + 1)
-        self._off1, self._nn, self._c = off1, off1.size, K
-        w1 = np.exp(-0.5 * (off1 / self.s) ** 2); w1 /= w1.sum()
-        nu = max(self.s * self.s * (1.0 - self.phi ** 2), 1e-12)
-        T1 = np.exp(np.clip(-0.5 * (off1[None, :] - self.phi * off1[:, None]) ** 2 / nu, -700.0, 700.0))
-        T1 /= T1.sum(1, keepdims=True)
-        self._w1, self._T1 = w1, T1
+        node = np.arange(-K, K + 1)
+        self._nn, self._c = node.size, K
+        off = self.gap[:, None] * node[None, :]
+        w1 = np.exp(-0.5 * (off / self.s_ax[:, None]) ** 2)
+        w1 /= w1.sum(1, keepdims=True)
+        nu = np.maximum(self.s_ax ** 2 * (1.0 - self.phi_ax ** 2), 1e-12)
+        T1 = np.exp(np.clip(-0.5 * (off[:, None, :] - self.phi_ax[:, None, None]
+                                    * off[:, :, None]) ** 2 / nu[:, None, None], -700.0, 700.0))
+        T1 /= T1.sum(2, keepdims=True)
+        self._off, self._w1, self._T1 = off, w1, T1
         self._act = [int(k) for k in np.flatnonzero(self.active)]
         # star node table: node 0 is the centre (all axes at mu); then, per active axis, the
         # 2K off-centre offsets along that axis alone.  1 + 2K*r nodes -- linear in the axes.
@@ -191,7 +407,7 @@ class _WalkEngine:
         self._star_axis = np.concatenate(
             [np.full(1, -1)] + [np.full(self._nn - 1, k) for k in self._act]).astype(int)
         self._star_off = np.concatenate(
-            [np.zeros(1)] + [off1[arm] for _ in self._act])
+            [np.zeros(1)] + [off[k][arm] for k in self._act])
         self._G = self._star_axis.size
         self._axwin = {}
         for i, k in enumerate(self._act):
@@ -237,12 +453,12 @@ class _WalkEngine:
         """Posterior mean window offset per component (frozen axes sit at 0)."""
         w = np.zeros(self.D)
         for i, k in enumerate(self._act):
-            w[k] = float(pi_ax[i] @ self._off1)
+            w[k] = float(pi_ax[i] @ self._off[k])
         return w
 
     def _dS_axis(self, k):
         """dS/dxi_k at each of axis k's window nodes (dS_k depends only on the k-coordinate)."""
-        a = np.exp(np.minimum(self.mu[k] + self._off1, 60.0))
+        a = np.exp(np.minimum(self.mu[k] + self._off[k], 60.0))
         if k < self.n:
             hv = self.HV[:, k]
             return (self.lam[k] * a)[:, None, None] * np.outer(hv, hv)[None]
@@ -282,26 +498,60 @@ class _WalkEngine:
             out.append(E)
         return out
 
-    def _steady_fisher(self):
-        H, F, n, m = self.H, self.F, self.n, self.m
-        P = np.eye(n) * (self.lam.max() + self.rho.max())
-        Q0, R0 = self._Q_of(np.zeros(n)), self._R_of(np.zeros(m))
-        for _ in range(400):
-            Ppred = self._cap_P(F @ P @ F.T + Q0)
-            S = H @ Ppred @ H.T + R0
-            K = Ppred @ H.T @ np.linalg.inv(S)
-            P = Ppred - K @ H @ Ppred
-        Ppred = self._cap_P(F @ P @ F.T + Q0)
-        Si = np.linalg.inv(H @ Ppred @ H.T + R0)
-        dS = self._dS_list(np.zeros(self.D))
-        return np.array([0.5 * np.trace(Si @ d @ Si @ d) for d in dS]) + _RIDGE
+    def _balanced_base(self):
+        """This member's base with every confounded pair's noise divided evenly.
+
+        The split-agnostic point of the same base -- the same total in every channel, half of each
+        confounded pair's share on each side of it.  A pair is a process eigenmode whose ``H v``
+        lies along one sensor axis, which is a fact about ``H`` and needs no prior knowledge of
+        the pairs; the rest of the test needs the Fisher this base is for.
+        """
+        lam, rho = self.lam.copy(), self.rho.copy()
+        for k in range(self.n):
+            hv = np.abs(self.HV[:, k])
+            if hv.max() <= 0.0:
+                continue
+            nz = np.flatnonzero(hv > _RANK_TOL * hv.max())
+            if nz.size != 1:
+                continue
+            i, h2 = int(nz[0]), float(self.HV[nz[0], k] ** 2)
+            tot = lam[k] * h2 + rho[i]
+            lam[k], rho[i] = 0.5 * tot / h2, 0.5 * tot
+        return lam, rho
+
+    # -- a confounded group's two coordinates: its contribution to S (identifiable per step)
+    #    and its log-odds (in the exact null space of the per-step scale-Fisher) --
+    def _group_read(self, mu):
+        out = []
+        for (k, i, h2) in self._groups:
+            a = self.lam[k] * h2 * math.exp(min(mu[k], 60.0))
+            b = self.rho[i] * math.exp(min(mu[self.n + i], 60.0))
+            out.append((a + b, math.log(max(a, 1e-300)) - math.log(max(b, 1e-300))))
+        return out
+
+    def _group_write(self, mu, tots, los):
+        """Put each group's total back with the given log-odds -- the exact null flow.
+
+        The null direction is ``(R, -Q)`` up to scale at every operating point, and integrating
+        that direction field gives ``da = -db``: the null manifold is the LEVEL SET OF THE TOTAL.
+        So sliding the log-odds and handing the total straight back moves exactly along the
+        coordinate the one-step likelihood cannot see, and touches nothing that it can.
+        """
+        out = mu.copy()
+        for gi, (k, i, h2) in enumerate(self._groups):
+            lo = float(np.clip(los[gi], -80.0, 80.0))
+            a = tots[gi] / (1.0 + math.exp(-lo))
+            b = tots[gi] - a
+            out[k] = math.log(max(a, 1e-300) / (self.lam[k] * h2))
+            out[self.n + i] = math.log(max(b, 1e-300) / self.rho[i])
+        return out
 
     def reset(self, mean=None, scale=None):
         self._pi_ax = None
         self._m = None if mean is None else np.asarray(mean, float)
         self._P = None
         self.mu = np.zeros(self.D) if scale is None else np.asarray(scale, float).copy()
-        self._Pmu = np.full(self.D, self.s * self.s)
+        self._Pmu = self.s_ax ** 2
         self.loglik = 0.0
         return self
 
@@ -323,7 +573,7 @@ class _WalkEngine:
         r = len(self._act)
         Qg, Rg = self._star_QR()
         if self._pi_ax is None:
-            self._pi_ax = np.tile(self._w1, (r, 1))
+            self._pi_ax = self._w1[self._act].copy()
             if self._m is None:
                 self._m = (np.linalg.lstsq(H, y, rcond=None)[0]
                            if np.all(np.isfinite(y)) else np.zeros(n))
@@ -331,7 +581,7 @@ class _WalkEngine:
                 self._P = self._cap_P(
                     np.eye(n) * float(Rg.reshape(self._G, -1).max()
                                       + Qg.reshape(self._G, -1).max()) * n)
-        pi_ax = self._pi_ax @ self._T1
+        pi_ax = np.einsum("ai,aij->aj", self._pi_ax, self._T1[self._act])
         # The dynamics are a CALLABLE when they are learned or nonlinear: it returns the
         # linearisation (for the covariance) and the predicted mean (from f, not the
         # Jacobian -- they differ once the transition depends on the state).  Real F/B
@@ -399,9 +649,22 @@ class _WalkEngine:
             info = float(pi_ax[i] @ info_g) + _RIDGE
             grad = float(pi_ax[i] @ score_g)
             K_mu = self._Pmu[k] / (self._Pmu[k] + 1.0 / info)
-            self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap, self.gap))
-            self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k], self._Pmu_cap)
+            self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap[k], self.gap[k]))
+            self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k], self._Pmu_cap[k])
         self._pi_ax, self._m, self._P = pi_ax, m_new, P_new
+        if self._groups and self._revert is not None:
+            # The per-axis Newton walk steps by ``score/info``, which is ~1/Q on a process axis
+            # and ~1/R on a sensor axis; where the two are confounded, that step is almost
+            # entirely along the NULL direction, in which the score carries no information at
+            # all.  It is an artefact of taking a per-axis step against a singular Fisher, and it
+            # systematically blames the smaller variance -- the wrong reflex when a sensor
+            # degrades.  The excursion is allowed, because it is what absorbs a level jump, but
+            # it is a TRANSIENT and not a verdict: it reverts to this member's hypothesis at the
+            # class's own rate ``phi``, at the total the walk just established.  The verdict is
+            # the bank's, on the ``forget`` timescale (research 0053's lesson b).
+            tots, los = zip(*self._group_read(self.mu))
+            back = [a + self._revert * (lo - a) for a, lo in zip(self._anchor_lo, los)]
+            self.mu = self._group_write(self.mu, list(tots), back)
         self.loglik += ll
         wmean = self._wmean(pi_ax)
         return LucidStep(m_new.copy(), P_new.copy(), e.copy(), ll,
@@ -703,9 +966,43 @@ class LucidFilter:
         self.p = 0 if B is None else B.shape[1]
         self.B = B
         self.forget = float(forget)
-        self.phi_arr = np.array([ph for ph in phis for _ in ss], float)
-        self.s_arr = np.array([sv for _ in phis for sv in ss], float)
-        cells = [(ph, sv) for ph in phis for sv in ss]
+        # Which directions can no per-step score ever carry?  Where a process eigenmode is read
+        # by exactly one sensor, the two scale derivatives are proportional as matrices and only
+        # their SUM is identifiable per step (research/sequence-demix 0001), so the split is
+        # carried as a dimension of the BANK: every member is a complete filter anchored at one
+        # rung of the ladder, the evidence reaches it through its own MEAN (a rung with too much
+        # process chases sensor noise and pays for it in its own predictive likelihood), and its
+        # weight accumulates on the `forget` timescale.  No EMA, no whiteness statistic, and no
+        # rung refers to the supplied base.  A structure with no such pair -- any rig where every
+        # process mode is read by more than one sensor -- gets no ladder and no extra cost.
+        #
+        # The ladder is a third bank dimension, INSIDE the cell index, so the dynamics channel's
+        # own reshape(n_dynamics, n_cells) and its hazard kernel are untouched: a fault is a
+        # change of dynamics, a split is a property of the noise, and mixing one does not mix the
+        # other.  It is crossed into the hypotheses that share the caller's own state space --
+        # the nominal dynamics and any named anchors; the departure WALKERS carry an augmented
+        # state whose axes are not the caller's, and are left unladdered (see the SUMMARY opens).
+        #
+        # Several pairs would make the joint set of split vectors exponential, so the ladder is
+        # enumerated the way this filter enumerates every other scale grid: as the CALTROP STAR
+        # (research 0013) -- one reference vector, plus one pair moved off it at a time.  That is
+        # ``1 + G (J - 1)`` vectors, LINEAR in the pair count, and with ONE pair it is the whole
+        # ladder exactly, and with none it is a single empty vector and the bank is what it was.
+        # The reference is the middle of the arclength grid, the agnostic split; no rung refers to
+        # the supplied base.
+        #
+        # A split vector is applied to the BASE `(Q0, R0)` a member is built from, not carried
+        # beside it.  That is what it is -- a division of a channel's noise between the process
+        # and the sensor at a fixed total -- and it keeps the bank uniform: a member reads its own
+        # anchor off its own base, so the same construction reaches the augmented state of a
+        # departure walker through `augment` without anything having to know it is one.
+        probe = _WalkEngine(Q0, R0, Hm, F, B, phis[0], ss[0])
+        self.groups = probe._groups
+        self.split_arr = _split_star(np.log(_rung_odds(self.forget)), len(self.groups))
+        bases = [_apply_split(probe, v) for v in self.split_arr]
+        self.phi_arr = np.array([ph for ph in phis for _ in ss for _ in bases], float)
+        self.s_arr = np.array([sv for _ in phis for sv in ss for _ in bases], float)
+        cells = [(ph, sv, bq, br) for ph in phis for sv in ss for (bq, br) in bases]
 
         # -------- the dynamics hypotheses (the ladder of research/dynamics-learning) --------
         # The NOMINAL member is always present and never leaves: it is the hedge that makes a
@@ -731,14 +1028,15 @@ class LucidFilter:
         self._members, self._pidx, self._specs = [], [], specs
         for bs, Fs, Bs, dep in specs:
             if dep is None:
-                eng = [_WalkEngine(Q0, R0, Hm, Fs, Bs, ph, sv) for ph, sv in cells]
+                eng = [_WalkEngine(bq, br, Hm, Fs, Bs, ph, sv)
+                       for ph, sv, bq, br in cells]
                 if bs is not None:
                     for e in eng:
                         e._dyn = _fixed_hook(bs)
                 self._members += eng
                 self._pidx += [np.arange(n)] * len(cells)
                 continue
-            Qa, Ra, Ha, walk = dep.augment(Q0, R0, Hm)
+            _, _, Ha, walk = dep.augment(Q0, R0, Hm)   # the shape; the bases follow per cell
             xmode = np.flatnonzero(walk[:dep.na])
             if xmode.size != n:
                 raise RuntimeError("augmented process eigenbasis did not separate")
@@ -746,7 +1044,8 @@ class LucidFilter:
             Fa[:n, :n] = Fs                     # the Jacobian at g = 0, x = 0: the
             Ba = (None if Bs is None                     # characteristic linearisation the
                   else np.vstack([Bs, np.zeros((dep.k, self.p))]))   # steady Fisher wants
-            for ph, sv in cells:
+            for ph, sv, bq, br in cells:   # the split rides into the augmentation with the base
+                Qa, Ra, _Ha, _w = dep.augment(bq, br, Hm)
                 e = _WalkEngine(Qa, Ra, Ha, Fa, Ba, ph, sv, walk_axes=walk, cap=dep.cap)
                 e._dyn = dep.callable_for()
                 self._members.append(e)

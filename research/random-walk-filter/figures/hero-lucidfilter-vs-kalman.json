@@ -8,21 +8,21 @@
     "jump": 9.0
   },
   "steady_state": {
-    "lucid_rmse": 0.6916357360437402,
+    "lucid_rmse": 0.3896042608060733,
     "kalman_rmse": 0.37645539625371965,
-    "lucid_penalty_pct": 83.72315629594493
+    "lucid_penalty_pct": 3.4928080944526263
   },
   "after_noise_change": {
-    "lucid_rmse": 1.84534846872109,
+    "lucid_rmse": 0.881602466624629,
     "kalman_rmse": 0.7748298907642781,
-    "kalman_penalty_pct": -58.0117303643322
+    "kalman_penalty_pct": -12.111192958562
   },
   "calibration_after_noise_change": {
-    "lucid": 1.2851665416562748,
+    "lucid": 0.8091351513467234,
     "kalman": 4.555976321859218
   },
   "jump_rise_time_steps": {
-    "lucid": 4,
+    "lucid": 3,
     "kalman": 16
   }
 }

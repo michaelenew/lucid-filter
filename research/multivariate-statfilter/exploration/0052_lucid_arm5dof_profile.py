@@ -192,15 +192,35 @@ def save(label, n_seeds):
 
 
 def compare(a, b):
+    """Paired same-seed diff of two runs, on BOTH angle and velocity RMSE ratios.
+
+    Velocity is part of the guard, not a footnote: 0053's regression showed up there first
+    (vel/oracle 3.0 in PROCESS, 5.4 in BOTH) while some angle ratios still looked benign.
+    """
     da = np.load(os.path.join(HERE, f"0052_{a}.npz")); db = np.load(os.path.join(HERE, f"0052_{b}.npz"))
-    print(f"paired diff (lucid/oracle): {b} - {a}   [same seeds]")
+    print(f"paired diff (lucid/oracle): {b} - {a}   [same seeds]   + = worse")
+    worst = None
     for regime, tag in REGIMES:
-        ra = da[f"{regime}_lucid"] / da[f"{regime}_oracle"]
-        rb = db[f"{regime}_lucid"] / db[f"{regime}_oracle"]
-        d = rb - ra; se = d.std(ddof=1) / math.sqrt(len(d))
-        sig = d.mean() / se if se > 0 else 0.0
-        print(f"  {tag:12s} {ra.mean():8.3f} -> {rb.mean():8.3f}  diff {d.mean():+8.3f} "
-              f"SE {se:.3f} ({sig:+.1f} sigma)")
+        if f"{regime}_lucid" not in da or f"{regime}_lucid" not in db:
+            continue
+        line = f"  {tag:12s}"
+        for what, suf in (("angle", ""), ("vel", "_vel")):
+            ka, ko = f"{regime}_lucid{suf}", f"{regime}_oracle{suf}"
+            if ka not in da or ka not in db:
+                continue
+            ra, rb = da[ka] / da[ko], db[ka] / db[ko]
+            d = rb - ra; se = d.std(ddof=1) / math.sqrt(len(d))
+            sig = d.mean() / se if se > 0 else 0.0
+            line += (f"  {what} {ra.mean():7.3f} -> {rb.mean():7.3f} "
+                     f"diff {d.mean():+7.3f} SE {se:.3f} ({sig:+.1f}s)")
+            if worst is None or d.mean() - 2 * se > worst[1]:
+                worst = (f"{tag}/{what}", d.mean() - 2 * se, d.mean(), se)
+        print(line)
+    if worst is not None:
+        verdict = "PASS" if worst[1] <= 0 else "FAIL"
+        print(f"  guard (every regime within +2 SE, velocity included): {verdict}"
+              f"   worst {worst[0]}: diff {worst[2]:+.3f} SE {worst[3]:.3f} "
+              f"-> diff-2SE {worst[1]:+.3f}")
 
 
 if __name__ == "__main__":
