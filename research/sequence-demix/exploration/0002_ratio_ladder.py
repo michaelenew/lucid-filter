@@ -150,10 +150,10 @@ def steady_fisher_full(eng):
 class _LadderEngine(_WalkEngine):
     """One bank member: the caltrop engine anchored at a fixed split of every confounded group."""
 
-    def __init__(self, Q0, R0, H, F, B, phi, s, groups=(), lo=0.0, drift=True):
+    def __init__(self, Q0, R0, H, F, B, phi, s, groups=(), lo=0.0, revert="class"):
         self._groups = list(groups)
         self._anchor_lo = float(lo)
-        self._drift = bool(drift)
+        self._revert = revert          # "class": at rate phi;  "hard": at once;  None: free
         super().__init__(Q0, R0, H, F, B, phi, s)
 
     # the two coordinates of a group: its contribution to S (identifiable) and its log-odds (not)
@@ -184,12 +184,17 @@ class _LadderEngine(_WalkEngine):
 
     def update(self, y, u=None):
         step = super().update(y, u=u)
-        if self._groups and self._drift:
-            # the walk's null-direction component is a transient, not a verdict: it may absorb a
-            # jump, but it reverts to this member's hypothesis at the class's own rate, exactly
-            # at the total the walk just established.
+        if self._groups and self._revert is not None:
+            # The per-axis Newton walk steps by `score/info`, which on the process axis is ~1/Q
+            # and on the sensor axis ~1/R: when Q << R that step is almost entirely along the
+            # NULL direction, where the per-step score carries no information at all.  It is an
+            # artefact of taking a per-axis Newton step against a singular Fisher, and it
+            # systematically blames the smaller variance -- exactly the wrong reflex when a
+            # SENSOR degrades.  The walk keeps the identifiable part; the null part goes back to
+            # this member's hypothesis, at the total the walk just established.
             tots, los = zip(*self._read(self.mu))
-            back = [self._anchor_lo + self.phi * (lo - self._anchor_lo) for lo in los]
+            rate = self.phi if self._revert == "class" else 0.0
+            back = [self._anchor_lo + rate * (lo - self._anchor_lo) for lo in los]
             self.mu = self._write(self.mu, list(tots), back)
         return step
 
@@ -199,7 +204,7 @@ class LadderFilter(LucidFilter):
 
     def __init__(self, *a, **kw):
         rungs = kw.pop("rungs", True)
-        drift = kw.pop("drift", True)
+        revert = kw.pop("revert", "class")
         super().__init__(*a, **kw)
         e0 = self._members[0]
         Q0 = e0.V @ np.diag(e0.lam) @ e0.V.T
@@ -211,7 +216,7 @@ class LadderFilter(LucidFilter):
         for p, sv in zip(self.phi_arr, self.s_arr):
             for lo in (self.rung_lo if groups else [0.0]):
                 mem.append(_LadderEngine(Q0, e0.rho, e0.H, e0.F, e0.B, p, sv,
-                                         groups=groups, lo=lo, drift=drift))
+                                         groups=groups, lo=lo, revert=revert))
                 phis.append(p); ss.append(sv); los.append(lo)
         self._members = mem
         self.phi_arr, self.s_arr = np.array(phis), np.array(ss)
@@ -283,7 +288,10 @@ def main():
     report("shipped LucidFilter()", r.mean[:, 0], r.var[:, 0, 0], th, kA, kC, t1 - t0)
     scales(r, "shipped")
 
-    for tag, kw in (("A: ladder", {}), ("A: ladder, no revert", {"drift": False})):
+    variants = (("A: ladder (class revert)", {}),
+                ("A: ladder (hard project)", {"revert": "hard"}),
+                ("A: ladder (free drift)", {"revert": None}))
+    for tag, kw in variants:
         t0 = time.time(); f = LadderFilter(**kw); r2 = f.filter(y[:, None]); t1 = time.time()
         report(tag, r2.mean[:, 0], r2.var[:, 0, 0], th, kA, kC, t1 - t0,
                extra=f"   verdict {f.verdict():+.2f}")
