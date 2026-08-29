@@ -23,9 +23,16 @@ Everything is vector; a scalar problem is length 1.  `dynamics=None` (learn the 
 open cell -- it belongs to the ODE-learning filter and raises `NotImplementedError` for now.
 
 This is a benchmark toy: the RMSE for a given amount of supplied knowledge is the bound a real
-implementation can aim at.  The mechanism (per-component walk, GPB1 grid, derived spectral truncation,
-finding-18 loop) is the parameter-free `WalkingVectorFilter` (now moved to research/ as a specimen),
-lifted with a supplied `F` and wrapped in the `(phi, s)` bank of `WalkingBank`.
+implementation can aim at.  The mechanism (per-component walk, axial GPB1, derived spectral
+truncation, finding-18 loop) is the parameter-free `WalkingVectorFilter` (now moved to research/ as
+a specimen), lifted with a supplied `F` and wrapped in the `(phi, s)` bank of `WalkingBank` -- with
+one structural change: the specimen's exact tensor-product scale grid is ``(2K+1)**(n+m)`` nodes,
+EXPONENTIAL in the component count (a 5-DOF arm is out of reach), and is retired to research as the
+theory-only reference.  The engine here evaluates the CALTROP axial star instead (research 0013):
+the window centre plus an axial window per active axis, ``1 + 2K * (#active axes)`` nodes -- LINEAR
+in `n + m`, so the whole filter is polynomial-time.  The star does not represent the joint scale
+density (no corner nodes); it locates its peak by per-axis walking, which 0013 validates as matching
+the exact grid for state tracking at linear cost.
 """
 from __future__ import annotations
 
@@ -83,12 +90,19 @@ def _logsumexp(a: np.ndarray) -> float:
 
 # ------------------------------------------------------- the per-(phi,s) engine
 class _WalkEngine:
-    """One bank member: the per-component walking grid filter WITH supplied dynamics F (+ forcing B u).
+    """One bank member: the per-component walking CALTROP filter WITH supplied dynamics F (+ forcing B u).
 
-    Identical to the research `WalkingVectorFilter` except the state prediction is the supplied linear
-    dynamics ``mpred = F m + B u``, ``Ppred = F P F^T + Q`` (F defaults to the identity -> random walk).
-    Parameter-free: gain ``K* = (1-phi)/4``, drift ``q_mu`` and the spectral-freeze floor are all derived
-    from the class ``(phi, s)``; no EMA, no tuned constant.
+    Same model and walk as the research `WalkingVectorFilter`, with the state prediction being the
+    supplied linear dynamics ``mpred = F m + B u``, ``Ppred = F P F^T + Q`` (F defaults to the
+    identity -> random walk) -- but the scale posterior lives on the caltrop star (research 0013),
+    not the exact tensor grid: the window centre ``mu`` plus one axial window per active axis,
+    ``1 + 2K * r`` nodes where the tensor grid is ``(2K+1)**r`` (exponential in the active-axis
+    count ``r``; theory-only).  Per-axis window posteriors carry the AR(1) memory (propagated
+    through the 1-D kernel, reweighted by the per-node likelihood); the state KF is GPB1-collapsed
+    over the star as the evidence-weighted mixture of the axial windows; and the centre walks by
+    the finding-18 loop per axis (score/Fisher averaged over the axial profile), so reach stays
+    unbounded.  Parameter-free: gain ``K* = (1-phi)/4``, drift ``q_mu`` and the spectral-freeze
+    floor are all derived from the class ``(phi, s)``; no EMA, no tuned constant.
     """
 
     def __init__(self, Q0, R0, H, F, B, phi, s):
@@ -112,22 +126,82 @@ class _WalkEngine:
         self._build_window()
         self.reset()
 
-    # -- grid window (unchanged from WalkingVectorFilter) --
+    # -- caltrop star window (the 1-D pieces are unchanged from WalkingVectorFilter) --
     def _build_window(self):
         K = int(math.ceil(_SPAN_S / _GAP_FACTOR))
         off1 = self.gap * np.arange(-K, K + 1)
+        self._off1, self._nn, self._c = off1, off1.size, K
         w1 = np.exp(-0.5 * (off1 / self.s) ** 2); w1 /= w1.sum()
         nu = max(self.s * self.s * (1.0 - self.phi ** 2), 1e-12)
         T1 = np.exp(np.clip(-0.5 * (off1[None, :] - self.phi * off1[:, None]) ** 2 / nu, -700.0, 700.0))
         T1 /= T1.sum(1, keepdims=True)
-        offsets = [off1 if a else np.array([0.0]) for a in self.active]
-        weights = [w1 if a else np.array([1.0]) for a in self.active]
-        trans = [T1 if a else np.array([[1.0]]) for a in self.active]
-        self._mesh = np.array(np.meshgrid(*offsets, indexing="ij")).reshape(self.D, -1).T
-        pi0 = weights[0]; Tj = trans[0]
-        for k in range(1, self.D):
-            pi0 = np.kron(pi0, weights[k]); Tj = np.kron(Tj, trans[k])
-        self._pi0, self._T, self._G = pi0, Tj, pi0.size
+        self._w1, self._T1 = w1, T1
+        self._act = [int(k) for k in np.flatnonzero(self.active)]
+        # star node table: node 0 is the centre (all axes at mu); then, per active axis, the
+        # 2K off-centre offsets along that axis alone.  1 + 2K*r nodes -- linear in the axes.
+        arm = np.delete(np.arange(self._nn), self._c)
+        self._star_axis = np.concatenate(
+            [np.full(1, -1)] + [np.full(self._nn - 1, k) for k in self._act]).astype(int)
+        self._star_off = np.concatenate(
+            [np.zeros(1)] + [off1[arm] for _ in self._act])
+        self._G = self._star_axis.size
+        self._axwin = {}
+        for i, k in enumerate(self._act):
+            w = np.empty(self._nn, dtype=int)
+            w[self._c] = 0
+            w[arm] = 1 + i * (self._nn - 1) + np.arange(self._nn - 1)
+            self._axwin[k] = w
+
+    def _star_QR(self):
+        """(Q_g, R_g) at every star node: the centre pair plus a per-node one-axis change."""
+        n = self.n
+        Qc = self.V @ np.diag(self.lam * np.exp(np.clip(self.mu[:n], -60, 60))) @ self.V.T
+        rc = self.rho * np.exp(np.clip(self.mu[n:], -60, 60))
+        Qg = np.repeat(Qc[None], self._G, 0)
+        rg = np.repeat(rc[None], self._G, 0)
+        for g in range(1, self._G):
+            k = int(self._star_axis[g]); o = float(self._star_off[g])
+            if k < n:
+                dlam = self.lam[k] * (math.exp(min(self.mu[k] + o, 60.0))
+                                      - math.exp(min(self.mu[k], 60.0)))
+                Qg[g] += dlam * np.outer(self.V[:, k], self.V[:, k])
+            else:
+                i = k - n
+                rg[g, i] = self.rho[i] * math.exp(min(self.mu[k] + o, 60.0))
+        Rg = np.zeros((self._G, self.m, self.m))
+        Rg[:, np.arange(self.m), np.arange(self.m)] = rg
+        return Qg, Rg
+
+    def _star_weights(self, pi_ax, alpha=None):
+        """One distribution over the star: the axial windows mixed with weights ``alpha``
+        (uniform when no evidence).  The shared centre accumulates every axis's centre mass."""
+        w = np.zeros(self._G)
+        r = len(self._act)
+        if r == 0:
+            w[0] = 1.0
+            return w
+        a = np.full(r, 1.0 / r) if alpha is None else alpha
+        for i, k in enumerate(self._act):
+            w[self._axwin[k]] += a[i] * pi_ax[i]
+        return w
+
+    def _wmean(self, pi_ax):
+        """Posterior mean window offset per component (frozen axes sit at 0)."""
+        w = np.zeros(self.D)
+        for i, k in enumerate(self._act):
+            w[k] = float(pi_ax[i] @ self._off1)
+        return w
+
+    def _dS_axis(self, k):
+        """dS/dxi_k at each of axis k's window nodes (dS_k depends only on the k-coordinate)."""
+        a = np.exp(np.minimum(self.mu[k] + self._off1, 60.0))
+        if k < self.n:
+            hv = self.HV[:, k]
+            return (self.lam[k] * a)[:, None, None] * np.outer(hv, hv)[None]
+        out = np.zeros((self._nn, self.m, self.m))
+        i = k - self.n
+        out[:, i, i] = self.rho[i] * a
+        return out
 
     def _Q_of(self, xi):
         return self.V @ np.diag(self.lam * np.exp(np.clip(xi, -60, 60))) @ self.V.T
@@ -160,7 +234,7 @@ class _WalkEngine:
         return np.array([0.5 * np.trace(Si @ d @ Si @ d) for d in dS]) + _RIDGE
 
     def reset(self, mean=None, scale=None):
-        self._pi = None
+        self._pi_ax = None
         self._m = None if mean is None else np.asarray(mean, float)
         self._P = None
         self.mu = np.zeros(self.D) if scale is None else np.asarray(scale, float).copy()
@@ -172,25 +246,25 @@ class _WalkEngine:
         n, m, H, F = self.n, self.m, self.H, self.F
         bu = (self.B @ u) if self.B is not None else 0.0
         y = np.atleast_1d(np.asarray(y, dtype=float))
-        scales = self.mu[None, :] + self._mesh
-        Qg = np.stack([self._Q_of(sc[:n]) for sc in scales])
-        Rg = np.stack([self._R_of(sc[n:]) for sc in scales])
-        if self._pi is None:
-            self._pi = self._pi0.copy()
+        r = len(self._act)
+        Qg, Rg = self._star_QR()
+        if self._pi_ax is None:
+            self._pi_ax = np.tile(self._w1, (r, 1))
             if self._m is None:
                 self._m = (np.linalg.lstsq(H, y, rcond=None)[0]
                            if np.all(np.isfinite(y)) else np.zeros(n))
             if self._P is None:
                 self._P = np.eye(n) * float(Rg.reshape(self._G, -1).max()
                                             + Qg.reshape(self._G, -1).max()) * n
-        pi = self._pi @ self._T
+        pi_ax = self._pi_ax @ self._T1
         mpred = F @ self._m + bu
         FPFt = F @ self._P @ F.T
         if not np.all(np.isfinite(y)):
-            self._pi = pi
-            self._P = FPFt + np.einsum("g,gij->ij", pi, Qg)
+            self._pi_ax = pi_ax
+            w = self._star_weights(pi_ax)
+            self._P = FPFt + np.einsum("g,gij->ij", w, Qg)
             self._m = mpred
-            wmean = pi @ self._mesh
+            wmean = self._wmean(pi_ax)
             return LucidStep(self._m.copy(), self._P.copy(), np.full(m, np.nan), 0.0,
                              self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
         Ppred = FPFt[None] + Qg
@@ -201,10 +275,23 @@ class _WalkEngine:
         sgn, logdet = np.linalg.slogdet(S)
         maha = np.einsum("i,gij,j->g", e, Si, e)
         lg = -0.5 * (m * _LOG2PI + logdet + maha)
-        mx = float(lg.max())
-        w = pi * np.exp(lg - mx); Z = float(w.sum())
-        ll = math.log(Z) + mx
-        pi = w / Z
+        if r:
+            logZ = np.empty(r)
+            for i, k in enumerate(self._act):
+                lgi = lg[self._axwin[k]]
+                mi = float(lgi.max())
+                wk = pi_ax[i] * np.exp(lgi - mi)
+                Zi = float(wk.sum())
+                pi_ax[i] = wk / Zi
+                logZ[i] = mi + math.log(Zi)
+            mz = float(logZ.max())
+            aw = np.exp(logZ - mz)
+            ll = mz + math.log(float(aw.mean()))
+            alpha = aw / float(aw.sum())
+        else:
+            ll = float(lg[0])
+            alpha = None
+        pi = self._star_weights(pi_ax, alpha)
         K = np.einsum("gik,gkl->gil", PHt, Si)
         Kbar = np.einsum("g,gil->il", pi, K)
         m_new = mpred + Kbar @ e
@@ -214,23 +301,26 @@ class _WalkEngine:
         Ppost = Ppred - np.einsum("gij,gjk->gik", KH, Ppred)
         P_new = np.einsum("g,gij->ij", pi, Ppost) + np.einsum("g,gi,gj->ij", pi, dm, dm)
         P_new = 0.5 * (P_new + P_new.T)
-        Sie = np.einsum("gij,j->gi", Si, e)
-        for k in range(self.D):
-            if not self.active[k]:
-                continue
-            dpk = np.stack([self._dS_list(sc)[k] for sc in scales])
+        # finding-18 walk per active axis, score/Fisher averaged over that axis's window
+        # posterior only (the caltrop: dS_k depends only on the k-coordinate, so the axial
+        # profile carries the axis's evidence at linear cost).
+        for i, k in enumerate(self._act):
+            idx = self._axwin[k]
+            dpk = self._dS_axis(k)
+            Sik = Si[idx]
+            Sie = np.einsum("gij,j->gi", Sik, e)
             score_g = 0.5 * (np.einsum("gi,gij,gj->g", Sie, dpk, Sie)
-                             - np.einsum("gij,gji->g", Si, dpk))
-            SidS = np.einsum("gij,gjk->gik", Si, dpk)
+                             - np.einsum("gij,gji->g", Sik, dpk))
+            SidS = np.einsum("gij,gjk->gik", Sik, dpk)
             info_g = 0.5 * np.einsum("gij,gji->g", SidS, SidS)
-            info = float(pi @ info_g) + _RIDGE
-            grad = float(pi @ score_g)
+            info = float(pi_ax[i] @ info_g) + _RIDGE
+            grad = float(pi_ax[i] @ score_g)
             K_mu = self._Pmu[k] / (self._Pmu[k] + 1.0 / info)
             self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap, self.gap))
             self._Pmu[k] = (1.0 - K_mu) * self._Pmu[k] + self._qmu[k]
-        self._pi, self._m, self._P = pi, m_new, P_new
+        self._pi_ax, self._m, self._P = pi_ax, m_new, P_new
         self.loglik += ll
-        wmean = pi @ self._mesh
+        wmean = self._wmean(pi_ax)
         return LucidStep(m_new.copy(), P_new.copy(), e.copy(), ll,
                          self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
 
