@@ -6,8 +6,8 @@ cells, and shipped the one that pays.
 
 **Shipped: `LucidFilter(offsets=True)`** — a constant process offset (a drift, a climbing
 bias) estimated online and fed back, closing **49–84%** of the distance to a Kalman filter
-told the drift, at a **0.8%** premium when there is no drift and **+14% per step** when the
-channel is on. Off by default and **bit-identical when off** (pinned by a test, not a
+told the drift, at a **0.8%** premium when there is no drift and **+8% per step** on the
+scalar rig, falling to nothing at arm scale. Off by default and **bit-identical when off** (pinned by a test, not a
 tolerance). The state is never augmented: a dense augmentation measures **1.9× on the scalar
 rig and 2.1–2.9× on the 5-DOF arm**, and the two-stage form is exact against it.
 
@@ -172,24 +172,98 @@ spurious drift of $-0.002$.
 second-moment channel can give. That is a calibration diagnostic rather than a state repair,
 and it is the one clear open below.
 
+## Off the random walk: what a general F changes
+
+[`0007`](exploration/0007_general_dynamics_and_the_confound.py). Everything above was measured
+on $F = I$. Two things came out of exercising a real one, and the second is a defect this probe
+found and fixed.
+
+**A drift the sensor never sees directly is still found.** On a double integrator read by a
+position sensor alone, the identifiable direction is velocity-side, and $\hat d$ = 0.023 and
+0.064 against truths of 0.02 and 0.06, with position RMSE 0.692 → 0.384 at the smaller rate.
+The gain shrinks as the drift grows past the class ladder's ceiling, the same falling-off the
+$r = 1.00$ row of `0005` shows.
+
+**And the channel must decline where a drift cannot be told from a sensor bias.** On the stable
+spectrum $d$ drives the state to the constant $(I-F)^{-1}d$, whose *reading* is exactly a
+sensor bias — the two fit identically and imply different states, so a channel carrying only
+the first silently picks it. Measured before the repair, on a stable AR(1) read by one sensor:
+
+| truth | off, rmse/calib | on, rmse/calib |
+|---|---|---|
+| a real sensor bias $c = 0.30$ | 0.335 / 0.91 | 0.382 / 1.65 |
+| a real sensor bias $c = 1.00$ | 0.786 / 2.07 | **0.960 / 5.25** |
+
+The repair is one line of the same algebra: `_mean_basis` now quotients the process entry by
+the **sensor entry** as well as by the free responses, so a drift is carried only where its
+signature *grows* and no constant can imitate it. A purely stable spectrum then has $k = 0$ and
+the channel is inert — on ≡ off bit-for-bit, all four rows — and a mixed spectrum keeps exactly
+the unit-root component and nothing on the stable one. The cost is honest and worth naming: a
+*genuine* drift on a stable rig is not carried either (0.383 against an oracle's 0.317), because
+nothing in the data distinguishes it from a miscalibrated sensor.
+
+## Beside the other two channels
+
+[`0008`](exploration/0008_with_the_other_channels_on.py).
+
+**The split ladder was never off.** A scalar direct-observation rig is exactly the structure the
+ladder switches on for, so `LucidFilter()` carries 24 rungs and 360 members and every scalar
+measurement in this workstream ran with it active. Nothing to test; it was already tested.
+
+**The dynamics channel was a real interaction, and the third repair is the one that works.** A
+constant added to the prediction and a departure in $F$ are two ways to explain the same
+feature, so under feedback a departure walker adapts $F$ to cancel the injected offset; the two
+settle into a stable, wrong equilibrium — the offset climbing to $+0.09$ on a *driftless* series
+against $-0.004$ with the dynamics channel off — and the walker's adaptation registers as a
+fault that the bank's thousand-step memory then keeps. Over eight seeds, one locked `fault` at
+1.000 against a baseline of 0.004.
+
+Two repairs were tried first and **neither touched it**, which is what identified the cause as a
+confound rather than interference: masking the departure walkers out of the gain the channel
+reads (the rule the split ladder already follows) moved the mean fault 0.37 → 0.36, and pushing
+the offset's own variance into the members' predictive covariance — so a guess is not handed
+over as a fact — did not move it either. Both are kept, because both are right on their own
+terms; neither is the fix.
+
+The fix is structural. Feedback is worth about twice the state repair of correcting only the
+output (0.392 against 0.471, where doing nothing is 0.559), so the channel uses it — and turns
+it off exactly when the dynamics channel is on, where it is not available:
+
+| configuration | driftless: rmse / fault | $r = 0.14$: rmse / $\hat d$ |
+|---|---|---|
+| `faults=1e-4` | 0.328 / 0.04 | 0.559 / — |
+| `faults=1e-4, offsets=True` | 0.339 / **0.04** | **0.498** / +0.138 |
+| `offsets=True` (feedback) | 0.341 / — | **0.387** / +0.134 |
+
+**And the cost vanishes as the rig grows**, which is the two-stage form's whole point:
+
+| rig | off | on | overhead | a state augmentation, same rig |
+|---|---|---|---|---|
+| scalar, ladder on, 360 members | 1.76 ms | 1.89 ms | **+7.9%** | 1.84× |
+| kinematic 2-DOF | 18.50 ms | 19.04 ms | +2.9% | — |
+| kinematic 5-DOF (arm scale) | 130.15 ms | 124.15 ms | **−4.6%** (noise) | 2.06–2.87× |
+
 ## Open
 
-1. **The sensor read-out as a diagnostic only.** It is accurate and it is the "lucid" promise
-   — tell me what the data is. What it needs is an output path that cannot touch the state,
-   and a convention for reporting a quantity defined only up to the common mode (report
-   relative to the consensus, as `0004` and `0006` do). Untried: whether it should be reported
-   at all when $m=1$, where it is pure gauge.
-2. **The drift and a sensor step are confounded over finite windows.** `0006`'s ESTIMATE
-   variant is the measurement: a persistent innovation offset loads onto the drift coordinate
-   at +0.08 within 400 steps. The shipped channel is immune only because it carries no sensor
-   entry to leave the bias in the innovation — it has *not* been shown immune to a genuine
-   sensor step under a genuine drift, which is the obvious next rig.
-3. **Only $F = I$ rigs are measured.** `_mean_basis` and the sensitivity recursion are written
-   for a general $F$ and nothing has exercised one — the same gap `sequence-demix` records as
-   its open 6. The stable-spectrum case is where the frame predicts $d$ and $c$ are confounded
-   *with each other*, and that prediction is unmeasured.
-4. **Untested with the dynamics channel or the split ladder on.** The channel rides on the
-   collapsed output, so it reaches them by construction and that is not the same as measured
-   — `sequence-demix` open 7 in a new place.
-5. **The 5-DOF arm is unmeasured.** Cost is bounded by construction ($O(n^2k + nmk)$ once per
-   step against the star's per-member cost) but the guard has not been run.
+1. **The sensor read-out as a diagnostic only.** Still the clearest gap. The estimate is
+   accurate and it is the "lucid" promise — tell me what the data is — but it needs an output
+   path that cannot touch the state, and a convention for reporting a quantity defined only up
+   to the common mode (report relative to the consensus, as `0004` and `0006` do). Untried:
+   whether to report it at all at $m = 1$, where it is pure gauge.
+2. **The drift's ceiling.** The class ladder's top rung is one process sd per step, and `0007`
+   shows the state gain falling off above it (a velocity drift of 3× the ceiling is estimated
+   correctly — 0.064 against 0.06 — but repairs much less of the RMSE). Whether the ceiling
+   should be raised, or the falloff is the transient rather than the ceiling, is unmeasured.
+3. **The two confounds are the same statement and are handled differently.** A drift is
+   confounded with a sensor bias on the stable spectrum (`0007`) and with a dynamics departure
+   under the dynamics channel (`0008`). The first is answered by declining to act, the second by
+   declining to feed back. Whether one rule covers both — and whether the second should also be
+   a structural quotient, against the departure directions rather than against the sensor
+   entry — is the obvious unification and is untried.
+4. **The demo arm is unmeasured.** `0008`'s arm-scale rig is a kinematic model of the right
+   size, not `multivariate-statfilter/0052`'s rig with its callable `H`, gravity and lever arms.
+   The no-impingement guard there is cheap to run — the channel is off by default and
+   bit-identical when off, so the risk is bounded — and it has not been run.
+5. **Nothing is measured with a moving offset.** The walk `rho * cls` exists so an offset that
+   changes is tracked, and every rig here holds it constant after a single onset. `ode-filter`'s
+   own $\tau$ channel found the missing-persistence axis exactly this way.

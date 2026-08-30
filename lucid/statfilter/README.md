@@ -139,15 +139,26 @@ when there is no drift to find:
 | 1σ of the walk per step | 0.548 / 0.98 | **0.390** / 0.75 | 0.359 |
 | 3σ | 0.711 / 1.04 | **0.457** / 0.73 | 0.359 |
 
-Two things follow the house rule rather than a setting. **Which offsets exist is structural**:
-a constant is identifiable only up to what a free response of the dynamics could already
-explain, so the channel is activated on that quotient and never on a gauge direction — for a
-random-walk level read by one sensor that is the drift, and the *sensor* bias is gauge (a level
-offset reads identically), which is why the filter absorbs a miscalibrated single sensor into
-the level and is right to. **And how big an offset is plausible is banked, not chosen**: five
-copies of the recursion at geometrically spaced class widths, mixed by their own predictive
-likelihood, between two derived ends — the width at which a constant and the noise it sits in
-are equally visible over the filter's own memory, and one noise sd per step.
+Three things follow the house rule rather than a setting. **Which offsets exist is
+structural**: a constant is identifiable only up to what a free response of the dynamics could
+already explain *or a constant sensor offset could imitate*, so the channel is activated on that
+quotient and never on a direction the data cannot separate. For a random-walk level read by one
+sensor that is the drift — the *sensor* bias is gauge there, which is why the filter absorbs a
+miscalibrated single sensor into the level and is right to. On a purely **stable** `F` nothing
+survives at all, because a drift there produces a constant offset that a sensor bias produces
+too, and the channel is inert rather than guessing between them (`r.offset` is then `None`).
+
+**How big an offset is plausible is banked, not chosen**: five copies of the recursion at
+geometrically spaced class widths, mixed by their own predictive likelihood, between two derived
+ends — the width at which a constant and the noise it sits in are equally visible over the
+filter's own memory, and one noise sd per step.
+
+**And the estimate is fed back to the recursion, except beside the dynamics channel.** Feeding
+it back is worth about twice the state repair of correcting only the output, but a constant
+added to the prediction and a departure in `F` explain the same feature, so a departure walker
+will adapt `F` to cancel it and report a fault that never clears. With `dynamics=None` or
+`faults=` the channel corrects the output instead — still a real gain, and the fault read-out
+stays where it was.
 
 The state is never augmented. The channel is carried in two stages (Friedland) on the collapsed
 output, which is **exact** against the augmented filter and costs nothing per bank member or

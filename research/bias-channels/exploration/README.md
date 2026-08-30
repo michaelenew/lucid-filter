@@ -10,3 +10,5 @@ Numbered probes behind [`../SUMMARY.md`](../SUMMARY.md). Later numbers are more 
 | [`0004`](0004_redundancy_and_the_gauge.py) | the residual state error under a sensor bias is the gauge component, `b/m` |
 | [`0005`](0005_the_class_is_banked.py) | no fixed class is defensible; the banked ladder beats both ends |
 | [`0006`](0006_report_or_apply.py) | the sensor entry is estimable and not usable — both ways, measured |
+| [`0007`](0007_general_dynamics_and_the_confound.py) | a general `F`; and the channel must decline where a drift cannot be told from a sensor bias |
+| [`0008`](0008_with_the_other_channels_on.py) | beside the split ladder and the dynamics channel, and what it costs at arm scale |

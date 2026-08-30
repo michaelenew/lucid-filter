@@ -606,3 +606,55 @@ def test_offset_channel_does_not_disturb_a_biased_sensor_rig():
     e_on = np.sqrt(np.mean((on.mean[400:, 0] - theta[400:]) ** 2))
     assert e_on < 1.05 * e_off                                       # no regression
     assert abs(on.offset[-1, 0]) < 0.02                              # and no spurious drift
+
+
+def test_offset_channel_is_inert_on_a_stable_spectrum():
+    """Where a drift cannot be told from a sensor bias, the channel declines to act.
+
+    On a stable `F` a process mean drives the state to the constant ``(I - F)^-1 d``, whose
+    reading IS a sensor bias -- the two fit identically and imply different states, so a channel
+    carrying only one of them would silently pick it.  `_mean_basis` quotients the process entry
+    by the sensor entry for exactly this reason, and on a purely stable spectrum nothing
+    survives.  Measured before the quotient existed (research/bias-channels 0007): a real sensor
+    bias read as a drift cost 0.786 -> 0.960 RMSE and calibration 2.07 -> 5.25.
+    """
+    F = np.array([[0.8]])
+    rng = np.random.default_rng(5)
+    Y = np.empty((300, 1))
+    x = 0.0
+    for t in range(300):
+        x = 0.8 * x + rng.normal(0, 0.2)
+        Y[t, 0] = x + rng.normal(0, 1.0)
+
+    f = LucidFilter(dynamics=F, offsets=True)
+    assert f._mean is None                                       # k = 0: nothing identifiable
+    on, off = f.filter(Y), LucidFilter(dynamics=F).filter(Y)
+    assert np.array_equal(on.mean, off.mean)                     # and therefore bit-identical
+    assert on.offset is None
+
+    # a unit root beside the stable mode restores it, and only along the unit root
+    from lucid.statfilter.lucid import _mean_basis
+    B = _mean_basis(np.diag([1.0, 0.7]), np.array([[1.0, 1.0]]))
+    assert B.shape[1] == 1
+    assert abs(B[1, 0]) < 1e-8                                   # nothing on the stable mode
+
+
+def test_offsets_do_not_provoke_the_dynamics_channel():
+    """The two channels are confounded, so the offset is not fed back when both are on.
+
+    A constant added to the prediction and a departure in `F` explain the same feature, so under
+    feedback a departure walker adapts `F` to cancel the injected offset and its adaptation
+    registers as a fault -- which the bank's long weight memory then keeps.  Measured over eight
+    driftless seeds (research/bias-channels 0008): one locked `fault` at 1.000 under feedback,
+    none under the feed-forward the filter now selects structurally.
+    """
+    Q, R, N = 0.02, 1.0, 500
+    rng = np.random.default_rng(12)                              # the seed that locked
+    theta = np.cumsum(rng.normal(0, np.sqrt(Q), N))
+    Y = (theta + rng.normal(0, np.sqrt(R), N))[:, None]
+
+    plain = LucidFilter(faults=1e-4).filter(Y)
+    both = LucidFilter(faults=1e-4, offsets=True).filter(Y)
+    assert LucidFilter(faults=1e-4, offsets=True)._mean.feedback is False
+    assert both.fault[-1] < 0.5                                  # no locked false detection
+    assert float(np.mean(both.fault)) < float(np.mean(plain.fault)) + 0.05
