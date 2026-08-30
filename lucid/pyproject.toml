@@ -20,7 +20,10 @@ Homepage = "https://github.com/michaelenew/lucid-filter"
 Research = "https://github.com/michaelenew/lucid-filter/tree/main/research"
 
 [tool.setuptools]
-packages = ["statfilter", "odefilter"]
+packages = ["statfilter", "odefilter", "lucid_kernel"]
+
+[tool.setuptools.package-data]
+lucid_kernel = ["*.c", "*.h"]   # so an installed copy can rebuild
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -56,10 +56,19 @@ Basic use:
 """
 from __future__ import annotations
 
+import functools
 import math
 from dataclasses import dataclass, asdict, field
 
 import numpy as np
+
+try:                                    # the compiled recursion, when built
+    import lucid_kernel as _kernel      # see lucid_kernel/README.md
+except ImportError:                     # pragma: no cover - optional
+    try:                                # installed as `lucid.odefilter` etc.
+        from .. import lucid_kernel as _kernel
+    except ImportError:
+        _kernel = None
 
 __all__ = ["AdaptiveFilter", "Params", "FilterResult", "Step"]
 
@@ -289,6 +298,46 @@ def _chain_batch(phi: np.ndarray, s: np.ndarray, n: int):
     return lam, np.broadcast_to(w, lam.shape), T
 
 
+@functools.lru_cache(maxsize=None)
+def _batch_verified(order: int):
+    """Whether the compiled recursion has been checked against NumPy here.
+
+    The parent's step is elementwise work plus three reductions, none of which
+    einsum gets a say in, so there is nothing to choose between -- but the
+    check is run anyway, because "identical" is a claim about the machine the
+    code is on and not only about the code.  Cached per grid size.
+    """
+    if _kernel is None or not _kernel.available():
+        return False
+    ext = _kernel.ext()
+    rng = np.random.default_rng(90210)
+    B, n = 5, 96
+    V = np.array([-7.0, -9.0, 0.0, 0.0, math.log(0.3), math.log(0.3)]) \
+        + 0.4 * rng.standard_normal((B, 6))
+    xv = np.cumsum(0.03 * rng.standard_normal(n))
+    xv[n // 3] = np.nan
+    Q, S2 = np.exp(V[:, 0]), np.exp(V[:, 1])
+    phP = 1.0 / (1.0 + np.exp(-V[:, 2]))
+    phM = 1.0 / (1.0 + np.exp(-V[:, 3]))
+    sP, sM = np.exp(V[:, 4]), np.exp(V[:, 5])
+    lamP, wP, TP = _chain_batch(phP, sP, order)
+    lamM, wM, TM = _chain_batch(phM, sM, order)
+    LP = np.repeat(lamP, order, axis=1)
+    LM = np.tile(lamM, (1, order))
+    T = (TP[:, :, None, :, None] * TM[:, None, :, None, :]).reshape(
+        B, order * order, order * order)
+    pi = (wP[:, :, None] * wM[:, None, :]).reshape(B, order * order)
+    Qg = Q[:, None] * np.exp(np.clip(LP, -60.0, 60.0))
+    Rg = S2[:, None] * np.exp(np.clip(LM, -60.0, 60.0))
+    args = (np.ascontiguousarray(xv), np.ascontiguousarray(T),
+            np.ascontiguousarray(pi), np.ascontiguousarray(Qg),
+            np.ascontiguousarray(Rg))
+    return _kernel.verify(("stat", int(order)),
+                          lambda: ext.stat_loglik_batch(*args),
+                          lambda: _batch_numpy(xv, T, pi, Qg, Rg),
+                          candidates=((),)) is not None
+
+
 def _loglik_batch(x: np.ndarray, V: np.ndarray, order: int) -> np.ndarray:
     """Marginal log-likelihood of ``x`` at every unconstrained vector in ``V``.
 
@@ -312,12 +361,27 @@ def _loglik_batch(x: np.ndarray, V: np.ndarray, order: int) -> np.ndarray:
     LP = np.repeat(lamP, n, axis=1)                     # joint grid: P varies slowly
     LM = np.tile(lamM, (1, n))
     T = (TP[:, :, None, :, None] * TM[:, None, :, None, :]).reshape(B, n * n, n * n)
-    pi = (wP[:, :, None] * wM[:, None, :]).reshape(B, n * n).copy()
+    pi = (wP[:, :, None] * wM[:, None, :]).reshape(B, n * n)
 
     Qg = Q[:, None] * np.exp(np.clip(LP, -60.0, 60.0))
     Rg = S2[:, None] * np.exp(np.clip(LM, -60.0, 60.0))
-    QR = Qg + Rg
 
+    if _batch_verified(order):
+        out = _kernel.ext().stat_loglik_batch(
+            np.ascontiguousarray(x, dtype=float), np.ascontiguousarray(T),
+            np.ascontiguousarray(pi), np.ascontiguousarray(Qg),
+            np.ascontiguousarray(Rg))
+        if out is not None:
+            return out
+    return _batch_numpy(x, T, pi, Qg, Rg)
+
+
+def _batch_numpy(x, T, pi, Qg, Rg):
+    """The recursion in NumPy.  The kernel is checked against this, and this
+    is what runs when there is no kernel to check."""
+    B = Qg.shape[0]
+    pi = pi.copy()
+    QR = Qg + Rg
     x0 = float(x[0])
     m = np.full(B, x0 if np.isfinite(x0) else 0.0)
     P = Rg.max(1) + Qg.max(1)                           # the diffuse start of update()

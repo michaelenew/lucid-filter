@@ -43,6 +43,13 @@ when roots are pinned — see below). `order` and
 modelling commitment, and because each root of the characteristic polynomial is
 a channel, choosing `p` is the same act as counting channels.
 
+**Speed.** The recursion has a compiled form in
+[`../lucid_kernel/`](../lucid_kernel/README.md), built by `pip install` when
+there is a compiler: 8x on the batched likelihood a fit evaluates and about 4x
+on a whole `fit()`, at `p = 3, order = 5`. It returns the same bits rather
+than the same number to a tolerance -- it is checked against the NumPy path,
+bit for bit, before it is used.
+
 ## Use
 
 ```python
