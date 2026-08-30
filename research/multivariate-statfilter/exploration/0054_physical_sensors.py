@@ -114,16 +114,16 @@ def jacobian_check():
     print(f"1. complex-step Jacobian vs central differences, worst abs error: {worst:.2e}")
     Hc = A.H_CHAR
     y0 = A.measure(np.zeros(A.N))[1]
-    print("   what each accelerometer reads at the home pose:")
-    print(f"   {'':>10} {'gravity (m/s^2)':>16}   {'d/d theta (per rad)':>28}   "
+    print("   what each accelerometer axis reads at the home pose:")
+    print(f"   {'':>12} {'gravity (m/s^2)':>16}   {'d/d theta (per rad)':>28}   "
           f"{'lever arms d/d alpha (m)':>28}")
     for j in range(A.NJ):
-        g = 2 * j + 1
-        print(f"   link {j + 1:>4} {y0[g]:>16.2f}   "
-              f"{np.array2string(np.round(Hc[g, 0::3], 1), floatmode='fixed'):>28}   "
-              f"{np.array2string(np.round(Hc[g, 2::3], 2), floatmode='fixed'):>28}")
-    print("   (the riser accelerometer reads ~nothing under yaw -- physically correct; yaw"
-          "\n    redundancy rides on links 2-5 through the chain)")
+        for ax, nm in ((3 * j + 1, "x"), (3 * j + 2, "y")):
+            print(f"   link {j + 1} {nm:>4} {y0[ax]:>16.2f}   "
+                  f"{np.array2string(np.round(Hc[ax, 0::3], 1), floatmode='fixed'):>28}   "
+                  f"{np.array2string(np.round(Hc[ax, 2::3], 2), floatmode='fixed'):>28}")
+    print("   (the y axes are what give roll and yaw their tangential lever arms; absolute"
+          "\n    yaw still rests on the encoder -- gravity is yaw-invariant)")
 
 
 def main():

@@ -126,9 +126,9 @@ scale-window node:
 
 with `n` the state dimension, `m` the sensor count and `r <= n + m` the number of
 active noise axes. `G` is the node count of the axial scale windows — **linear**
-in the axes, where a joint grid would be `5^r`. A 5-DOF arm (`n=15`, `m=10`,
-`r=25`, the default 15-member bank) is ≈ 14 M multiply-adds per update, measured
-40 ms/step in pure numpy, where profiling attributes most of the wall time to
+in the axes, where a joint grid would be `5^r`. A 5-DOF arm (`n=15`, `m=15`,
+`r=30`, the default 15-member bank) is ≈ 31 M multiply-adds per update, measured
+76 ms/step in pure numpy, where profiling attributes most of the wall time to
 interpreter overhead rather than flops. The two levers for embedded use: the bank
 multiplier (a 1–3 member bank tracks the same — the bank exists to average away
 the class choice, not for accuracy; pass `phis=`/`ss=`), and structure — a

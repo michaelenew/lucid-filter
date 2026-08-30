@@ -157,8 +157,10 @@ def render():
 
     # arm panel: fixed workspace box over all frames and cameras -- sized to the true and
     # lucid arms; the raw-pot arm may clip out of frame when its sensor is failing (the point)
-    half = float(np.abs(np.concatenate([P_true, P_lu])).max()) * 1.06
-    ax_arm.set_xlim(-half, half); ax_arm.set_ylim(-half * 0.72, half * 1.05)
+    seen = np.concatenate([P_true, P_lu]).reshape(-1, 3)
+    sp = np.concatenate([project(seen[::11], az_at(i)) for i in range(0, T, 50)])
+    ax_arm.set_xlim(sp[:, 0].min() - 0.10, sp[:, 0].max() + 0.10)
+    ax_arm.set_ylim(sp[:, 1].min() - 0.06, sp[:, 1].max() + 0.06)
     ax_arm.set_aspect("equal"); ax_arm.axis("off")
     for lx, lab, c in [(0.02, "true", C_TRUE), (0.18, "raw pot", C_POT), (0.40, "lucid", C_LU)]:
         ax_arm.text(lx, 0.02, "● " + lab, transform=ax_arm.transAxes, color=c, fontsize=8.5,
