@@ -201,11 +201,12 @@ the first silently picks it. Measured before the repair, on a stable AR(1) read 
 | a real sensor bias $c = 0.30$ | 0.335 / 0.91 | 0.382 / 1.65 |
 | a real sensor bias $c = 1.00$ | 0.786 / 2.07 | **0.960 / 5.25** |
 
-The repair is one line of the same algebra: `_mean_basis` now quotients the process entry by
-the **sensor entry** as well as by the free responses, so a drift is carried only where its
-signature *grows* and no constant can imitate it. A purely stable spectrum then has $k = 0$ and
-the channel is inert — on ≡ off bit-for-bit, all four rows — and a mixed spectrum keeps exactly
-the unit-root component and nothing on the stable one. The cost is honest and worth naming: a
+The repair at the time quotiented the process entry by the **sensor entry** as well as by the
+free responses. *That realization is itself superseded* — `0015` found it truncating a Jordan
+tower's offset component-wise, which is a worse defect — by the **z = 1 generalized eigenspace
+restriction**, which reaches every verdict in this section by exact algebra: a purely stable
+spectrum has $k = 0$ and the channel is inert — on ≡ off bit-for-bit, all four rows — and a
+mixed spectrum keeps exactly the unit-root component and nothing on the stable one. The cost is honest and worth naming: a
 *genuine* drift on a stable rig is not carried either (0.383 against an oracle's 0.317), because
 nothing in the data distinguishes it from a miscalibrated sensor.
 
@@ -405,26 +406,145 @@ One thing this rules out: it is not the observer's walk. Shrinking $q$ to 0.01×
 the tail ratio the *wrong* way (0.55 → 0.45 → 0.43 at 2σ), so the tracker's willingness to let
 the offset move is helping, not costing.
 
+## A process bias on many modes: attributed exactly, and fed back at a cost
+
+[`0014`](exploration/0014_which_mode_is_biased.py). `0011` showed the channel finds nothing on
+the demo arm; `0007` showed it finds a drift on a two-state rig where there is only one place
+one could be. Neither asked the question a caller with a real machine has: with fifteen states
+and five physical disturbance channels, is a bias on one of them put on that one?
+
+**Structurally, the channel rediscovers the rig's own geometry.** The identifiable basis has
+$k=5$ and spans exactly the columns of `GJ`, the map from the five per-joint jerk disturbances
+into the state — principal angles 1.0000 on every direction, found from $(F,H)$ alone without
+being told what `GJ` is.
+
+**And the attribution is clean.** Reading `r.offset` back onto those channels:
+
+| injected | recovered $g$ |
+|---|---|
+| joint 2, 0.6 | −0.03, +0.02, **+0.60**, +0.00, +0.02 |
+| joint 2, 1.2 | −0.04, +0.01, **+1.20**, +0.01, +0.01 |
+| joint 0, 1.2 | **+1.15**, +0.01, +0.01, +0.01, +0.01 |
+| joint 4, 1.2 | −0.04, +0.01, +0.01, +0.01, **+1.20** |
+
+**The state, however, gets worse — and this is the workstream's one shipped-behaviour caveat.**
+With the bias present, the angle estimate degrades 1.29× and the velocity 1.97×, with
+calibration going 1.45 → **2.43**:
+
+| window | angle, off → on | calibration |
+|---|---|---|
+| before onset | 1.000× | unchanged |
+| 200 steps after onset | 0.998× | unchanged |
+| **settled** | **1.288×** | 1.45 → **2.43** |
+
+Two cheap explanations are ruled out by the same run. It is **not the transient** — the loss is
+absent until the estimate has converged, which is the opposite of every other rig here. And it
+is **not injected noise** — the fed-back offset's mean change per step in the settled window is
+0.0000.
+
+~~What is left is that feeding back an offset which is accurate but not *exact* is not free
+when the offset is far from the sensor in **relative degree**.~~ **Superseded by
+[`0015`](exploration/0015_the_partial_feedback_defect.py)**, which localized the mechanism with
+an oracle variant the relative-degree reading cannot survive: feeding back the *exact* truth
+reproduced the full harm, so the residual-error story was wrong. The cause was the quotient
+truncating the tower's offset component-wise and the feedback being **partial** — see the
+section below, where the fix is raced and shipped. Relative degree was the correlate, not the
+mechanism: at the same relative degree, feeding the whole tower is clean.
+
+## The settled-window loss was a feedback loop from a truncated quotient — found and fixed
+
+[`0015`](exploration/0015_the_partial_feedback_defect.py), run under a sharp brief: a
+steady-state accumulated error is either **rust** (an accumulator degrading over time) or a
+**feedback loop** (an equilibrium — an oversight in the theory). Rule out rust first.
+
+**Rust is ruled out.** On a one-joint copy of the arm's own constructor the pathology
+reproduces at **4.1× with calibration 10–18** — and windowed over 3000 steps it climbs for
+~600 steps after the estimate converges, then **plateaus flat for the remaining 2000**, with
+every internal stationary (the estimate exact to ~2e-4, |V| bounded, rung weights converged).
+Nothing accumulates.
+
+**The loop, localized by two variants.** Replacing the estimate with the *exact truth* (b
+frozen, Pb ≈ 0) reproduces the full harm — so it is not the estimator, the wander, the class
+ladder, or `consider`. What the oracle still did was feed back the **truncated** direction: the
+sensor-column quotient (`0007`) carried only the accel-mean component of the tower's offset and
+dropped the velocity-mean as "imitable by an accel-sensor bias" — which it exactly is, over
+every horizon; a true gauge pair. But imitable-for-the-likelihood is not absorbable-for-free:
+with no sensor-bias state either, the dropped component is a permanent 0.3σ tension between
+the pot and the accel sensor. The off filter eats the *whole* bias in variance currency — ξ at
++2.3 all run, high gain, negligible error. The on filter's half-success **calms the very walk
+that was covering it** (the ~600-step onset that looked like rust is the walk's decay), and the
+same tension at base gain costs 4×. Wrong-and-humble beats almost-right-and-certain — `0036`'s
+oldest lesson, biting its own descendant.
+
+**The fix was raced before it was adopted.** Feeding the full free-response quotient, on three
+truths (settled window, calibration after the variance restoration below):
+
+| chain truth | off | truncated (shipped before) | **whole tower (ships now)** |
+|---|---|---|---|
+| jerk bias 1.2 | 0.0044 / 0.69 | 0.0179 / **10.3** | **0.0066 / 1.16** |
+| accel-*sensor* bias | 0.0319 / 28.5 | 0.0314 / 27.7 | **0.0076 / 1.9** |
+| none (guard) | 0.0048 | 0.0047 | 0.0048 |
+
+The adversarial row — the truth being the very sensor bias the dropped component was confounded
+with — comes out **opposite to the stable-rig geometry**: resolving the tension protects the
+strongly-observed angle, and the gauge displacement lands on the weakly-coupled top derivative.
+
+**The rule that ships: the offset basis is the free-response quotient restricted to the z = 1
+generalized eigenspace of $F$** — the modes where a constant's signature grows polynomially, so
+no constant sensor offset can imitate it in the long run. It supersedes `0007`'s sensor-column
+quotient, reproducing its verdict on every spectrum measured (stable inert, mixed keeping
+exactly the unit-root part, scalar and double-integrator unchanged) while keeping a Jordan
+tower **whole** — and it removes a horizon artifact, since eigenspace membership is exact
+algebra where the old quotient decided a long-run question over $2n+2$ steps. It is also the
+repository's founding frame arriving here: *the offset is a root at z = 1* (`ode-filter`), now
+as an activation rule.
+
+**Also restored: the $V P_b V'$ term on the reported state variance**, dropped in an earlier
+refactor — the state's error contains $V(b-\bar b)$ exactly, and omitting its covariance was
+pure overconfidence wherever the offset is live (`0014`'s calibration 2.43; now 1.16 on the
+chain, 1.80 on the arm's short window).
+
+**What remains, decomposed by an exact reference — and it shrinks with the window.** The
+settled ratio depends on how much of the convergence transient the window carries: 1.5× over
+steps 900+, **1.19× over 1200–2100, 1.05× over 2100–3000, calibration 0.85–0.87** (`0015`'s own
+run). The exact augmented KF at the channel's class prior and walk pays 1.16× over the pooled
+window on the same rig, closing to 1.03× with the walk at 0 — so the long-run residual is at or
+below the *fundamental* price of the $\rho\cdot cls$ diffusion walk, and the transient is the
+rest. The arm's `0014` window (700–1000, mostly transient) reads 1.25× at calibration 1.80.
+What the channel buys on such rigs — where the walks cover a constant jerk bias at negligible
+cost anyway — is the *attribution* (g = 1.209 on the right joint); what it costs is now bounded,
+honest, and priced. And the sensor-bias row is not a concession but a gain: on a tower, a
+genuine accel-sensor bias costs the plain filter 0.031 at calibration 27, and the channel — by
+resolving the tension under the process-side convention — **0.0053 at 0.83**, a 6× win.
+
 ## Open
 
-1. **The read-out wants ~1000 steps** to come within a few percent (`0010`), and a wider class
+1. **The walk's price on a converged offset, and the FLAT-rung refinement** (`0015`). The
+   $\rho\cdot cls$ diffusion walk costs a measured 1.16× on the chain even for the exact
+   augmented filter, and 0 walk closes that to 1.03× — but a zero-walk rung can never re-track
+   a change, and the $\tau$ channel's record says a jump would then discredit it permanently.
+   The candidate is the $\tau$ channel's own pattern — explicit FLAT members beside the
+   diffusing rungs, with a reprice on the rising edge of disagreement — and it needs its own
+   probe battery (the moving-offset rigs of `0009` are the guard). The other half of the
+   residual (ours: 1.16× above the augmented reference) is unattributed.
+2. **The read-out wants ~1000 steps** to come within a few percent (`0010`), and a wider class
    ladder gets there faster at no measured cost — the observer cannot act, so the reach/resolution
    trade that keeps the acting channel's ceiling where it is does not obviously bind here. The
    two currently share one ladder and there is no measurement saying they should.
-2. **Drifts above twice the ladder's ceiling are under-served** (`0012`: tail gap 52% at
+3. **Drifts above twice the ladder's ceiling are under-served** (`0012`: tail gap 52% at
    $r = 2.00$, against 86% with a ×10 ladder). The fix is known and its cost is measured; what
    is not settled is whether a caller who expects a large drift should get a wider ladder
    automatically, and from what — the base is the only thing the filter has to scale it by, and
    `0005` is the record of that being untrustworthy.
-3. **Whether the read-out should cost the scale walk something** (`0013`). The two channels
+4. **Whether the read-out should cost the scale walk something** (`0013`). The two channels
    spend the same evidence: the walk's down-weighting of a suspect sensor is what blinds the
    observer that could name it, and the observer sits at 0.90–0.99 of what is left. Nothing has
    tried holding $\eta$ where the read-out is confident, and it is not obvious it should — the
    down-weighting is a real state repair, so this is a trade to price rather than a bug to fix.
    The obvious first measurement is what the state loses if $\eta$ is held.
-4. **The arm guard is run at two seeds** (`0011`), where the workstream's own convention is
+5. **The arm guard is run at two seeds** (`0011`), where the workstream's own convention is
    four and the acceptance rule is "every regime within +2 SE of the paired diff". The margins
    are wide enough that the verdict is not in doubt, and the standard error is not reported.
-5. **The arm's own read-out is unexamined.** `0011` measures that the channel does no harm
+6. **The arm's own read-out is unexamined.** `0011` measures that the channel does no harm
    there; it does not ask what `r.sensor_offset` says about a rig whose sensors are genuinely
    fine, which is the false-positive question for the diagnostic.

@@ -289,8 +289,10 @@ def _mean_basis(F, H, tol=_RANK_TOL, process_only=True, sensor_only=False):
     rows ``:n`` are the process entry, rows ``n:`` the sensor entry.
 
     **``process_only`` is the default, and it is two measured decisions, not a simplification.**
-    The first is the quotient just described, taken against the sensor entry as well: see the
-    ``process_only`` branch below for why a drift is carried only where its signature grows.
+    The first is the restriction to the z = 1 generalized eigenspace of ``F`` -- a drift is
+    carried only where its signature grows polynomially, so no constant sensor offset can
+    imitate it in the long run, and it is carried WHOLE there (see the branch below for the
+    partial-feedback defect that truncating a Jordan tower was measured to cause, `0015`).
     The second is that the sensor entry is not carried at all.
     The sensor entry is identifiable only up to the gauge at every ``m`` -- one level read by
     two sensors gives the RELATIVE bias and never the common mode -- so a bias of ``b`` on one
@@ -332,24 +334,46 @@ def _mean_basis(F, H, tol=_RANK_TOL, process_only=True, sensor_only=False):
         return (np.vstack([np.zeros((n, basis.shape[1])), basis]) if basis.size
                 else np.zeros((n + m, 0)))
     if process_only:
-        # Carry a process offset only where a constant SENSOR offset could not have produced
-        # the same readings.  On the stable spectrum it could: `d` drives the state to the
-        # constant `(I - F)^-1 d`, whose reading is exactly a bias, so the two hypotheses fit
-        # identically and imply different states -- and a channel that carries only one of them
-        # would silently pick it.  Measured before this quotient existed (`0007`): on a stable
-        # AR(1) read by one sensor, a real sensor bias was read as a drift and cost 0.786 ->
-        # 0.960 RMSE with calibration 2.07 -> 5.25.  Quotienting the process entry by the bias
-        # columns as well as by the free responses is the whole fix: what survives is the part
-        # of the drift whose signature GROWS, which is the part no constant can imitate, and on
-        # a structure where nothing survives the channel correctly declines to act.
-        A = np.hstack([A, np.tile(np.eye(m), (2 * n + 2, 1))])
-        Bm = Bm[:, :n]
+        # Carry a process offset only on the z = 1 GENERALIZED EIGENSPACE of `F` -- the modes
+        # where a constant's signature GROWS polynomially in `t`, so that no constant sensor
+        # offset can imitate it in the long run.  This subsumes and supersedes the earlier
+        # quotient by the sensor-bias columns (`0007`), which reached the same verdicts on
+        # every spectrum measured -- stable inert, mixed keeping exactly the unit-root part --
+        # but decided a LONG-RUN question over a 2n+2-step horizon, and on a Jordan tower that
+        # truncated the offset COMPONENT-wise: the tower's velocity-mean component, exactly
+        # imitable by a top-derivative sensor bias over any horizon, was quotiented away while
+        # its accel-mean sibling was kept and fed.  `0015` measures what that costs: feeding
+        # HALF a tower's offset leaves a permanent innovation tension the size of the dropped
+        # component, and the channel's own success calms the scale walk that was covering it
+        # -- 4.1x the state error at 10x overconfidence on the 1-joint chain, reproduced with
+        # the estimate replaced by the exact truth, so it is the truncation and not the
+        # estimator.  The tower is all one z = 1 block, so the eigenspace rule keeps it WHOLE:
+        # every component is fed, the tension is zero, and the confounded (velocity-mean vs
+        # sensor-bias) gauge inside the tower is resolved to the process side -- measured as
+        # the right convention on the chain in all three truth cases, including a genuine
+        # sensor bias, where resolving the tension protects the strongly-observed angle and
+        # the gauge displacement lands on the weakly-coupled top derivative.
+        ev = np.linalg.eigvals(F)
+        mult = int(np.sum(np.abs(ev - 1.0) < 1e-6))
+        if mult == 0:
+            return np.zeros((n + m, 0))
+        Mp = np.linalg.matrix_power(F - np.eye(n), mult)
+        _, se, Vte = np.linalg.svd(Mp)
+        E1 = Vte[se <= tol * max(1.0, se[0] if se.size else 0.0)].T   # (n, r) the eigenspace
+        if E1.size == 0:
+            return np.zeros((n + m, 0))
+        Bm = Bm[:, :n] @ E1
+        resid = Bm - A @ np.linalg.pinv(A) @ Bm
+        _, sv, Vt = np.linalg.svd(resid, full_matrices=False)
+        keep = Vt[sv > tol * max(1.0, sv[0])].T
+        if not keep.size:
+            return np.zeros((n + m, 0))
+        basis = E1 @ keep
+        basis /= np.linalg.norm(basis, axis=0, keepdims=True)
+        return np.vstack([basis, np.zeros((m, basis.shape[1]))])
     resid = Bm - A @ np.linalg.pinv(A) @ Bm
     _, sv, Vt = np.linalg.svd(resid, full_matrices=False)
-    basis = Vt[sv > tol * max(1.0, sv[0])].T
-    if process_only and basis.size:
-        basis = np.vstack([basis, np.zeros((m, basis.shape[1]))])
-    return basis
+    return Vt[sv > tol * max(1.0, sv[0])].T
 
 
 class _MeanChannel:
@@ -505,6 +529,13 @@ class _MeanChannel:
             self.V = Vp
         w = np.exp(self.logw - _logsumexp(self.logw))
         self.bbar = w @ self.b
+        # The state owes variance for not knowing the offsets -- its error contains V (b - bbar)
+        # exactly -- so the POST-update mixture covariance is refreshed here and `update` adds
+        # ``V Pmix V'`` to the reported var.  Dropped in an earlier refactor and measured as
+        # overconfidence exactly where the offset is live (`0014`: calibration 2.43).
+        db = self.b - self.bbar
+        self._Pmix = (np.einsum("j,jab->ab", w, self.Pb)
+                      + np.einsum("j,ja,jb->ab", w, db, db))
         # under feed-forward the members never saw the offset, so the correction is applied to
         # the output instead: the sensitivity says exactly how far a unit of it moves the state
         return None if self.feedback else self.V @ self.bbar
@@ -1883,6 +1914,7 @@ class LucidFilter:
                     corr = mc.step(innov, Sc - addS, Kc, ok=fin)
                     if corr is not None:
                         mean = mean + corr
+                    var = var + mc.V @ mc._Pmix @ mc.V.T
                 if so is not None:
                     so.step(innov, Sc, Kc, ok=fin)      # every output discarded, by design
             if mc is not None:

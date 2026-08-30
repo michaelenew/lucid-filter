@@ -729,3 +729,58 @@ def test_read_out_and_drift_are_complementary():
     assert r.offset is None
     assert abs(r.sensor_offset[-1, 0]) < 0.4                     # absolute, not relative
     assert r.sensor_offset[-1, 1] > 0.7 * 1.5
+
+
+def test_offset_feedback_is_never_partial_on_a_tower():
+    """A Jordan tower's offset basis is kept WHOLE, and feeding it does not corrode the state.
+
+    The defect this guards (research/bias-channels 0015): the earlier sensor-column quotient
+    truncated a tower's offset component-wise, and feeding HALF an offset left a permanent
+    innovation tension while the channel's own success calmed the scale walk covering it --
+    4.1x the settled state error at 10x overconfidence, reproduced with the estimate replaced
+    by the exact truth.  The basis rule is now the z = 1 generalized eigenspace, which keeps
+    the tower whole; this pins both the basis and the settled-window behaviour.
+    """
+    import math
+
+    dt, order = 0.01, 3
+    F = np.eye(order)
+    for i in range(order):
+        for j in range(i + 1, order):
+            F[i, j] = dt ** (j - i) / math.factorial(j - i)
+    G = np.array([dt ** (order - i) / math.factorial(order - i) for i in range(order)])
+    Q0 = 0.6 ** 2 * np.outer(G, G) + 1e-12 * np.eye(order)
+    H = np.array([[1.0, 0, 0], [0, 0, 1.0]])
+    R0 = np.array([0.06 ** 2, 0.02 ** 2])
+
+    from lucid.statfilter.lucid import _mean_basis
+    B = _mean_basis(F, H)
+    assert B.shape[1] == 2                                       # accel AND velocity means
+    # the tower is all one z = 1 block: nothing of it may be truncated away
+    span = B[:order] @ B[:order].T
+    for v in (np.array([0.0, 1, 0]), np.array([0.0, 0, 1])):
+        assert np.linalg.norm(span @ v - v) < 1e-6
+
+    T, T0 = 1500, 300
+    rng = np.random.default_rng(0)
+    t = np.arange(T) * dt
+    U = (2.0 * np.sin(2 * np.pi * 0.35 * t))[:, None]
+    s = np.zeros(order)
+    S, Y = np.zeros((T, order)), np.zeros((T, 2))
+    for k in range(T):
+        d = 1.2 if k >= T0 else 0.0
+        s = F @ s + G * U[k, 0] + G * (0.6 * rng.standard_normal() + d)
+        S[k] = s
+        Y[k] = H @ s + np.sqrt(R0) * rng.standard_normal(2)
+
+    kw = dict(dynamics=F, control=G[:, None], H=H, process=Q0, measurement=R0)
+    on = LucidFilter(offsets=True, **kw).filter(Y, U=U)
+    off = LucidFilter(**kw).filter(Y, U=U)
+    sl = slice(900, T)
+    e_on = np.sqrt(np.mean((on.mean[sl, 0] - S[sl, 0]) ** 2))
+    e_off = np.sqrt(np.mean((off.mean[sl, 0] - S[sl, 0]) ** 2))
+    cal = float(np.mean((on.mean[sl, 0] - S[sl, 0]) ** 2 / on.var[sl, 0, 0]))
+    assert e_on < 2.2 * e_off                                    # was 4.1x under the defect
+    assert cal < 4.0                                             # was 10-18x overconfident
+    # (the short window still carries some of the convergence transient; the settled
+    #  two-seed measurement in 0015 is 1.5x and 1.16)
