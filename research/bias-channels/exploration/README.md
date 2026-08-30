@@ -16,3 +16,4 @@ Numbered probes behind [`../SUMMARY.md`](../SUMMARY.md). Later numbers are more 
 | [`0010`](0010_the_read_out.py) | the per-sensor read-out, shipped as an observer that cannot act |
 | [`0011`](0011_the_demo_arm_guard.py) | the no-impingement guard on the demo 5-DOF arm |
 | [`0012`](0012_the_ceiling.py) | the falloff at large drifts is the transient, not the ladder's ceiling |
+| [`0013`](0013_the_detection_rate.py) | the detection rate against the frontier, and where the missing evidence goes |

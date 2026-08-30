@@ -355,6 +355,56 @@ from $(F, H)$ alone can express it. Hence the second fix acts on the loop rather
 basis. It also explains the shape `0008` measured: the two channels co-drifted rather than
 settling, because the "equivalent drift" a given departure represents moves as the state does.
 
+## The detection rate, against the frontier
+
+[`0013`](exploration/0013_the_detection_rate.py). Everything above measures the *estimate*;
+this measures the *rate*, on the instrument the rest of the repository uses. Prequential
+log-odds against a matched null, exactly as `ode-filter` 0046 defines trust, with the oracle
+being the same quantity with the offset known rather than estimated — so its slope **is** the
+per-step KL, and it is the fastest any detector could accrue evidence on this data.
+
+| | oracle, nats/step | achieved | ratio | tail | steps to 99:1, oracle → achieved |
+|---|---|---|---|---|---|
+| drift 0.05 | 0.0337 | 0.0280 | 0.83 | **0.91** | 81 → 168 |
+| drift 0.14 | 0.1069 | 0.0945 | 0.88 | **0.94** | 21 → 54 |
+| drift 0.42 | 0.2745 | 0.2435 | 0.89 | **0.94** | 6 → 26 |
+| sensor bias 1σ, $m{=}3$ | 0.2797 | 0.2054 | 0.73 | 0.82 | 10 → 97 |
+| sensor bias 2σ, $m{=}3$ | 0.7527 | 0.3757 | 0.50 | 0.55 | 3 → 61 |
+| sensor bias 2σ, $m{=}5$ | 0.7609 | 0.3533 | 0.46 | 0.52 | 4 → 80 |
+
+**The drift channel runs at 91–94% of the frontier once converged**, and its whole shortfall is
+the approach — the same conclusion `0012` reached from the RMSE side, now in nats. The
+consumer-facing number is the latency: a 99:1 verdict takes 2.5–3× the oracle's.
+
+**The sensor read-out looks far worse and is not.** Its tail ratio does not close, and it
+*falls* as the bias grows — 0.82 at 1σ against 0.52 at 2σ — which is the wrong direction for a
+slow estimator, since a bigger signal should be easier. Re-evaluating the frontier at the
+**filter's own $S$** rather than the oracle's separates the two possible causes:
+
+| | oracle | local frontier | achieved | ach/oracle | **ach/local** | $\eta$ on the biased sensor |
+|---|---|---|---|---|---|---|
+| 1σ, $m{=}3$ | 0.2604 | 0.2394 | 0.2147 | 0.82 | **0.90** | +0.43 (others +0.08) |
+| 2σ, $m{=}3$ | 0.7359 | 0.4248 | 0.4018 | 0.55 | **0.95** | +1.42 (others +0.07) |
+| 1σ, $m{=}5$ | 0.3049 | 0.2347 | 0.2273 | 0.75 | **0.97** | +0.62 (others −0.01) |
+| 2σ, $m{=}5$ | 0.7533 | 0.3930 | 0.3895 | 0.52 | **0.99** | +1.58 (others +0.00) |
+
+**The observer sits at 0.90–0.99 of the evidence its own filter still contains.** It is not slow;
+the evidence has been taken away — by the scale walk inflating the biased sensor's $\eta$ by
++1.42 to +1.58, a factor of 4–5 in variance, which shrinks $S^{-1}$ and with it every nat the
+read-out could have earned. The size dependence is the signature: the larger the bias, the
+harder the filter defends, and the more of the gap the defence accounts for (0.90 → 0.99).
+
+**So the two channels are in tension, and the direction is not the one this workstream started
+from.** The opening claim — "the scale channel can only defend; a mean channel repairs" — was
+withdrawn in `0004` because defending is nearly as good for the *state*. The sharper statement
+is now measurable: **defending is nearly as good for the state, and it is what costs the
+diagnosis its speed.** Down-weighting a suspect sensor and naming it are the same evidence spent
+two ways, and the filter currently spends it all on the first.
+
+One thing this rules out: it is not the observer's walk. Shrinking $q$ to 0.01× or to zero moves
+the tail ratio the *wrong* way (0.55 → 0.45 → 0.43 at 2σ), so the tracker's willingness to let
+the offset move is helping, not costing.
+
 ## Open
 
 1. **The read-out wants ~1000 steps** to come within a few percent (`0010`), and a wider class
@@ -366,10 +416,12 @@ settling, because the "equivalent drift" a given departure represents moves as t
    is not settled is whether a caller who expects a large drift should get a wider ladder
    automatically, and from what — the base is the only thing the filter has to scale it by, and
    `0005` is the record of that being untrustworthy.
-3. **The approach, not the steady state, is where the remaining loss is** (`0012`: 6–47% of the
-   gap closed during the 200 steps after onset, against 90–94% in the tail). Nothing has asked
-   whether it is at the detection frontier the way `dynamics-learning` established for a fault,
-   which is the natural next question and the natural instrument for it already exists.
+3. **Whether the read-out should cost the scale walk something** (`0013`). The two channels
+   spend the same evidence: the walk's down-weighting of a suspect sensor is what blinds the
+   observer that could name it, and the observer sits at 0.90–0.99 of what is left. Nothing has
+   tried holding $\eta$ where the read-out is confident, and it is not obvious it should — the
+   down-weighting is a real state repair, so this is a trade to price rather than a bug to fix.
+   The obvious first measurement is what the state loses if $\eta$ is held.
 4. **The arm guard is run at two seeds** (`0011`), where the workstream's own convention is
    four and the acceptance rule is "every regime within +2 SE of the paired diff". The margins
    are wide enough that the verdict is not in doubt, and the standard error is not reported.
