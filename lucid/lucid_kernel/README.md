@@ -41,13 +41,20 @@ call with the kernel off:
 | `OdeFilter.loglik` | p = 3, order 5 | 10.7× |
 | `OdeFilter.filter` | p = 3, order 5 | 7.8× |
 | `statfilter._loglik_batch` | order 3 … 9 | 8.2× … 1.7× |
-| a whole `OdeFilter.fit(y, p=3)` | 250 points | 4× |
+| a whole `OdeFilter.fit(y, p=3)` | 600 points | **6.9×** (1196 s → 174 s) |
+| a whole `OdeFilter.fit(y, p=3)` | 250 points | 3.7× (42 s → 11 s) |
+| a whole `OdeFilter.fit(y, p=1)` | 250 points | 2.8× |
 
-The last row is the one that matters and is the smallest, because Amdahl
-arrives on schedule: with the recursion 8× faster, what is left is the fit's
-own scaffolding. The next thing worth compiling is `_face_profile` — the
-scalar Kalman pass over the `s = 0` face that pass 1 optimises — which was
-0.4% of the fit before and is 22% of it now.
+The two fit rows are the same code and differ only in the length of the
+series, which is worth reading rather than averaging: the fit's fixed costs —
+`scipy`'s optimiser bookkeeping, the grid rebuild per likelihood evaluation,
+the one-off verification — do not shrink with the recursion, so on a short
+series they are what is left, and on a long one they are not. Long series are
+where a fit is actually slow, so 6.9× is the number to plan with.
+
+At 250 points the largest single thing left is `_face_profile`, the scalar
+Kalman pass over the `s = 0` face that pass 1 optimises: 0.4% of that fit
+before the kernel and 22% of it after. It is the next thing worth compiling.
 
 `OdeFilter.update` — one observation at a time — stays in NumPy: there is one
 step's work to amortise a call over and nothing to win. So does a run with

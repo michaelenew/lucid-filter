@@ -453,8 +453,10 @@ einsums over arrays small enough that NumPy spends longer deciding what to do
 than doing it. Profiling one `OdeFilter.fit(y, p=3)` puts 99% of the wall
 clock inside `_loglik_batch` and 79% of it inside `c_einsum` alone. The kernel
 buys 8× on that recursion at `p = 3, order = 5` — 5–11× across the orders a
-fit actually uses, 2× at `p = 1` — and about 4× on a whole `fit()`, where what
-is left is the fit's own scaffolding rather than the recursion.
+fit actually uses, 2× at `p = 1` — and **6.9× on a whole `fit()`** of 600
+points, which is the length at which a fit is slow enough to care (1196 s →
+174 s). On a short series it is less, 3.7× at 250 points, because the fit's
+fixed costs do not shrink with the recursion.
 
 **It returns the same bits**, not the same number to a tolerance. It calls
 NumPy's own `exp`, `log` and BLAS rather than libm's and its own, because
