@@ -86,6 +86,10 @@ _HAZARD = 1e-4              # default fault rate: ~1 dynamics fault per 10,000 s
                             # the operating point on the false-alarm/delay frontier, and the delay
                             # it buys is derived, log(1/rho) / KL-rate (research 0001).
 _RANK_TOL = 1e-8            # numerical rank tolerance (the order used for structural activation)
+_OFFSET_CLASSES = 5         # rungs of the offset channel's class ladder -- a compute budget in
+                            # the sense of `order`, not a fitted value: the two ENDS are derived
+                            # (the memory's resolution floor, one noise sd per step above) and
+                            # the rungs sit geometrically between them.
 _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sense as _SPAN_S: the
                             # finest grid the engine will build is the one a thousand-step memory
                             # supports (24 rungs).  A longer `forget` still sharpens the bank's
@@ -259,6 +263,253 @@ def _rung_odds(forget):
 
 
 # --------------------------------------------------------------------- results
+# ------------------------------------------------------- the first-moment (offset) channel
+def _mean_basis(F, H, tol=_RANK_TOL, process_only=True, sensor_only=False):
+    """An orthonormal basis for the IDENTIFIABLE constant offsets of ``(F, H)``.
+
+    Every noise channel in this filter is carried in VARIANCE currency -- a log-scale per
+    process eigenmode and per sensor.  The FIRST moment has the same two entries and neither
+    was ever carried: a persistent process mean (a drift, a climbing bias) and a persistent
+    sensor mean (a miscalibrated sensor).  Writing both in one model,
+
+        theta_t = F theta_{t-1} + d + w_t,        y_t = H theta_t + c + v_t
+
+    they are not two channels but one, because they are not separately identifiable.  With a
+    diffuse prior on ``theta_0`` a candidate ``(d, c)`` is indistinguishable from ``(0, 0)``
+    exactly when some free response of the homogeneous system reproduces its mean trajectory,
+    and for an observable ``(F, H)`` that means: a sensor bias is GAUGE on ``H ker(F - I)`` (a
+    state offset the dynamics hold still reads identically), a process mean is gauge on
+    ``(F - I) ker(H)``, and on the stable part of the spectrum the two are confounded with each
+    other, because ``d`` drives the state to the constant ``(I - F)^-1 d`` whose reading is
+    itself a sensor bias.
+
+    So the channel is activated on the QUOTIENT -- the columns returned here -- and never on a
+    gauge direction, whose Fisher is exactly zero and whose estimate would therefore never
+    sharpen (research/bias-channels 0002, 0003 test 4).  Returned stacked as ``(d, c)``:
+    rows ``:n`` are the process entry, rows ``n:`` the sensor entry.
+
+    **``process_only`` is the default, and it is two measured decisions, not a simplification.**
+    The first is the quotient just described, taken against the sensor entry as well: see the
+    ``process_only`` branch below for why a drift is carried only where its signature grows.
+    The second is that the sensor entry is not carried at all.
+    The sensor entry is identifiable only up to the gauge at every ``m`` -- one level read by
+    two sensors gives the RELATIVE bias and never the common mode -- so a bias of ``b`` on one
+    of ``m`` sensors leaves an irreducible ``b/m`` in any state estimate, verified to three
+    figures in `0004`.  Estimating it is easy and accurate; USING it is not, and both ways of
+    using it were measured and rejected (`0006`): applied to the state it imposes the
+    quotient's own convention, which is worse than the incumbent behaviour (m = 3, one sensor
+    2 sigma off: 0.42 blind against 0.71 corrected, because the scale walk's ``eta`` already
+    down-weights the biased sensor and the convention throws that partial repair away), and
+    estimated-but-not-applied it corrupts the process entry, which IS applied (a spurious
+    drift of 0.076 and the state error doubling).  Carrying the process entry alone is clean
+    on both: 49-84% of the distance to an oracle on a drifting rig, and 0.385 -> 0.386 on the
+    biased-sensor rig it is not meant for.
+
+    The scalar default (``F = 1``, ``H = 1``) therefore has k = 1: the drift.  The sensor entry
+    is still ESTIMATED, on its own quotient (``sensor_only``) and by an observer whose every
+    output is discarded -- see `LucidFilter`'s ``_sensor``.  Reporting it is free; the measured
+    finding is only that acting on it is not.
+    """
+    F, H = np.atleast_2d(F), np.atleast_2d(H)
+    n, m = F.shape[0], H.shape[0]
+    cols_x, cols_d = [], []
+    Fp, Ssum = np.eye(n), np.zeros((n, n))
+    for _ in range(2 * n + 2):                       # past the Cayley-Hamilton horizon
+        cols_x.append(H @ Fp)
+        cols_d.append(H @ Ssum)
+        Ssum, Fp = Ssum + Fp, F @ Fp
+    A = np.vstack(cols_x)                            # what a free response can already explain
+    Bm = np.hstack([np.vstack(cols_d), np.tile(np.eye(m), (2 * n + 2, 1))])
+    if sensor_only:
+        # The sensor entry alone, quotiented by the free responses only: what survives is the
+        # per-sensor offset MODULO the common mode, which is gauge at every `m` (`0004`).  This
+        # is the read-out basis -- never fed back, so it is not quotiented against the process
+        # entry the way that one is against this one.
+        Bm = Bm[:, n:]
+        resid = Bm - A @ np.linalg.pinv(A) @ Bm
+        _, sv, Vt = np.linalg.svd(resid, full_matrices=False)
+        basis = Vt[sv > tol * max(1.0, sv[0])].T
+        return (np.vstack([np.zeros((n, basis.shape[1])), basis]) if basis.size
+                else np.zeros((n + m, 0)))
+    if process_only:
+        # Carry a process offset only where a constant SENSOR offset could not have produced
+        # the same readings.  On the stable spectrum it could: `d` drives the state to the
+        # constant `(I - F)^-1 d`, whose reading is exactly a bias, so the two hypotheses fit
+        # identically and imply different states -- and a channel that carries only one of them
+        # would silently pick it.  Measured before this quotient existed (`0007`): on a stable
+        # AR(1) read by one sensor, a real sensor bias was read as a drift and cost 0.786 ->
+        # 0.960 RMSE with calibration 2.07 -> 5.25.  Quotienting the process entry by the bias
+        # columns as well as by the free responses is the whole fix: what survives is the part
+        # of the drift whose signature GROWS, which is the part no constant can imitate, and on
+        # a structure where nothing survives the channel correctly declines to act.
+        A = np.hstack([A, np.tile(np.eye(m), (2 * n + 2, 1))])
+        Bm = Bm[:, :n]
+    resid = Bm - A @ np.linalg.pinv(A) @ Bm
+    _, sv, Vt = np.linalg.svd(resid, full_matrices=False)
+    basis = Vt[sv > tol * max(1.0, sv[0])].T
+    if process_only and basis.size:
+        basis = np.vstack([basis, np.zeros((m, basis.shape[1]))])
+    return basis
+
+
+class _MeanChannel:
+    """The identifiable constant offsets, carried in TWO STAGES rather than as extra state.
+
+    The obvious realization -- augment the state with the k constants -- is the one this engine
+    cannot afford: the inner recursion is replicated across every bank member and every star
+    node, and a dense augmentation measures 1.9x on the scalar rig and 2.1-2.9x on the 5-DOF arm
+    (research/bias-channels 0002).  The two-stage form (Friedland 1969) leaves the inner
+    recursion untouched and is EXACT against the augmented filter -- pinned to 1e-12 on the
+    exactly-conditioned cases in `0003` -- by carrying the sensitivity
+
+        V <- (F V + D) - K U,        U = H (F V + D) + C
+
+    ("how far a unit of each offset moves the estimate") and running a k-dimensional recursive
+    least squares of the innovation on ``U``.  Two consequences make it the right shape here:
+    the channel costs nothing per NODE, and the offsets are physical constants shared by every
+    member, so ONE channel rides on the collapsed output -- O(1) in the bank size.
+
+    It runs in FEEDBACK: the estimate is returned to the recursion each step as an additive
+    prediction offset, so the members see the data the offset is not in and their noise walks
+    are not driven to explain it.  Only the process entry is carried -- see `_mean_basis` for
+    the measurement that settled that.
+
+    **The class is banked, not chosen.**  How big an offset is plausible is a nuisance, and this
+    filter has one way of handling those: grid it and let the evidence weight it.  Choosing
+    instead was tried and measured (`0005`): the wide end buys 71% of the distance to an oracle
+    told the drift but costs 11% on driftless data, the narrow end costs nothing and buys
+    nothing, and no fixed choice is defensible because the good end depends on the supplied base
+    being loose -- a caller who supplies a TIGHT base would get the narrow behaviour from the
+    same rule.  So the channel runs `_OFFSET_CLASSES` copies of the recursion at geometrically
+    spaced class widths and mixes them by their own predictive likelihood on the bank's
+    ``forget`` timescale, exactly as the ``(phi, s)`` box is mixed one level down.  The ladder's
+    floor is DERIVED -- ``V / T`` with ``T = 1/(1 - forget)`` is where a constant and the noise
+    it sits in are equally visible over the filter's own memory, so the bottom rung is "no
+    offset" in the only sense the filter can hold that belief -- and its ceiling is the
+    scale-free convention used everywhere else here, one noise sd per step.  Neither end is
+    fitted; the rung count is a compute budget.
+
+    The sensitivity is shared by every rung: ``V`` and ``U`` depend on ``(F, H, D, C, K)`` and
+    not on the class, so a rung costs one k-dimensional update and nothing else.
+
+    The walk on each rung is the hazard times its own class, ``rho * cls`` -- the departure
+    walker's rule -- so an offset that MOVES is tracked, and none of it is frozen.
+    """
+
+    def __init__(self, basis, n, F, H, Q0, R0, rho, mem, feedback=True):
+        self.k = basis.shape[1]
+        # FEEDBACK returns the estimate to the members' own prediction, which is worth about
+        # twice the state repair of correcting only the output (`0008`: 0.392 against 0.471 on
+        # a drifting rig, where doing nothing is 0.559).  It is switched off when the DYNAMICS
+        # channel is on, and that is structural rather than cautious: a constant added to the
+        # prediction and a departure in `F` are two ways to explain the same feature, so a
+        # departure walker will adapt `F` to cancel the injected offset, the two settle into a
+        # stable and wrong equilibrium, and the walker's adaptation registers as a fault the
+        # bank's thousand-step memory then keeps.  Measured (`0008`, 8 seeds, driftless): one
+        # seed locks `fault` at 1.000 under feedback, none under feed-forward, whose mean fault
+        # is 0.063 against the 0.064 the filter reports with no offset channel at all.
+        self.feedback = bool(feedback)
+        self.D = np.ascontiguousarray(basis[:n])                 # (n, k) the process entry
+        self.C = np.ascontiguousarray(basis[n:])                 # (m, k) the sensor entry
+        self.F, self.H, self.n = F, H, n
+        # the noise each column's offset sits in -- its own magnitude, in its own units
+        top = (np.einsum("ik,ij,jk->k", self.D, Q0, self.D)
+               + np.einsum("ik,i,ik->k", self.C, R0, self.C))
+        top = np.maximum(top, 1e-300)
+        floor = top / max(mem, 1.0)
+        step = (top / floor) ** (1.0 / max(_OFFSET_CLASSES - 1, 1))
+        self.cls = np.stack([floor * step ** j for j in range(_OFFSET_CLASSES)])   # (J, k)
+        self.q = rho * self.cls
+        self.forget = 1.0 - 1.0 / max(mem, 1.0)
+        self.reset()
+
+    def reset(self):
+        J, k = self.cls.shape
+        self.b = np.zeros((J, k))
+        self.Pb = np.zeros((J, k, k))
+        self.Pb[:] = np.eye(k)
+        self.Pb *= self.cls[:, :, None]
+        self.V = np.zeros((self.n, k))
+        self.logw = np.zeros(J)
+        self.bbar = np.zeros(k)
+        self._Vp = self.D.copy()
+        self._U = self.H @ self.D + self.C
+        self._Pmix = np.zeros((k, k))
+
+    @property
+    def prediction_offset(self):
+        """``D b`` -- what the process entry adds to every member's prediction (feedback only)."""
+        return self.D @ self.bbar if self.feedback else np.zeros(self.n)
+
+    @property
+    def measurement_offset(self):
+        """What the sensor entry subtracts from the observation -- zero, by `_mean_basis`."""
+        return self.C @ self.bbar
+
+    def report(self):
+        """The read-out: the constant offset ``d``, in the caller's own state coordinates."""
+        return self.D @ self.bbar
+
+    def consider(self):
+        """``U Pb U'`` -- what the members must add to their own innovation covariance.
+
+        Feeding an estimate back without its uncertainty hands every member a guess as a fact,
+        and the members are not neutral about that: a departure walker has the freedom to fit
+        the perturbation and the nominal does not, so an early wild estimate is EVIDENCE that
+        the dynamics changed, and the bank's thousand-step memory then keeps that verdict.
+        Measured before this existed (`0008`): on a driftless series with `faults=` on, one seed
+        in three ran ``fault`` to 1.000 and stayed there, against 0.004 with the channel off.
+
+        So the offset's variance goes where the rest of the filter's uncertainty goes -- into
+        the predictive covariance every member scores against, which is the ordinary "consider"
+        treatment of a nuisance and costs one ``m x m`` addition.  A wide offset then makes
+        every member's density wide, no member gains on another for a reason that is really
+        the channel's ignorance, and the gain shrinks the way it should when a prediction is
+        uncertain.  Called once before the members run; `step` reuses what it caches.
+        """
+        self._Vp = self.F @ self.V + self.D
+        self._U = self.H @ self._Vp + self.C                     # (m, k), shared by every rung
+        self.Pb = self.Pb + self.q[:, :, None] * np.eye(self.k)
+        w = np.exp(self.logw - _logsumexp(self.logw))
+        db = self.b - self.bbar
+        self._Pmix = (np.einsum("j,jab->ab", w, self.Pb)
+                      + np.einsum("j,ja,jb->ab", w, db, db))
+        return self._U @ self._Pmix @ self._U.T
+
+    def step(self, e, S, K, ok=True):
+        """One two-stage step against the collapsed innovation ``e``, gain ``K``, cov ``S``.
+
+        ``S`` is the members' own covariance BEFORE `consider`'s inflation, so that a rung's
+        own uncertainty is not counted twice.  In feedback form the innovation already excludes
+        the mixture's estimate, so a rung is scored on what its OWN offset would have left.
+        """
+        Vp, U = self._Vp, self._U
+        if ok:
+            UPU = np.einsum("ia,jab,kb->jik", U, self.Pb, U)
+            Sb = UPU + S
+            Sbi = np.linalg.inv(Sb)
+            # Partial feedback: the prediction path carries `bbar`, the measurement path does
+            # not, so what a rung has left to explain includes the sensor entry in full.
+            base = self.bbar if self.feedback else np.zeros(self.k)
+            r = (e - np.einsum("ia,ja->ji", U, self.b - base)
+                 - (self.C @ base))
+            _, ld = np.linalg.slogdet(Sb)
+            ll = -0.5 * (ld + np.einsum("ji,jik,jk->j", r, Sbi, r))
+            Kb = np.einsum("jab,ib,jik->jak", self.Pb, U, Sbi)
+            self.b = self.b + np.einsum("jak,jk->ja", Kb, r)
+            self.Pb = self.Pb - np.einsum("jam,mb,jbc->jac", Kb, U, self.Pb)
+            self.Pb = 0.5 * (self.Pb + np.swapaxes(self.Pb, 1, 2))
+            self.logw = self.forget * (self.logw - _logsumexp(self.logw)) + ll
+            self.V = Vp - K @ U
+        else:
+            self.V = Vp
+        w = np.exp(self.logw - _logsumexp(self.logw))
+        self.bbar = w @ self.b
+        # under feed-forward the members never saw the offset, so the correction is applied to
+        # the output instead: the sensitivity says exactly how far a unit of it moves the state
+        return None if self.feedback else self.V @ self.bbar
+
+
 @dataclass
 class LucidStep:
     """What the filter knows after one vector observation (bank model-averaged)."""
@@ -269,6 +520,8 @@ class LucidStep:
     loglik: float                  #: mixture predictive log-density of y_t
     process_scale: np.ndarray      #: per process-eigenmode log-scale (n,)
     measurement_scale: np.ndarray  #: per-sensor log-scale (m,)
+    offset: np.ndarray = None      #: the constant process offset ``d`` (n,) -- ``None`` when off
+    sensor_offset: np.ndarray = None  #: per-sensor constant offset (m,), read-out only
     dynamics: np.ndarray = None    #: posterior-mean ``F`` (n, n) -- ``None`` when supplied fixed
     control: np.ndarray = None     #: posterior-mean ``B`` (n, p) -- ``None`` when fixed or absent
     fault: float = 0.0             #: posterior probability the dynamics have left the NOMINAL --
@@ -290,6 +543,8 @@ class LucidResult:
     process_scale: np.ndarray
     measurement_scale: np.ndarray
     loglik: float = 0.0
+    offset: np.ndarray = None      #: (T, n) the constant process offset ``d``, or ``None``
+    sensor_offset: np.ndarray = None  #: (T, m) per-sensor constant offset, read-out only
     dynamics: np.ndarray = None    #: (T, n, n) learned ``F``, or ``None`` when supplied fixed
     control: np.ndarray = None     #: (T, n, p) learned ``B``, or ``None``
     fault: np.ndarray = None       #: (T,) posterior probability of a dynamics fault
@@ -595,7 +850,7 @@ class _WalkEngine:
         self._P[:, idx] = 0.0
         self._P[idx, idx] = self._cap[idx]
 
-    def update(self, y, u=None):
+    def update(self, y, u=None, off=None, add_S=None):
         n, m, H = self.n, self.m, self.H
         y = np.atleast_1d(np.asarray(y, dtype=float))
         r = len(self._act)
@@ -627,6 +882,8 @@ class _WalkEngine:
             mpred = F @ self._m + ((self.B @ u) if self.B is not None else 0.0)
         else:
             F, mpred = self._dyn(self._m, u)
+        if off is not None:
+            mpred = mpred + off
         FPFt = F @ self._P @ F.T
         if not np.all(np.isfinite(y)):
             self._pi_ax = pi_ax
@@ -647,6 +904,8 @@ class _WalkEngine:
         e = y - ypred
         PHt = np.einsum("gij,kj->gik", Ppred, H)
         S = np.einsum("ij,gjk->gik", H, PHt) + Rg
+        if add_S is not None:
+            S = S + add_S
         Si = np.linalg.inv(S)
         sgn, logdet = np.linalg.slogdet(S)
         maha = np.einsum("i,gij,j->g", e, Si, e)
@@ -731,13 +990,17 @@ class _LoopBank:
 
     def __init__(self, members):
         self.members = members
+        self.n = members[0].n
 
-    def update(self, y, u=None):
-        st = [f.update(y, u=u) for f in self.members]
+    def update(self, y, u=None, want_S=False, off=None, add_S=None):
+        kw = {} if off is None else {"off": off}
+        if add_S is not None:
+            kw["add_S"] = add_S
+        st = [f.update(y, u=u, **kw) for f in self.members]
         return (np.stack([t.mean for t in st]), np.stack([t.var for t in st]),
                 np.stack([t.innovation for t in st]), np.array([t.loglik for t in st]),
                 np.stack([t.process_scale for t in st]),
-                np.stack([t.measurement_scale for t in st]))
+                np.stack([t.measurement_scale for t in st]), None, None)
 
 
 class _EngineBank:
@@ -868,7 +1131,7 @@ class _EngineBank:
             self.mu[:, k] = np.log(np.maximum(a2, 1e-300) / (self.lam[:, k] * h2))
             self.mu[:, n + i] = np.log(np.maximum(b2, 1e-300) / self.rho[:, i])
 
-    def update(self, y, u=None):
+    def update(self, y, u=None, off=None, want_S=False, add_S=None):
         M, n, m, H = self.M, self.n, self.m, self.H
         y = np.atleast_1d(np.asarray(y, dtype=float))
         ok = bool(np.all(np.isfinite(y)))
@@ -898,6 +1161,8 @@ class _EngineBank:
             F = np.empty((M, n, n)); mpred = np.empty((M, n))
             for j in range(M):
                 F[j], mpred[j] = self._dyns[j](self._m[j], u)
+        if off is not None:
+            mpred = mpred + off
         FPFt = np.einsum("bij,bjk,blk->bil", F, self._P, F)
         if not ok:
             self._pi[:] = pi
@@ -907,7 +1172,7 @@ class _EngineBank:
             self._m[:] = mpred
             sc = self.mu + self._wmean(pi)
             return (self._m.copy(), self._P.copy(), np.full((M, m), np.nan),
-                    np.zeros(M), sc[:, :n], sc[:, n:])
+                    np.zeros(M), sc[:, :n], sc[:, n:], None, None)
         Ppred = FPFt[:, None] + Qg
         # The live measurement map, per member (each evaluates its own mean).  With no hook
         # this is exactly the shared-H arithmetic it always was, contraction order included --
@@ -926,6 +1191,8 @@ class _EngineBank:
             e = y[None] - yp
             PHt = np.einsum("bgij,bkj->bgik", Ppred, Hb)
             S = np.einsum("bij,bgjk->bgik", Hb, PHt) + Rg
+        if add_S is not None:
+            S = S + add_S
         Si = np.linalg.inv(S)
         _, logdet = np.linalg.slogdet(S)
         maha = np.einsum("bi,bgij,bj->bg", e, Si, e)
@@ -980,7 +1247,12 @@ class _EngineBank:
             self._revert_groups()
         self._ll += ll
         sc = self.mu + self._wmean(pi)
-        return (m_new, P_new, e, ll, sc[:, :n], sc[:, n:])
+        # The offset channel needs the collapsed response of THIS bank: the mean gain `Kbar`
+        # (already formed above) and the star-collapsed innovation covariance.  Both are pure
+        # read-outs of the step that just ran, and neither is computed when the channel is off.
+        Sbar = np.einsum("bg,bgij->bij", w, S) if want_S else None
+        return (m_new, P_new, e, ll, sc[:, :n], sc[:, n:],
+                Kbar if want_S else None, Sbar)
 
 
 # ------------------------------------------------------- the dynamics channel
@@ -1258,7 +1530,7 @@ class LucidFilter:
     """
 
     def __init__(self, dynamics=0, control=None, H=None, process=None, measurement=None,
-                 n=None, faults=None, departures=None, anchors=None,
+                 n=None, faults=None, departures=None, anchors=None, offsets=False,
                  phis=_PHIS, ss=_SS, forget=0.999):
         learn = dynamics is None or faults is not None
         if faults is None or faults is True:
@@ -1352,6 +1624,29 @@ class LucidFilter:
         # and the sensor at a fixed total -- and it keeps the bank uniform: a member reads its own
         # anchor off its own base, so the same construction reaches the augmented state of a
         # departure walker through `augment` without anything having to know it is one.
+        # -------- the first-moment channel (research/bias-channels) --------
+        # Off unless asked for, and then activated STRUCTURALLY: the identifiable quotient of
+        # the joint (process mean, sensor bias) space, which is empty for many structures and
+        # never contains a gauge direction.  It is carried in two stages on the collapsed
+        # output, so nothing below this line changes and no member pays for it.
+        self._mean = self._sensor = None
+        if offsets:
+            mem = 1.0 / max(1.0 - self.forget, 1e-12)
+            basis = _mean_basis(F, Hm)
+            if basis.shape[1]:
+                self._mean = _MeanChannel(basis, n, F, Hm, Q0, R0, rho, mem,
+                                          feedback=not learn)
+            # The per-sensor read-out is a pure OBSERVER: the same recursion on the sensor
+            # entry's own quotient, whose estimate is reported and whose every output is
+            # discarded.  It is built this way because acting on it is what fails -- applied to
+            # the state it adopts the gauge convention and loses to doing nothing, and merely
+            # left in the innovation it corrupts the process entry (`0004`, `0006`).  Watching
+            # costs neither, and a signed per-sensor offset is the one thing a second-moment
+            # channel provably cannot report: a scale sees only `e**2`, so a biased sensor and
+            # its innocent neighbour move its `eta` the same way.
+            sb = _mean_basis(F, Hm, sensor_only=True)
+            if sb.shape[1]:
+                self._sensor = _MeanChannel(sb, n, F, Hm, Q0, R0, rho, mem, feedback=False)
         probe = _WalkEngine(Q0, R0, Hm, F, B, phis[0], ss[0])
         self.groups = probe._groups
         self.split_arr = _split_star(np.log(_rung_odds(self.forget)), len(self.groups))
@@ -1434,6 +1729,10 @@ class LucidFilter:
     def reset(self):
         for f in self._members:
             f.reset()
+        if self._mean is not None:
+            self._mean.reset()
+        if self._sensor is not None:
+            self._sensor.reset()
         # Group structurally-identical members into stacked executors -- same recursion, one
         # leading member axis (see `_EngineBank`).  Grouping is by structure, NOT by position:
         # `eigh` orders a base's eigenmodes by value, so rungs of one spec can carry the same
@@ -1457,6 +1756,19 @@ class LucidFilter:
             bank.idx = np.array(idx)
             banks.append(bank)
         self._banks = banks
+        if self._mean is not None or self._sensor is not None:
+            M = len(self._members)
+            self._Kb = np.zeros((M, self.n, self.m))
+            self._Sb = np.zeros((M, self.m, self.m))
+            # The channel reads the recursion's response -- its mean gain and innovation
+            # covariance -- off the members that share the CALLER'S OWN state space.  A
+            # departure walker's axes are not the caller's, so its gain is not the caller's
+            # either, and mixing it in perturbs the sensitivity enough to feed back on the
+            # dynamics channel: measured before this mask existed (`0008`), a driftless series
+            # ran `fault` to 0.37 against 0.04 with the channel off.  This is the same rule the
+            # split ladder follows one level down, for the same reason.
+            self._mean_src = np.repeat(
+                np.array([sp[3] is None for sp in self._specs]), self._nc)
         self._logw = np.zeros(len(self._members))
         self.loglik = 0.0
         self._alarm = False
@@ -1513,12 +1825,32 @@ class LucidFilter:
         n = self.n
         mn = np.empty((M, n)); vr = np.empty((M, n, n)); inn = np.empty((M, self.m))
         llv = np.empty(M); psc = np.empty((M, n)); msc = np.empty((M, self.m))
+        # The offset channel runs in FEEDBACK: the members are handed the data its estimate is
+        # not in -- the process entry as an additive prediction offset, the sensor entry as a
+        # correction to `y` -- so their noise walks are never driven to explain a constant.
+        mc, so = self._mean, self._sensor
+        need = mc is not None or so is not None
+        if mc is None:
+            yb, off, addS = y, None, None
+        else:
+            yb = np.atleast_1d(np.asarray(y, float)) - mc.measurement_offset
+            off = mc.prediction_offset
+            addS = mc.consider()      # the offset's own variance, into what every member scores
+        if so is not None:
+            so.consider()             # the observer only watches: its inflation is discarded
+        kw = np.zeros(M) if need else None
         for bank in self._banks:
-            bm, bv, bi, bl, bp, bms = bank.update(y, u=u)
+            bo = None if off is None else np.concatenate([off, np.zeros(bank.n - n)])
+            bm, bv, bi, bl, bp, bms, bK, bS = bank.update(yb, u=u, off=bo, add_S=addS,
+                                                          want_S=need)
             ix = bank.idx
             mn[ix] = bm[:, :n]; vr[ix] = bv[:, :n, :n]; inn[ix] = bi
             llv[ix] = bl; psc[ix] = bp[:, bank.pidx]; msc[ix] = bms
-        yv = np.atleast_1d(np.asarray(y, float))
+            if need and bK is not None:
+                kw[ix] = self._mean_src[ix]
+                self._Kb[ix] = bK[:, :n]
+                self._Sb[ix] = bS
+        yv = np.atleast_1d(np.asarray(yb, float))
         if np.all(np.isfinite(yv)):
             bank_ll = _logsumexp(prior + llv)
             self._logw = self.forget * prior + llv
@@ -1534,8 +1866,31 @@ class LucidFilter:
         ms = post @ msc
         innov = post @ inn
         self.loglik += bank_ll
+        off_out = sen_out = None
+        if need:
+            # the channel's view of the recursion it rides on: the model-averaged mean gain and
+            # innovation covariance, over the members that report them
+            wk = post * kw
+            tot = wk.sum()
+            if tot > 0.0:
+                wk = wk / tot
+                Kc = np.einsum("b,bij->ij", wk, self._Kb)
+                # the members' own covariance, with `consider`'s inflation taken back off so a
+                # rung is not charged twice for the same ignorance
+                Sc = np.einsum("b,bij->ij", wk, self._Sb)
+                fin = bool(np.all(np.isfinite(yv)))
+                if mc is not None:
+                    corr = mc.step(innov, Sc - addS, Kc, ok=fin)
+                    if corr is not None:
+                        mean = mean + corr
+                if so is not None:
+                    so.step(innov, Sc, Kc, ok=fin)      # every output discarded, by design
+            if mc is not None:
+                off_out = mc.report()
+            if so is not None:
+                sen_out = so.C @ so.bbar
         if not self._report:
-            return LucidStep(mean, var, innov, bank_ll, ps, ms)
+            return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out)
         Fh, Bh = self._dynamics_mean(post)
         # The fault readout is a marginal of the posterior -- the filter itself never
         # thresholds, it mixes.  Its RISING EDGE re-prices the walkers' ignorance: a jump has
@@ -1546,7 +1901,7 @@ class LucidFilter:
         if alarm and not self._alarm:
             self._reprice()
         self._alarm = alarm
-        return LucidStep(mean, var, innov, bank_ll, ps, ms, Fh, Bh, fault)
+        return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out, Fh, Bh, fault)
 
     def filter(self, Y, U=None) -> LucidResult:
         Y = np.atleast_2d(np.asarray(Y, float))
@@ -1561,6 +1916,8 @@ class LucidFilter:
         mean = np.empty((T, self.n)); var = np.empty((T, self.n, self.n))
         inn = np.empty((T, self.m)); ps = np.empty((T, self.n)); ms = np.empty((T, self.m))
         live = self._report
+        offs = np.empty((T, self.n)) if self._mean is not None else None
+        sens = np.empty((T, self.m)) if self._sensor is not None else None
         dyn = np.empty((T, self.n, self.n)) if live else None
         ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
         flt = np.empty(T) if live else None
@@ -1569,12 +1926,17 @@ class LucidFilter:
             st = self.update(row, None if U is None else U[i])
             mean[i] = st.mean; var[i] = st.var; inn[i] = st.innovation
             ps[i] = st.process_scale; ms[i] = st.measurement_scale; total += st.loglik
+            if offs is not None:
+                offs[i] = st.offset
+            if sens is not None:
+                sens[i] = st.sensor_offset
             if live:
                 dyn[i] = st.dynamics; flt[i] = st.fault
                 if ctl is not None:
                     ctl[i] = st.control
         return LucidResult(mean=mean, var=var, innovation=inn,
                            process_scale=ps, measurement_scale=ms, loglik=total,
+                           offset=offs, sensor_offset=sens,
                            dynamics=dyn, control=ctl, fault=flt)
 
     def loglik_of(self, Y, U=None) -> float:
