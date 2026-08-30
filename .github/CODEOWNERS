@@ -1,0 +1,3 @@
+# Default owner for everything in the repository: review requests are routed
+# here automatically for any pull request that touches these paths.
+*   @michaelenew
