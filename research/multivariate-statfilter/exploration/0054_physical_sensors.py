@@ -139,8 +139,8 @@ def main():
         jstd, pot, acc = schedule()
         U, S, Y = A.simulate(sd, jstd, pot, acc)
         Qs = [j ** 2 * (A.B @ A.B.T) for j in jstd]
-        Rs = [np.concatenate([[pot[k, j] ** 2, acc[k, j] ** 2] for j in range(A.NJ)])
-              for k in range(T)]
+        Rs = [np.concatenate([[pot[k, j] ** 2, acc[k, j] ** 2, acc[k, j] ** 2]
+                              for j in range(A.NJ)]) for k in range(T)]
         est = {"lucid": A.make_filter().filter(Y, U).mean,
                "fixed": A.kalman(U, Y),
                "oracle": A.kalman(U, Y, Qs, Rs),
@@ -153,7 +153,7 @@ def main():
                                       measurement=A.R0).filter(Y, U).mean}
         Pt = tip(S)
         P = {k: tip(v) for k, v in est.items()}
-        P["raw"] = np.array([A.joints3d(Y[k, 0::2])[-1] for k in range(T)])
+        P["raw"] = np.array([A.joints3d(Y[k, 0::3])[-1] for k in range(T)])
         on = np.zeros(T, bool)
         for nm, a, b in PHASES:
             if nm != "calm":
@@ -195,20 +195,26 @@ def main():
             e = np.zeros(A.N); e[A.ORDER * j] = 1.0; rows.append(e)
             e = np.zeros(A.N); e[A.ORDER * j + di] = 1.0; rows.append(e)
         Hm = np.array(rows)
+        M4 = len(rows)
         R0 = np.tile([A.POT ** 2, sig ** 2], A.NJ)
         rng = np.random.default_rng(0)
-        servo = A.Servo(); s = np.zeros(A.N)
-        S = np.zeros((T, A.N)); Y = np.zeros((T, A.M)); U = np.zeros((T, A.NJ))
+
+        class _Servo2(A.Servo):                # the control rig interleaves 2 rows per joint
+            def observe(self, y):
+                A.Servo.observe(self, np.repeat(y[0::2], 3))
+
+        servo = _Servo2(); s = np.zeros(A.N)
+        S = np.zeros((T, A.N)); Y = np.zeros((T, M4)); U = np.zeros((T, A.NJ))
         rth, rom, ral, rjk = A.reference(T)
-        sdv = np.empty(A.M)
+        sdv = np.empty(M4)
         sdv[0::2], sdv[1::2] = pot[0], dyn[0]
-        y = Hm @ s + sdv * rng.standard_normal(A.M)
+        y = Hm @ s + sdv * rng.standard_normal(M4)
         for k in range(T):
             servo.observe(y)
             U[k] = servo.command(rth[k], rom[k], ral[k], rjk[k])
             s = A.F @ s + A.B @ U[k] + A.B @ (jstd[k] * rng.standard_normal(A.NJ))
             sdv[0::2], sdv[1::2] = pot[k], dyn[k]
-            y = Hm @ s + sdv * rng.standard_normal(A.M)
+            y = Hm @ s + sdv * rng.standard_normal(M4)
             S[k], Y[k] = s, y
         lu = LucidFilter(dynamics=A.F, control=A.B, H=Hm, process=A.Q0,
                          measurement=R0).filter(Y, U).mean

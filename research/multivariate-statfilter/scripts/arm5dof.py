@@ -14,10 +14,15 @@ of the configuration, not of the drawing.
 
 **The sensors.**  A potentiometer per joint (angle, sigma 0.06 rad ~ 3.4 deg -- the bad
 absolute sensor), and a MEMS accelerometer bolted near the distal end of each link, 6 cm off
-the link axis, one sensitive axis read (sigma 0.03 m/s^2 -- the good dynamic sensor).  What
-that axis reads is proper acceleration,
+the link axis, with its two LATERAL axes recorded (sigma 0.03 m/s^2 each -- the good dynamic
+sensor; the part is 3-axis, and the along-link axis adds little here).  Two axes are not a
+convenience: the x axis lies along the mount offset, so a roll about the link it is bolted to
+produces a purely TANGENTIAL acceleration that x cannot see -- one recorded axis would leave
+the forearm roll (and base yaw) dynamically blind, which is the relative-degree pathology
+`0054` quarantines in its control rig, sitting undocumented inside the hero rig.  What each
+axis reads is proper acceleration,
 
-    y_j = s . R_j(theta)^T ( p_j..(theta, om, al) + g e_z ),
+    y_js = s . R_j(theta)^T ( p_j..(theta, om, al) + g e_z ),      s in {x, y},
 
 and every piece of it is nonlinear in the state: the mount's linear acceleration is a
 configuration-dependent lever-arm map on the joint accelerations plus centripetal and
@@ -35,10 +40,11 @@ The Jacobian is by COMPLEX-STEP differentiation: ``h`` is written complex-safe, 
 cancellation and no step size to choose.  One evaluation per column, exact; `0054` pins it
 against central differences.
 
-Two physically honest consequences, kept rather than papered over: the riser accelerometer
-reads ~nothing (a vertical link's lateral axis sees no gravity change and no lever arm under
-yaw), so yaw redundancy comes from the accelerometers on links 2-5 through the chain --
-exactly as on real hardware, where absolute yaw needs the encoder or a magnetometer.  And the
+Two physically honest consequences, kept rather than papered over: yaw and roll are sensed
+dynamically only through the 6 cm mount lever (their tangential channels), and no
+accelerometer sees absolute yaw at all -- gravity is yaw-invariant -- so the yaw ANGLE rests
+on the encoder, exactly as on real hardware, where it takes a magnetometer to do better.  And
+the
 servo flies on an alpha-beta-gamma tracker of the POTENTIOMETERS, never on the true state
 (0004's closed-loop bias, one level down), at a bandwidth the potentiometer can support: a
 triple pole at s = -8 on a 0.06 rad sensor injects 1.57 rad/s^3 of jerk noise -- 2.6x the
@@ -60,7 +66,7 @@ import numpy as np
 
 NJ, ORDER, DT = 5, 3, 0.01
 POT, ACC, JERK = 0.06, 0.030, 0.6             # rad, m/s^2, rad/s^3
-N, M = ORDER * NJ, 2 * NJ
+N, M = ORDER * NJ, 3 * NJ
 
 # the chain: yaw + shoulder pitch at the base, pitch + roll at the elbow, one wrist flex
 AXES = ["z", "y", "y", "z", "y"]
@@ -78,7 +84,7 @@ G = np.array([DT ** (ORDER - i) / math.factorial(ORDER - i) for i in range(ORDER
 F = np.kron(np.eye(NJ), Fb)
 B = np.kron(np.eye(NJ), G[:, None])
 Q0 = np.kron(np.eye(NJ), JERK ** 2 * np.outer(G, G) + 1e-12 * np.eye(ORDER))
-R0 = np.tile([POT ** 2, ACC ** 2], NJ)
+R0 = np.tile([POT ** 2, ACC ** 2, ACC ** 2], NJ)
 
 # eigenmode -> joint map for the process-scale diagnostics (block-diag Q0 -> localised modes)
 _lam, _V = np.linalg.eigh(Q0)
@@ -122,7 +128,9 @@ def joints3d(theta):
 # ------------------------------------------------- the measurement map, h(x) and its Jacobian
 GRAV = 9.81
 MOUNT = np.array([0.06, 0.0, 0.0])            # IMU offset from the link axis, in link coords
-SAXIS = np.array([1.0, 0.0, 0.0])             # the sensitive axis, in link coords
+SAXES = np.array([[1.0, 0.0, 0.0],            # the recorded axes, in link coords: x (radial,
+                  [0.0, 1.0, 0.0]])           # along the mount) and y (tangential -- the one
+                                              # that sees a roll about this link)
 
 
 def _rot_c(ax, a):
@@ -163,8 +171,10 @@ def _h(x):
         R = R @ _rot_c(AXES[j], HOME[j] + th[..., j])
         d = R @ (np.array([0.0, 0.0, LINK[j]], dtype=x.dtype) + MOUNT.astype(x.dtype))
         a_m = p_acc + np.cross(dw, d) + np.cross(w, np.cross(w, d))
-        out[..., 2 * j] = th[..., j]                       # the potentiometer
-        out[..., 2 * j + 1] = ((R @ SAXIS.astype(x.dtype)) * (a_m + g)).sum(-1)
+        out[..., 3 * j] = th[..., j]                       # the potentiometer
+        prop = a_m + g
+        out[..., 3 * j + 1] = ((R @ SAXES[0].astype(x.dtype)) * prop).sum(-1)
+        out[..., 3 * j + 2] = ((R @ SAXES[1].astype(x.dtype)) * prop).sum(-1)
         link = R @ np.array([0.0, 0.0, LINK[j]], dtype=x.dtype)
         p_acc = p_acc + np.cross(dw, link) + np.cross(w, np.cross(w, link))
     return out
@@ -222,7 +232,7 @@ class Servo:
         self.th = self.th + DT * self.om + 0.5 * DT ** 2 * self.al
         self.om = self.om + DT * self.al
         self.al = self.al + DT * self.u
-        r = y[0::2] - self.th                  # the standard alpha-beta-gamma corrections
+        r = y[0::3] - self.th                  # the standard alpha-beta-gamma corrections
         self.th += self.ALPHA_T * r
         self.om += (self.KV / DT) * r
         self.al += (2.0 * self.KA / DT ** 2) * r
@@ -274,13 +284,13 @@ def simulate(seed, jstd, pot_s, acc_s):
     s = np.zeros(N)
     S = np.zeros((T, N)); Y = np.zeros((T, M)); U = np.zeros((T, NJ))
     sd = np.empty(M)
-    sd[0::2], sd[1::2] = pot_s[0], acc_s[0]
+    sd[0::3], sd[1::3], sd[2::3] = pot_s[0], acc_s[0], acc_s[0]
     y = sense(s, sd, rng)
     for k in range(T):
         servo.observe(y)                       # on the MEASUREMENTS, never on s
         U[k] = servo.command(rth[k], rom[k], ral[k], rjk[k])
         s = F @ s + B @ U[k] + B @ (jstd[k] * rng.standard_normal(NJ))
-        sd[0::2], sd[1::2] = pot_s[k], acc_s[k]
+        sd[0::3], sd[1::3], sd[2::3] = pot_s[k], acc_s[k], acc_s[k]
         y = sense(s, sd, rng)
         S[k], Y[k] = s, y
     return U, S, Y

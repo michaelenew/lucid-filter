@@ -120,7 +120,7 @@ def render():
     th_true = S.reshape(T, NJ, ORDER)[:, :, 0]
     th_lu = res.mean.reshape(T, NJ, ORDER)[:, :, 0]
     th_fx = fx.reshape(T, NJ, ORDER)[:, :, 0]
-    th_pot = Y[:, 0::2]
+    th_pot = Y[:, 0::3]
 
     print("kinematics...")
     P_true = np.array([joints3d(th_true[k]) for k in range(T)])      # (T, 6, 3)
@@ -133,8 +133,8 @@ def render():
 
     ms, ps = res.measurement_scale, res.process_scale
     chip = np.zeros((T, 3, NJ))                                      # rows: pot, accel, process
-    chip[:, 0] = ms[:, 0::2]
-    chip[:, 1] = ms[:, 1::2]
+    chip[:, 0] = ms[:, 0::3]
+    chip[:, 1] = np.maximum(ms[:, 1::3], ms[:, 2::3])   # hotter of the IMU's two axes
     for j in range(NJ):
         chip[:, 2, j] = ps[:, MODE_OF_JOINT[j]]
     NORM = 6.0                                                       # x15 -> 2 ln 15 = 5.4
