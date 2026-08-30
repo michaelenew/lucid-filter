@@ -161,6 +161,17 @@ will adapt `F` to cancel it and report a fault that never clears. With `dynamics
 `faults=` the channel corrects the output instead — still a real gain, and the fault read-out
 stays where it was.
 
+**One measured limit, and it decides whether to switch this on.** The offset is fed back into
+the prediction, and that is only safe when the offset is *near the sensor in relative degree*.
+On a scalar level read directly, and on a velocity-side drift under a position sensor, the
+channel is a clear gain. On the 5-DOF arm a per-joint **jerk** bias reaches the potentiometer
+through three integrations, and there the channel attributes it correctly — to two decimals, on
+the right joint — while the angle estimate degrades 1.29× and calibration goes 1.45 → 2.43,
+because a residual of a few parts in a thousand becomes a systematic error along a direction the
+filter now believes it knows. On a rig like that, read `r.offset` as a diagnostic and measure
+whether the feedback pays before relying on it. (With no offset present the channel costs
+nothing there — the guard passes in every regime — so this is about rigs that *have* one.)
+
 The state is never augmented. The channel is carried in two stages (Friedland) on the collapsed
 output, which is **exact** against the augmented filter and costs nothing per bank member or
 scale node — a dense augmentation measures 1.84× on the scalar rig and 2.06–2.87× at arm scale,

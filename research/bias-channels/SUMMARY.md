@@ -405,26 +405,80 @@ One thing this rules out: it is not the observer's walk. Shrinking $q$ to 0.01×
 the tail ratio the *wrong* way (0.55 → 0.45 → 0.43 at 2σ), so the tracker's willingness to let
 the offset move is helping, not costing.
 
+## A process bias on many modes: attributed exactly, and fed back at a cost
+
+[`0014`](exploration/0014_which_mode_is_biased.py). `0011` showed the channel finds nothing on
+the demo arm; `0007` showed it finds a drift on a two-state rig where there is only one place
+one could be. Neither asked the question a caller with a real machine has: with fifteen states
+and five physical disturbance channels, is a bias on one of them put on that one?
+
+**Structurally, the channel rediscovers the rig's own geometry.** The identifiable basis has
+$k=5$ and spans exactly the columns of `GJ`, the map from the five per-joint jerk disturbances
+into the state — principal angles 1.0000 on every direction, found from $(F,H)$ alone without
+being told what `GJ` is.
+
+**And the attribution is clean.** Reading `r.offset` back onto those channels:
+
+| injected | recovered $g$ |
+|---|---|
+| joint 2, 0.6 | −0.03, +0.02, **+0.60**, +0.00, +0.02 |
+| joint 2, 1.2 | −0.04, +0.01, **+1.20**, +0.01, +0.01 |
+| joint 0, 1.2 | **+1.15**, +0.01, +0.01, +0.01, +0.01 |
+| joint 4, 1.2 | −0.04, +0.01, +0.01, +0.01, **+1.20** |
+
+**The state, however, gets worse — and this is the workstream's one shipped-behaviour caveat.**
+With the bias present, the angle estimate degrades 1.29× and the velocity 1.97×, with
+calibration going 1.45 → **2.43**:
+
+| window | angle, off → on | calibration |
+|---|---|---|
+| before onset | 1.000× | unchanged |
+| 200 steps after onset | 0.998× | unchanged |
+| **settled** | **1.288×** | 1.45 → **2.43** |
+
+Two cheap explanations are ruled out by the same run. It is **not the transient** — the loss is
+absent until the estimate has converged, which is the opposite of every other rig here. And it
+is **not injected noise** — the fed-back offset's mean change per step in the settled window is
+0.0000.
+
+What is left is that feeding back an offset which is accurate but not *exact* is not free when
+the offset is far from the sensor in **relative degree**. A jerk bias reaches the potentiometer
+through three integrations, so a residual of a few parts in a thousand becomes a systematic
+angle error while the covariance says the direction is known — hence the overconfidence. The
+sign of the result tracks the degree across the three rigs measured: degree 0 (a drift on the
+observed level) gains 0.711 → 0.457, degree 1 (a velocity drift under a position sensor) gains
+0.692 → 0.384, degree 3 loses. **Stated as a hypothesis consistent with three rigs, not a
+demonstrated law — one rig per degree is not a law**, and it is the same shape as
+`multivariate-statfilter`'s standing relative-degree open on the second-moment channel
+("nothing in the construction currently prices relative degree in"), now visible on the first.
+
 ## Open
 
-1. **The read-out wants ~1000 steps** to come within a few percent (`0010`), and a wider class
+1. **The feedback is not safe at high relative degree** (`0014`), and the channel has no way
+   to say so. It already *has* a feed-forward mode — it uses one beside the dynamics channel —
+   so exposing "estimate and report, do not feed back" is a small change; whether feed-forward
+   actually helps here is **unmeasured** and not obvious, since the output correction $Vb$ is
+   amplified by the same integrations. Measure that before exposing anything. The other half is
+   whether the activation rule should price relative degree at all, which is the sibling open
+   on the second-moment channel and is not solved there either.
+2. **The read-out wants ~1000 steps** to come within a few percent (`0010`), and a wider class
    ladder gets there faster at no measured cost — the observer cannot act, so the reach/resolution
    trade that keeps the acting channel's ceiling where it is does not obviously bind here. The
    two currently share one ladder and there is no measurement saying they should.
-2. **Drifts above twice the ladder's ceiling are under-served** (`0012`: tail gap 52% at
+3. **Drifts above twice the ladder's ceiling are under-served** (`0012`: tail gap 52% at
    $r = 2.00$, against 86% with a ×10 ladder). The fix is known and its cost is measured; what
    is not settled is whether a caller who expects a large drift should get a wider ladder
    automatically, and from what — the base is the only thing the filter has to scale it by, and
    `0005` is the record of that being untrustworthy.
-3. **Whether the read-out should cost the scale walk something** (`0013`). The two channels
+4. **Whether the read-out should cost the scale walk something** (`0013`). The two channels
    spend the same evidence: the walk's down-weighting of a suspect sensor is what blinds the
    observer that could name it, and the observer sits at 0.90–0.99 of what is left. Nothing has
    tried holding $\eta$ where the read-out is confident, and it is not obvious it should — the
    down-weighting is a real state repair, so this is a trade to price rather than a bug to fix.
    The obvious first measurement is what the state loses if $\eta$ is held.
-4. **The arm guard is run at two seeds** (`0011`), where the workstream's own convention is
+5. **The arm guard is run at two seeds** (`0011`), where the workstream's own convention is
    four and the acceptance rule is "every regime within +2 SE of the paired diff". The margins
    are wide enough that the verdict is not in doubt, and the standard error is not reported.
-5. **The arm's own read-out is unexamined.** `0011` measures that the channel does no harm
+6. **The arm's own read-out is unexamined.** `0011` measures that the channel does no harm
    there; it does not ask what `r.sensor_offset` says about a rig whose sensors are genuinely
    fine, which is the false-positive question for the diagnostic.
