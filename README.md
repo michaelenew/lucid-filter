@@ -24,7 +24,7 @@ rough noise magnitudes. It works out the rest online — every scale, per
 component, per step — and it works it out *fast*: told nothing at all it lands
 **3.5% above an oracle-tuned Kalman filter** on the scalar benchmark, and
 **1.03×** an oracle handed both the true noise schedule and the true payload on
-the drone below. Across every rig here the worst case anywhere is 1.36×, on the
+the drone below. Across every rig here the worst case anywhere is 1.37×, on the
 one window where a sensor degrades by ×12 and the walk is still reaching it;
 the same model with fixed noise pays 2.0–6.9× on those same runs. A regime
 change is absorbed in a few steps, not a window. There is no `fit()`, no
@@ -269,22 +269,22 @@ the noise machinery; `frozen` is told neither —
 | window | lucid | noise-only | frozen |
 |---|---|---|---|
 | before the crate | 0.98 | 1.00 | 1.00 |
-| calm, carrying | 1.03 | 1.10 | 3.47 |
+| calm, carrying | 1.02 | 1.10 | 3.47 |
 | gust, carrying | 1.03 | 1.11 | 1.29 |
-| GPS multipath ×12, carrying | 1.36 | 1.12 | 6.92 |
-| calm, after the drop | 1.03 | 1.12 | 2.10 |
-| gyro vibration ×12, after the drop | 0.98 | 0.98 | 2.36 |
+| GPS multipath ×12, carrying | 1.37 | 1.12 | 6.92 |
+| calm, after the drop | 1.09 | 1.12 | 2.10 |
+| gyro vibration ×12, after the drop | 0.98 | 0.99 | 2.35 |
 
 The crate is detected **2.8 ± 0.4 steps (28 ms)** after the grab, on 5 seeds out
 of 5, with **0.00%** of pre-pick-up steps ever flagged. Run the same mission with
 no crate at all and the cost of carrying the fault hypothesis is 1.024 ± 0.043 —
 indistinguishable from not carrying it — which is what makes the 28 ms end of the
 detection frontier affordable. Carrying, it recovers the
-mass to 1.528 ± 0.003 kg (true 1.520) and the off-centre lever arm to
+mass to 1.529 ± 0.003 kg (true 1.520) and the off-centre lever arm to
 1.62 ± 0.01 cm (true 1.63) — the inertias only to −15%, which is the excitation
-limit below. After the release the same read-out returns to 1.101 ± 0.001 kg and
-0.11 ± 0.00 cm. The one place the lucid filter is beaten is the ×12 GPS burst,
-where an oracle *told* the new sensor noise is 1.36/1.12 = 21% better than one
+limit below. After the release the same read-out returns to 1.100 ± 0.001 kg and
+0.10 ± 0.01 cm. The one place the lucid filter is beaten is the ×12 GPS burst,
+where an oracle *told* the new sensor noise is 1.37/1.12 = 22% better than one
 still walking towards it — the transient-attribution open, on a bigger rig.
 
 On the earlier dynamics rigs (`0007`, the shipped filter re-measured): a scalar
@@ -334,8 +334,8 @@ that has a payload attached mid-flight in 28.9 ± 1.7 steps against a frontier o
   shared.
 - **The dynamics read-out comes home; the fault *flag* does not.** Eleven steps
   after the drone releases the crate the reported payload is already back inside
-  10% of zero, and it settles at 1.101 ± 0.001 kg against a truth of 1.100 and an
-  off-centre lever arm of 0.11 cm against 0.00. `r.fault`, though, stays pinned
+  10% of zero, and it settles at 1.100 ± 0.001 kg against a truth of 1.100 and an
+  off-centre lever arm of 0.10 cm against 0.00. `r.fault`, though, stays pinned
   at 1.0 for the rest of the
   run. That is what it should do and not what the name suggests: the marginal
   asks *which member of the bank is flying*, and once the departure walker has
