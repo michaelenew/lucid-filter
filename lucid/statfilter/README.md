@@ -141,13 +141,15 @@ when there is no drift to find:
 | 3σ | 0.711 / 1.04 | **0.457** / 0.73 | 0.359 |
 
 Three things follow the house rule rather than a setting. **Which offsets exist is
-structural**: a constant is identifiable only up to what a free response of the dynamics could
-already explain *or a constant sensor offset could imitate*, so the channel is activated on that
-quotient and never on a direction the data cannot separate. For a random-walk level read by one
-sensor that is the drift — the *sensor* bias is gauge there, which is why the filter absorbs a
-miscalibrated single sensor into the level and is right to. On a purely **stable** `F` nothing
-survives at all, because a drift there produces a constant offset that a sensor bias produces
-too, and the channel is inert rather than guessing between them (`r.offset` is then `None`).
+structural**: the channel carries the free-response quotient of the constants, restricted to the
+**z = 1 generalized eigenspace** of the dynamics — the modes where a constant's signature grows
+polynomially, so nothing else can imitate it in the long run — and it carries those modes
+*whole* (feeding half a Jordan tower's offset was measured as worse than feeding none). For a
+random-walk level read by one sensor that is the drift — the *sensor* bias is gauge there, which
+is why the filter absorbs a miscalibrated single sensor into the level and is right to. On a
+purely **stable** `F` nothing survives, because a drift there produces a constant offset that a
+sensor bias produces too, and the channel is inert rather than guessing between them
+(`r.offset` is then `None`).
 
 **How big an offset is plausible is banked, not chosen**: five copies of the recursion at
 geometrically spaced class widths, mixed by their own predictive likelihood, between two derived
@@ -161,16 +163,19 @@ will adapt `F` to cancel it and report a fault that never clears. With `dynamics
 `faults=` the channel corrects the output instead — still a real gain, and the fault read-out
 stays where it was.
 
-**One measured limit, and it decides whether to switch this on.** The offset is fed back into
-the prediction, and that is only safe when the offset is *near the sensor in relative degree*.
-On a scalar level read directly, and on a velocity-side drift under a position sensor, the
-channel is a clear gain. On the 5-DOF arm a per-joint **jerk** bias reaches the potentiometer
-through three integrations, and there the channel attributes it correctly — to two decimals, on
-the right joint — while the angle estimate degrades 1.29× and calibration goes 1.45 → 2.43,
-because a residual of a few parts in a thousand becomes a systematic error along a direction the
-filter now believes it knows. On a rig like that, read `r.offset` as a diagnostic and measure
-whether the feedback pays before relying on it. (With no offset present the channel costs
-nothing there — the guard passes in every regime — so this is about rigs that *have* one.)
+**One measured price, stated rather than hidden.** On a Jordan-tower rig whose scale walks
+already cover a constant disturbance well (the 5-DOF arm: a per-joint jerk bias costs the plain
+filter almost nothing), carrying the offset posterior costs the
+settled state estimate about 1.05–1.25× against leaving the channel off (shrinking toward 1 as
+the estimate's convergence transient passes out of the window), at honest calibration — at or
+below the fundamental price of the offset's own walk, which the exact augmented filter pays
+too. What the
+channel buys there is the *attribution*: the offset named on the right joint to two decimals.
+An earlier defect that made this trade look far worse — feeding back a *truncated* tower offset,
+which left a permanent innovation tension while calming the very scale walk that covered it,
+4.1× at 10× overconfidence — is fixed by the activation rule above (the tower is kept whole),
+and guarded by a test. With no offset present the channel costs nothing (the no-impingement
+guard passes in every regime); this paragraph is about rigs that *have* one.
 
 The state is never augmented. The channel is carried in two stages (Friedland) on the collapsed
 output, which is **exact** against the augmented filter and costs nothing per bank member or

@@ -18,3 +18,4 @@ Numbered probes behind [`../SUMMARY.md`](../SUMMARY.md). Later numbers are more 
 | [`0012`](0012_the_ceiling.py) | the falloff at large drifts is the transient, not the ladder's ceiling |
 | [`0013`](0013_the_detection_rate.py) | the detection rate against the frontier, and where the missing evidence goes |
 | [`0014`](0014_which_mode_is_biased.py) | a process bias on many modes: attributed exactly, and fed back at a cost |
+| [`0015`](0015_the_partial_feedback_defect.py) | the settled-window loss: rust ruled out, the partial-feedback loop found, the z=1 rule shipped |
