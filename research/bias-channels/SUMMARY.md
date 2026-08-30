@@ -11,9 +11,11 @@ scalar rig, falling to nothing at arm scale. Off by default and **bit-identical 
 tolerance). The state is never augmented: a dense augmentation measures **1.9× on the scalar
 rig and 2.1–2.9× on the 5-DOF arm**, and the two-stage form is exact against it.
 
-**Not shipped, and the reason is a measurement, not a preference:** the sensor-bias cell. Its
-estimate is accurate and its *use* is not available — both ways of using it were built and
-measured, and both lose to doing nothing.
+**The sensor-bias cell ships as a read-out and not as a repair**, and the reason is a
+measurement rather than a preference: its estimate is accurate, and both ways of *using* it were
+built and measured and both lose to doing nothing. So `r.sensor_offset` reports a signed
+per-sensor offset — the one thing a second-moment channel cannot — from an observer that is
+bit-for-bit unable to change the filter.
 
 ## The frame: one channel, two entries, and a gauge
 
@@ -243,13 +245,42 @@ it off exactly when the dynamics channel is on, where it is not available:
 | kinematic 2-DOF | 18.50 ms | 19.04 ms | +2.9% | — |
 | kinematic 5-DOF (arm scale) | 130.15 ms | 124.15 ms | **−4.6%** (noise) | 2.06–2.87× |
 
+## The read-out ships as an observer that cannot act
+
+[`0010`](exploration/0010_the_read_out.py). `0004` and `0006` left one thing clearly worth
+having and clearly not safe to use, so it ships in the only form that is both: the same
+two-stage recursion on the sensor entry's own quotient, run beside the drift channel, **whose
+every output is discarded**. It never corrects the state, never corrects $y$, and never inflates
+what the members score against — so it cannot change the filter's behaviour, and that is pinned
+bit-for-bit (mean, variance, log-likelihood and the drift estimate all identical with the
+observer present and absent) rather than argued.
+
+`r.sensor_offset` is what no second-moment channel can give: a **signed, per-sensor** offset. A
+scale sees only $e^2$, so at $m=2$ it moves the biased sensor's $\eta$ and its innocent
+neighbour's the same way (+0.71 / +0.74 in `0001`).
+
+| $m$ | read-out, relative to the consensus | truth |
+|---|---|---|
+| 2 | −0.89, **+0.89** | ∓1.00 |
+| 3 | −0.56, −0.57, **+1.12** | −0.67, **+1.33** |
+| 5 | −0.31 … −0.36, **+1.34** | −0.40, **+1.60** |
+| 8 | −0.17 … −0.24, **+1.40** | −0.25, **+1.75** |
+
+It names the right sensor at every $m$ and reads **15–20% low**, the prior's shrinkage; treat it
+as "this one, by about this much", not as a calibration constant to subtract.
+
+**And the two halves are complementary, which is the frame closing on itself.** Where a drift is
+identifiable a sensor bias is gauge, and the read-out is relative to the consensus. Where a
+sensor bias is *absolutely* identifiable — a stable $F$, so $H\ker(F-I)$ is empty — the drift is
+confounded and its channel is inert, and the read-out becomes absolute: (−0.12, **+1.26**)
+against a truth of (0, 1.5), with `r.offset` reported as `None`. Whichever of the pair the data
+can hold is the one that is carried.
+
 ## Open
 
-1. **The sensor read-out as a diagnostic only.** Still the clearest gap. The estimate is
-   accurate and it is the "lucid" promise — tell me what the data is — but it needs an output
-   path that cannot touch the state, and a convention for reporting a quantity defined only up
-   to the common mode (report relative to the consensus, as `0004` and `0006` do). Untried:
-   whether to report it at all at $m = 1$, where it is pure gauge.
+1. **The read-out is biased low by 15–20%** (`0010`), and the shrinkage grows with $m$. It is
+   the prior's, so the class ladder is where to look; whether the observer wants a wider ceiling
+   than the channel that acts is unmeasured, and the two need not share one.
 2. **The drift's ceiling.** The class ladder's top rung is one process sd per step, and `0007`
    shows the state gain falling off above it (a velocity drift of 3× the ceiling is estimated
    correctly — 0.064 against 0.06 — but repairs much less of the RMSE). Whether the ceiling

@@ -264,7 +264,7 @@ def _rung_odds(forget):
 
 # --------------------------------------------------------------------- results
 # ------------------------------------------------------- the first-moment (offset) channel
-def _mean_basis(F, H, tol=_RANK_TOL, process_only=True):
+def _mean_basis(F, H, tol=_RANK_TOL, process_only=True, sensor_only=False):
     """An orthonormal basis for the IDENTIFIABLE constant offsets of ``(F, H)``.
 
     Every noise channel in this filter is carried in VARIANCE currency -- a log-scale per
@@ -318,6 +318,17 @@ def _mean_basis(F, H, tol=_RANK_TOL, process_only=True):
         Ssum, Fp = Ssum + Fp, F @ Fp
     A = np.vstack(cols_x)                            # what a free response can already explain
     Bm = np.hstack([np.vstack(cols_d), np.tile(np.eye(m), (2 * n + 2, 1))])
+    if sensor_only:
+        # The sensor entry alone, quotiented by the free responses only: what survives is the
+        # per-sensor offset MODULO the common mode, which is gauge at every `m` (`0004`).  This
+        # is the read-out basis -- never fed back, so it is not quotiented against the process
+        # entry the way that one is against this one.
+        Bm = Bm[:, n:]
+        resid = Bm - A @ np.linalg.pinv(A) @ Bm
+        _, sv, Vt = np.linalg.svd(resid, full_matrices=False)
+        basis = Vt[sv > tol * max(1.0, sv[0])].T
+        return (np.vstack([np.zeros((n, basis.shape[1])), basis]) if basis.size
+                else np.zeros((n + m, 0)))
     if process_only:
         # Carry a process offset only where a constant SENSOR offset could not have produced
         # the same readings.  On the stable spectrum it could: `d` drives the state to the
@@ -508,6 +519,7 @@ class LucidStep:
     process_scale: np.ndarray      #: per process-eigenmode log-scale (n,)
     measurement_scale: np.ndarray  #: per-sensor log-scale (m,)
     offset: np.ndarray = None      #: the constant process offset ``d`` (n,) -- ``None`` when off
+    sensor_offset: np.ndarray = None  #: per-sensor constant offset (m,), read-out only
     dynamics: np.ndarray = None    #: posterior-mean ``F`` (n, n) -- ``None`` when supplied fixed
     control: np.ndarray = None     #: posterior-mean ``B`` (n, p) -- ``None`` when fixed or absent
     fault: float = 0.0             #: posterior probability the dynamics have left the NOMINAL --
@@ -530,6 +542,7 @@ class LucidResult:
     measurement_scale: np.ndarray
     loglik: float = 0.0
     offset: np.ndarray = None      #: (T, n) the constant process offset ``d``, or ``None``
+    sensor_offset: np.ndarray = None  #: (T, m) per-sensor constant offset, read-out only
     dynamics: np.ndarray = None    #: (T, n, n) learned ``F``, or ``None`` when supplied fixed
     control: np.ndarray = None     #: (T, n, p) learned ``B``, or ``None``
     fault: np.ndarray = None       #: (T,) posterior probability of a dynamics fault
@@ -1614,13 +1627,24 @@ class LucidFilter:
         # the joint (process mean, sensor bias) space, which is empty for many structures and
         # never contains a gauge direction.  It is carried in two stages on the collapsed
         # output, so nothing below this line changes and no member pays for it.
-        self._mean = None
+        self._mean = self._sensor = None
         if offsets:
+            mem = 1.0 / max(1.0 - self.forget, 1e-12)
             basis = _mean_basis(F, Hm)
             if basis.shape[1]:
-                self._mean = _MeanChannel(basis, n, F, Hm, Q0, R0, rho,
-                                          1.0 / max(1.0 - self.forget, 1e-12),
+                self._mean = _MeanChannel(basis, n, F, Hm, Q0, R0, rho, mem,
                                           feedback=not learn)
+            # The per-sensor read-out is a pure OBSERVER: the same recursion on the sensor
+            # entry's own quotient, whose estimate is reported and whose every output is
+            # discarded.  It is built this way because acting on it is what fails -- applied to
+            # the state it adopts the gauge convention and loses to doing nothing, and merely
+            # left in the innovation it corrupts the process entry (`0004`, `0006`).  Watching
+            # costs neither, and a signed per-sensor offset is the one thing a second-moment
+            # channel provably cannot report: a scale sees only `e**2`, so a biased sensor and
+            # its innocent neighbour move its `eta` the same way.
+            sb = _mean_basis(F, Hm, sensor_only=True)
+            if sb.shape[1]:
+                self._sensor = _MeanChannel(sb, n, F, Hm, Q0, R0, rho, mem, feedback=False)
         probe = _WalkEngine(Q0, R0, Hm, F, B, phis[0], ss[0])
         self.groups = probe._groups
         self.split_arr = _split_star(np.log(_rung_odds(self.forget)), len(self.groups))
@@ -1705,6 +1729,8 @@ class LucidFilter:
             f.reset()
         if self._mean is not None:
             self._mean.reset()
+        if self._sensor is not None:
+            self._sensor.reset()
         # Group structurally-identical members into stacked executors -- same recursion, one
         # leading member axis (see `_EngineBank`).  Grouping is by structure, NOT by position:
         # `eigh` orders a base's eigenmodes by value, so rungs of one spec can carry the same
@@ -1728,7 +1754,7 @@ class LucidFilter:
             bank.idx = np.array(idx)
             banks.append(bank)
         self._banks = banks
-        if self._mean is not None:
+        if self._mean is not None or self._sensor is not None:
             M = len(self._members)
             self._Kb = np.zeros((M, self.n, self.m))
             self._Sb = np.zeros((M, self.m, self.m))
@@ -1800,24 +1826,25 @@ class LucidFilter:
         # The offset channel runs in FEEDBACK: the members are handed the data its estimate is
         # not in -- the process entry as an additive prediction offset, the sensor entry as a
         # correction to `y` -- so their noise walks are never driven to explain a constant.
-        mc = self._mean
+        mc, so = self._mean, self._sensor
+        need = mc is not None or so is not None
         if mc is None:
             yb, off, addS = y, None, None
         else:
             yb = np.atleast_1d(np.asarray(y, float)) - mc.measurement_offset
             off = mc.prediction_offset
             addS = mc.consider()      # the offset's own variance, into what every member scores
-        Kc = None if mc is None else np.zeros((n, self.m))
-        Sc = None if mc is None else np.zeros((self.m, self.m))
-        kw = np.zeros(M) if mc is not None else None
+        if so is not None:
+            so.consider()             # the observer only watches: its inflation is discarded
+        kw = np.zeros(M) if need else None
         for bank in self._banks:
             bo = None if off is None else np.concatenate([off, np.zeros(bank.n - n)])
             bm, bv, bi, bl, bp, bms, bK, bS = bank.update(yb, u=u, off=bo, add_S=addS,
-                                                          want_S=mc is not None)
+                                                          want_S=need)
             ix = bank.idx
             mn[ix] = bm[:, :n]; vr[ix] = bv[:, :n, :n]; inn[ix] = bi
             llv[ix] = bl; psc[ix] = bp[:, bank.pidx]; msc[ix] = bms
-            if mc is not None and bK is not None:
+            if need and bK is not None:
                 kw[ix] = self._mean_src[ix]
                 self._Kb[ix] = bK[:, :n]
                 self._Sb[ix] = bS
@@ -1837,8 +1864,8 @@ class LucidFilter:
         ms = post @ msc
         innov = post @ inn
         self.loglik += bank_ll
-        off_out = None
-        if mc is not None:
+        off_out = sen_out = None
+        if need:
             # the channel's view of the recursion it rides on: the model-averaged mean gain and
             # innovation covariance, over the members that report them
             wk = post * kw
@@ -1848,13 +1875,20 @@ class LucidFilter:
                 Kc = np.einsum("b,bij->ij", wk, self._Kb)
                 # the members' own covariance, with `consider`'s inflation taken back off so a
                 # rung is not charged twice for the same ignorance
-                Sc = np.einsum("b,bij->ij", wk, self._Sb) - addS
-                corr = mc.step(innov, Sc, Kc, ok=bool(np.all(np.isfinite(yv))))
-                if corr is not None:
-                    mean = mean + corr
-            off_out = mc.report()
+                Sc = np.einsum("b,bij->ij", wk, self._Sb)
+                fin = bool(np.all(np.isfinite(yv)))
+                if mc is not None:
+                    corr = mc.step(innov, Sc - addS, Kc, ok=fin)
+                    if corr is not None:
+                        mean = mean + corr
+                if so is not None:
+                    so.step(innov, Sc, Kc, ok=fin)      # every output discarded, by design
+            if mc is not None:
+                off_out = mc.report()
+            if so is not None:
+                sen_out = so.C @ so.bbar
         if not self._report:
-            return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out)
+            return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out)
         Fh, Bh = self._dynamics_mean(post)
         # The fault readout is a marginal of the posterior -- the filter itself never
         # thresholds, it mixes.  Its RISING EDGE re-prices the walkers' ignorance: a jump has
@@ -1865,7 +1899,7 @@ class LucidFilter:
         if alarm and not self._alarm:
             self._reprice()
         self._alarm = alarm
-        return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, Fh, Bh, fault)
+        return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out, Fh, Bh, fault)
 
     def filter(self, Y, U=None) -> LucidResult:
         Y = np.atleast_2d(np.asarray(Y, float))
@@ -1881,6 +1915,7 @@ class LucidFilter:
         inn = np.empty((T, self.m)); ps = np.empty((T, self.n)); ms = np.empty((T, self.m))
         live = self._report
         offs = np.empty((T, self.n)) if self._mean is not None else None
+        sens = np.empty((T, self.m)) if self._sensor is not None else None
         dyn = np.empty((T, self.n, self.n)) if live else None
         ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
         flt = np.empty(T) if live else None
@@ -1891,13 +1926,16 @@ class LucidFilter:
             ps[i] = st.process_scale; ms[i] = st.measurement_scale; total += st.loglik
             if offs is not None:
                 offs[i] = st.offset
+            if sens is not None:
+                sens[i] = st.sensor_offset
             if live:
                 dyn[i] = st.dynamics; flt[i] = st.fault
                 if ctl is not None:
                     ctl[i] = st.control
         return LucidResult(mean=mean, var=var, innovation=inn,
                            process_scale=ps, measurement_scale=ms, loglik=total,
-                           offset=offs, dynamics=dyn, control=ctl, fault=flt)
+                           offset=offs, sensor_offset=sens,
+                           dynamics=dyn, control=ctl, fault=flt)
 
     def loglik_of(self, Y, U=None) -> float:
         return self.filter(Y, U).loglik

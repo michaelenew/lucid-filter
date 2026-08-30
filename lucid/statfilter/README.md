@@ -126,7 +126,8 @@ pushing it, reported as `r.offset` and fed back into the prediction.
 
 ```python
 r = LucidFilter(offsets=True).filter(Y)
-r.offset          # (T, n) the constant offset as currently believed
+r.offset          # (T, n) the constant process offset as currently believed
+r.sensor_offset   # (T, m) what each sensor reads high or low -- a read-out, never applied
 ```
 
 It is off by default and **bit-identical when off**. Switched on, on a level with a drift, it
@@ -165,10 +166,15 @@ output, which is **exact** against the augmented filter and costs nothing per ba
 scale node — a dense augmentation measures 1.9–2.9×, this measures +14% per step with the
 channel on.
 
-**It does not repair a miscalibrated sensor**, and that is measured rather than assumed: a bias
-of `b` on one of `m` sensors leaves an irreducible `b/m` in any state estimate (the common mode
-is not in the data), the scale walk's own down-weighting is already a partial repair, and both
-ways of applying an estimated sensor bias measure *worse* than leaving it alone. See
+**It reports a miscalibrated sensor and does not repair one**, and that split is measured
+rather than assumed: a bias of `b` on one of `m` sensors leaves an irreducible `b/m` in any
+state estimate (the common mode is not in the data), the scale walk's own down-weighting is
+already a partial repair, and both ways of *applying* an estimated sensor bias measure worse
+than leaving it alone. So `r.sensor_offset` comes from an observer that is bit-for-bit unable to
+change the filter — it says "sensor 3 reads about 1.1 high relative to the others", which is
+what a caller can act on, and which the per-sensor `eta` cannot say because a scale sees only
+`e**2` and moves the innocent neighbour the same way. Read it as *this one, by about this much*:
+it names the right sensor at every `m` and reads 15–20% low. See
 [`research/bias-channels/`](../../research/bias-channels/SUMMARY.md).
 
 ## What one update costs

@@ -12,3 +12,5 @@ Numbered probes behind [`../SUMMARY.md`](../SUMMARY.md). Later numbers are more 
 | [`0006`](0006_report_or_apply.py) | the sensor entry is estimable and not usable — both ways, measured |
 | [`0007`](0007_general_dynamics_and_the_confound.py) | a general `F`; and the channel must decline where a drift cannot be told from a sensor bias |
 | [`0008`](0008_with_the_other_channels_on.py) | beside the split ladder and the dynamics channel, and what it costs at arm scale |
+| [`0009`](0009_a_moving_offset.py) | an offset that moves — step, ramp and sign reversal |
+| [`0010`](0010_the_read_out.py) | the per-sensor read-out, shipped as an observer that cannot act |

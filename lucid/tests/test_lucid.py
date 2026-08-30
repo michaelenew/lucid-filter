@@ -658,3 +658,74 @@ def test_offsets_do_not_provoke_the_dynamics_channel():
     assert LucidFilter(faults=1e-4, offsets=True)._mean.feedback is False
     assert both.fault[-1] < 0.5                                  # no locked false detection
     assert float(np.mean(both.fault)) < float(np.mean(plain.fault)) + 0.05
+
+
+def test_sensor_read_out_names_the_biased_sensor():
+    """The signed per-sensor offset -- the one thing a second-moment channel cannot report.
+
+    A scale sees only ``e**2``, so a biased sensor and its innocent neighbour move ``eta`` the
+    same way (research/bias-channels 0001 measured +0.71 / +0.74 at m = 2).  The read-out is
+    relative to the consensus, because the common mode of the biases is gauge on a random walk.
+    """
+    Q, R, N, T0, bias = 0.02, 1.0, 700, 300, 2.0
+    rng = np.random.default_rng(7)
+    theta = np.cumsum(rng.normal(0, np.sqrt(Q), N))
+    Y = np.stack([theta + rng.normal(0, np.sqrt(R), N) for _ in range(3)], axis=1)
+    Y[T0:, 2] += bias
+
+    r = LucidFilter(H=np.ones((3, 1)), measurement=np.ones(3), offsets=True).filter(Y)
+    c = r.sensor_offset[-1]
+    assert c[2] - 0.5 * (c[0] + c[1]) > 0.7 * bias               # sensor 3 stands out
+    assert abs(c[0] - c[1]) < 0.3 * bias                         # the other two agree
+    assert abs(float(np.mean(c))) < 0.05 * bias                  # and the gauge is not claimed
+
+
+def test_sensor_read_out_cannot_change_the_filter():
+    """The observer is reported and never acted on, so it must not move a single number.
+
+    Acting on it fails both ways (research/bias-channels 0004, 0006): applied to the state it
+    adopts the gauge convention and loses to doing nothing, and left in the innovation it
+    corrupts the process entry.  It is therefore built to be inert, and that is pinned here
+    bit-for-bit rather than argued.
+    """
+    Q, R, N, T0 = 0.02, 1.0, 500, 250
+    rng = np.random.default_rng(7)
+    theta = np.cumsum(rng.normal(0, np.sqrt(Q), N) + 0.1 * (np.arange(N) >= T0))
+    Y = np.stack([theta + rng.normal(0, np.sqrt(R), N) for _ in range(3)], axis=1)
+    Y[T0:, 2] += 2.0
+    H, R0 = np.ones((3, 1)), np.ones(3)
+
+    a = LucidFilter(H=H, measurement=R0, offsets=True)
+    b = LucidFilter(H=H, measurement=R0, offsets=True)
+    b._sensor = None                                             # the only difference
+    ra, rb = a.filter(Y), b.filter(Y)
+    assert np.array_equal(ra.mean, rb.mean)
+    assert np.array_equal(ra.var, rb.var)
+    assert ra.loglik == rb.loglik
+    assert np.array_equal(ra.offset, rb.offset)
+
+
+def test_read_out_and_drift_are_complementary():
+    """Whichever of the pair is identifiable is the one that is carried.
+
+    On a stable ``F`` the drift is confounded with a sensor bias and the drift channel is inert
+    -- and it is exactly there that ``H ker(F - I)`` is empty, so no bias is gauge and the
+    read-out becomes ABSOLUTE rather than relative to the consensus.
+    """
+    F, H = np.array([[0.8]]), np.ones((2, 1))
+    rng = np.random.default_rng(3)
+    x, X = 0.0, []
+    for _ in range(500):
+        x = 0.8 * x + rng.normal(0, 0.3)
+        X.append(x)
+    X = np.array(X)
+    Y = np.stack([X + rng.normal(0, 1.0, 500) for _ in range(2)], axis=1)
+    Y[250:, 1] += 1.5
+
+    f = LucidFilter(dynamics=F, H=H, measurement=np.ones(2), offsets=True)
+    assert f._mean is None                                       # the drift is not identifiable
+    assert f._sensor is not None and f._sensor.k == 2            # both biases are
+    r = f.filter(Y)
+    assert r.offset is None
+    assert abs(r.sensor_offset[-1, 0]) < 0.4                     # absolute, not relative
+    assert r.sensor_offset[-1, 1] > 0.7 * 1.5
