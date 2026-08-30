@@ -67,6 +67,7 @@ Configure by **give-what-you-know**; every argument has a working default.
 | `faults` | hazard `rho`: the supplied dynamics may **change** | none → they are fixed |
 | `departures` | the directions the dynamics may move along — each an `(n, n)` matrix, an `(A, C)` pair when one physical parameter moves `F` and `B` together, or a callable of the state when the direction rotates with the operating point | every entry of `F` (and `B`) |
 | `anchors` | named fault hypotheses, each carried as its own full filter | none |
+| `offsets` | carry a constant **process offset** — a drift, a climbing bias | `False` |
 | `phis`, `ss` | the `(phi, s)` box the bank averages over | a broad dead-zone-free range |
 | `forget` | the bank's weight memory — the single residual knob | 0.999 |
 
@@ -116,6 +117,48 @@ One thing `departures=` asks of you: a direction's class size is scale-free
 `‖B‖`, a *single* global scale, so it says the same thing on every direction only
 when the columns those directions live in are comparable in magnitude. Choosing
 input units that make them so is free, and is the caller's to do.
+
+## The offset channel
+
+Every noise channel above is second-moment — a log-scale per mode and per sensor. `offsets=True`
+adds the first: a constant **process offset**, the drift a level climbs at when something is
+pushing it, reported as `r.offset` and fed back into the prediction.
+
+```python
+r = LucidFilter(offsets=True).filter(Y)
+r.offset          # (T, n) the constant offset as currently believed
+```
+
+It is off by default and **bit-identical when off**. Switched on, on a level with a drift, it
+closes **49–84%** of the distance to a Kalman filter told the drift, and costs **0.8%** of RMSE
+when there is no drift to find:
+
+| drift | filter, RMSE / calibration | with `offsets=True` | told the drift |
+|---|---|---|---|
+| none | 0.360 / 1.00 | 0.363 / 0.95 | 0.359 |
+| 1σ of the walk per step | 0.548 / 0.98 | **0.390** / 0.75 | 0.359 |
+| 3σ | 0.711 / 1.04 | **0.457** / 0.73 | 0.359 |
+
+Two things follow the house rule rather than a setting. **Which offsets exist is structural**:
+a constant is identifiable only up to what a free response of the dynamics could already
+explain, so the channel is activated on that quotient and never on a gauge direction — for a
+random-walk level read by one sensor that is the drift, and the *sensor* bias is gauge (a level
+offset reads identically), which is why the filter absorbs a miscalibrated single sensor into
+the level and is right to. **And how big an offset is plausible is banked, not chosen**: five
+copies of the recursion at geometrically spaced class widths, mixed by their own predictive
+likelihood, between two derived ends — the width at which a constant and the noise it sits in
+are equally visible over the filter's own memory, and one noise sd per step.
+
+The state is never augmented. The channel is carried in two stages (Friedland) on the collapsed
+output, which is **exact** against the augmented filter and costs nothing per bank member or
+scale node — a dense augmentation measures 1.9–2.9×, this measures +14% per step with the
+channel on.
+
+**It does not repair a miscalibrated sensor**, and that is measured rather than assumed: a bias
+of `b` on one of `m` sensors leaves an irreducible `b/m` in any state estimate (the common mode
+is not in the data), the scale walk's own down-weighting is already a partial repair, and both
+ways of applying an estimated sensor bias measure *worse* than leaving it alone. See
+[`research/bias-channels/`](../../research/bias-channels/SUMMARY.md).
 
 ## What one update costs
 
@@ -181,6 +224,7 @@ for the per-component noise machinery,
 dynamics channel,
 [`sequence-demix/`](../../research/sequence-demix/SUMMARY.md) for the
 process/sensor split,
+[`bias-channels/`](../../research/bias-channels/SUMMARY.md) for the offset channel,
 [`optimality-proof/`](../../research/optimality-proof/SUMMARY.md) for where
 "optimal" does and does not hold. The earlier fitted filters this one replaced
 (`AdaptiveFilter`, `VectorFilter`, `WalkingFilter`, `WalkingVectorFilter`) are

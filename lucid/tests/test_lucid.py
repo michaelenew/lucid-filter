@@ -518,3 +518,91 @@ def test_callable_H_offset_is_not_misread_at_init():
     f.reset()
     st = f.update(Hm @ np.array([1.0, -0.5]) + c)      # the exact reading at x = (1, -0.5)
     assert np.allclose(st.mean, [1.0, -0.5], atol=0.05), st.mean
+
+
+# ----------------------------------------------------- the offset channel (first moment)
+def test_offsets_off_is_bit_identical():
+    """The channel is off unless asked for, and then it is not there at all.
+
+    Every noise channel in this filter is second-moment; the offset channel is the first, and
+    it rides on the collapsed output rather than inside the recursion precisely so that a
+    caller who does not ask for it pays nothing.  Pinned bit-for-bit, not to a tolerance.
+    """
+    rng = np.random.default_rng(4)
+    Y = np.cumsum(rng.normal(0, 0.2, 200))[:, None] + rng.normal(0, 1, (200, 1))
+    a = LucidFilter().filter(Y)
+    b = LucidFilter(offsets=False).filter(Y)
+    assert np.array_equal(a.mean, b.mean)
+    assert np.array_equal(a.var, b.var)
+    assert a.loglik == b.loglik
+    assert a.offset is None
+
+
+def test_offset_basis_is_the_identifiable_quotient():
+    """Activation is structural: the gauge directions are excluded, by construction.
+
+    A sensor bias is gauge on ``H ker(F - I)`` -- a state offset the dynamics hold still reads
+    identically -- so a scalar level read by one sensor can carry a DRIFT and cannot carry a
+    sensor bias.  Checked against the likelihood in research/bias-channels 0002; the sensor
+    entry is not carried at all, for the reason `_mean_basis` records.
+    """
+    from lucid.statfilter.lucid import _mean_basis
+
+    B1 = _mean_basis(np.eye(1), np.ones((1, 1)))
+    assert B1.shape == (2, 1)
+    assert np.allclose(np.abs(B1[:, 0]), [1.0, 0.0], atol=1e-9)      # the drift, not the bias
+
+    # the full quotient still knows the sensor entry: one level, two sensors -> the RELATIVE
+    # bias is identifiable and the common mode is gauge
+    B2 = _mean_basis(np.eye(1), np.ones((2, 1)), process_only=False)
+    assert B2.shape == (3, 2)
+    assert abs(np.array([0.0, 1.0, 1.0]) @ B2 @ B2.T @ np.array([0.0, 1.0, 1.0])) < 1e-9
+
+
+def test_offset_channel_finds_a_drift_and_does_not_invent_one():
+    """It recovers a climbing bias, and reports zero when there is none.
+
+    The premium for carrying the channel on driftless data is what makes it safe to switch on;
+    research/bias-channels 0005 measures it at 0.8% of RMSE, against 49-84% of the distance to
+    an oracle told the drift when there is one.
+    """
+    Q, R, N, T0, rate = 0.02, 1.0, 700, 300, 0.3
+    rng = np.random.default_rng(11)
+    theta = np.cumsum(rng.normal(0, np.sqrt(Q), N) + rate * (np.arange(N) >= T0))
+    Y = (theta + rng.normal(0, np.sqrt(R), N))[:, None]
+
+    on = LucidFilter(offsets=True).filter(Y)
+    off = LucidFilter().filter(Y)
+    assert abs(on.offset[-1, 0] - rate) < 0.1 * rate                 # the rate, to 10%
+    lo = T0 + 100
+    e_on = np.sqrt(np.mean((on.mean[lo:, 0] - theta[lo:]) ** 2))
+    e_off = np.sqrt(np.mean((off.mean[lo:, 0] - theta[lo:]) ** 2))
+    assert e_on < 0.8 * e_off
+
+    flat = np.cumsum(rng.normal(0, np.sqrt(Q), N))
+    Yf = (flat + rng.normal(0, np.sqrt(R), N))[:, None]
+    quiet = LucidFilter(offsets=True).filter(Yf)
+    assert abs(quiet.offset[-1, 0]) < 0.05                           # no hallucinated drift
+
+
+def test_offset_channel_does_not_disturb_a_biased_sensor_rig():
+    """A rig the channel is NOT for must be left alone.
+
+    A miscalibrated sensor is a first-moment fault the channel deliberately does not carry
+    (`_mean_basis`), so the guard is that switching the channel on does not degrade the rig
+    where it has nothing to offer -- the failure mode measured in research/bias-channels 0006
+    when the sensor entry was carried.
+    """
+    Q, R, N, T0, bias = 0.02, 1.0, 700, 300, 2.0
+    rng = np.random.default_rng(7)
+    theta = np.cumsum(rng.normal(0, np.sqrt(Q), N))
+    Y = np.stack([theta + rng.normal(0, np.sqrt(R), N) for _ in range(3)], axis=1)
+    Y[T0:, 2] += bias
+    H, R0 = np.ones((3, 1)), np.ones(3)
+
+    off = LucidFilter(H=H, measurement=R0).filter(Y)
+    on = LucidFilter(H=H, measurement=R0, offsets=True).filter(Y)
+    e_off = np.sqrt(np.mean((off.mean[400:, 0] - theta[400:]) ** 2))
+    e_on = np.sqrt(np.mean((on.mean[400:, 0] - theta[400:]) ** 2))
+    assert e_on < 1.05 * e_off                                       # no regression
+    assert abs(on.offset[-1, 0]) < 0.02                              # and no spurious drift

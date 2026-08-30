@@ -399,6 +399,7 @@ are:
 |---|---|
 | [`multivariate-statfilter/`](research/multivariate-statfilter/SUMMARY.md) | **delivered** — the per-component noise machinery behind `LucidFilter` |
 | [`dynamics-learning/`](research/dynamics-learning/SUMMARY.md) | **delivered** — online learned dynamics (`dynamics=None`, `faults=`): detects a dynamics change (a crate picked up off centre, a tire blowout) on the derived information frontier, recovers the new dynamics online, and names the physical parameter that moved |
+| [`bias-channels/`](research/bias-channels/SUMMARY.md) | **delivered** — the first-moment channel (`offsets=`): a constant process offset estimated online, closing 49–84% of the distance to a filter told the drift, at 0.8% when there is none; and the measured reason the sensor-bias half is not shipped |
 | [`random-walk-filter/`](research/random-walk-filter/SUMMARY.md) | delivered (specimen) — the scalar parent and the scale-walk theory |
 | [`ode-filter/`](research/ode-filter/SUMMARY.md) | candidate (specimen) — locally-linear-ODE dynamics, the tracked dynamics channel |
 | [`optimality-proof/`](research/optimality-proof/SUMMARY.md) | where "optimal" does and does not hold; the per-step process/sensor ambiguity is Proposition 1 here |
