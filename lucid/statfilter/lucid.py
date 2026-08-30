@@ -305,8 +305,10 @@ def _mean_basis(F, H, tol=_RANK_TOL, process_only=True, sensor_only=False):
     on both: 49-84% of the distance to an oracle on a drifting rig, and 0.385 -> 0.386 on the
     biased-sensor rig it is not meant for.
 
-    The scalar default (``F = 1``, ``H = 1``) therefore has k = 1: the drift.  The sensor
-    read-out lives in the research probes, where `0004` measures what it is worth.
+    The scalar default (``F = 1``, ``H = 1``) therefore has k = 1: the drift.  The sensor entry
+    is still ESTIMATED, on its own quotient (``sensor_only``) and by an observer whose every
+    output is discarded -- see `LucidFilter`'s ``_sensor``.  Reporting it is free; the measured
+    finding is only that acting on it is not.
     """
     F, H = np.atleast_2d(F), np.atleast_2d(H)
     n, m = F.shape[0], H.shape[0]

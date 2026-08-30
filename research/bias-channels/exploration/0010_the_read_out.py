@@ -23,6 +23,11 @@ Three things are measured:
               ABSOLUTE rather than relative -- and it is exactly there that the drift channel
               is inert, so the two are complementary: whichever of the pair is identifiable is
               the one that is carried.
+  CONVERGENCE the read-out sits 15-20% low at 400 steps of evidence, and the question is
+              whether that is the prior's shrinkage or the estimate still arriving.  Widening
+              the class ladder separates them: a wider one converges FASTER and lands in the
+              same place, so it is the estimate arriving.  At 1700 steps the shipped ladder is
+              within 1% of the truth.
 
 Run: python3 0010_the_read_out.py
 """
@@ -41,10 +46,11 @@ from lucid import LucidFilter                                    # noqa: E402
 Q_TRUE, R_TRUE, N, T0, BIAS, SEEDS = 0.02, 1.0, 700, 300, 2.0, (7, 8, 9, 10)
 
 
-def rig(m, seed, drift=0.0):
+def rig(m, seed, total=N, drift=0.0):
     rng = np.random.default_rng(seed)
-    theta = np.cumsum(rng.normal(0, np.sqrt(Q_TRUE), N) + drift * (np.arange(N) >= T0))
-    Y = np.stack([theta + rng.normal(0, np.sqrt(R_TRUE), N) for _ in range(m)], axis=1)
+    theta = np.cumsum(rng.normal(0, np.sqrt(Q_TRUE), total)
+                      + drift * (np.arange(total) >= T0))
+    Y = np.stack([theta + rng.normal(0, np.sqrt(R_TRUE), total) for _ in range(m)], axis=1)
     Y[T0:, m - 1] += BIAS
     return theta, Y
 
@@ -71,7 +77,7 @@ def main():
     print("INVARIANCE -- the observer cannot change the filter, checked bit-for-bit")
     print("=" * 88)
     for m, drift in ((3, 0.0), (3, 0.10), (5, 0.10)):
-        theta, Y = rig(m, 7, drift)
+        theta, Y = rig(m, 7, drift=drift)
         H, R0 = np.ones((m, 1)), np.ones(m)
         a = LucidFilter(H=H, measurement=R0, offsets=True)
         b = LucidFilter(H=H, measurement=R0, offsets=True)
@@ -108,6 +114,36 @@ def main():
     print()
     print("  the pair is complementary: where a drift is identifiable a sensor bias is gauge,")
     print("  and where a sensor bias is absolutely identifiable a drift is not carried at all.")
+
+    print()
+    print("=" * 88)
+    print("CONVERGENCE -- is the shrinkage the prior's, or the estimate still arriving?")
+    print("=" * 88)
+    print(f"{'m':>2} {'steps of evidence':>18} | {'shipped':>9} {'ladder x10':>11} "
+          f"{'x100':>8} | truth")
+    for m in (3, 5):
+        for total in (700, 2000):
+            vals = []
+            for mult in (1.0, 10.0, 100.0):
+                acc = 0.0
+                for seed in SEEDS:
+                    _, Y = rig(m, seed, total)
+                    f = LucidFilter(H=np.ones((m, 1)), measurement=np.ones(m), offsets=True)
+                    if mult != 1.0:
+                        f.reset()
+                        so = f._sensor
+                        step = (so.cls[-1] * mult / so.cls[0]) ** (1.0 / (so.cls.shape[0] - 1))
+                        so.cls = np.stack([so.cls[0] * step ** j
+                                           for j in range(so.cls.shape[0])])
+                        so.q = 1e-4 * so.cls
+                        so.reset()
+                    acc += f.filter(Y).sensor_offset[-1, m - 1] / len(SEEDS)
+                vals.append(acc)
+            print(f"{m:2d} {total - T0:18d} | {vals[0]:9.3f} {vals[1]:11.3f} {vals[2]:8.3f} | "
+                  f"{BIAS * (m - 1) / m:.3f}")
+    print()
+    print("  a wider ladder converges faster and lands in the SAME place, so the shrinkage at")
+    print("  400 steps is the estimate arriving rather than a prior pulling it down.")
 
 
 if __name__ == "__main__":

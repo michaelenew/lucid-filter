@@ -163,8 +163,9 @@ stays where it was.
 
 The state is never augmented. The channel is carried in two stages (Friedland) on the collapsed
 output, which is **exact** against the augmented filter and costs nothing per bank member or
-scale node — a dense augmentation measures 1.9–2.9×, this measures +14% per step with the
-channel on.
+scale node — a dense augmentation measures 1.84× on the scalar rig and 2.06–2.87× at arm scale,
+where this measures +8% and +0.7% respectively, and passes the repository's own 5-DOF
+no-impingement guard in every regime.
 
 **It reports a miscalibrated sensor and does not repair one**, and that split is measured
 rather than assumed: a bias of `b` on one of `m` sensors leaves an irreducible `b/m` in any
@@ -173,8 +174,9 @@ already a partial repair, and both ways of *applying* an estimated sensor bias m
 than leaving it alone. So `r.sensor_offset` comes from an observer that is bit-for-bit unable to
 change the filter — it says "sensor 3 reads about 1.1 high relative to the others", which is
 what a caller can act on, and which the per-sensor `eta` cannot say because a scale sees only
-`e**2` and moves the innocent neighbour the same way. Read it as *this one, by about this much*:
-it names the right sensor at every `m` and reads 15–20% low. See
+`e**2` and moves the innocent neighbour the same way. It names the right sensor at every `m` and wants
+about a thousand steps of evidence to come within a few percent, so read it early as *this one,
+by at least this much*. See
 [`research/bias-channels/`](../../research/bias-channels/SUMMARY.md).
 
 ## What one update costs

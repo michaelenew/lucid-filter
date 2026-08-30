@@ -131,10 +131,11 @@ class, so a rung costs one $k$-dimensional update and nothing else.
 
 Cost: **2.26 → 2.58 ms/step** with the channel on, unchanged off.
 
-## The sensor entry: estimable, and not usable
+## The sensor entry: estimable, and not usable as a repair
 
-The workstream's main negative result, and the reason the shipped channel is
-`process_only`.
+The workstream's main negative result, and the reason the shipped channel is `process_only`.
+It is what confines the sensor entry to the read-out two sections below; the estimate itself was
+never in doubt.
 
 **Redundancy, not estimation, is what moves a sensor bias**
 ([`0004`](exploration/0004_redundancy_and_the_gauge.py)). The residual state error under a
@@ -168,8 +169,10 @@ defending is nearly as good as repairing, because repairing is gauge-limited.
 puts the state at $\theta + b/m$ and throws away the scale walk's down-weighting: **1.68–1.81×
 worse**. *Estimating without applying* leaves the bias in the innovation, where it loads onto
 the process entry, which **is** applied: a spurious drift of +0.08 and **1.30–1.51× worse**.
-The shipped channel carries neither, and is 1.000–1.003× on the rig it is not for, with a
-spurious drift of $-0.002$.
+The shipped channel applies neither, and is 1.000–1.003× on the rig it is not for, with a
+spurious drift of $-0.002$. What it does instead is *watch* — see
+[*The read-out ships as an observer that cannot act*](#the-read-out-ships-as-an-observer-that-cannot-act)
+below, which is this finding's consequence rather than an exception to it.
 
 **What is genuinely lost by not shipping it** is the read-out — a signed, per-sensor offset
 ("sensor 3 reads 1.25 high relative to the others", against a truth of 1.33), which no
@@ -268,8 +271,12 @@ neighbour's the same way (+0.71 / +0.74 in `0001`).
 | 5 | −0.31 … −0.36, **+1.34** | −0.40, **+1.60** |
 | 8 | −0.17 … −0.24, **+1.40** | −0.25, **+1.75** |
 
-It names the right sensor at every $m$ and reads **15–20% low**, the prior's shrinkage; treat it
-as "this one, by about this much", not as a calibration constant to subtract.
+It names the right sensor at every $m$ and reads 15–20% low at 400 steps of evidence — and that
+is the estimate **arriving**, not a prior pulling it down. Widening the class ladder separates
+the two: a wider one converges faster and lands in the same place, and by 1700 steps the shipped
+ladder is within 1% (1.343 against 1.333 at $m=3$, 1.599 against 1.600 at $m=5$, identical to a
+ladder a hundred times wider). So the read-out is asymptotically right and wants evidence:
+early, read it as *this one, by at least this much*.
 
 **And the two halves are complementary, which is the frame closing on itself.** Where a drift is
 identifiable a sensor bias is gauge, and the read-out is relative to the consensus. Where a
@@ -350,9 +357,10 @@ settling, because the "equivalent drift" a given departure represents moves as t
 
 ## Open
 
-1. **The read-out is biased low by 15–20%** (`0010`), and the shrinkage grows with $m$. It is
-   the prior's, so the class ladder is where to look; whether the observer wants a wider ceiling
-   than the channel that acts is unmeasured, and the two need not share one.
+1. **The read-out wants ~1000 steps** to come within a few percent (`0010`), and a wider class
+   ladder gets there faster at no measured cost — the observer cannot act, so the reach/resolution
+   trade that keeps the acting channel's ceiling where it is does not obviously bind here. The
+   two currently share one ladder and there is no measurement saying they should.
 2. **Drifts above twice the ladder's ceiling are under-served** (`0012`: tail gap 52% at
    $r = 2.00$, against 86% with a ×10 ladder). The fix is known and its cost is measured; what
    is not settled is whether a caller who expects a large drift should get a wider ladder
