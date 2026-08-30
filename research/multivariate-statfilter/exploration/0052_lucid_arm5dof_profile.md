@@ -1,5 +1,15 @@
 # 0052 — LucidFilter on the 5-DOF arm: the freeze-lockout regression, and the 0024 fix restored
 
+> **Superseded in two respects, by [`0054`](0054_physical_sensors.md): the sensor model and
+> the chain.**  This probe's "accelerometer" reads its own joint's angular acceleration
+> through a constant diagonal `H` -- no sensor does that -- and its four coplanar pitch
+> joints are not an arm anyone builds.  0054's first cut measured the diagonal shortcut at
+> **10-154x an oracle** on a physically-sensed version of this chain; the rig as it now
+> stands (`../scripts/arm5dof.py`) is the common yaw/pitch + pitch/roll + wrist chain with
+> linear MEMS accelerometers, where no constant `H` exists at all.  The noise-machinery
+> findings here stand; the ratio table is superseded by 0054's.
+
+
 Profiling the public `LucidFilter` (the caltrop-star engine) on the 5-DOF arm rig — the README-demo
 case: every joint fuses a bad potentiometer (angle, sigma 0.06) with a good accelerometer (angular
 acceleration, sigma 0.02) through `H`, commanded 2-sinusoid jerk trajectory as known forcing `B u`,

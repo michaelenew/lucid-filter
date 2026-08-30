@@ -24,10 +24,11 @@ rough noise magnitudes. It works out the rest online — every scale, per
 component, per step — and it works it out *fast*: told nothing at all it lands
 **3.5% above an oracle-tuned Kalman filter** on the scalar benchmark, and
 **1.03×** an oracle handed both the true noise schedule and the true payload on
-the drone below. Across every rig here the worst case anywhere is 1.36×, on the
-one window where a sensor degrades by ×12 and the walk is still reaching it;
-the same model with fixed noise pays 2.1–6.9× on those same runs. A regime
-change is absorbed in a few steps, not a window. There is no `fit()`, no
+the drone below. The bill is largest where a burst hits the sensors that carry
+most of the information while the walk is still reaching them — the worst window
+on any rig here is 2.8× the oracle, dominated by its first half-second — and the
+same model with fixed noise pays 2–7× *steadily* on those same runs. A regime
+change is absorbed in steps, not windows. There is no `fit()`, no
 threshold, no forgetting factor, no window and no changepoint detector; the
 single residual knob does nothing near its default.
 
@@ -108,23 +109,32 @@ can watch the chips find it.
 
 *Also as [an MP4](research/multivariate-statfilter/figures/arm5dof-lucid.mp4).*
 
-The rig: every joint fuses a **bad potentiometer** (angle, σ ≈ 0.06 rad ≈ 3.4°)
-with a **good accelerometer** (angular acceleration, σ ≈ 0.02); the arm's servo
-tracks minimum-jerk waypoint moves, and the commanded forcing is the known input
-`U`. The regimes: accelerometers ×15, vibration (disturbance torque) ×20, one
-joint's potentiometer ×15, then both at once.
+The arm is the chain most 5-DOF arms share — yaw and shoulder pitch at the base,
+elbow pitch and a forearm roll, one wrist flex holding the effector — and every
+joint fuses a **bad potentiometer** (angle, σ ≈ 0.06 rad ≈ 3.4°) with the two
+lateral axes of a **link-mounted MEMS accelerometer** (σ ≈ 0.03 m/s²). The servo
+tracks minimum-jerk waypoint moves *on the potentiometers*, and the commanded
+forcing is the known input `U`. The regimes: accelerometers ×15, vibration ×20,
+one joint's potentiometer ×15, then both at once.
 
-Through the bursts the lucid tip estimate holds **0.017 m RMSE**. The raw
-potentiometer reads 0.316 m — **19× worse** — and a fixed-noise Kalman filter
-given the *same model* reads 0.034 m (2× worse), with most of its remaining gap
-in the calm stretches after each burst, where the lucid filter re-converges
-faster (0.014 m vs 0.037 m). The learned scales double as a live diagnosis: the
-chip grid pinpoints *which joint's* potentiometer died. The accelerometer and
-process chips light together — the accelerometer reads the very state the
-disturbance drives, so those two channels are collinear, and the filter tracks
-their total, which is exactly what the state estimate needs
-([`0027`](research/multivariate-statfilter/exploration/0027_confound.md),
-[`0052`](research/multivariate-statfilter/exploration/0052_lucid_arm5dof_profile.md)).
+The accelerometers are why `H` here is a **callable**. What each axis reads is
+proper acceleration: gravity resolved in a link frame that moves with every
+joint below it, configuration-dependent lever arms on the joint accelerations,
+and centripetal terms quadratic in the rates. No constant `H` exists at all, so
+the map is linearised at every step, exactly as `F` is — by a batched
+complex-step Jacobian, exact to 1e-9. Freeze that linearisation at the home pose
+and the same filter is **15–195× the oracle** on the same data, while its noise
+machinery works flawlessly — faithfully booking the linearisation error as
+sensor noise, which is exactly the wrong thing to trust a reading by
+([`0054`](research/multivariate-statfilter/exploration/0054_physical_sensors.md)).
+
+Through the bursts the lucid tip estimate holds **0.019 m RMSE**. The raw
+potentiometer reads 0.227 m — **12× worse** — and a fixed-noise Kalman filter
+given the *same model and the same live measurement map* reads 0.031 m (1.6×
+worse, and 2.1–7.3× the oracle per regime: on this rig the accelerometers double
+as inclinometers, so knowing *when* to trust them is worth more than ever). The
+learned scales double as a live diagnosis: the chip grid pinpoints *which
+joint's* potentiometer died.
 
 **What one update costs.** Per bank member, per step, the arithmetic is one
 small Kalman update per scale-window node:
@@ -135,12 +145,12 @@ $$\text{cost} \approx G\,(2n^2m + 2nm^2 + m^3) \quad\text{multiply-adds},
 where $n$ is the state dimension, $m$ the sensor count, and $r \le n+m$ the
 number of active noise axes ($G$ is the node count of the axial scale windows —
 linear in the axes; a joint grid would be $5^r$). For the arm above
-($n{=}15$, $m{=}10$, $r{=}25$, $G{=}101$, and the default bank of 15 members)
-that is **≈ 14 million multiply-adds per update — measured 40 ms/step in pure
-numpy**, where profiling attributes most of the wall time to interpreter
-overhead rather than flops. The drone above runs the same engine with a dynamics
-channel on top ($n{=}12$ plus six departure coefficients, $m{=}12$, 30 members)
-at **≈ 60 ms/step**. The two levers that matter for embedded use: the
+($n{=}15$, $m{=}15$, $r{=}30$, $G{=}121$, and the default bank of 15 members)
+that is **≈ 31 million multiply-adds per update — measured 76 ms/step in pure
+numpy**, the complex-step measurement Jacobian included, where profiling
+attributes most of the wall time to interpreter overhead rather than flops. The
+drone above runs the same engine with a dynamics channel on top ($n{=}12$ plus
+six departure coefficients, $m{=}12$, 30 members) at **≈ 60 ms/step**. The two levers that matter for embedded use: the
 bank multiplier (a 1–3 member bank tracks the same — the bank exists to average
 away the class choice, not for accuracy; pass `phis=`/`ss=`), and structure —
 when the model is block-diagonal (independent joints), five separate per-joint
@@ -198,7 +208,7 @@ Configure by **give-what-you-know**; every argument has a working default:
 |---|---|---|
 | `dynamics` | state transition `F`; `None` learns it, a callable re-linearises it | `0` → random-walk level |
 | `control` | known-forcing map `B` (pass `u`/`U` at update) | none |
-| `H` | measurement matrix | identity |
+| `H` | measurement matrix; a **callable** of the state when the sensors are not a fixed linear functional of it — every inertial sensor on a moving linkage — returning the Jacobian, or an `(H, y_predicted)` pair when `h(x)` is not `H(x) x` | identity |
 | `process` | base process covariance `Q0` | identity |
 | `measurement` | base per-sensor variances `R0` | ones |
 | `faults` | hazard `rho`: the supplied dynamics may **change** | none → they are fixed |
@@ -228,21 +238,29 @@ worse too, because the departure coefficients share one augmented state
 
 ## Measured behaviour
 
-On the arm rig (4 seeds, RMSE ratio to an oracle Kalman filter told the true
-noise schedule; `fixed` is the same model frozen at the base noise —
-[`0052`](research/multivariate-statfilter/exploration/0052_lucid_arm5dof_profile.py)):
+On the arm rig (3 seeds, tip RMSE ratio to an oracle Kalman filter told the true
+noise schedule; `fixed` is the same model frozen at the base noise; `frozen-H` is
+the same lucid filter with the measurement map linearised once at the home pose
+instead of every step —
+[`0054`](research/multivariate-statfilter/exploration/0054_physical_sensors.md)):
 
-| regime | lucid / oracle | fixed / oracle |
-|---|---|---|
-| calm | 0.98 | 1.00 |
-| accelerometers ×15 | 1.15 | 2.58 |
-| one potentiometer ×15 | 1.22 | 5.48 |
-| vibration ×20 | 1.07 | 1.01 |
-| vibration + accels | 1.11 | 2.42 |
-| vibration + potentiometer | 1.17 | 5.48 |
+| regime | lucid / oracle | fixed / oracle | frozen-H / oracle |
+|---|---|---|---|
+| calm | 0.94 | 2.89 | 89.5 |
+| accelerometers ×15 | 2.77 | 4.99 | 15.7 |
+| vibration ×20 | 1.11 | 7.28 | 130.5 |
+| one potentiometer ×15 | 1.07 | 2.10 | 195.2 |
+| vibration + accelerometers | 2.10 | 2.73 | 14.8 |
 
-Near-oracle in every regime, with the fixed filter paying 2.4–5.5× wherever a
-sensor degrades. Sensor redundancy is what the filter converts into accuracy:
+Near-oracle wherever the information exists, never worse than the fixed filter —
+and the third column is the cost of getting the *sensor model* wrong, which
+dwarfs the noise question entirely. The one elevated cell decomposes: the
+accelerometer burst's first fifty steps run at 9.4× while ten scales travel to
+exactly 2 ln 15, and the settled tail at ~2× is the price of *not being told*
+that the sensors carrying nearly all the information went bad together — an
+oracle switches to pots-plus-prior cleanly; the bank has to keep the hypotheses
+that let it notice the burst end. Sensor redundancy is what the filter converts
+into accuracy:
 with the potentiometers removed (accelerometers only), the joint angle is
 unobservable — even the oracle drifts — and adaptation has nowhere to shift
 trust, so it buys nothing
@@ -259,22 +277,22 @@ the noise machinery; `frozen` is told neither —
 | window | lucid | noise-only | frozen |
 |---|---|---|---|
 | before the crate | 0.98 | 1.00 | 1.00 |
-| calm, carrying | 1.03 | 1.10 | 3.47 |
+| calm, carrying | 1.02 | 1.10 | 3.47 |
 | gust, carrying | 1.03 | 1.11 | 1.29 |
-| GPS multipath ×12, carrying | 1.36 | 1.12 | 6.92 |
-| calm, after the drop | 1.03 | 1.12 | 2.10 |
-| gyro vibration ×12, after the drop | 0.98 | 0.98 | 2.36 |
+| GPS multipath ×12, carrying | 1.37 | 1.12 | 6.92 |
+| calm, after the drop | 1.09 | 1.12 | 2.10 |
+| gyro vibration ×12, after the drop | 0.98 | 0.99 | 2.35 |
 
 The crate is detected **2.8 ± 0.4 steps (28 ms)** after the grab, on 5 seeds out
 of 5, with **0.00%** of pre-pick-up steps ever flagged. Run the same mission with
 no crate at all and the cost of carrying the fault hypothesis is 1.024 ± 0.043 —
 indistinguishable from not carrying it — which is what makes the 28 ms end of the
 detection frontier affordable. Carrying, it recovers the
-mass to 1.528 ± 0.003 kg (true 1.520) and the off-centre lever arm to
+mass to 1.529 ± 0.003 kg (true 1.520) and the off-centre lever arm to
 1.62 ± 0.01 cm (true 1.63) — the inertias only to −15%, which is the excitation
-limit below. After the release the same read-out returns to 1.101 ± 0.001 kg and
-0.11 ± 0.00 cm. The one place the lucid filter is beaten is the ×12 GPS burst,
-where an oracle *told* the new sensor noise is 1.36/1.12 = 21% better than one
+limit below. After the release the same read-out returns to 1.100 ± 0.001 kg and
+0.10 ± 0.01 cm. The one place the lucid filter is beaten is the ×12 GPS burst,
+where an oracle *told* the new sensor noise is 1.37/1.12 = 22% better than one
 still walking towards it — the transient-attribution open, on a bigger rig.
 
 On the earlier dynamics rigs (`0007`, the shipped filter re-measured): a scalar
@@ -318,14 +336,14 @@ that has a payload attached mid-flight in 28.9 ± 1.7 steps against a frontier o
   precision by a suite test; the measured costs and residuals are recorded in
   [`sequence-demix`](research/sequence-demix/SUMMARY.md#open-items-complete).
 - **Collinear channels are tracked as a total.** A sensor that directly reads
-  the state a disturbance drives (the accelerometer/vibration pair above)
-  shares one identifiable total with it; the state estimate needs exactly that
-  total and is unaffected, but the *attribution* between the two is partly
-  shared.
+  the state a disturbance drives shares one identifiable total with it; the
+  state estimate needs exactly that total and is unaffected, but the
+  *attribution* between the two is partly shared
+  ([`0027`](research/multivariate-statfilter/exploration/0027_confound.md)).
 - **The dynamics read-out comes home; the fault *flag* does not.** Eleven steps
   after the drone releases the crate the reported payload is already back inside
-  10% of zero, and it settles at 1.101 ± 0.001 kg against a truth of 1.100 and an
-  off-centre lever arm of 0.11 cm against 0.00. `r.fault`, though, stays pinned
+  10% of zero, and it settles at 1.100 ± 0.001 kg against a truth of 1.100 and an
+  off-centre lever arm of 0.10 cm against 0.00. `r.fault`, though, stays pinned
   at 1.0 for the rest of the
   run. That is what it should do and not what the name suggests: the marginal
   asks *which member of the bank is flying*, and once the departure walker has
@@ -342,8 +360,26 @@ that has a payload attached mid-flight in 28.9 ± 1.7 steps against a frontier o
   state estimate nothing here, and it is the reason a recovered parameter should
   be read next to the excitation that produced it
   ([`0008`](research/dynamics-learning/exploration/0008_drone3d_payload.md)).
+- **Attribution degrades with relative degree.** Give the arm a rate gyro instead
+  of an accelerometer — so a jerk disturbance reaches the sensor through `dt²/2`
+  rather than `dt`, 200× weaker per step — and a process burst is blamed on the
+  sensors: the gyro scales run to e⁶ and the filter throws away its good
+  channel for about a second, at 103× the oracle in that window. The same
+  pathology appeared *inside* the arm rig when only one accelerometer axis per
+  link was recorded — the forearm roll was dynamically blind, and its bursts
+  were booked on a potentiometer — which is why the rig records both lateral
+  axes, and why a rig audit is not done until every disturbance axis has a
+  sensor at comparable relative degree. The scale walk
+  scores per step, and a disturbance that is nearly invisible in one step loses
+  the per-step argument to a sensor axis that is not. It is the same shape as the
+  dynamics channel's relative-degree finding, on the noise channel, and nothing in
+  the construction currently prices it in
+  ([`0054`](research/multivariate-statfilter/exploration/0054_physical_sensors.md)).
 - **Nothing here has been flown.** Every number is from synthetic rigs with
-  known ground truth; hardware validation is not part of this repository.
+  known ground truth; hardware validation is not part of this repository. The rigs
+  are audited for physical realism rather than assumed to have it — what each one
+  still simplifies (no mass matrix on the arm; no motor lag, drag or slung-load
+  pendulum on the drone) is stated in its own module docstring.
 
 ## The research behind it
 

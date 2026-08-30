@@ -392,3 +392,129 @@ def test_callable_dynamics_with_faults():
     r = f.filter(Y)
     assert np.all(np.isfinite(r.dynamics)) and r.dynamics.shape == (1200, 1, 1)
     assert abs(r.dynamics[-1, 0, 0] - 0.6) < 0.4
+
+
+# ------------------------------------------------- a state-dependent measurement map
+
+def test_callable_H_constant_matches_the_matrix():
+    """A callable that returns the same matrix every step IS the matrix -- to machine precision.
+
+    The guard on the whole feature: supplying ``H`` as a callable must not change what the
+    filter computes, only where the Jacobian comes from.  Everything structural (the
+    activation rule, the confounded pairs, the steady-state scale-Fisher) is answered from the
+    characteristic linearisation, so the two constructions have to agree exactly.
+    """
+    r = rng(5)
+    Hm = np.array([[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    F = np.array([[1.0, 0.1, 0.005], [0.0, 1.0, 0.1], [0.0, 0.0, 1.0]])
+    Y = r.standard_normal((60, 2))
+    box = {"phis": (0.70, 0.95), "ss": (0.30, 0.80)}
+    kw = dict(dynamics=F, process=np.eye(3) * 0.01, measurement=[0.2, 0.05], **box)
+    a = LucidFilter(H=Hm, **kw).filter(Y)
+    b = LucidFilter(H=lambda x: Hm, **kw).filter(Y)
+    assert np.allclose(a.mean, b.mean, atol=1e-12)
+    assert np.allclose(a.var, b.var, atol=1e-12)
+    assert np.allclose(a.process_scale, b.process_scale, atol=1e-12)
+    assert np.allclose(a.measurement_scale, b.measurement_scale, atol=1e-12)
+    assert abs(a.loglik - b.loglik) < 1e-9
+
+
+def test_callable_H_tracks_a_rotating_sensor():
+    """A sensor whose axis rotates with the state is tracked; a frozen H is not.
+
+    The physical case this exists for: an inertial sensor on a moving linkage reads the chain
+    below it through axes that rotate, so its ``H`` is a function of the state.  Here one
+    sensor reads ``cos(a) x0 + sin(a) x1`` with the mixing angle swept over the run.  A filter
+    told the live Jacobian must beat one frozen at the characteristic (a = 0) map.
+    """
+    r = rng(11)
+    T = 400
+    ang = np.linspace(0.0, 1.2, T)
+    F = np.array([[1.0, 0.05], [0.0, 1.0]])
+    x = np.zeros(2)
+    X = np.zeros((T, 2)); Y = np.zeros((T, 2))
+    for k in range(T):
+        x = F @ x + np.array([0.0, 0.02]) * r.standard_normal()
+        X[k] = x
+        Y[k] = [x[0] + 0.05 * r.standard_normal(),
+                math.cos(ang[k]) * x[0] + math.sin(ang[k]) * x[1] + 0.05 * r.standard_normal()]
+    step = {"k": 0}
+
+    def Hof(_x):
+        a = ang[min(step["k"], T - 1)]
+        return np.array([[1.0, 0.0], [math.cos(a), math.sin(a)]])
+
+    kw = dict(dynamics=F, process=np.diag([1e-9, 4e-4]), measurement=[0.0025, 0.0025],
+              phis=(0.85,), ss=(0.40,))
+    live = LucidFilter(H=Hof, **kw)
+    live.reset()
+    est = np.empty((T, 2))
+    for k in range(T):
+        step["k"] = k
+        est[k] = live.update(Y[k]).mean
+    frozen = LucidFilter(H=Hof(None), **kw).filter(Y).mean
+    err = lambda e: float(np.sqrt(np.mean((e[100:] - X[100:]) ** 2)))   # noqa: E731
+    assert err(est) < 0.5 * err(frozen), (err(est), err(frozen))
+
+
+def test_callable_H_nonlinear_pair_and_stacked_bank():
+    """The ``(H, y_pred)`` return, and the stacked bank pinned to the looped members under it.
+
+    ``h(x) = H(x) x`` is not general enough for a real inertial sensor -- a rotating-axis term
+    is quadratic in the rates -- so the callable may return the predicted measurement too.
+    The stacked executor evaluates a Jacobian per member, at that member's own mean, and must
+    still be the same recursion as the loop.
+    """
+    from lucid.statfilter.lucid import _WalkEngine
+
+    class _Looped(_WalkEngine):
+        def update(self, y, u=None):
+            return _WalkEngine.update(self, y, u=u)
+
+    r = rng(7)
+    F = np.array([[1.0, 0.1], [0.0, 0.98]])
+
+    def Hof(x):
+        # a sensor whose axis tilts with the state, plus a small bounded term that is NOT
+        # H(x) x -- the shape a rotating-axis (rate-squared) contribution actually has
+        a = 0.4 * math.tanh(float(x[1]))
+        ca, sa = math.cos(a), math.sin(a)
+        Hj = np.array([[1.0, 0.0], [sa, ca]])
+        yp = np.array([float(x[0]), sa * float(x[0]) + ca * float(x[1])
+                       + 0.05 * math.sin(float(x[0]))])
+        return Hj, yp
+
+    Y = np.concatenate([r.standard_normal((25, 2)), 3 + r.standard_normal((25, 2))])
+    Y[9] = np.nan
+    kw = dict(dynamics=F, H=Hof, process=np.eye(2) * 0.05, measurement=[0.3, 0.3],
+              faults=1 / 100, phis=(0.70, 0.95), ss=(0.30, 0.80))
+    a, b = LucidFilter(**kw), LucidFilter(**kw)
+    for f in b._members:
+        f.__class__ = _Looped
+    b.reset()
+    assert any(type(bk).__name__ == "_EngineBank" for bk in a._banks)
+    assert all(type(bk).__name__ == "_LoopBank" for bk in b._banks)
+    ra, rb = a.filter(Y), b.filter(Y)
+    assert np.all(np.isfinite(ra.mean))
+    assert np.allclose(ra.mean, rb.mean, atol=1e-9)
+    assert np.allclose(ra.var, rb.var, atol=1e-9)
+    assert np.allclose(ra.process_scale, rb.process_scale, atol=1e-8)
+    assert np.allclose(ra.measurement_scale, rb.measurement_scale, atol=1e-8)
+    assert np.allclose(ra.fault, rb.fault, atol=1e-9)
+
+
+def test_callable_H_offset_is_not_misread_at_init():
+    """h with a constant offset (an accelerometer's gravity term) must not poison the start.
+
+    The cold-start mean is a least squares against the measurement map; with an ``(H, y_pred)``
+    hook the map has a value at zero state, and solving ``H x = y`` without subtracting it
+    would book gravity as enormous state.  The init linearises h at the origin instead.
+    """
+    Hm = np.array([[1.0, 0.0], [0.5, 2.0]])
+    c = np.array([0.0, 7.0])
+    f = LucidFilter(dynamics=np.eye(2), H=lambda x: (Hm, Hm @ x + c),
+                    process=np.eye(2) * 1e-4, measurement=[1e-4, 1e-4],
+                    phis=(0.85,), ss=(0.40,))
+    f.reset()
+    st = f.update(Hm @ np.array([1.0, -0.5]) + c)      # the exact reading at x = (1, -0.5)
+    assert np.allclose(st.mean, [1.0, -0.5], atol=0.05), st.mean

@@ -12,11 +12,16 @@ six of them.  That is a property of the RIG, not a fitted constant, and it is me
 `0008_drone3d_payload.py`'s ``units_control`` re-runs the same data with the angular inputs
 in newton-metres and reports what it costs.
 
-The one-step map is affine in the state at a given attitude,
+The one-step map is affine in the state at a given operating point,
 
-    x_{t+1} = F0 x_t + B(att_t; m, I, c) u_t + w_t,
+    x_{t+1} = F(att_t, om_t; I) x_t + B(att_t; m, I, c) u_t + w_t,
 
-with ``F0`` the (exact) kinematic integrator and every physical parameter living in ``B``:
+and BOTH halves move with that operating point.  ``F`` does, for two reasons that are rigid-
+body physics rather than rig decoration: a rate gyro reads **body** rates, so the attitude
+kinematics are ``d(att)/dt = T(att) om_b`` and not ``d(att)/dt = om`` (treating the two as the
+same is worth 9-20x the gyro's own noise here, 114x at the worst step); and the gyroscopic
+coupling ``om x I om = [om]x I om`` is linear in ``om`` with state-dependent coefficients.
+Every physical parameter lives in ``B``:
 
 * ``m``      -- thrust column, position/velocity rows: ``dt g (m0/m) R(att) e3``
 * ``I``      -- torque columns, attitude/rate rows: ``dt ALPHA (I0/I)``
@@ -32,11 +37,15 @@ mass and trims the standing torque away with its rate integrator (a steady -0.98
 the roll and pitch commands while carrying, 0.00 when empty), so the crate is not visible in
 the vehicle's *behaviour* -- only in the residual, which is the filter's job.
 
-The truth is the same recursion with the true ``(m, I, c)``, which is the rig convention of
-the 5-DOF arm (`make_arm5dof_lucid_gif.py`): it isolates the estimation question rather than
-the discretisation one.  The gyroscopic term ``om x I om`` and the Euler-rate/body-rate
-distinction are dropped, which is a modelling simplification of the RIG, not of the filter --
-the flight envelope here stays inside +-29 degrees of bank.
+The truth is the same recursion with the true ``(m, I, c)``: it isolates the estimation
+question rather than the discretisation one.  What the filter is NOT given, and has to absorb:
+the gyroscopic term is computed from the NOMINAL inertia in the filter's model and from the
+true one in the truth, so a real (small) model error survives the payload event -- the
+departure directions here move ``B`` only.  Remaining rig simplifications, stated so they can
+be argued with: no rotor/motor lag, no aerodynamic drag, no slung-load pendulum (the crate is
+rigidly gripped), and the wind is a disturbance ACCELERATION rather than a force, so it does
+not weaken by ``m0/m = 0.72`` while the crate is aboard.  The flight envelope is +-29 degrees
+of bank.
 
 The autopilot flies on an alpha-beta observer of the MEASUREMENTS, never on the truth: 0004
 measured that flying on the true state correlates ``u`` with process noise the filter cannot
@@ -106,28 +115,61 @@ def Rmat(att):
                      [-sp, cp * sr, cp * cr]])
 
 
+def Tmat(att):
+    """Body rates -> Euler-angle rates, for ZYX.
+
+    The state carries what a rate gyro actually reads -- **body** rates -- so the attitude
+    kinematics are ``d(att)/dt = T(att) om_b``, not ``d(att)/dt = om``.  Treating the two as
+    the same is worth 9-20x the gyro's own noise on this rig's flight envelope (max 114x), so
+    it is not a rounding error; it is the difference between a fair rig and a flattering one.
+    """
+    r, p = float(att[0]), float(att[1])
+    cr, sr, tp, cp = math.cos(r), math.sin(r), math.tan(p), math.cos(p)
+    return np.array([[1.0, sr * tp, cr * tp],
+                     [0.0, cr, -sr],
+                     [0.0, sr / cp, cr / cp]])
+
+
 def Bof(att, m, I, c):
     """The one-step input map at attitude ``att`` for a vehicle of ``(m, I, c)``."""
     B = np.zeros((N, P))
+    Tm = Tmat(att)
     th = G * (M0 / m) * Rmat(att)[:, 2]                     # thrust: uT = T / (m0 g)
     B[PX, 0], B[VX, 0] = 0.5 * DT ** 2 * th, DT * th
     ang = np.array([-c[1], c[0], 0.0]) * (M0 * G / I)       # off-centre thrust -> torque
-    B[AT, 0], B[OM, 0] = 0.5 * DT ** 2 * ang, DT * ang
+    B[AT, 0], B[OM, 0] = 0.5 * DT ** 2 * (Tm @ ang), DT * ang
     eff = np.diag(ALPHA * I0 / I)                           # torque effectiveness
-    B[AT, 1:4], B[OM, 1:4] = 0.5 * DT ** 2 * eff, DT * eff
+    B[AT, 1:4], B[OM, 1:4] = 0.5 * DT ** 2 * (Tm @ eff), DT * eff
     B[2, 4], B[5, 4] = -0.5 * DT ** 2, -DT                  # gravity (u = G)
     return B
 
 
-F0 = np.eye(N)
-F0[PX, VX] = DT * np.eye(3)
-F0[AT, OM] = DT * np.eye(3)
+def Fof(att, om, I):
+    """The one-step transition at ``(att, om)`` -- state-dependent, and it has to be.
+
+    Two terms make it so, and both are real rigid-body physics rather than rig decoration:
+    the attitude kinematics ``T(att)``, and the gyroscopic coupling ``om x I om``, which is
+    linear in ``om`` with state-dependent coefficients (``om x I om = [om]x I om``) and so
+    lives in ``F`` exactly.
+    """
+    F = np.eye(N)
+    F[PX, VX] = DT * np.eye(3)
+    Tm = Tmat(att)
+    F[AT, OM] = DT * Tm
+    sk = np.array([[0.0, -om[2], om[1]], [om[2], 0.0, -om[0]], [-om[1], om[0], 0.0]])
+    gyro = -(sk * I[None, :]) / I[:, None]                  # -I^-1 [om]x I
+    F[AT, OM] += 0.5 * DT ** 2 * (Tm @ gyro)
+    F[OM, OM] += DT * gyro
+    return F
+
+
+F0 = Fof(np.zeros(3), np.zeros(3), I0)
 B_NOM = Bof(np.zeros(3), M0, I0, np.zeros(3))
 
 
 def base(x):
-    """The supplied dynamics: a callable of the state, because ``B`` rotates with attitude."""
-    return F0, Bof(x[AT], M0, I0, np.zeros(3))
+    """The supplied dynamics: a callable, because BOTH F and B move with the operating point."""
+    return Fof(x[AT], x[OM], I0), Bof(x[AT], M0, I0, np.zeros(3))
 
 
 # ------------------------------------------------- the six physical departure directions
@@ -143,7 +185,8 @@ def _thrust_dir(x):
 def _torque_dir(k):
     def d(x):
         B = np.zeros((N, P))
-        B[6 + k, 1 + k], B[9 + k, 1 + k] = 0.5 * DT ** 2 * ALPHA, DT * ALPHA
+        B[AT, 1 + k] = 0.5 * DT ** 2 * ALPHA * Tmat(x[AT])[:, k]
+        B[9 + k, 1 + k] = DT * ALPHA
         return np.zeros((N, N)), B
     return d
 
@@ -157,7 +200,8 @@ def _com_dir(k):
 
     def d(x):
         B = np.zeros((N, P))
-        B[6 + row, 0], B[9 + row, 0] = 0.5 * DT ** 2 * gain, DT * gain
+        B[AT, 0] = 0.5 * DT ** 2 * gain * Tmat(x[AT])[:, row]
+        B[9 + row, 0] = DT * gain
         return np.zeros((N, N)), B
     return d
 
@@ -274,7 +318,7 @@ class Autopilot:
 
     def observe(self, y):
         self.p = self.p + DT * self.v
-        self.a = self.a + DT * self.w
+        self.a = self.a + DT * (Tmat(self.a) @ self.w)
         self.p += self.KP_P * (y[0:3] - self.p)
         self.v += self.KV_P * (y[3:6] - self.v)
         self.a += self.KA_A * (y[6:9] - self.a)
@@ -322,8 +366,10 @@ def simulate(seed=0, carry=True):
         m, I, c = inertia(on)
         ap.observe(y)
         u = ap.control(ref[k], dref[k], ddref[k])
-        B = Bof(x[AT], m, I, c)
-        x = F0 @ x + B @ u + _GW @ (sw[k] * rng.standard_normal(6))
+        w = sw[k] * rng.standard_normal(6)
+        Gw = _GW.copy()                       # a disturbance TORQUE is a body angular
+        Gw[AT, 3:6] = 0.5 * DT ** 2 * Tmat(x[AT])   # acceleration; it reaches the Euler
+        x = Fof(x[AT], x[OM], I) @ x + Bof(x[AT], m, I, c) @ u + Gw @ w  # angles through T
         y = x + sv[k] * rng.standard_normal(M)
         X[k], Y[k], U[k] = x, y, u
     return U, X, Y, hold
@@ -346,9 +392,9 @@ def kalman(U, Y, sv=None, sw=None, carry=None):
     for k in range(T):
         on = False if carry is None else bool(carry[k])
         mm, I, c = inertia(on)
-        B = Bof(m[AT], mm, I, c)
-        mp = F0 @ m + B @ U[k]
-        Pp = F0 @ Pm @ F0.T + Qs[k]
+        Fk = Fof(m[AT], m[OM], I)
+        mp = Fk @ m + Bof(m[AT], mm, I, c) @ U[k]
+        Pp = Fk @ Pm @ Fk.T + Qs[k]
         S = Pp + np.diag(Rd[k])
         K = np.linalg.solve(S.T, Pp.T).T
         m = mp + K @ (Y[k] - mp)

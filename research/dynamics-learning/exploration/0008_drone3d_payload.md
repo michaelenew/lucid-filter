@@ -14,6 +14,11 @@ standing torque, `tau = (-c) x (T e3) = T (-c_y, c_x, 0)`: a thrust → roll/pit
 is **exactly zero** on the vehicle the filter was given.  There is no nominal value for it to
 move away from — the direction exists only to be found.
 
+(All tables re-measured after the fairness pass corrected the attitude kinematics -- body
+rates through `T(att)`, plus the gyroscopic term; the results moved by at most 0.06 in any
+ratio cell, which is the honest outcome: the conflation was a rig infidelity, not a source of
+performance.)
+
 **The rig** (`../scripts/drone3d.py`): a 1.10 kg quadrotor flying a 32 s delivery job at 100 Hz
 on GPS position (σ 0.30 m), GPS velocity (σ 0.035 m/s), AHRS attitude (σ 0.030 rad) and rate
 gyro (σ 0.004 rad/s) — the arm rig's bad-absolute-plus-good-dynamic fusion shape, one level up.
@@ -33,11 +38,11 @@ filter's own information set.
 |---|---|---|
 | detection after the grab | **2.8 ± 0.4 steps = 28 ms** (5/5 seeds) | pass |
 | pre-pick-up steps flagged | **0.00%** | pass |
-| mass recovered, carrying | **1.528 ± 0.003** kg (true 1.520) | pass |
+| mass recovered, carrying | **1.529 ± 0.003** kg (true 1.520) | pass |
 | off-centre lever arm, carrying | **1.62 ± 0.01 cm** (true 1.63) | pass |
-| inertia recovered, carrying | (0.0235, 0.0240, 0.0287) vs true (0.0275, 0.0279, 0.0281) | −15%, see below |
-| nominal recovered after the drop | m **1.101 ± 0.001** (true 1.100), \|c\| **0.11 ± 0.00 cm** (true 0) | pass |
-| never worse than the frozen model | every window (worst: 1.36 vs 6.92) | pass |
+| inertia recovered, carrying | (0.0235, 0.0240, 0.0285) vs true (0.0275, 0.0279, 0.0281) | −15%, see below |
+| nominal recovered after the drop | m **1.100 ± 0.001** (true 1.100), \|c\| **0.10 ± 0.01 cm** (true 0) | pass |
+| never worse than the frozen model | every window (worst: 1.37 vs 6.92) | pass |
 | tuning constants | ρ = 1/T; nothing else | pass |
 | cost | ~60 ms/step numpy, 30 members (n = 12 + 6, m = 12) | — |
 
@@ -48,11 +53,11 @@ dynamics channel from the noise machinery; `frozen` is told neither.
 | window | lucid | noise-only | frozen |
 |---|---|---|---|
 | pre-pick-up | 0.98 | 1.00 | 1.00 |
-| calm · carrying | 1.03 | 1.10 | 3.47 |
+| calm · carrying | 1.02 | 1.10 | 3.47 |
 | WIND · carrying | 1.03 | 1.11 | 1.29 |
-| MULTIPATH · carrying | 1.36 | 1.12 | 6.92 |
-| calm · empty | 1.03 | 1.12 | 2.10 |
-| VIBRATION · empty | 0.98 | 0.98 | 2.36 |
+| MULTIPATH · carrying | 1.37 | 1.12 | 6.92 |
+| calm · empty | 1.09 | 1.12 | 2.10 |
+| VIBRATION · empty | 0.98 | 0.99 | 2.35 |
 
 Reading the middle column is the point of the rig: told the true noise and nothing else, a
 Kalman filter still pays 1.10–1.12× because it is flying the wrong aircraft, and the frozen one
@@ -68,8 +73,8 @@ detection frontier affordable.
 
 ## The one place it is beaten, and why
 
-Under the ×12 GPS burst the lucid filter runs at 1.36× where the noise-told oracle runs at
-1.12× — a 21% gap, and the only window in the table where being *told* the sensor noise is worth
+Under the ×12 GPS burst the lucid filter runs at 1.37× where the noise-told oracle runs at
+1.12× — a 22% gap, and the only window in the table where being *told* the sensor noise is worth
 anything.  This is the transient-attribution open of `sequence-demix/0005` on a bigger rig: the
 scale walk has to travel `2 ln 12 = 5.0` in log-variance to reach the new GPS noise, and while
 it is travelling the filter is over-trusting a sensor that has already gone bad.  The window
@@ -79,8 +84,8 @@ the dynamics channel is implicated — the payload read-out is unmoved across th
 ## Two limits worth stating plainly
 
 **The dynamics read-out comes home; the fault *flag* does not.**  Eleven steps after the release
-the reported payload is already back inside 10% of zero, and it settles at m 1.101 ± 0.001 and
-|c| 0.11 ± 0.00 cm.  `r.fault`, though, stays pinned at 1.0 for the remaining 1050 steps.  That
+the reported payload is already back inside 10% of zero, and it settles at m 1.100 ± 0.001 and
+|c| 0.10 ± 0.01 cm.  `r.fault`, though, stays pinned at 1.0 for the remaining 1050 steps.  That
 is correct and it is not what the name suggests: the
 marginal asks *which member of the bank is flying*, and once the departure walker has re-learned
 the nominal dynamics the walker and the nominal member predict identically — there is no
