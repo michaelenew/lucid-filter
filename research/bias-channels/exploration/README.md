@@ -14,3 +14,5 @@ Numbered probes behind [`../SUMMARY.md`](../SUMMARY.md). Later numbers are more 
 | [`0008`](0008_with_the_other_channels_on.py) | beside the split ladder and the dynamics channel, and what it costs at arm scale |
 | [`0009`](0009_a_moving_offset.py) | an offset that moves — step, ramp and sign reversal |
 | [`0010`](0010_the_read_out.py) | the per-sensor read-out, shipped as an observer that cannot act |
+| [`0011`](0011_the_demo_arm_guard.py) | the no-impingement guard on the demo 5-DOF arm |
+| [`0012`](0012_the_ceiling.py) | the falloff at large drifts is the transient, not the ladder's ceiling |

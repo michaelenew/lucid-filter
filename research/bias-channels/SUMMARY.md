@@ -5,11 +5,13 @@ per sensor. This workstream asked what the **first** moment is missing, priced b
 cells, and shipped the one that pays.
 
 **Shipped: `LucidFilter(offsets=True)`** — a constant process offset (a drift, a climbing
-bias) estimated online and fed back, closing **49–84%** of the distance to a Kalman filter
-told the drift, at a **0.8%** premium when there is no drift and **+8% per step** on the
-scalar rig, falling to nothing at arm scale. Off by default and **bit-identical when off** (pinned by a test, not a
-tolerance). The state is never augmented: a dense augmentation measures **1.9× on the scalar
-rig and 2.1–2.9× on the 5-DOF arm**, and the two-stage form is exact against it.
+bias) estimated online and fed back, closing **49–84%** of the distance to a Kalman filter told
+the drift, at a **0.8%** premium when there is no drift. Off by default and **bit-identical when
+off**, pinned by a test rather than a tolerance. Cost: **+8% per step** on the scalar rig and
+**+0.7% on the demo 5-DOF arm**, where it also passes the repository's own no-impingement guard
+in every regime. The state is never augmented, which is the whole reason it is affordable: a
+dense augmentation measures **1.84× on the scalar rig** and **2.06–2.87× at arm scale**, and the
+two-stage form is exact against it.
 
 **The sensor-bias cell ships as a read-out and not as a repair**, and the reason is a
 measurement rather than a preference: its estimate is accurate, and both ways of *using* it were
@@ -276,25 +278,93 @@ confounded and its channel is inert, and the read-out becomes absolute: (−0.12
 against a truth of (0, 1.5), with `r.offset` reported as `None`. Whichever of the pair the data
 can hold is the one that is carried.
 
+## The demo arm: the guard the workstream had not run
+
+[`0011`](exploration/0011_the_demo_arm_guard.py), on
+[`multivariate-statfilter/0052`](../multivariate-statfilter/exploration/0052_lucid_arm5dof_profile.py)'s
+rig imported rather than reimplemented — 15 states, 10 sensors, a commanded trajectory through
+known forcing, phased noise bursts. This is `sequence-demix`'s second acceptance benchmark, and
+for a channel that is off by default the question it answers is the narrow one: **turning it on
+must not damage a rig it has nothing to offer.** The arm has no drift and no miscalibrated
+sensor, and it is driven hard by a known input, so a filter that mistook forcing for drift would
+show up here immediately.
+
+| regime | angle, off → on | ratio | velocity, off → on | ratio |
+|---|---|---|---|---|
+| CALM | 0.00708 → 0.00706 | 0.996 | 0.0038 → 0.0038 | 0.988 |
+| SENSOR | 0.01038 → 0.01038 | 1.000 | 0.0237 → 0.0237 | 1.000 |
+| pot-hot | 0.01473 → 0.01448 | 0.983 | 0.0057 → 0.0055 | 0.979 |
+| PROCESS | 0.00756 → 0.00755 | 1.000 | 0.0051 → 0.0051 | 1.004 |
+| BOTH | 0.01093 → 0.01092 | 0.999 | 0.0246 → 0.0246 | 1.000 |
+| **process+pot** | 0.01412 → **0.01384** | **0.980** | 0.0064 → **0.0063** | **0.985** |
+
+Every regime is at or below 1.004 and the arm's hardest is *better* on both axes; the largest
+offset the channel claims anywhere is 0.0067, i.e. it correctly finds nothing; and the cost is
+**42.8 → 43.0 ms/step, +0.7%**. The structure carries $k=5$ process offsets (one per joint) and
+$k=5$ sensor read-outs.
+
+## The falloff at large drifts is the transient, not the ceiling
+
+[`0012`](exploration/0012_the_ceiling.py). `0005` closes 84% of the distance to an oracle at
+$r = 0.14$ and 49% at $r = 1.00$, and two readings fit that shape and call for opposite fixes:
+the ladder's top rung binds, or the estimate simply takes longer to reach while doing more
+damage on the way. Splitting the post-onset window separates them:
+
+| drift | approach (200 steps after onset) | tail (last 400) | tail, ceiling ×10 |
+|---|---|---|---|
+| 0.14 | 47% | **94%** | — |
+| 0.42 | 37% | **90%** | 90% |
+| 1.00 | 13% | **94%** | 85% |
+| 2.00 | 6% | 52% | **86%** |
+
+**The tail closes almost completely up to one process sd per step, and the approach does not** —
+so through the range the ladder is built for, the falloff is the price of learning the offset,
+which is a transient no grid can remove, and `0005`'s averaged window is carrying it.
+
+**Above about twice the top rung the ceiling does bind**, and visibly: at $r = 2.00$ the tail
+gap is 52% and a ×10 ladder recovers it to 86%. That is the honest limit of the "one noise sd
+per step" convention — it covers what it says it covers and no more. Raising it is not free:
+the same ×10 ladder costs 94% → 85% at $r = 1.00$, a wider grid being less efficient where it
+is not needed, which is the ordinary resolution-versus-reach trade and the reason the ceiling
+is where the convention puts it rather than higher.
+
+## Why one confound got a structural fix and the other a behavioural one
+
+Derived, not measured, and worth stating because the two look like the same problem. The
+channel meets two confounds and handles them differently:
+
+* against a **sensor bias**, on the stable spectrum — handled by declining to act, through a
+  quotient of the process basis by the sensor columns (`0007`);
+* against a **dynamics departure**, under the dynamics channel — handled by declining to feed
+  back (`0008`).
+
+The asymmetry is not a matter of taste. A sensor bias contributes a *constant* to the
+observation, and a process mean on a stable mode contributes the constant $H(I-F)^{-1}d$: two
+constants, equal for a whole family of $(d, c)$, so the confound is **structural** and a
+structural quotient removes it exactly. A departure contributes $A_j x_t$ — proportional to the
+state — which equals a constant only while $x_t$ is itself roughly constant. That confound is
+therefore **state-dependent**, it comes and goes as the state wanders, and no quotient taken
+from $(F, H)$ alone can express it. Hence the second fix acts on the loop rather than on the
+basis. It also explains the shape `0008` measured: the two channels co-drifted rather than
+settling, because the "equivalent drift" a given departure represents moves as the state does.
+
 ## Open
 
 1. **The read-out is biased low by 15–20%** (`0010`), and the shrinkage grows with $m$. It is
    the prior's, so the class ladder is where to look; whether the observer wants a wider ceiling
    than the channel that acts is unmeasured, and the two need not share one.
-2. **The drift's ceiling.** The class ladder's top rung is one process sd per step, and `0007`
-   shows the state gain falling off above it (a velocity drift of 3× the ceiling is estimated
-   correctly — 0.064 against 0.06 — but repairs much less of the RMSE). Whether the ceiling
-   should be raised, or the falloff is the transient rather than the ceiling, is unmeasured.
-3. **The two confounds are the same statement and are handled differently.** A drift is
-   confounded with a sensor bias on the stable spectrum (`0007`) and with a dynamics departure
-   under the dynamics channel (`0008`). The first is answered by declining to act, the second by
-   declining to feed back. Whether one rule covers both — and whether the second should also be
-   a structural quotient, against the departure directions rather than against the sensor
-   entry — is the obvious unification and is untried.
-4. **The demo arm is unmeasured.** `0008`'s arm-scale rig is a kinematic model of the right
-   size, not `multivariate-statfilter/0052`'s rig with its callable `H`, gravity and lever arms.
-   The no-impingement guard there is cheap to run — the channel is off by default and
-   bit-identical when off, so the risk is bounded — and it has not been run.
-5. **Nothing is measured with a moving offset.** The walk `rho * cls` exists so an offset that
-   changes is tracked, and every rig here holds it constant after a single onset. `ode-filter`'s
-   own $\tau$ channel found the missing-persistence axis exactly this way.
+2. **Drifts above twice the ladder's ceiling are under-served** (`0012`: tail gap 52% at
+   $r = 2.00$, against 86% with a ×10 ladder). The fix is known and its cost is measured; what
+   is not settled is whether a caller who expects a large drift should get a wider ladder
+   automatically, and from what — the base is the only thing the filter has to scale it by, and
+   `0005` is the record of that being untrustworthy.
+3. **The approach, not the steady state, is where the remaining loss is** (`0012`: 6–47% of the
+   gap closed during the 200 steps after onset, against 90–94% in the tail). Nothing has asked
+   whether it is at the detection frontier the way `dynamics-learning` established for a fault,
+   which is the natural next question and the natural instrument for it already exists.
+4. **The arm guard is run at two seeds** (`0011`), where the workstream's own convention is
+   four and the acceptance rule is "every regime within +2 SE of the paired diff". The margins
+   are wide enough that the verdict is not in doubt, and the standard error is not reported.
+5. **The arm's own read-out is unexamined.** `0011` measures that the channel does no harm
+   there; it does not ask what `r.sensor_offset` says about a rig whose sensors are genuinely
+   fine, which is the false-positive question for the diagnostic.
