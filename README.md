@@ -442,6 +442,32 @@ pip install -e .
 One distribution, `lucid-filter`; `numpy` is the only runtime dependency.
 Python ≥ 3.10. `from lucid import LucidFilter`.
 
+### The optional C kernel
+
+`pip install` also compiles [`lucid/lucid_kernel/`](lucid/lucid_kernel/README.md),
+which is the inner recursion in C. It is optional in the strict sense: if
+there is no compiler the install still succeeds, and everything still works.
+
+It exists because the recursion is *dispatch-bound* — a step is a handful of
+einsums over arrays small enough that NumPy spends longer deciding what to do
+than doing it. Profiling one `OdeFilter.fit(y, p=3)` puts 99% of the wall
+clock inside `_loglik_batch` and 79% of it inside `c_einsum` alone. The kernel
+buys 8× on that recursion at `p = 3, order = 5` — 5–11× across the orders a
+fit actually uses, 2× at `p = 1` — and **6.9× on a whole `fit()`** of 600
+points, which is the length at which a fit is slow enough to care (1196 s →
+174 s). On a short series it is less, 3.7× at 250 points, because the fit's
+fixed costs do not shrink with the recursion.
+
+**It returns the same bits**, not the same number to a tolerance. It calls
+NumPy's own `exp`, `log` and BLAS rather than libm's and its own, because
+those are the operations whose last bit belongs to the local NumPy build; it
+*asks* NumPy which way round it sums the contractions where `np.einsum`
+decides that for itself; and before it is used for a problem shape it is run
+against the NumPy path and compared bit for bit, falling back with a warning
+if it ever disagrees. So a result computed with it and a result computed
+without it are the same result — there is nothing to note in a write-up, and
+`LUCID_KERNEL=0` turns it off if you would rather check that yourself.
+
 ## A note on reading this repository
 
 Every `SUMMARY.md` is written to be falsifiable and is edited when a probe

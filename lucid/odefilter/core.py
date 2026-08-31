@@ -72,10 +72,19 @@ quantity that both detects and reverts.
 """
 from __future__ import annotations
 
+import functools
 import math
 from dataclasses import dataclass, asdict, field
 
 import numpy as np
+
+try:                                    # the compiled recursion, when built
+    import lucid_kernel as _kernel      # see lucid_kernel/README.md
+except ImportError:                     # pragma: no cover - optional
+    try:                                # installed as `lucid.odefilter` etc.
+        from .. import lucid_kernel as _kernel
+    except ImportError:
+        _kernel = None
 
 __all__ = ["OdeFilter", "Params", "FilterResult", "Step"]
 
@@ -393,6 +402,20 @@ class FilterResult:
         return len(self.mean)
 
 
+def _result_bits(r: FilterResult) -> np.ndarray:
+    """Every number a run produces, flattened, for a bit-for-bit comparison.
+
+    The column order is the one :meth:`OdeFilter._run` fills, which is also
+    the order the kernel returns; `loglik` is left out because it is the sum
+    of a column already here.
+    """
+    return np.concatenate([
+        r.mean, r.var, r.innovation, r.share_prior, r.share_process,
+        r.share_measurement, r.process_anomaly, r.process_regime,
+        r.measurement_anomaly, r.measurement_regime, r.whiteness, r.dynamics,
+        r.pred_var, r.state_mean.ravel(), r.state_cov.ravel()])
+
+
 # ------------------------------------------------------------------- the grid
 _GAP_FACTOR = 1.5   # node spacing = 1.5 * s: the resolution limit, no dead zone
                     # (research/adaptive-grid finding 11).  Uniform, not Gauss-
@@ -567,6 +590,138 @@ def _grid_batch(V: np.ndarray, p: int, order: int, order_A: int, with_A: bool,
         Fs=Fs, Aidx=np.repeat(np.arange(nA), nN))
 
 
+@functools.lru_cache(maxsize=None)
+def _einsum_orders(p: int, G: int = 32):
+    """Ask NumPy which way round it sums the two undecidable contractions.
+
+    `np.einsum` chooses a reduction shape per contraction, and the choice
+    moves with the operand sizes rather than with the arithmetic.  Two of the
+    contractions in this recursion are affected:
+
+        F P0 F'   `einsum("bgxw,bgwv,bgzv->bgxz")` sums both contracted axes
+                  as one flat run at p >= 3 and as a nested pair -- inner sum
+                  over v, accumulated over w -- at p = 2.
+        F m0      `einsum("bgxz,bgz->bgx")` reduces a contiguous axis with a
+                  stride-0 output, which is the shape that sends einsum down
+                  a vectorised path: the products land in SIMD lanes and come
+                  back through a butterfly, so the sum is not left to right.
+                  The kernel reproduces that up to p = 4, above which the two
+                  plausible lane widths disagree and neither is what NumPy
+                  gives; there it hands the contraction back to NumPy.
+
+    A third, `einsum("g,gxz->xz")` and `einsum("g,gx,gz->xz")`, is the
+    reporting collapse `filter()` does per step, and it turns vectorised at
+    p = 1 for the same reason: the per-node covariance is then contiguous in
+    the node index.
+
+    Encoding a table of what NumPy does would be a claim about every NumPy on
+    every CPU.  This asks instead, on data of the shape in hand.  Returns
+    ``(ap_mode, mp_mode, sc_mode)``, with ``ap_mode`` None when neither order
+    is NumPy's -- which retires the kernel rather than letting it answer
+    differently.
+    """
+    K = _kernel
+    ext = K.ext()
+    rng = np.random.default_rng(11)
+    B, Gc = 4, 32                       # the two contractions below reduce
+    F = rng.random((B, Gc, p, p))       # over p, so this G is free
+    P0 = rng.random((B, Gc, p, p))
+    m0 = rng.random((B, Gc, p))
+
+    ref_ap = np.einsum("bgxw,bgwv,bgzv->bgxz", F, P0, F)
+    flat = np.zeros_like(ref_ap)
+    for w in range(p):
+        for v in range(p):
+            flat += F[:, :, :, None, w] * P0[:, :, None, None, w, v] \
+                    * F[:, :, None, :, v]
+    nested = np.zeros_like(ref_ap)
+    for w in range(p):
+        inner = np.zeros_like(ref_ap)
+        for v in range(p):
+            inner += F[:, :, :, None, w] * P0[:, :, None, None, w, v] \
+                     * F[:, :, None, :, v]
+        nested += inner
+    ap = (K.AP_FLAT if np.array_equal(ref_ap.view(np.uint64),
+                                      flat.view(np.uint64))
+          else K.AP_NESTED if np.array_equal(ref_ap.view(np.uint64),
+                                             nested.view(np.uint64))
+          else None)
+
+    ref_mp = np.einsum("bgxz,bgz->bgx", F, m0)
+    lanes = np.empty_like(ref_mp)
+    for b in range(B):
+        for gi in range(Gc):
+            for x in range(p):
+                lanes[b, gi, x] = ext.np_prim("lanedot", F[b, gi, x], m0[b, gi])
+    mp = (K.MP_LANES if np.array_equal(ref_mp.view(np.uint64),
+                                       lanes.view(np.uint64))
+          else K.MP_EINSUM)
+
+    # The reporting collapse `filter()` does per step -- and this one reduces
+    # over the NODES, so it has to be asked at the grid size in hand, and asked
+    # more than once: at p = 1 it produces a single number per draw, and a
+    # single number agrees by luck often enough to be worthless as evidence.
+    sc = K.SC_NAIVE
+    for _ in range(64):
+        pi = rng.random(G)
+        Pn = rng.random((G, p, p))
+        dm = rng.random((G, p))
+        ref_sc = (np.einsum("g,gxz->xz", pi, Pn)
+                  + np.einsum("g,gx,gz->xz", pi, dm, dm))
+        naive = np.empty((p, p))
+        for x in range(p):
+            for z in range(p):
+                a = 0.0
+                for gi in range(G):
+                    a += pi[gi] * Pn[gi, x, z]
+                b = 0.0
+                for gi in range(G):
+                    b += pi[gi] * dm[gi, x] * dm[gi, z]
+                naive[x, z] = a + b
+        if not np.array_equal(ref_sc.view(np.uint64), naive.view(np.uint64)):
+            sc = K.SC_EINSUM
+            break
+    return ap, mp, sc
+
+
+@functools.lru_cache(maxsize=None)
+def _kernel_modes(p: int, order: int, order_A: int, with_A: bool):
+    """The verified evaluation order for this problem shape, or None.
+
+    :func:`_einsum_orders` proposes; this disposes, by running a short but
+    deliberately awkward series -- a missing observation, parameter vectors
+    spread far enough apart that the nodes disagree -- through both the kernel
+    and :func:`_batch_numpy` and comparing the raw bits.  Only a pair that
+    survives that is ever used, and the answer is cached per shape, so a fit
+    pays for this once per (p, order, order_A, with_A) it touches.
+    """
+    if _kernel is None or not _kernel.available():
+        return None
+    ext = _kernel.ext()
+    ap, mp, _sc = _einsum_orders(p, order * order * (order_A if with_A else 1))
+    candidates = () if ap is None else ((ap, mp),)
+
+    rng = np.random.default_rng(20240917)
+    B, n = 6, 96
+    base = np.concatenate([
+        [0.5] + [0.0] * (p - 1),
+        [-7.0, -9.0, 0.0, 0.0, math.log(0.3), math.log(0.3),
+         _logit(0.9), math.log(0.2)]])
+    V = base + 0.4 * rng.standard_normal((B, p + 8))
+    yv = np.cumsum(0.03 * rng.standard_normal(n))
+    yv[n // 3] = np.nan                     # exercise the missing branch too
+    gg = _grid_batch(V, p, order, order_A, with_A, 0)
+    Fg = np.ascontiguousarray(gg["Fs"][:, gg["Aidx"]])
+    args = (np.ascontiguousarray(yv), np.ascontiguousarray(gg["T"]),
+            np.ascontiguousarray(gg["pi0"]), np.ascontiguousarray(gg["Qg"]),
+            np.ascontiguousarray(gg["Rg"]), Fg, int(p))
+    return _kernel.verify(
+        ("ode", int(p), int(order), int(order_A), bool(with_A)),
+        lambda a, m: ext.ode_loglik_batch(*args, int(a), int(m)),
+        lambda: _batch_numpy(yv, gg, p),
+        candidates=candidates)
+
+
 def _loglik_batch(y: np.ndarray, V: np.ndarray, p: int, order: int,
                   order_A: int = 3, with_A: bool = True,
                   unit_roots: int = 0) -> np.ndarray:
@@ -585,13 +740,44 @@ def _loglik_batch(y: np.ndarray, V: np.ndarray, p: int, order: int,
 
     A row whose parameters drive the recursion out of range gets -inf, the
     batched equivalent of :class:`_Numerical` reaching ``_run``'s guard.  Rows
-    are independent -- every operation below contracts within its own ``b`` --
-    so one dead row cannot poison the others.
+    are independent -- every operation contracts within its own ``b`` -- so
+    one dead row cannot poison the others.
+
+    This is where a fit spends essentially all of its time (99% of one
+    ``fit(p=3)``, and 79% inside ``c_einsum`` alone), so it is the one place
+    with a compiled form: :func:`_batch_kernel` when `lucid_kernel` is built
+    and has been checked against :func:`_batch_numpy` on this NumPy, and
+    :func:`_batch_numpy` otherwise.  The two return the same bits, which is
+    asserted rather than assumed -- see :func:`_kernel_modes`.
     """
     V = np.atleast_2d(V)
-    B = V.shape[0]
     g = _grid_batch(V, p, order, order_A, with_A, unit_roots)
+    modes = _kernel_modes(p, order, order_A, with_A)
+    if modes is not None:
+        out = _batch_kernel(y, g, p, modes)
+        if out is not None:
+            return out
+    return _batch_numpy(y, g, p)
+
+
+def _batch_kernel(y, g, p, modes):
+    """The same recursion in C.  None when the kernel is not built."""
+    ext = _kernel.ext() if _kernel is not None else None
+    if ext is None:
+        return None
+    return ext.ode_loglik_batch(
+        np.ascontiguousarray(y, dtype=float),
+        np.ascontiguousarray(g["T"]), np.ascontiguousarray(g["pi0"]),
+        np.ascontiguousarray(g["Qg"]), np.ascontiguousarray(g["Rg"]),
+        np.ascontiguousarray(g["Fs"][:, g["Aidx"]]), int(p),
+        int(modes[0]), int(modes[1]))
+
+
+def _batch_numpy(y, g, p):
+    """The recursion in NumPy.  The kernel is checked against this, and this
+    is what runs when there is no kernel to check."""
     T, Qg, Rg, Aidx = g["T"], g["Qg"], g["Rg"], g["Aidx"]
+    B = Qg.shape[0]
     Fg = g["Fs"][:, Aidx]                                 # (B, G, p, p)
     G = Qg.shape[1]
 
@@ -843,6 +1029,7 @@ class OdeFilter:
         self.order = int(order)
         self.order_A = int(order_A)
         self._built = None
+        self._modes = None              # the verified kernel order for this grid
         # supplied-dynamics mode: a callable state -> (p x p) transition, evaluated
         # at the running state estimate each step (EKF-style).  The dynamics are then
         # KNOWN, not fitted or ranged; only the noise scales are inferred.  None keeps
@@ -1153,6 +1340,108 @@ class OdeFilter:
             if Fs.shape != (y.size, self.params.p, self.params.p):
                 raise ValueError(f"Fs must have shape ({y.size}, {self.params.p}, "
                                  f"{self.params.p}), got {Fs.shape}")
+        # The compiled recursion covers the ordinary case: the fitted, tracked
+        # dynamics.  Caller-supplied transitions stay in NumPy -- there is no
+        # speed to win there, since the callable is Python anyway.
+        if Fs is None and self.linearized_dynamics is None:
+            modes = self._stream_modes()
+            if modes is not None:
+                out = self._run_kernel(y, want, modes)
+                if out is not None:
+                    return out
+        return self._run_numpy(y, want, Fs)
+
+    # ------------------------------------------------------- the compiled run
+    def _run_kernel(self, y, want, modes):
+        """The whole series through the kernel, or None if it is not built.
+
+        Bit-for-bit :meth:`_run_numpy`; :meth:`_stream_modes` has checked that
+        on this NumPy before this is ever reached.  The streaming state is not
+        touched, so there is nothing to save and restore.
+        """
+        ext = _kernel.ext() if _kernel is not None else None
+        if ext is None:
+            return None
+        g = self._build()
+        pr = self.params
+        res = ext.ode_filter(
+            np.ascontiguousarray(y, dtype=float),
+            np.ascontiguousarray(g["T"]), np.ascontiguousarray(g["pi0"]),
+            np.ascontiguousarray(g["Qg"]), np.ascontiguousarray(g["Rg"]),
+            np.ascontiguousarray(g["Fs"][g["Aidx"]]),
+            np.ascontiguousarray(g["LP"]), np.ascontiguousarray(g["LM"]),
+            np.ascontiguousarray(g["LA"]),
+            float(pr.phi_P), float(pr.phi_M), int(pr.p), int(bool(want)),
+            int(modes[0]), int(modes[1]), int(modes[2]))
+        if res is None:                       # the _Numerical guard fired
+            if not want:
+                return -np.inf
+            raise _Numerical("non-positive predictive variance")
+        if not want:
+            return res
+        cols, sm, sc, total = res
+        names = ("mean", "var", "innovation", "share_prior", "share_process",
+                 "share_measurement", "process_anomaly", "process_regime",
+                 "measurement_anomaly", "measurement_regime", "whiteness",
+                 "dynamics", "pred_var")
+        return FilterResult(loglik=total, state_mean=sm, state_cov=sc,
+                            **{n: cols[i] for i, n in enumerate(names)})
+
+    def _stream_modes(self):
+        """The verified evaluation order for this filter's grid, or None.
+
+        The same two contractions as :func:`_kernel_modes`, but a different
+        code path -- the streaming recursion reaches for BLAS where the
+        batched one reaches for einsum -- so it gets its own end-to-end check,
+        on every field `filter()` reports rather than only on the likelihood.
+        """
+        if _kernel is None or not _kernel.available():
+            return None
+        key = (self.params, self.order, self.order_A)
+        if self._modes is not None and self._modes[0] == key:
+            return self._modes[1]
+        ext = _kernel.ext()
+        pr = self.params
+        g = self._build()
+        ap, mp, sc = _einsum_orders(pr.p, int(g["Qg"].size))
+        # the collapse is offered both ways round: the probe is evidence, the
+        # end-to-end check below is the decision
+        candidates = (() if ap is None else
+                      ((ap, mp, sc), (ap, mp, 1 - sc)))
+        rng = np.random.default_rng(4242)
+        yv = np.cumsum(0.05 * rng.standard_normal(64))
+        yv[7] = np.nan
+        args = (np.ascontiguousarray(yv), np.ascontiguousarray(g["T"]),
+                np.ascontiguousarray(g["pi0"]), np.ascontiguousarray(g["Qg"]),
+                np.ascontiguousarray(g["Rg"]),
+                np.ascontiguousarray(g["Fs"][g["Aidx"]]),
+                np.ascontiguousarray(g["LP"]), np.ascontiguousarray(g["LM"]),
+                np.ascontiguousarray(g["LA"]),
+                float(pr.phi_P), float(pr.phi_M), int(pr.p), 1)
+
+        def reference():
+            r = self._run_numpy(yv, want=True, Fs=None)
+            return _result_bits(r)
+
+        def compiled(a, m, c):
+            res = ext.ode_filter(*args, int(a), int(m), int(c))
+            if res is None:
+                return None
+            cols, sm, sc, _ = res
+            return np.concatenate([cols.ravel(), sm.ravel(), sc.ravel()])
+
+        modes = _kernel.verify(
+            ("ode-stream", int(pr.p), int(self.order), int(self.order_A),
+             bool(pr.s_A > 0.0)), compiled, reference, candidates=candidates)
+        self._modes = (key, modes)
+        return modes
+
+    def _run_numpy(self, y: np.ndarray, want: bool, Fs=None):
+        """The recursion in NumPy, one `update()` per observation.
+
+        This is the definition; :meth:`_run_kernel` is checked against it, bit
+        for bit, before it is used.
+        """
         saved = (self._pi, self._m, self._P, self._prev_lamP, self._prev_lamM,
                  self._loglik, self._e_prev, self._ee, self._e2, self._nw)
         try:
