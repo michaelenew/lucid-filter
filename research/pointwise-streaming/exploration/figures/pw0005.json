@@ -2,7 +2,7 @@
  "seeds": [
   {
    "events": 1871,
-   "wall_ms_per_event": 7.712879343666514,
+   "wall_ms_per_event": 1.517764561197231,
    "gridded_rows_kept": 7,
    "gridded_rows": 1600,
    "all_lucid": 0.035100175459814975,
@@ -20,7 +20,7 @@
   },
   {
    "events": 1890,
-   "wall_ms_per_event": 7.890691956614107,
+   "wall_ms_per_event": 1.4388457291004901,
    "gridded_rows_kept": 20,
    "gridded_rows": 1600,
    "all_lucid": 0.024857438188881174,
@@ -38,7 +38,7 @@
   },
   {
    "events": 1886,
-   "wall_ms_per_event": 7.687987116118887,
+   "wall_ms_per_event": 1.4390189082714284,
    "gridded_rows_kept": 9,
    "gridded_rows": 1600,
    "all_lucid": 0.055892414244218154,
@@ -56,7 +56,7 @@
   },
   {
    "events": 1868,
-   "wall_ms_per_event": 7.694726368843445,
+   "wall_ms_per_event": 1.4935658094219284,
    "gridded_rows_kept": 8,
    "gridded_rows": 1600,
    "all_lucid": 0.041822571418700376,
@@ -74,7 +74,7 @@
   },
   {
    "events": 1872,
-   "wall_ms_per_event": 8.018094645299106,
+   "wall_ms_per_event": 1.4652363525641718,
    "gridded_rows_kept": 10,
    "gridded_rows": 1600,
    "all_lucid": 0.042860136447849584,

@@ -73,7 +73,8 @@ It found three things no row-wise rig could have, and each is a design item in
    the tail (3.61× against 1.23×): reverting toward the member's base split hands half of a
    genuinely elevated total to the process axis when a sensor really is bad.
 
-**Cost.** 2.95 ± 0.03 ms per event in pure numpy, for `n = 2`, `m = 3`, one sensor per
-event — down from 6.14 before the stacked bank landed. Per *instant* that is the pointwise column of
+**Cost.** 1.47 ± 0.01 ms per event in pure numpy, for `n = 2`, `m = 3`, one sensor per
+event — 6.14 before the stacked bank landed, 2.95 after it, and 1.47 once the exact `Q(a)`
+was pre-factored into gap-independent pieces. Per *instant* that is the pointwise column of
 [`0003`](0003_pointwise_vs_joint.md): fewer multiply-adds than the joint row, more
 interpreter passes.

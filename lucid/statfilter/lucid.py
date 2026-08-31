@@ -1828,13 +1828,17 @@ class _EngineBank:
         # See `_WalkEngine.update`: a partial event gets its share of the step budget, and
         # holds the split of every pair its own subset confounds.
         budget = self.gap if mo == m else self.gap * (mo / m)
+        # NB gated on the EVENT being partial, not on the model having pairs: a partial event
+        # confounds pairs the model does not, which is the whole point -- with one sensor
+        # reporting, every process mode it sees is confounded with that sensor's own noise.
+        # Each member answers for itself, because each carries its own base and so its own
+        # pairs.
         held = None
-        if mo != m and self._groups:
-            e0 = self.members[0]
-            ev_groups, _ = e0.event_groups(obs, mo)
-            if ev_groups:
-                held = np.stack([[lo for _, lo in f._group_read(f.mu, ev_groups)]
-                                 for f in self.members])
+        if mo != m:
+            held = []
+            for j, f in enumerate(self.members):
+                g, _ = f.event_groups(obs, mo)
+                held.append((g, [lo for _, lo in f._group_read(self.mu[j], g)] if g else None))
         for ax, k in enumerate(self._act):       # NB: not `a` -- that is the elapsed time
             idx = self._axwin[k]
             dpk = self._dS_axis(k, obs, aQ if k < n else a, Hout)
@@ -1854,14 +1858,17 @@ class _EngineBank:
             self.mu[:, k] += np.clip(Kmu * (grad / info), -budget[:, k], budget[:, k])
             self._Pmu[:, k] = np.minimum((1.0 - Kmu) * self._Pmu[:, k] + self._qmu[:, k] * a,
                                          self._Pmu_cap[:, k])
-        if held is not None:
-            for j, f in enumerate(self.members):
-                tots = [t for t, _ in f._group_read(f.mu, ev_groups)]
-                f.mu[:] = f._group_write(f.mu, tots, held[j], ev_groups)
         self._pi[:] = pi
         self._m[:] = m_new
         self._P[:] = P_new
-        if self._groups and mo == m:
+        if held is not None:                    # hold each pair's split, keep its total
+            for j, f in enumerate(self.members):
+                g, lo = held[j]
+                if lo is None:
+                    continue
+                tots = [t for t, _ in f._group_read(self.mu[j], g)]
+                self.mu[j] = f._group_write(self.mu[j], tots, lo, g)
+        elif self._groups:
             self._revert_groups(a)
         self._ll += ll
         sc = self.mu + self._wmean(pi)
