@@ -253,13 +253,21 @@ POSES = [np.zeros(NJ),
 SEGS = [(0.0, 1.5, 0, 0), (1.5, 4.0, 0, 1), (4.0, 5.5, 1, 1), (5.5, 8.0, 1, 2),
         (8.0, 9.5, 2, 2), (9.5, 12.0, 2, 3), (12.0, 13.5, 3, 3), (13.5, 16.0, 3, 4),
         (16.0, 19.0, 4, 4)]
+CYCLE = SEGS[-1][1]                           # 19 s, and the job ENDS where it started
 
 
 def reference(T):
-    """Minimum-jerk waypoint reference: theta, omega, alpha, jerk, each (T, NJ)."""
+    """Minimum-jerk waypoint reference: theta, omega, alpha, jerk, each (T, NJ).
+
+    The job is a CYCLE -- the last pose is the first -- so a run longer than ``CYCLE`` is
+    more cycles rather than a slower one.  That matters: segment duration is what sets the
+    commanded acceleration, and slowing the arm down to fill a longer demo would take the
+    excitation with it.  Position, rate and acceleration are all zero at the seam, so the
+    wrap is smooth.  A run of ``CYCLE`` or less is untouched by this.
+    """
     th = np.zeros((T, NJ)); om = np.zeros((T, NJ))
     al = np.zeros((T, NJ)); jk = np.zeros((T, NJ))
-    t = np.arange(T) * DT
+    t = np.mod(np.arange(T) * DT, CYCLE)
     for (t0, t1, ia, ib) in SEGS:
         a, b = POSES[ia], POSES[ib]
         sel = (t >= t0) & (t < t1)
