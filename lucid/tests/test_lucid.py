@@ -331,8 +331,8 @@ def test_departure_variance_is_bounded_never_frozen():
     Y, _ = ar1(T=400)
     f = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25])
     f.filter(Y)
-    dep = f._specs[-1][3]
-    eng = f._members[(f._nd - 1) * f._nc]
+    dep = f._specs[-1][3]                    # the bottom-rung walker: the last spec
+    eng = f._members[(len(f._specs) - 1) * f._nc]
     assert np.all(np.diag(eng._P)[dep.gidx] <= dep.cap[dep.gidx] * (1 + 1e-9))
     assert np.all(np.diag(eng._P)[dep.gidx] > 0.0)      # never frozen at zero
     eng.reprice(dep.gidx)                                # the detection restart
