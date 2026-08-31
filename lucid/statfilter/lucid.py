@@ -21,6 +21,22 @@ Configure by the give-what-you-know / infer-the-rest rule -- for each input pass
 
 Everything is vector; a scalar problem is length 1.
 
+**The input is a stream of events, not a matrix of rows.**  The general thing that
+happens is that ONE sensor reports, at some time:
+
+    f.observe(sensor, value, t=timestamp)     # one (sensor, timestamp, value) point
+
+Sensors are not assumed to share a schedule and the gaps are not assumed equal.  A
+partly-observed row is a first-class input (``NaN`` = that sensor did not report, and the
+present ones are sub-selected out of ``H`` and ``R`` rather than the row being discarded);
+a fully synchronous row at a fixed rate is the special case, ``filter(Y)``, and runs the
+arithmetic it always did.  ``timestep`` fixes the time unit: everything supplied about the
+model and every class timescale is per NOMINAL STEP, and an event ``a = dt / timestep``
+steps after the last takes each of them to that power -- ``F(a) = exp(a log F)``,
+``Q -> Q a``, ``phi -> phi**a``, ``forget -> forget**a``, ``rho -> 1 - (1-rho)**a``.
+``R`` alone is not scaled: a measurement variance belongs to the reading, not to the gap
+before it.  See ``research/pointwise-streaming/SUMMARY.md``.
+
 **The dynamics channel.**  `dynamics=None` learns `F` (and `B`) online from the random-walk prior;
 `dynamics=F0, faults=rho` says the supplied dynamics may CHANGE -- a payload attached to a drone, a
 tire blown out -- and the filter detects the change and recovers the new dynamics without a refit, a
@@ -81,6 +97,8 @@ _SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weigh
                                            #   (`3 s` of half-span).  A box ending at 0.8 tops out
                                            #   at a factor of 11, which is smaller than the regime
                                            #   changes in this repository's own rigs.
+_SERIES_REACH = 4.0         # gaps out to 4 nominal steps: how far the pre-factored Q(a)
+                            # series must stay accurate before the exact route is used instead
 _HAZARD = 1e-4              # default fault rate: ~1 dynamics fault per 10,000 steps.  A LABELED
                             # prior of the same standing as `forget`, not a tuning constant: it is
                             # the operating point on the false-alarm/delay frontier, and the delay
@@ -234,6 +252,44 @@ def _split_star(los, n_pairs):
             v[g] = los[j]
             out.append(v)
     return np.array(out)
+
+
+def _subset_groups(eng, obs):
+    """The pairs a PARTIAL event's own observed subset confounds.
+
+    `_split_groups` asks whether ``H v_k`` lies along one sensor axis -- a question about the
+    whole row.  An event that carries a subset of the sensors asks the same question of
+    ``H[obs] v_k``, and gets a bigger answer: the fewer sensors report, the more pairs are
+    proportional in that event's score.  In the limit that matters most -- ONE sensor, which
+    is what a ``(sensor, timestamp, value)`` stream delivers -- ``S`` is a scalar, every
+    process mode that sensor sees enters it additively alongside the sensor's own noise, and
+    the split between them is invisible **at every such step**.  That is Proposition 1 again,
+    reached not through the model but through the packetisation.
+
+    The structural test is exact here and needs no Fisher solve: with a single observed
+    sensor the two ``dS`` are proportional by construction.  What is still asked of the full
+    model is that both axes carry information at all (``_Ichar``), so a ridge-regularised
+    ``Q0``'s null modes stay out, exactly as in `_split_groups`.
+
+    Returns the same ``(process axis, sensor axis, (H v)_i^2)`` triples, with GLOBAL indices.
+    """
+    dg = eng._Ichar
+    info = dg > _RANK_TOL * dg.max()
+    out = []
+    for k in range(eng.n):
+        if not (eng.active[k] and info[k]):
+            continue
+        hv = np.abs(eng.HV[obs, k])
+        if hv.max() <= 0.0:
+            continue
+        nz = np.flatnonzero(hv > _RANK_TOL * hv.max())
+        if nz.size != 1:
+            continue
+        i = int(obs[nz[0]])
+        if not info[eng.n + i]:
+            continue
+        out.append((k, i, float(eng.HV[i, k] ** 2)))
+    return out
 
 
 def _rung_odds(forget):
@@ -558,6 +614,7 @@ class LucidStep:
     fault: float = 0.0             #: posterior probability the dynamics have left the NOMINAL --
     #: which is the supplied ``F`` under ``faults=``, and the random walk ``F = I`` under
     #: ``dynamics=None`` (where it therefore reads "the dynamics are not a random walk")
+    time: float = math.nan         #: the filter clock after this event (see ``timestep``)
 
     @property
     def scale(self) -> np.ndarray:
@@ -579,6 +636,8 @@ class LucidResult:
     dynamics: np.ndarray = None    #: (T, n, n) learned ``F``, or ``None`` when supplied fixed
     control: np.ndarray = None     #: (T, n, p) learned ``B``, or ``None``
     fault: np.ndarray = None       #: (T,) posterior probability of a dynamics fault
+    time: np.ndarray = None        #: (T,) the filter clock at each event
+    sensor: np.ndarray = None      #: (T,) which sensor each event carried -- streams only
 
     def __len__(self) -> int:
         return len(self.mean)
@@ -587,6 +646,257 @@ class LucidResult:
 def _logsumexp(a: np.ndarray) -> float:
     m = float(np.max(a))
     return m + math.log(float(np.sum(np.exp(a - m))))
+
+
+# ------------------------------------------------------ the elapsed-time map
+# A supplied ``F`` is the ONE-NOMINAL-STEP sampling of a fixed continuous generator
+# ``A = log F``; over an elapsed ``a`` nominal steps the transition is ``exp(a A)``.  The
+# three primitives below are the numpy-only realisation (the package has no scipy
+# dependency): scaling-and-squaring for ``exp``, Denman-Beavers for the square root, and
+# inverse scaling-and-squaring for ``log``.  They are exercised only when a stream actually
+# carries a non-nominal gap -- ``a == 1`` and ``a == 0`` short-circuit to ``F`` and ``I``.
+
+
+def _expm(M):
+    """Matrix exponential by scaling and squaring with a Taylor core."""
+    M = np.asarray(M, float)
+    nrm = float(np.abs(M).sum(1).max())
+    if nrm == 0.0:
+        return np.eye(M.shape[0])
+    k = max(0, int(math.ceil(math.log2(nrm / 0.5))))
+    A = M / (2.0 ** k)
+    E = np.eye(A.shape[0])
+    term = E
+    for j in range(1, 32):              # ||A|| <= 1/2: the tail is below double precision
+        term = term @ A / j
+        E = E + term
+        if np.abs(term).sum(1).max() < 1e-18:
+            break
+    for _ in range(k):
+        E = E @ E
+    return E
+
+
+def _sqrtm(A):
+    """Principal matrix square root (Denman-Beavers), for matrices with no eigenvalue on
+    the closed negative real axis -- which is exactly the condition for ``log A`` to be
+    real, so a failure here and a failure there are the same failure."""
+    Y = np.array(A, float)
+    Z = np.eye(A.shape[0])
+    for _ in range(64):
+        Yn = 0.5 * (Y + np.linalg.inv(Z))
+        Zn = 0.5 * (Z + np.linalg.inv(Y))
+        done = np.abs(Yn - Y).max() <= 1e-14 * max(1.0, float(np.abs(Yn).max()))
+        Y, Z = Yn, Zn
+        if done:
+            break
+    return Y
+
+
+def _logm(F):
+    """Principal matrix logarithm by inverse scaling and squaring.
+
+    Repeated square roots pull ``F`` towards the identity until the ``log(I + X)`` series
+    converges fast, then the result is scaled back.  Defective matrices are fine -- the
+    constant-velocity transition ``[[1, dt], [0, 1]]`` is the common one and has no
+    eigenbasis at all, which is why this is not an eigendecomposition.
+    """
+    n = F.shape[0]
+    I = np.eye(n)
+    A = np.array(F, float)
+    k = 0
+    while np.abs(A - I).sum(1).max() > 0.25 and k < 60:
+        A = _sqrtm(A)
+        k += 1
+    X = A - I
+    L = np.zeros_like(X)
+    term = I
+    for j in range(1, 48):
+        term = term @ X
+        L = L + ((-1.0) ** (j + 1) / j) * term
+        if np.abs(term).sum(1).max() < 1e-18:
+            break
+    return (2.0 ** k) * L
+
+
+class _Propagator:
+    """The elapsed-time transition and forcing map of a FIXED one-nominal-step ``F``.
+
+    ``F`` is read as the ``a = 1`` sampling of a fixed generator ``A = log F``, so over an
+    elapsed ``a`` nominal steps
+
+        F(a) = exp(a A),     Phi(a) = int_0^a exp(A tau) dtau,
+
+    both read off one exponential of ``a * [[A, I], [0, 0]]``.  The supplied ``B`` is the
+    ONE-STEP forcing map (``x_t = F x_{t-1} + B u_t``), so its continuous counterpart is
+    ``Phi(1)^-1 B`` and the elapsed map is ``Phi(a) Phi(1)^-1 B`` -- which is exactly ``B``
+    at ``a = 1`` and ``0`` at ``a = 0``, i.e. continuous THROUGH the nominal step rather
+    than agreeing with it only there.
+
+    The factorisation is LAZY: a filter that is never handed a non-nominal gap never
+    computes a logarithm, and one whose ``F`` has no real logarithm only finds out (with an
+    error naming the fix) if it is actually asked to propagate over a non-nominal gap.
+    """
+
+    def __init__(self, F):
+        self.F = np.asarray(F, float)
+        self.n = self.F.shape[0]
+        self._I = np.eye(self.n)
+        self._Z = np.zeros((self.n, self.n))
+        self._trivial = np.array_equal(self.F, self._I)
+        self._A = None
+        self._Pinv = None
+        self._key = None
+        self._val = None
+        self._qcache = {}
+
+    def factor(self):
+        """Force the generator, returning False when there is none (rather than raising)."""
+        try:
+            self._factor()
+        except ValueError:
+            return False
+        return True
+
+    def _factor(self):
+        if self._A is not None:
+            return
+        try:
+            A = _logm(self.F)
+            ok = np.all(np.isfinite(A)) and np.allclose(_expm(A), self.F,
+                                                        rtol=1e-6, atol=1e-8)
+        except np.linalg.LinAlgError:
+            ok = False
+        if not ok:
+            raise ValueError(
+                "these dynamics have no real continuous-time generator, so there is no "
+                "transition over a non-nominal time step to compute (a negative real "
+                "eigenvalue is the usual cause -- no continuous system samples to that).  "
+                "Either sample uniformly, or pass `dynamics` as a callable of the state, "
+                "which is propagated by the first-order elapsed map instead.")
+        self._A = A
+        aug = np.zeros((2 * self.n, 2 * self.n))
+        aug[:self.n, :self.n] = A
+        aug[:self.n, self.n:] = self._I
+        self._aug = aug
+        Phi1 = _expm(aug)[:self.n, self.n:]
+        try:
+            self._Pinv = np.linalg.solve(Phi1, self._I)
+        except np.linalg.LinAlgError:               # int_0^1 exp(A t) dt singular: only
+            self._Pinv = None                       # when A has a 2*pi*i*k eigenvalue
+
+    # -- the exact process accumulation over an elapsed gap --
+    def _vanloan(self, Qc, a):
+        """``int_0^a exp(A s) Qc exp(A' s) ds`` -- Van Loan's block exponential."""
+        n = self.n
+        M = np.zeros((2 * n, 2 * n))
+        M[:n, :n] = -self._A
+        M[:n, n:] = Qc
+        M[n:, n:] = self._A.T
+        E = _expm(M * a)
+        Fa = E[n:, n:].T
+        Q = Fa @ E[:n, n:]
+        return 0.5 * (Q + Q.T)
+
+    def spectral(self, Q0):
+        """The continuous spectral density whose ONE-STEP accumulation is ``Q0``.
+
+        ``Q0`` is what the caller supplied: the process covariance of one nominal step.  The
+        map ``Qc -> int_0^1 exp(As) Qc exp(A's) ds`` is linear and symmetric-preserving, so it
+        is inverted once, on the symmetric basis, and the answer is what makes ``Q(a)`` exact
+        at every gap rather than only at ``a = 1``.
+
+        Returns ``None`` when the inverse is not usable -- an ``A`` the map is singular for,
+        or a recovered density that is not positive semidefinite.  The caller then falls back
+        to scaling ``Q0`` linearly, which is what this replaced and is still exact for the
+        random-walk default.
+        """
+        n = self.n
+        idx = [(i, j) for i in range(n) for j in range(i, n)]
+        cols = []
+        for (i, j) in idx:                       # the symmetric basis, unit-weighted
+            E = np.zeros((n, n)); E[i, j] = E[j, i] = 1.0
+            cols.append(np.array([self._vanloan(E, 1.0)[p_] for p_ in idx]))
+        L = np.stack(cols, axis=1)
+        rhs = np.array([Q0[p_] for p_ in idx])
+        try:
+            sol = np.linalg.solve(L, rhs)
+        except np.linalg.LinAlgError:
+            return None
+        Qc = np.zeros((n, n))
+        for v, (i, j) in zip(sol, idx):
+            Qc[i, j] = Qc[j, i] = v
+        if not np.all(np.isfinite(Qc)):
+            return None
+        w = np.linalg.eigvalsh(0.5 * (Qc + Qc.T))
+        scale = max(float(np.abs(Qc).max()), 1e-300)
+        if w.min() < -1e-8 * scale:
+            return None
+        if not np.allclose(self._vanloan(Qc, 1.0), Q0, rtol=1e-6,
+                           atol=1e-12 * max(float(np.abs(Q0).max()), 1e-300)):
+            return None
+        return Qc
+
+    def series(self, Qc):
+        """Pre-factor ``Q(a)`` into pieces that do not depend on the gap.
+
+            Q(a) = sum_{p,q} A^p Qc (A^T)^q  a^(p+q+1) / (p! q! (p+q+1))
+
+        -- the Taylor expansion of ``int_0^a exp(As) Qc exp(A's) ds``.  Every matrix product
+        in it is independent of ``a``, so they are computed ONCE and each gap costs only a
+        weighted sum of them.  That matters because a real stream hands over a different gap
+        every event: a Van Loan exponential per member per event was measured at 7.6 ms an
+        event on the asynchronous rig against 3.0 without it, and none of it caches, because
+        no two gaps repeat.
+
+        Returns ``(terms, degree)`` with ``terms[d] = sum_{p+q=d} ...``, or ``None`` when the
+        expansion is not trustworthy over the gaps a caller might bring -- the exact route
+        then stands.
+        """
+        n, P = self.n, 10
+        Ap = [np.eye(n)]
+        for _ in range(P):
+            Ap.append(Ap[-1] @ self._A)
+        fact = [math.factorial(j) for j in range(P + 1)]
+        terms = []
+        for d in range(P + 1):
+            T = np.zeros((n, n))
+            for q in range(d + 1):
+                pth = d - q
+                T = T + (Ap[pth] @ Qc @ Ap[q].T) / (fact[pth] * fact[q] * (d + 1))
+            terms.append(T)
+        nrm = float(np.abs(self._A).sum(1).max())
+        if nrm * _SERIES_REACH > 1.0:              # the tail is not negligible out to the
+            return None                            # gaps a caller may bring: use Van Loan
+        return terms
+
+    def accumulate(self, Qc, a, terms=None):
+        """``Q(a)`` -- from the pre-factored series when it is trustworthy, else exact."""
+        if terms is None:
+            return self._vanloan(Qc, a)
+        out = np.zeros((self.n, self.n))
+        w = a
+        for T in terms:
+            out = out + w * T
+            w *= a
+        return 0.5 * (out + out.T)
+
+    def at(self, a):
+        """``(F(a), Psi(a))`` with ``mpred = F(a) x + Psi(a) B u``."""
+        if a == 1.0:
+            return self.F, self._I
+        if a == 0.0:
+            return self._I, self._Z
+        if self._trivial:
+            return self._I, a * self._I
+        if a == self._key:
+            return self._val
+        self._factor()
+        M = _expm(a * self._aug)
+        Fa, Phi = M[:self.n, :self.n], M[:self.n, self.n:]
+        out = (Fa, a * self._I if self._Pinv is None else Phi @ self._Pinv)
+        self._key, self._val = a, out
+        return out
 
 
 # ------------------------------------------------------- the per-(phi,s) engine
@@ -611,7 +921,7 @@ class _WalkEngine:
     """
 
     def __init__(self, Q0, R0, H, F, B, phi, s, walk_axes=None, cap=None, group_class=None,
-                 fisher_Si=None):
+                 fisher_Si=None, prop=None):
         self._revert = float(phi)         # rate the walk's null excursion returns to that
                                           # hypothesis; the class's own persistence.  Named so
                                           # research can vary it -- both bounds are load-bearing
@@ -638,6 +948,11 @@ class _WalkEngine:
         self.phi, self.s = float(phi), float(s)
         self._cap = None if cap is None else np.asarray(cap, float)
         self._dyn = None            # optional (mean, u) -> (Jacobian, predicted mean) callable
+        self._prop = prop if prop is not None else _Propagator(F)
+        self._Tcache = {}           # the AR(1) scale kernel per elapsed time (D x nn x nn)
+        self._Qc = False            # the recovered spectral density: lazy, see _base_Q
+        self._subcache = {}         # (groups, anchors) per observed subset -- see _subset_groups
+        self._Q0 = np.array(Q0, float)
         self._hook = None           # optional mean -> (H Jacobian, predicted measurement).
         # ``self.H`` stays the CHARACTERISTIC linearisation whatever the hook does: the
         # structural questions -- which axes are observable, which pairs are confounded, what
@@ -728,25 +1043,110 @@ class _WalkEngine:
             w[arm] = 1 + i * (self._nn - 1) + np.arange(self._nn - 1)
             self._axwin[k] = w
 
-    def _star_QR(self):
-        """(Q_g, R_g) at every star node: the centre pair plus a per-node one-axis change."""
+    def _base_Q(self, a):
+        """The base process covariance accumulated over ``a`` nominal steps.
+
+        ``Q0`` is the caller's ONE-STEP covariance, so ``Q(1) = Q0`` by definition and the
+        nominal step needs nothing.  Off it, scaling ``Q0`` linearly is exact only when the
+        transition is the identity -- for a random walk `Q` really is proportional to elapsed
+        time.  It is badly wrong for an integrator: a double integrator accumulates position
+        variance as ``t**3``, so a half-length gap gets FOUR times the position noise it
+        should and a tenth-length gap a HUNDRED times.  That reads as a filter that cannot
+        trust its own propagation and over-fits every reading, and it is not something the
+        scale walk can absorb, because the misfit is a different multiple at every gap
+        (research/pointwise-streaming/0005 measured 15x oracle on the asynchronous rig).
+
+        So the base is the exact accumulation, recovered once from the generator the
+        propagator already holds.  Where that recovery is unavailable -- dynamics with no real
+        generator, a singular Van Loan map, a density that comes back non-PSD, or a per-step
+        linearisation which has no fixed generator at all -- it falls back to the linear
+        scaling, which is exactly what the caller would otherwise have had.
+        """
+        if self._Qc is False:
+            self._Qc = self._Qterms = None
+            if self._dyn is None and self._prop.factor():
+                self._Qc = self._prop.spectral(self._Q0)
+                if self._Qc is not None:
+                    self._Qterms = self._prop.series(self._Qc)
+        if self._Qc is None:
+            return a * self._Q0
+        return self._prop.accumulate(self._Qc, a, self._Qterms)
+
+    def _star_QR(self, a=1.0):
+        """(Q_g, r_g) at every star node: the centre pair plus a per-node one-axis change.
+
+        ``Q`` accumulates over ELAPSED TIME and so carries the factor ``a``; ``r`` does not --
+        a measurement variance is a property of the reading, not of the gap before it.  ``r_g``
+        comes back as the (G, m) DIAGONAL, so a partial event can sub-select sensors out of it
+        without ever forming the (m, m) block.
+        """
         n = self.n
-        Qc = self.V @ np.diag(self.lam * np.exp(np.clip(self.mu[:n], -60, 60))) @ self.V.T
+        xi = np.clip(self.mu[:n], -60, 60)
         rc = self.rho * np.exp(np.clip(self.mu[n:], -60, 60))
-        Qg = np.repeat(Qc[None], self._G, 0)
         rg = np.repeat(rc[None], self._G, 0)
+        if a == 1.0:
+            Qc = self.V @ np.diag(self.lam * np.exp(xi)) @ self.V.T
+            Qg = np.repeat(Qc[None], self._G, 0)
+            for g in range(1, self._G):
+                k = int(self._star_axis[g]); o = float(self._star_off[g])
+                if k < n:
+                    dlam = self.lam[k] * (math.exp(min(self.mu[k] + o, 60.0))
+                                          - math.exp(min(self.mu[k], 60.0)))
+                    Qg[g] += dlam * np.outer(self.V[:, k], self.V[:, k])
+                else:
+                    rg[g, k - n] = self.rho[k - n] * math.exp(min(self.mu[k] + o, 60.0))
+            return Qg, rg
+        # Off the nominal step the base is the exact accumulation (`_base_Q`) and the scale
+        # is applied to it as a CONGRUENCE, ``D^(1/2) Q(a) D^(1/2)`` with
+        # ``D = V diag(e^xi) V'``.  That is positive semidefinite for every scale and every
+        # gap, because a congruence of a PSD matrix is PSD -- which adding the scale's
+        # departure to the base is NOT: for the default ``Q0 = I`` on a double integrator
+        # that sum goes negative at ``a ~ 0.8`` with the scale walked down, and a negative
+        # ``Q`` diverges the filter outright.  It also reduces to ``V diag(lam e^xi) V'``
+        # exactly at ``a = 1``, since ``D`` and ``Q0`` share the eigenbasis -- so this is one
+        # formula through the nominal step, not two that happen to agree at it.
+        half = self.V @ np.diag(np.exp(0.5 * xi)) @ self.V.T
+        Qc = half @ self._base_Q(a) @ half
+        Qg = np.repeat(Qc[None], self._G, 0)
+        # A node differs from the centre in ONE coordinate, so its congruence differs from the
+        # centre's by a RANK-2 update -- ``(c-1)(v w' + w v') + (c-1)^2 (v'Qv) v v'`` with
+        # ``w = Q v``.  That is O(n^2) a node instead of O(n^3), and at ``a = 1``, where
+        # ``Q v_k = lam_k e^xi_k v_k``, it collapses to exactly the ``dlam v v'`` the nominal
+        # branch above adds.  One formula, two costs.
         for g in range(1, self._G):
             k = int(self._star_axis[g]); o = float(self._star_off[g])
-            if k < n:
-                dlam = self.lam[k] * (math.exp(min(self.mu[k] + o, 60.0))
-                                      - math.exp(min(self.mu[k], 60.0)))
-                Qg[g] += dlam * np.outer(self.V[:, k], self.V[:, k])
-            else:
-                i = k - n
-                rg[g, i] = self.rho[i] * math.exp(min(self.mu[k] + o, 60.0))
-        Rg = np.zeros((self._G, self.m, self.m))
-        Rg[:, np.arange(self.m), np.arange(self.m)] = rg
-        return Qg, Rg
+            if k >= n:
+                rg[g, k - n] = self.rho[k - n] * math.exp(min(self.mu[k] + o, 60.0))
+                continue
+            c = math.exp(0.5 * (min(self.mu[k] + o, 60.0) - xi[k])) - 1.0
+            v = self.V[:, k]
+            w = Qc @ v
+            Qg[g] = Qc + c * (np.outer(v, w) + np.outer(w, v)) + (c * c * float(v @ w)) * np.outer(v, v)
+        return Qg, rg
+
+    def _kernel(self, a):
+        """The scale classes' AR(1) transition over ``a`` nominal steps, per axis.
+
+        Each axis's ``xi`` is AR(1) with ITS OWN persistence and stationary sd per nominal step
+        (a confounded pair's two axes carry their own class, research sequence-demix/0002), i.e.
+        an Ornstein-Uhlenbeck process sampled at the nominal rate; over ``a`` steps the
+        persistence is ``phi**a`` and the innovation variance ``s^2 (1 - phi^2a)``.  At ``a = 0``
+        that is the identity -- nothing moves between two readings at one instant -- and at
+        ``a = 1`` it is the kernel built once at construction, bit for bit.
+        """
+        if a == 1.0:
+            return self._T1
+        T = self._Tcache.get(a)
+        if T is None:
+            pa = self.phi_ax ** a
+            nu = np.maximum(self.s_ax ** 2 * (1.0 - pa ** 2), 1e-12)
+            off = self._off
+            T = np.exp(np.clip(-0.5 * (off[:, None, :] - pa[:, None, None] * off[:, :, None]) ** 2
+                               / nu[:, None, None], -700.0, 700.0))
+            T /= T.sum(2, keepdims=True)
+            if len(self._Tcache) < 512:
+                self._Tcache[a] = T
+        return T
 
     def _star_weights(self, pi_ax, alpha=None):
         """One distribution over the star: the axial windows mixed with weights ``alpha``
@@ -780,16 +1180,37 @@ class _WalkEngine:
         Hk = np.atleast_2d(np.asarray(out, float))
         return Hk, Hk @ mean
 
-    def _dS_axis(self, k, HV=None):
-        """dS/dxi_k at each of axis k's window nodes (dS_k depends only on the k-coordinate)."""
-        a = np.exp(np.minimum(self.mu[k] + self._off[k], 60.0))
+    def _dS_axis(self, k, obs, a=1.0, HV=None):
+        """dS/dxi_k at each of axis k's window nodes, over the sensors ``obs`` this event
+        carried (dS_k depends only on the k-coordinate).
+
+        A process mode's entry carries the elapsed factor ``a`` because ``Q`` does; a sensor's
+        does not.  Either can come back identically zero -- a mode this event's sensors cannot
+        see, or a sensor that did not read -- and a zero here is what tells ``update`` to let
+        that axis DRIFT rather than update it on no evidence.
+
+        The ``a`` passed for a process mode is the LIVE process time (``_aQ``), not the gap
+        since the last event.  The two differ only at a zero gap, and there the distinction is
+        the whole ball game: this score is the local one, keeping ``Q``'s own dependence on
+        ``xi`` and dropping the prior covariance's, and at a zero gap the dropped term is the
+        ONLY term.  Zeroing the score there would hand every process-scale axis's evidence to
+        whichever sensor happened to follow the gap and discard what the other sensors at that
+        instant say about the same ``Q`` -- which is measurably what it did
+        (research/pointwise-streaming/0003).  Carrying the live process time keeps the leading
+        term instead, so ``m`` readings of one instant weigh on the process scale whether they
+        arrive as a row or as ``m`` points.
+        """
+        e = np.exp(np.minimum(self.mu[k] + self._off[k], 60.0))
         if k < self.n:
-            hv = (self.HV if HV is None else HV)[:, k]
-            return (self.lam[k] * a)[:, None, None] * np.outer(hv, hv)[None]
-        out = np.zeros((self._nn, self.m, self.m))
+            hv = (self.HV if HV is None else HV)[obs, k]
+            return (a * self.lam[k] * e)[:, None, None] * np.outer(hv, hv)[None]
+        out = np.zeros((self._nn, obs.size, obs.size))
         i = k - self.n
-        out[:, i, i] = self.rho[i] * a
+        j = int(np.searchsorted(obs, i))
+        if j < obs.size and obs[j] == i:
+            out[:, j, j] = self.rho[i] * e
         return out
+
 
     def _cap_P(self, P):
         """Bound a state's variance at its class cap by symmetric row/column scaling.
@@ -835,15 +1256,15 @@ class _WalkEngine:
 
     # -- a confounded group's two coordinates: its contribution to S (identifiable per step)
     #    and its log-odds (in the exact null space of the per-step scale-Fisher) --
-    def _group_read(self, mu):
+    def _group_read(self, mu, groups=None):
         out = []
-        for (k, i, h2) in self._groups:
+        for (k, i, h2) in (self._groups if groups is None else groups):
             a = self.lam[k] * h2 * math.exp(min(mu[k], 60.0))
             b = self.rho[i] * math.exp(min(mu[self.n + i], 60.0))
             out.append((a + b, math.log(max(a, 1e-300)) - math.log(max(b, 1e-300))))
         return out
 
-    def _group_write(self, mu, tots, los):
+    def _group_write(self, mu, tots, los, groups=None):
         """Put each group's total back with the given log-odds -- the exact null flow.
 
         The null direction is ``(R, -Q)`` up to scale at every operating point, and integrating
@@ -852,7 +1273,7 @@ class _WalkEngine:
         coordinate the one-step likelihood cannot see, and touches nothing that it can.
         """
         out = mu.copy()
-        for gi, (k, i, h2) in enumerate(self._groups):
+        for gi, (k, i, h2) in enumerate(self._groups if groups is None else groups):
             lo = float(np.clip(los[gi], -80.0, 80.0))
             a = tots[gi] / (1.0 + math.exp(-lo))
             b = tots[gi] - a
@@ -862,12 +1283,33 @@ class _WalkEngine:
 
     def reset(self, mean=None, scale=None):
         self._pi_ax = None
+        self._aQ = 0.0              # the live process time: see _dS_axis
         self._m = None if mean is None else np.asarray(mean, float)
         self._P = None
         self.mu = np.zeros(self.D) if scale is None else np.asarray(scale, float).copy()
         self._Pmu = self.s_ax ** 2
         self.loglik = 0.0
         return self
+
+    def event_groups(self, obs, mo):   # noqa: D401
+        """``(groups, anchor log-odds)`` for an event carrying the sensors ``obs``.
+
+        A FULL row is the model's own question and gets the model's own answer, unchanged --
+        so nothing about row-wise filtering passes through here.  A partial event gets the
+        pairs its subset confounds, cached per subset (there are ``m`` singletons and the
+        full row, so the cache is tiny and warm after the first pass).
+        """
+        if mo == self.m:
+            return self._groups, self._anchor_lo
+        key = obs.tobytes()
+        got = self._subcache.get(key)
+        if got is None:
+            g = _subset_groups(self, obs)
+            anc = np.array([lo for _, lo in self._group_read(np.zeros(self.D), g)])
+            got = (g, anc)
+            if len(self._subcache) < 256:
+                self._subcache[key] = got
+        return got
 
     def reprice(self, idx):
         """A detected jump re-prices ignorance: variance back to the class cap on ``idx``,
@@ -881,46 +1323,71 @@ class _WalkEngine:
         self._P[:, idx] = 0.0
         self._P[idx, idx] = self._cap[idx]
 
-    def update(self, y, u=None, off=None, add_S=None):
+    def update(self, y, u=None, a=1.0, off=None, add_S=None):
+        """One EVENT: the sensors of ``y`` that are finite, ``a`` nominal steps after the last.
+
+        ``a = 1`` with an all-finite ``y`` is the classical synchronous step and runs the
+        identical arithmetic.  Otherwise the sensors that read are sub-selected out of ``H``
+        and ``r`` -- the correction, the predictive density and the scale evidence are all
+        over that subset alone, absent sensors are never imputed -- and ``Q``, the walk's
+        drift and each axis's AR(1) kernel accumulate over the gap.
+        """
         n, m, H = self.n, self.m, self.H
         y = np.atleast_1d(np.asarray(y, dtype=float))
+        obs = np.flatnonzero(np.isfinite(y))
+        mo = obs.size
         r = len(self._act)
-        Qg, Rg = self._star_QR()
+        # the model uses the true gap; the process-scale SCORE uses the live process time,
+        # which differs from it only at a zero gap (see _dS_axis)
+        aQ = a if a > 0.0 else self._aQ
+        self._aQ = aQ
+        Qg, rg = self._star_QR(a)
         if self._pi_ax is None:
             self._pi_ax = self._w1[self._act].copy()
             if self._m is None:
-                if np.all(np.isfinite(y)):
+                if mo:
                     # Initialise by linearising h at the origin.  With a constant H this is
                     # the least-squares start it always was (h(0) = 0); with a hook it
                     # subtracts the measurement's value at zero state -- gravity, for an
                     # accelerometer -- which a raw lstsq against the Jacobian would
                     # otherwise misread as enormous state.
                     H0, y0 = self._H_at(np.zeros(n))
-                    self._m = np.linalg.lstsq(H0, y - y0, rcond=None)[0]
+                    self._m = np.linalg.lstsq(H0[obs], (y - y0)[obs], rcond=None)[0]
                 else:
                     self._m = np.zeros(n)
             if self._P is None:
+                Q1, r1 = (Qg, rg) if a == 1.0 else self._star_QR(1.0)
                 self._P = self._cap_P(
-                    np.eye(n) * float(Rg.reshape(self._G, -1).max()
-                                      + Qg.reshape(self._G, -1).max()) * n)
-        pi_ax = np.einsum("ai,aij->aj", self._pi_ax, self._T1[self._act])
+                    np.eye(n) * float(r1.max() + Q1.reshape(self._G, -1).max()) * n)
+        pi_ax = np.einsum("ai,aij->aj", self._pi_ax, self._kernel(a)[self._act])
         # The dynamics are a CALLABLE when they are learned or nonlinear: it returns the
         # linearisation (for the covariance) and the predicted mean (from f, not the
         # Jacobian -- they differ once the transition depends on the state).  Real F/B
         # arrive linearised per operating point, so this is the general path.
         if self._dyn is None:
-            F = self.F
-            mpred = F @ self._m + ((self.B @ u) if self.B is not None else 0.0)
+            F, Psi = self._prop.at(a)
+            mpred = F @ self._m + ((Psi @ (self.B @ u)) if self.B is not None else 0.0)
         else:
-            F, mpred = self._dyn(self._m, u)
+            F1, mp1 = self._dyn(self._m, u)
+            if a == 1.0:
+                F, mpred = F1, mp1
+            else:
+                # A per-step linearisation has no fixed generator to exponentiate -- it is only
+                # ever the truth AT the nominal step -- so the elapsed map is the first-order
+                # one, exact at a = 0 and a = 1 and correct to first order in the generator
+                # between them, which is the regime a linearisation lives in anyway.
+                F = np.eye(F1.shape[0]) + a * (F1 - np.eye(F1.shape[0]))
+                mpred = self._m + a * (mp1 - self._m)
         if off is not None:
-            mpred = mpred + off
+            mpred = mpred + (off if a == 1.0 else a * off)
         FPFt = F @ self._P @ F.T
-        if not np.all(np.isfinite(y)):
+        if mo == 0:
             self._pi_ax = pi_ax
             w = self._star_weights(pi_ax)
             self._P = self._cap_P(FPFt + np.einsum("g,gij->ij", w, Qg))
             self._m = mpred
+            for k in self._act:                     # nothing seen: every scale drifts
+                self._Pmu[k] = min(self._Pmu[k] + self._qmu[k] * a, self._Pmu_cap[k])
             wmean = self._wmean(pi_ax)
             return LucidStep(self._m.copy(), self._P.copy(), np.full(m, np.nan), 0.0,
                              self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
@@ -930,17 +1397,20 @@ class _WalkEngine:
         # a link-mounted gyro reads is the whole chain below it, through axes that rotate with
         # the state.  It returns the linearisation (for the covariance and for dS/dxi) and the
         # predicted measurement (from h, not the Jacobian -- they differ once h is nonlinear).
-        H, ypred = self._H_at(mpred)
-        HV = self.HV if self._hook is None else H @ self.V
-        e = y - ypred
+        Hf, ypred = self._H_at(mpred)
+        HV = self.HV if self._hook is None else Hf @ self.V
+        H = Hf if mo == m else Hf[obs]
+        e = (y - ypred) if mo == m else (y - ypred)[obs]
         PHt = np.einsum("gij,kj->gik", Ppred, H)
-        S = np.einsum("ij,gjk->gik", H, PHt) + Rg
+        S = np.einsum("ij,gjk->gik", H, PHt)
+        S[:, np.arange(mo), np.arange(mo)] += rg[:, obs]
         if add_S is not None:
-            S = S + add_S
+            S = S + (add_S if mo == m else add_S[np.ix_(range(add_S.shape[0]), obs, obs)]
+                     if add_S.ndim == 3 else add_S[np.ix_(obs, obs)])
         Si = np.linalg.inv(S)
         sgn, logdet = np.linalg.slogdet(S)
         maha = np.einsum("i,gij,j->g", e, Si, e)
-        lg = -0.5 * (m * _LOG2PI + logdet + maha)
+        lg = -0.5 * (mo * _LOG2PI + logdet + maha)
         if r:
             logZ = np.empty(r)
             for i, k in enumerate(self._act):
@@ -970,9 +1440,26 @@ class _WalkEngine:
         # finding-18 walk per active axis, score/Fisher averaged over that axis's window
         # posterior only (the caltrop: dS_k depends only on the k-coordinate, so the axial
         # profile carries the axis's evidence at linear cost).
+        # The walk's step budget is ONE grid spacing per nominal step OF A FULL ROW: it is
+        # what keeps a single Newton step against a near-singular Fisher from becoming a
+        # verdict.  An event carrying part of the row carries part of the evidence that would
+        # contradict such a step -- with one sensor reporting, nothing contradicts it at all
+        # -- so it gets that part of the budget.  A full row is unchanged by construction.
+        budget = self.gap if mo == m else self.gap * (mo / m)
+        # What a partial event may move.  The pairs its own subset confounds are directions it
+        # cannot see AT ALL -- with one sensor reporting, ``S`` is a scalar and a process mode
+        # it sees enters it exactly as that sensor's own noise does.  So the event moves each
+        # such pair's TOTAL, which it can see, and its split is held at whatever identifiable
+        # evidence already made it.
+        ev_groups, _ = self.event_groups(obs, mo)
+        held = ([lo for _, lo in self._group_read(self.mu, ev_groups)]
+                if (ev_groups and mo != m) else None)
         for i, k in enumerate(self._act):
             idx = self._axwin[k]
-            dpk = self._dS_axis(k, HV)
+            dpk = self._dS_axis(k, obs, aQ if k < n else a, HV)
+            if not dpk.any():                       # no evidence here: drift, never freeze
+                self._Pmu[k] = min(self._Pmu[k] + self._qmu[k] * a, self._Pmu_cap[k])
+                continue
             Sik = Si[idx]
             Sie = np.einsum("gij,j->gi", Sik, e)
             score_g = 0.5 * (np.einsum("gi,gij,gj->g", Sie, dpk, Sie)
@@ -982,10 +1469,14 @@ class _WalkEngine:
             info = float(pi_ax[i] @ info_g) + _RIDGE
             grad = float(pi_ax[i] @ score_g)
             K_mu = self._Pmu[k] / (self._Pmu[k] + 1.0 / info)
-            self.mu[k] += float(np.clip(K_mu * (grad / info), -self.gap[k], self.gap[k]))
-            self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k], self._Pmu_cap[k])
+            self.mu[k] += float(np.clip(K_mu * (grad / info), -budget[k], budget[k]))
+            self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k] * a,
+                               self._Pmu_cap[k])
+        if held is not None:
+            tots = [t for t, _ in self._group_read(self.mu, ev_groups)]
+            self.mu = self._group_write(self.mu, tots, held, ev_groups)
         self._pi_ax, self._m, self._P = pi_ax, m_new, P_new
-        if self._groups and self._revert is not None:
+        if self._groups and mo == m and self._revert is not None:
             # The per-axis Newton walk steps by ``score/info``, which is ~1/Q on a process axis
             # and ~1/R on a sensor axis; where the two are confounded, that step is almost
             # entirely along the NULL direction, in which the score carries no information at
@@ -995,12 +1486,17 @@ class _WalkEngine:
             # it is a TRANSIENT and not a verdict: it reverts to this member's hypothesis at the
             # class's own rate ``phi``, at the total the walk just established.  The verdict is
             # the bank's, on the ``forget`` timescale (research 0053's lesson b).
+            rev = self._revert if a == 1.0 else self._revert ** a
             tots, los = zip(*self._group_read(self.mu))
-            back = [a + self._revert * (lo - a) for a, lo in zip(self._anchor_lo, los)]
+            back = [an + rev * (lo - an) for an, lo in zip(self._anchor_lo, los)]
             self.mu = self._group_write(self.mu, list(tots), back)
         self.loglik += ll
         wmean = self._wmean(pi_ax)
-        return LucidStep(m_new.copy(), P_new.copy(), e.copy(), ll,
+        innov = e
+        if mo != m:
+            innov = np.full(m, np.nan)
+            innov[obs] = e
+        return LucidStep(m_new.copy(), P_new.copy(), innov.copy(), ll,
                          self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
 
 
@@ -1023,11 +1519,13 @@ class _LoopBank:
         self.members = members
         self.n = members[0].n
 
-    def update(self, y, u=None, want_S=False, off=None, add_S=None):
+    def update(self, y, u=None, a=1.0, want_S=False, off=None, add_S=None):
         kw = {} if off is None else {"off": off}
         if add_S is not None:
             kw["add_S"] = add_S
-        st = [f.update(y, u=u, **kw) for f in self.members]
+        # ``a`` is passed on, so an overriding subclass must take it: a subclass that
+        # silently dropped it would keep running and treat every gap as nominal.
+        st = [f.update(y, u=u, a=a, **kw) for f in self.members]
         return (np.stack([t.mean for t in st]), np.stack([t.var for t in st]),
                 np.stack([t.innovation for t in st]), np.array([t.loglik for t in st]),
                 np.stack([t.process_scale for t in st]),
@@ -1064,6 +1562,11 @@ class _EngineBank:
         self.gap, self._qmu, self._Pmu_cap = st("gap"), st("_qmu"), st("_Pmu_cap")
         self._off, self._w1 = st("_off"), st("_w1")
         self._T1a = np.ascontiguousarray(np.stack([f._T1[f._act] for f in members]))
+        self._phi_ax = st("phi_ax")
+        self._s_ax = st("s_ax")
+        self._Tcache = {}           # the stacked AR(1) kernel per elapsed time
+        self._aQ = 0.0              # the live process time: see _WalkEngine._dS_axis
+        self._props = [f._prop for f in members]
         self._star_off = st("_star_off")
         sa = e0._star_axis
         self._gp = np.flatnonzero((sa >= 0) & (sa < self.n))
@@ -1099,26 +1602,62 @@ class _EngineBank:
         P *= sc[:, :, None] * sc[:, None, :]
         return P
 
-    def _star_QR(self):
+    def _star_QR(self, a=1.0):
+        """The stacked twin of ``_WalkEngine._star_QR``: ``Q`` carries the elapsed factor, ``r``
+        does not, and ``r`` comes back as the (M, G, m) diagonal for sub-selection."""
         n, M, G = self.n, self.M, self._G
-        le = self.lam * np.exp(np.clip(self.mu[:, :n], -60, 60))
-        Qc = np.einsum("bk,bkij->bij", le, self._Vout)
+        xi = np.clip(self.mu[:, :n], -60, 60)
         rc = self.rho * np.exp(np.clip(self.mu[:, n:], -60, 60))
-        Qg = np.repeat(Qc[:, None], G, 1)
         rg = np.repeat(rc[:, None], G, 1)
-        if self._gp.size:
-            kp = self._kp
-            mu_k = self.mu[:, kp]
-            dlam = self.lam[:, kp] * (
-                np.exp(np.minimum(mu_k + self._star_off[:, self._gp], 60.0))
-                - np.exp(np.minimum(mu_k, 60.0)))
-            Qg[:, self._gp] += dlam[:, :, None, None] * self._Vout[:, kp]
         if self._gs.size:
             rg[:, self._gs, self._is] = self.rho[:, self._is] * np.exp(
                 np.minimum(self.mu[:, n + self._is] + self._star_off[:, self._gs], 60.0))
-        Rg = np.zeros((M, G, self.m, self.m))
-        Rg[:, :, np.arange(self.m), np.arange(self.m)] = rg
-        return Qg, Rg
+        if a == 1.0:
+            Qc = np.einsum("bk,bkij->bij", self.lam * np.exp(xi), self._Vout)
+            Qg = np.repeat(Qc[:, None], G, 1)
+            if self._gp.size:
+                kp = self._kp
+                mu_k = self.mu[:, kp]
+                dlam = self.lam[:, kp] * (
+                    np.exp(np.minimum(mu_k + self._star_off[:, self._gp], 60.0))
+                    - np.exp(np.minimum(mu_k, 60.0)))
+                Qg[:, self._gp] += dlam[:, :, None, None] * self._Vout[:, kp]
+            return Qg, rg
+        half = np.einsum("bik,bk,bjk->bij", self.V, np.exp(0.5 * xi), self.V)
+        base = np.stack([f._base_Q(a) for f in self.members])
+        Qc = np.einsum("bij,bjk,bkl->bil", half, base, half)
+        Qg = np.repeat(Qc[:, None], G, 1)
+        if self._gp.size:                          # the rank-2 form -- see _WalkEngine._star_QR
+            kp = self._kp
+            c = np.exp(0.5 * (np.minimum(self.mu[:, kp] + self._star_off[:, self._gp], 60.0)
+                              - xi[:, kp])) - 1.0
+            v = np.einsum("bik,gk->bgi", self.V, np.eye(n)[kp])
+            w = np.einsum("bij,bgj->bgi", Qc, v)
+            vw = np.einsum("bgi,bgi->bg", v, w)
+            Qg[:, self._gp] += (c[:, :, None, None]
+                                * (np.einsum("bgi,bgj->bgij", v, w)
+                                   + np.einsum("bgi,bgj->bgij", w, v))
+                                + (c * c * vw)[:, :, None, None]
+                                * np.einsum("bgi,bgj->bgij", v, v))
+        return Qg, rg
+
+    def _kernel(self, a):
+        """The stacked per-axis AR(1) kernel over ``a`` nominal steps, active axes only."""
+        if a == 1.0:
+            return self._T1a
+        T = self._Tcache.get(a)
+        if T is None:
+            pa = self._phi_ax[:, self._act] ** a
+            nu = np.maximum(self._s_ax[:, self._act] ** 2 * (1.0 - pa ** 2), 1e-12)
+            off = self._off[:, self._act]
+            T = np.exp(np.clip(
+                -0.5 * (off[:, :, None, :] - pa[:, :, None, None] * off[:, :, :, None]) ** 2
+                / nu[:, :, None, None], -700.0, 700.0))
+            T /= T.sum(3, keepdims=True)
+            T = np.ascontiguousarray(T)
+            if len(self._Tcache) < 512:
+                self._Tcache[a] = T
+        return T
 
     def _star_w(self, pi, alpha):
         r = len(self._act)
@@ -1137,18 +1676,27 @@ class _EngineBank:
             w[:, k] = np.einsum("bn,bn->b", pi[:, i], self._off[:, k])
         return w
 
-    def _dS_axis(self, k, Hout=None):
-        a = np.exp(np.minimum(self.mu[:, k, None] + self._off[:, k], 60.0))
+    def _dS_axis(self, k, obs, a=1.0, Hout=None):
+        """The stacked twin of ``_WalkEngine._dS_axis``, over the sensors ``obs`` carried."""
+        e = np.exp(np.minimum(self.mu[:, k, None] + self._off[:, k], 60.0))
         if k < self.n:
-            Ho = self._Hout if Hout is None else Hout
-            return (self.lam[:, k, None] * a)[:, :, None, None] * Ho[:, k, None]
-        out = np.zeros((self.M, self._nn, self.m, self.m))
+            if Hout is None:
+                hv = self.HV[:, obs, k]
+                hout = np.einsum("bi,bj->bij", hv, hv)
+            else:                                  # a live H: its own outer, sub-selected
+                hout = Hout[:, k][np.ix_(range(self.M), obs, obs)]
+            return (a * self.lam[:, k, None] * e)[:, :, None, None] * hout[:, None]
+        out = np.zeros((self.M, self._nn, obs.size, obs.size))
         i = k - self.n
-        out[:, :, i, i] = self.rho[:, i, None] * a
+        j = int(np.searchsorted(obs, i))
+        if j < obs.size and obs[j] == i:
+            out[:, :, j, j] = self.rho[:, i, None] * e
         return out
 
-    def _revert_groups(self):
+    def _revert_groups(self, gap=1.0):
+        """The model's own confounded pairs, stacked -- the full-row path, untouched."""
         n = self.n
+        rev = self._revert if gap == 1.0 else self._revert ** gap
         for gi, (k, i, _h) in enumerate(self._groups):
             h2 = self._h2[:, gi]
             a = self.lam[:, k] * h2 * np.exp(np.minimum(self.mu[:, k], 60.0))
@@ -1156,44 +1704,58 @@ class _EngineBank:
             tot = a + b
             lo = np.log(np.maximum(a, 1e-300)) - np.log(np.maximum(b, 1e-300))
             anc = self._anchor[:, gi]
-            back = np.clip(anc + self._revert * (lo - anc), -80.0, 80.0)
+            back = np.clip(anc + rev * (lo - anc), -80.0, 80.0)
             a2 = tot / (1.0 + np.exp(-back))
             b2 = tot - a2
             self.mu[:, k] = np.log(np.maximum(a2, 1e-300) / (self.lam[:, k] * h2))
             self.mu[:, n + i] = np.log(np.maximum(b2, 1e-300) / self.rho[:, i])
 
-    def update(self, y, u=None, off=None, want_S=False, add_S=None):
+    def update(self, y, u=None, a=1.0, off=None, want_S=False, add_S=None):
+        """The stacked twin of ``_WalkEngine.update`` -- same event model, same partial
+        sub-selection, same elapsed-time maps, one leading member axis."""
         M, n, m, H = self.M, self.n, self.m, self.H
         y = np.atleast_1d(np.asarray(y, dtype=float))
-        ok = bool(np.all(np.isfinite(y)))
+        obs = np.flatnonzero(np.isfinite(y))
+        mo = obs.size
+        ok = mo > 0
         r = len(self._act)
-        Qg, Rg = self._star_QR()
+        aQ = a if a > 0.0 else self._aQ
+        self._aQ = aQ
+        Qg, rg = self._star_QR(a)
         if self._fresh:
             self._pi[:] = self._w1[:, self._act]
             if not ok:
                 self._m[:] = 0.0
             elif self._hooks is None:
-                self._m[:] = np.linalg.lstsq(H, y, rcond=None)[0]
+                self._m[:] = np.linalg.lstsq(H[obs], y[obs], rcond=None)[0]
             else:
                 # linearise h at the origin -- every member starts there, so one member's
                 # (H0, h(0)) serves the stack; subtracting h(0) keeps an offset measurement
                 # (an accelerometer's gravity term) out of the least-squares start
                 H0, y0 = self.members[0]._H_at(np.zeros(n))
-                self._m[:] = np.linalg.lstsq(H0, y - y0, rcond=None)[0]
-            scal = (Rg.reshape(M, -1).max(1) + Qg.reshape(M, -1).max(1)) * n
+                self._m[:] = np.linalg.lstsq(H0[obs], (y - y0)[obs], rcond=None)[0]
+            Q1, r1 = (Qg, rg) if a == 1.0 else self._star_QR(1.0)
+            scal = (r1.reshape(M, -1).max(1) + Q1.reshape(M, -1).max(1)) * n
             self._P[:] = np.eye(n)[None] * scal[:, None, None]
             self._cap_P(self._P)
             self._fresh = False
-        pi = np.einsum("bai,baij->baj", self._pi, self._T1a)
+        pi = np.einsum("bai,baij->baj", self._pi, self._kernel(a))
         if self._dyns is None:
-            F = np.broadcast_to(self.F, (M, n, n))
-            mpred = self._m @ self.F.T + ((self.B @ u) if self.B is not None else 0.0)
+            Fa, Psi = self._props[0].at(a)          # one generator, shared by these members
+            F = np.broadcast_to(Fa, (M, n, n))
+            mpred = self._m @ Fa.T + ((Psi @ (self.B @ u)) if self.B is not None else 0.0)
         else:
             F = np.empty((M, n, n)); mpred = np.empty((M, n))
+            I = np.eye(n)
             for j in range(M):
-                F[j], mpred[j] = self._dyns[j](self._m[j], u)
+                Fj, mj = self._dyns[j](self._m[j], u)
+                if a == 1.0:
+                    F[j], mpred[j] = Fj, mj
+                else:                               # the first-order elapsed map, as looped
+                    F[j] = I + a * (Fj - I)
+                    mpred[j] = self._m[j] + a * (mj - self._m[j])
         if off is not None:
-            mpred = mpred + off
+            mpred = mpred + (off if a == 1.0 else a * off)
         FPFt = np.einsum("bij,bjk,blk->bil", F, self._P, F)
         if not ok:
             self._pi[:] = pi
@@ -1201,6 +1763,9 @@ class _EngineBank:
             self._P[:] = FPFt + np.einsum("bg,bgij->bij", w, Qg)
             self._cap_P(self._P)
             self._m[:] = mpred
+            for k in self._act:                     # nothing seen: every scale drifts
+                self._Pmu[:, k] = np.minimum(self._Pmu[:, k] + self._qmu[:, k] * a,
+                                             self._Pmu_cap[:, k])
             sc = self.mu + self._wmean(pi)
             return (self._m.copy(), self._P.copy(), np.full((M, m), np.nan),
                     np.zeros(M), sc[:, :n], sc[:, n:], None, None)
@@ -1210,33 +1775,37 @@ class _EngineBank:
         # a state-dependent H costs nothing where there is none.
         if self._hooks is None:
             Hb, Hout = None, None
-            e = y[None] - mpred @ H.T
-            PHt = np.einsum("bgij,kj->bgik", Ppred, H)
-            S = np.einsum("ij,bgjk->bgik", H, PHt) + Rg
+            Hs = H if mo == m else H[obs]
+            e = (y if mo == m else y[obs])[None] - mpred @ Hs.T
+            PHt = np.einsum("bgij,kj->bgik", Ppred, Hs)
+            S = np.einsum("ij,bgjk->bgik", Hs, PHt)
         else:
             Hb = np.empty((M, m, n)); yp = np.empty((M, m))
             for j in range(M):
                 Hb[j], yp[j] = self.members[j]._H_at(mpred[j])
             HbV = np.einsum("bij,bjk->bik", Hb, self.V)
             Hout = np.einsum("bik,bjk->bkij", HbV, HbV)
-            e = y[None] - yp
+            if mo != m:
+                Hb = Hb[:, obs]
+            e = (y[None] - yp) if mo == m else (y[None] - yp)[:, obs]
             PHt = np.einsum("bgij,bkj->bgik", Ppred, Hb)
-            S = np.einsum("bij,bgjk->bgik", Hb, PHt) + Rg
+            S = np.einsum("bij,bgjk->bgik", Hb, PHt)
+        S[:, :, np.arange(mo), np.arange(mo)] += rg[:, :, obs]
         if add_S is not None:
-            S = S + add_S
+            S = S + (add_S if mo == m else add_S[..., obs, :][..., :, obs])
         Si = np.linalg.inv(S)
         _, logdet = np.linalg.slogdet(S)
         maha = np.einsum("bi,bgij,bj->bg", e, Si, e)
-        lg = -0.5 * (m * _LOG2PI + logdet + maha)
+        lg = -0.5 * (mo * _LOG2PI + logdet + maha)
         if r:
             logZ = np.empty((M, r))
-            for a, k in enumerate(self._act):
+            for ax, k in enumerate(self._act):   # NB: not `a` -- that is the elapsed time
                 lgi = lg[:, self._axwin[k]]
                 mi = lgi.max(1)
-                wk = pi[:, a] * np.exp(lgi - mi[:, None])
+                wk = pi[:, ax] * np.exp(lgi - mi[:, None])
                 Zi = wk.sum(1)
-                pi[:, a] = wk / Zi[:, None]
-                logZ[:, a] = mi + np.log(Zi)
+                pi[:, ax] = wk / Zi[:, None]
+                logZ[:, ax] = mi + np.log(Zi)
             mz = logZ.max(1)
             aw = np.exp(logZ - mz[:, None])
             ll = mz + np.log(aw.mean(1))
@@ -1250,39 +1819,68 @@ class _EngineBank:
         m_new = mpred + np.einsum("bil,bl->bi", Kbar, e)
         mpost = mpred[:, None] + np.einsum("bgil,bl->bgi", K, e)
         dm = mpost - m_new[:, None]
-        HPp = (np.einsum("ij,bgjk->bgik", H, Ppred) if Hb is None
+        HPp = (np.einsum("ij,bgjk->bgik", Hs, Ppred) if Hb is None
                else np.einsum("bij,bgjk->bgik", Hb, Ppred))
         Ppost = Ppred - np.einsum("bgil,bglk->bgik", K, HPp)
         P_new = (np.einsum("bg,bgij->bij", w, Ppost)
                  + np.einsum("bg,bgi,bgj->bij", w, dm, dm))
         P_new = self._cap_P(0.5 * (P_new + np.swapaxes(P_new, 1, 2)))
-        for a, k in enumerate(self._act):
+        # See `_WalkEngine.update`: a partial event gets its share of the step budget, and
+        # holds the split of every pair its own subset confounds.
+        budget = self.gap if mo == m else self.gap * (mo / m)
+        # NB gated on the EVENT being partial, not on the model having pairs: a partial event
+        # confounds pairs the model does not, which is the whole point -- with one sensor
+        # reporting, every process mode it sees is confounded with that sensor's own noise.
+        # Each member answers for itself, because each carries its own base and so its own
+        # pairs.
+        held = None
+        if mo != m:
+            held = []
+            for j, f in enumerate(self.members):
+                g, _ = f.event_groups(obs, mo)
+                held.append((g, [lo for _, lo in f._group_read(self.mu[j], g)] if g else None))
+        for ax, k in enumerate(self._act):       # NB: not `a` -- that is the elapsed time
             idx = self._axwin[k]
-            dpk = self._dS_axis(k, Hout)
+            dpk = self._dS_axis(k, obs, aQ if k < n else a, Hout)
+            if not dpk.any():                    # no evidence here: drift, never freeze
+                self._Pmu[:, k] = np.minimum(self._Pmu[:, k] + self._qmu[:, k] * a,
+                                             self._Pmu_cap[:, k])
+                continue
             Sik = Si[:, idx]
             Sie = np.einsum("bgij,bj->bgi", Sik, e)
             score = 0.5 * (np.einsum("bgi,bgij,bgj->bg", Sie, dpk, Sie)
                            - np.einsum("bgij,bgji->bg", Sik, dpk))
             SidS = np.einsum("bgij,bgjk->bgik", Sik, dpk)
             info_g = 0.5 * np.einsum("bgij,bgji->bg", SidS, SidS)
-            info = np.einsum("bg,bg->b", pi[:, a], info_g) + _RIDGE
-            grad = np.einsum("bg,bg->b", pi[:, a], score)
+            info = np.einsum("bg,bg->b", pi[:, ax], info_g) + _RIDGE
+            grad = np.einsum("bg,bg->b", pi[:, ax], score)
             Kmu = self._Pmu[:, k] / (self._Pmu[:, k] + 1.0 / info)
-            self.mu[:, k] += np.clip(Kmu * (grad / info), -self.gap[:, k], self.gap[:, k])
-            self._Pmu[:, k] = np.minimum((1.0 - Kmu) * self._Pmu[:, k] + self._qmu[:, k],
+            self.mu[:, k] += np.clip(Kmu * (grad / info), -budget[:, k], budget[:, k])
+            self._Pmu[:, k] = np.minimum((1.0 - Kmu) * self._Pmu[:, k] + self._qmu[:, k] * a,
                                          self._Pmu_cap[:, k])
         self._pi[:] = pi
         self._m[:] = m_new
         self._P[:] = P_new
-        if self._groups:
-            self._revert_groups()
+        if held is not None:                    # hold each pair's split, keep its total
+            for j, f in enumerate(self.members):
+                g, lo = held[j]
+                if lo is None:
+                    continue
+                tots = [t for t, _ in f._group_read(self.mu[j], g)]
+                self.mu[j] = f._group_write(self.mu[j], tots, lo, g)
+        elif self._groups:
+            self._revert_groups(a)
         self._ll += ll
         sc = self.mu + self._wmean(pi)
         # The offset channel needs the collapsed response of THIS bank: the mean gain `Kbar`
         # (already formed above) and the star-collapsed innovation covariance.  Both are pure
         # read-outs of the step that just ran, and neither is computed when the channel is off.
         Sbar = np.einsum("bg,bgij->bij", w, S) if want_S else None
-        return (m_new, P_new, e, ll, sc[:, :n], sc[:, n:],
+        innov = e
+        if mo != m:
+            innov = np.full((M, m), np.nan)
+            innov[:, obs] = e
+        return (m_new, P_new, innov, ll, sc[:, :n], sc[:, n:],
                 Kbar if want_S else None, Sbar)
 
 
@@ -1558,11 +2156,26 @@ class LucidFilter:
     phis, ss : sequences, optional  
         The ``(phi, s)`` box the bank averages over.  Defaults to a broad dead-zone-free range;
         not a fitted value.  ``forget`` (default 0.999) is the weight memory -- the one residual.
+    timestep : float, optional
+        How long ONE NOMINAL STEP is, in whatever units the timestamps are in (default 1.0,
+        i.e. time is counted in steps).  Everything supplied about the model -- ``dynamics``,
+        ``process`` -- and every class timescale -- ``phis``, ``ss``, ``forget``, ``faults``
+        -- is per nominal step; ``timestep`` is what lets an event carry a real ``t`` or
+        ``dt``.  Sampling at 100 Hz with timestamps in seconds: ``timestep=0.01``.
+
+    Events
+    ------
+    ``observe(sensor, value, t=)`` is one ``(sensor, timestamp, value)`` point and is the
+    general input; ``stream(points)`` runs a whole stream of them.  ``update(y, t=)`` takes a
+    length-``m`` row in which ``NaN`` means *that sensor did not report*, and ``filter(Y, t=)``
+    a batch of such rows.  Absent sensors are sub-selected out of ``H`` and ``R`` -- never
+    imputed, never a reason to discard the sensors that did report.  With no clock and no
+    absences this is the uniform, fully-observed filter, unchanged.
     """
 
     def __init__(self, dynamics=0, control=None, H=None, process=None, measurement=None,
                  n=None, faults=None, departures=None, anchors=None, offsets=False,
-                 phis=_PHIS, ss=_SS, forget=0.999):
+                 phis=_PHIS, ss=_SS, forget=0.999, timestep=1.0):
         learn = dynamics is None or faults is not None
         if faults is None or faults is True:
             rho = _HAZARD
@@ -1620,11 +2233,16 @@ class LucidFilter:
             raise ValueError(f"control must have {n} rows")
         if not 0.0 < forget <= 1.0:
             raise ValueError("forget must lie in (0, 1]")
+        timestep = float(timestep)
+        if not timestep > 0.0:
+            raise ValueError("timestep (the duration of one nominal step) must be positive")
 
         self.n, self.m, self.D = n, m, n + m
         self.p = 0 if B is None else B.shape[1]
         self.B = B
         self.forget = float(forget)
+        self.timestep = timestep
+        self._Mdcache = {}
         # Which directions can no per-step score ever carry?  Where a process eigenmode is read
         # by exactly one sensor, the two scale derivatives are proportional as matrices and only
         # their SUM is identifiable per step (research/sequence-demix 0001), so the split is
@@ -1712,8 +2330,9 @@ class LucidFilter:
             if dep is None:
                 Si_c = probe._fisher_Si if Fs is F else None
                 eng = []
+                pr = _Propagator(Fs)    # one generator per hypothesis, shared by its cells
                 for ph, sv, bq, br in cells:
-                    e = _WalkEngine(bq, br, Hm, Fs, Bs, ph, sv, fisher_Si=Si_c)
+                    e = _WalkEngine(bq, br, Hm, Fs, Bs, ph, sv, fisher_Si=Si_c, prop=pr)
                     Si_c = e._fisher_Si
                     eng.append(e)
                 if bs is not None:
@@ -1803,12 +2422,68 @@ class LucidFilter:
         self._logw = np.zeros(len(self._members))
         self.loglik = 0.0
         self._alarm = False
+        self._t = None
         return self
 
-    def _hazard_mix(self, logw):
+    # ------------------------------------------------------------------ the clock
+    @property
+    def time(self):
+        """The filter clock -- the timestamp of the last event, ``None`` before the first."""
+        return self._t
+
+    def _elapsed(self, t, dt):
+        """Advance the clock and return the gap in NOMINAL STEPS.
+
+        Everything the caller supplied about the model -- ``dynamics``, ``process`` -- and
+        every class timescale -- ``phis``, ``ss``, ``forget``, ``faults`` -- is per nominal
+        step, and ``timestep`` says how long one of those is in the caller's time units.
+        Supplying neither ``t`` nor ``dt`` advances exactly one nominal step, which is the
+        uniform-sampling filter this one generalises.
+        """
+        prev = self._t
+        if t is not None and dt is not None:
+            raise ValueError("pass t (an absolute timestamp) or dt (an elapsed time), not both")
+        if t is not None:
+            now = float(t)
+            a = 1.0 if prev is None else (now - prev) / self.timestep
+        elif dt is not None:
+            a = float(dt) / self.timestep
+            now = (0.0 if prev is None else prev) + float(dt)
+        else:
+            a = 1.0
+            now = (0.0 if prev is None else prev) + self.timestep
+        if not a >= 0.0:
+            raise ValueError(
+                f"time went backwards ({a * self.timestep:.6g} before the last event): a "
+                "stream must arrive in non-decreasing timestamp order (equal timestamps, "
+                "for sensors that read the same instant, are fine)")
+        self._t = now
+        return a
+
+    def _hazard_kernel(self, a):
+        """The fault class's mixing kernel over ``a`` nominal steps: a hazard ``rho`` per
+        nominal step is ``1 - (1 - rho)**a`` over the gap."""
+        if a == 1.0:
+            return self._Md
+        M = self._Mdcache.get(a)
+        if M is None:
+            k = self._nd
+            if k > 1:
+                rho_a = -math.expm1(a * math.log1p(-self.hazard))
+                M = (np.eye(k) * (1.0 - rho_a * k / (k - 1))
+                     + np.ones((k, k)) * (rho_a / (k - 1)))
+            else:
+                M = np.ones((1, 1))
+            if len(self._Mdcache) < 512:
+                self._Mdcache[a] = M
+        return M
+
+
+
+    def _hazard_mix(self, logw, a=1.0):
         """Propagate the bank prior through the fault class's kernel."""
         W = np.exp(logw - float(logw.max())).reshape(self._nd, self._nc)
-        out = np.log(np.maximum(self._Md.T @ W, 1e-300)).ravel()
+        out = np.log(np.maximum(self._hazard_kernel(a).T @ W, 1e-300)).ravel()
         return out - _logsumexp(out)
 
     def _dynamics_mean(self, post):
@@ -1844,15 +2519,23 @@ class LucidFilter:
             for c in range(self._nc):
                 self._members[d * self._nc + c].reprice(dep.gidx)
 
-    def update(self, y, u=None) -> LucidStep:
+    def update(self, y, u=None, t=None, dt=None) -> LucidStep:
+        """One event: the readings in ``y`` that are finite, at time ``t`` (or ``dt`` after the
+        last event; neither means one nominal step, the uniform case).
+
+        A ``NaN`` entry means *that sensor did not report at this instant*, which is the
+        ordinary condition of a multi-rate sensor set, not an exception.  Absent sensors are
+        sub-selected out of ``H`` and ``R``; never imputed, never in the likelihood.
+        """
         if self.B is not None and u is None:
             raise ValueError(f"this filter has a control input; pass u (length {self.p})")
         if self.B is None and u is not None:
             raise ValueError("filter has no control map; do not pass u")
+        a = self._elapsed(t, dt)
         M = len(self._members)
         prior = self._logw - _logsumexp(self._logw)
         if self._nd > 1:
-            prior = self._hazard_mix(prior)
+            prior = self._hazard_mix(prior, a)
         n = self.n
         mn = np.empty((M, n)); vr = np.empty((M, n, n)); inn = np.empty((M, self.m))
         llv = np.empty(M); psc = np.empty((M, n)); msc = np.empty((M, self.m))
@@ -1872,7 +2555,7 @@ class LucidFilter:
         kw = np.zeros(M) if need else None
         for bank in self._banks:
             bo = None if off is None else np.concatenate([off, np.zeros(bank.n - n)])
-            bm, bv, bi, bl, bp, bms, bK, bS = bank.update(yb, u=u, off=bo, add_S=addS,
+            bm, bv, bi, bl, bp, bms, bK, bS = bank.update(yb, u=u, a=a, off=bo, add_S=addS,
                                                           want_S=need)
             ix = bank.idx
             mn[ix] = bm[:, :n]; vr[ix] = bv[:, :n, :n]; inn[ix] = bi
@@ -1882,9 +2565,11 @@ class LucidFilter:
                 self._Kb[ix] = bK[:, :n]
                 self._Sb[ix] = bS
         yv = np.atleast_1d(np.asarray(yb, float))
-        if np.all(np.isfinite(yv)):
+        if np.any(np.isfinite(yv)):
             bank_ll = _logsumexp(prior + llv)
-            self._logw = self.forget * prior + llv
+            # ``forget`` is a memory PER NOMINAL STEP, so over a gap of ``a`` it is
+            # ``forget**a`` -- the bank's weight memory is a duration, not a count of events.
+            self._logw = (self.forget ** a) * prior + llv
         else:
             bank_ll = 0.0
             self._logw = prior
@@ -1922,7 +2607,8 @@ class LucidFilter:
             if so is not None:
                 sen_out = so.C @ so.bbar
         if not self._report:
-            return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out)
+            return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out,
+                             time=self._t)
         Fh, Bh = self._dynamics_mean(post)
         # The fault readout is a marginal of the posterior -- the filter itself never
         # thresholds, it mixes.  Its RISING EDGE re-prices the walkers' ignorance: a jump has
@@ -1933,9 +2619,58 @@ class LucidFilter:
         if alarm and not self._alarm:
             self._reprice()
         self._alarm = alarm
-        return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out, Fh, Bh, fault)
+        return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out, Fh, Bh, fault,
+                         self._t)
 
-    def filter(self, Y, U=None) -> LucidResult:
+    def observe(self, sensor, value, t=None, dt=None, u=None) -> LucidStep:
+        """One ``(sensor, timestamp, value)`` point -- the filter's most general input.
+
+        This is the streaming form: sensors are not assumed to share a schedule, so the
+        general thing that happens is that ONE of them reports.  A synchronous row is the
+        special case where ``m`` points share a timestamp, and feeding it as ``m`` points at
+        one ``t`` is legal and means the same thing (``dt = 0`` between them moves no state
+        and accumulates no process noise -- only the corrections land).
+
+            f = LucidFilter(H=H, measurement=R0, timestep=0.01)   # 100 Hz nominal
+            for sensor, t, value in stream:
+                st = f.observe(sensor, value, t=t)
+                st.mean          # the state estimate as of t
+
+        ``sensor`` may also be a sequence of indices with a matching sequence of values,
+        for a device that reports several channels together.
+        """
+        y = np.full(self.m, np.nan)
+        idx = np.atleast_1d(np.asarray(sensor))
+        if idx.size and (idx.min() < -self.m or idx.max() >= self.m):
+            raise ValueError(f"sensor index out of range for m = {self.m}")
+        y[idx] = np.atleast_1d(np.asarray(value, float))
+        return self.update(y, u=u, t=t, dt=dt)
+
+    def _times(self, T, t, dt):
+        """Per-event ``(t, dt)`` arguments for a batch of ``T`` events."""
+        if t is not None and dt is not None:
+            raise ValueError("pass t (absolute timestamps) or dt (elapsed times), not both")
+        if t is not None:
+            t = np.atleast_1d(np.asarray(t, float)).ravel()
+            if t.size != T:
+                raise ValueError(f"t must have {T} entries, one per event")
+            return [(float(v), None) for v in t]
+        if dt is not None:
+            d = np.atleast_1d(np.asarray(dt, float)).ravel()
+            if d.size == 1:
+                d = np.repeat(d, T)
+            if d.size != T:
+                raise ValueError(f"dt must be a scalar or have {T} entries")
+            return [(None, float(v)) for v in d]
+        return [(None, None)] * T
+
+    def filter(self, Y, U=None, t=None, dt=None) -> LucidResult:
+        """Filter a batch of synchronous rows.  ``Y`` is (T, m); a ``NaN`` entry is a sensor
+        that did not report on that row, and a row may be partly or wholly absent.
+
+        ``t`` gives the (T,) absolute timestamps and ``dt`` the elapsed times (a scalar for a
+        uniform but non-nominal rate); neither means one nominal step per row.
+        """
         Y = np.atleast_2d(np.asarray(Y, float))
         if Y.ndim != 2 or Y.shape[1] != self.m:
             raise ValueError(f"Y must be (T, {self.m})")
@@ -1945,8 +2680,10 @@ class LucidFilter:
             U = np.atleast_2d(np.asarray(U, float))
         self.reset()
         T = Y.shape[0]
+        when = self._times(T, t, dt)
         mean = np.empty((T, self.n)); var = np.empty((T, self.n, self.n))
         inn = np.empty((T, self.m)); ps = np.empty((T, self.n)); ms = np.empty((T, self.m))
+        clock = np.empty(T)
         live = self._report
         offs = np.empty((T, self.n)) if self._mean is not None else None
         sens = np.empty((T, self.m)) if self._sensor is not None else None
@@ -1955,9 +2692,11 @@ class LucidFilter:
         flt = np.empty(T) if live else None
         total = 0.0
         for i, row in enumerate(Y):
-            st = self.update(row, None if U is None else U[i])
+            ti, di = when[i]
+            st = self.update(row, None if U is None else U[i], t=ti, dt=di)
             mean[i] = st.mean; var[i] = st.var; inn[i] = st.innovation
             ps[i] = st.process_scale; ms[i] = st.measurement_scale; total += st.loglik
+            clock[i] = st.time
             if offs is not None:
                 offs[i] = st.offset
             if sens is not None:
@@ -1969,7 +2708,63 @@ class LucidFilter:
         return LucidResult(mean=mean, var=var, innovation=inn,
                            process_scale=ps, measurement_scale=ms, loglik=total,
                            offset=offs, sensor_offset=sens,
-                           dynamics=dyn, control=ctl, fault=flt)
+                           dynamics=dyn, control=ctl, fault=flt, time=clock)
 
-    def loglik_of(self, Y, U=None) -> float:
-        return self.filter(Y, U).loglik
+    def stream(self, points, U=None) -> LucidResult:
+        """Filter a stream of ``(sensor, timestamp, value)`` points -- one sensor at a time.
+
+        ``points`` is any iterable of triples, or an array with those three columns.
+        Timestamps must be non-decreasing; equal ones mean "the same instant".  ``U``, if
+        the filter has a control map, is the known forcing at each point.
+
+        The result is per POINT: ``mean[i]`` is the state as of point ``i``, ``sensor[i]``
+        says which sensor it was and ``time[i]`` when, and ``innovation[i]`` is ``NaN``
+        everywhere except that sensor.
+        """
+        pts = list(points)
+        T = len(pts)
+        if self.B is not None:
+            if U is None:
+                raise ValueError(f"this filter has control input; pass U of shape ({T}, {self.p})")
+            U = np.atleast_2d(np.asarray(U, float))
+        self.reset()
+        mean = np.empty((T, self.n)); var = np.empty((T, self.n, self.n))
+        inn = np.empty((T, self.m)); ps = np.empty((T, self.n)); ms = np.empty((T, self.m))
+        clock = np.empty(T); which = np.empty(T, dtype=int)
+        live = self._report
+        offs = np.empty((T, self.n)) if self._mean is not None else None
+        sens = np.empty((T, self.m)) if self._sensor is not None else None
+        dyn = np.empty((T, self.n, self.n)) if live else None
+        ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
+        flt = np.empty(T) if live else None
+        total = 0.0
+        for i, pt in enumerate(pts):
+            try:
+                sensor, when, value = pt
+            except (TypeError, ValueError):
+                raise ValueError(
+                    f"point {i} is not a (sensor, timestamp, value) triple: {pt!r}") from None
+            if float(sensor) != int(sensor):
+                raise ValueError(
+                    f"point {i} has a non-integer sensor index ({sensor!r}) -- a point is "
+                    "(sensor, timestamp, value), in that order")
+            st = self.observe(int(sensor), float(value), t=float(when),
+                              u=None if U is None else U[i])
+            mean[i] = st.mean; var[i] = st.var; inn[i] = st.innovation
+            ps[i] = st.process_scale; ms[i] = st.measurement_scale; total += st.loglik
+            clock[i] = st.time; which[i] = int(sensor)
+            if offs is not None:
+                offs[i] = st.offset
+            if sens is not None:
+                sens[i] = st.sensor_offset
+            if live:
+                dyn[i] = st.dynamics; flt[i] = st.fault
+                if ctl is not None:
+                    ctl[i] = st.control
+        return LucidResult(mean=mean, var=var, innovation=inn,
+                           process_scale=ps, measurement_scale=ms, loglik=total,
+                           offset=offs, sensor_offset=sens,
+                           dynamics=dyn, control=ctl, fault=flt, time=clock, sensor=which)
+
+    def loglik_of(self, Y, U=None, t=None, dt=None) -> float:
+        return self.filter(Y, U, t=t, dt=dt).loglik
