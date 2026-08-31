@@ -13,7 +13,7 @@ same state at 2x the single-sensor variance -- same total information, but no si
 mode, so the (orthogonal) split ladder stays out of the bank and the probe measures the
 hazard machinery alone at 24x less compute.  20 seeds,
 with a no-change arm for calm costs.  Contenders: the derived hazard LADDER
-(faults=True: rungs 1/2 ... 5e-4, decades; see `_hazard_ladder`) against PINNED hazards
+(faults=True: rungs 1/2 ... 5e-4, decades; see `_HAZARDS`) against PINNED hazards
 spanning it, plus a rung-count perturbation (one extra decade below) for the inertness claim.
 Measured per arm: detection delay (first fault > 0.5 after t*, the 0001 reporting
 convention), false-crossing fraction on [300, t*), state RMSE on calm/recovery/settled

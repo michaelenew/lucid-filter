@@ -5,8 +5,11 @@ a random-walk level) and the *observation* (`H`, default: identity).  Everything
 infers online: which process eigenmode is drifting, which sensor is glitching, and how far -- by
 WALKING a per-component log-scale grid with unbounded reach, and it does not even take the AR(1) class
 `(phi, s)` -- it runs a small bank across a broad `(phi, s)` box and lets the data average it out
-(the flat identification ridge integrates away; only `forget`, a ~1000-step weight memory, remains, and
-tracking is identical for any value near 1).
+(the flat identification ridge integrates away).  The nominal filter is ``forget = 1``, pure Bayes,
+solved under the class's one shape assumption -- the log-scales are a STATIONARY AR(1) family.
+``forget < 1`` is not part of that theory: it is the engineering escape for the stationarity
+assumption itself being violated, and it is admissible only because it lives on the ridge, where
+its value provably barely reaches the estimate -- see the ``forget`` parameter doc.
 
     theta_t = F theta_{t-1} + B u_t + w_t,   w_t ~ N(0, Q(t))
     y_t     = H theta_t          + v_t,      v_t ~ N(0, R(t))
@@ -49,13 +52,14 @@ forever (a false detection then costs ~nothing), optional named fault `anchors` 
 detector when the failure modes can be named), and a departure walker whose variance is bounded at
 the class cap and re-priced to it when a fault is confirmed -- bounded, never frozen.  The fault
 hazard is NOT a labeled prior: it is a nuisance, and this filter has one way of handling those --
-grid it and let the evidence weight it.  The bank runs a derived hazard LADDER (top: the class's
-own persistence boundary, 1/2 per step; bottom: one fault per weight memory; decade rungs between,
-so uniform initial weights ARE the log-uniform prior) and each rung's running predictive
+grid it and let the evidence weight it.  The bank runs a broad hazard BOX (`_HAZARDS`, decade
+rungs down from the class's own persistence boundary 1/2, so uniform initial weights ARE the
+log-uniform prior -- a class-breadth convention in the exact sense of the `(phi, s)` box, valid
+at ``forget = 1`` and reading nothing from ``forget``) and each rung's running predictive
 likelihood weights it; the reported `hazard` is the posterior mean, the regime the data currently
 supports.  Each rung's gain, drift, cap and restart width derive from its own `(rho_j, class
 size)`, and its detection frontier is derived (`log(1/rho_j) / KL-rate`), not tuned.  Passing a
-number (`faults=rho`) pins the ladder to that one rung -- give-what-you-know, for a caller who
+number (`faults=rho`) pins the box to that one rung -- give-what-you-know, for a caller who
 truly knows the rate.  The derivations and the measured acceptance results are
 `research/dynamics-learning/SUMMARY.md` and exploration 0009.
 
@@ -107,34 +111,35 @@ _SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weigh
                                            #   changes in this repository's own rigs.
 _SERIES_REACH = 4.0         # gaps out to 4 nominal steps: how far the pre-factored Q(a)
                             # series must stay accurate before the exact route is used instead
-def _hazard_ladder(forget):
-    """The derived hazard ladder the fault class is mixed over (research 0009).
-
-    A pinned hazard fails the monotonicity test that separates a compute budget from a tuning
-    constant: calm accuracy degrades monotonically in ``rho`` (0006: 1/7000 -> calm 1.148,
-    1/50000 -> 1.066) while detection delay improves monotonically (``log(1/rho)/KL``), so a
-    single ``rho`` sits on a trade-off no caller can defend.  The filter's rule for such a
-    nuisance is the ``(phi, s)`` rule: grid it and let the evidence weight it.  Both ends are
-    derived, neither fitted:
-
-    * TOP ``1/2`` -- the fault class's own persistence boundary.  The class says a fault
-      PERSISTS; a hazard above 1/2 would have the dynamics leave a hypothesis more often than
-      stay, which contradicts the class rather than parameterising it.  (It is also the
-      largest hazard whose uniform-leak kernel stays a stochastic matrix for every bank size.)
-    * BOTTOM one fault per weight memory ``T = 1/(1 - forget)`` -- rungs below are INERT: their
-      calm tax (~rho per step) and their share of the detection launch both vanish against the
-      ladder above, so further rungs change nothing the weights can hold.
-    * DECADE spacing -- the scale-free convention; uniform initial weights on geometric rungs
-      are exactly the log-uniform reference prior over the rate.  Refining the spacing is a
-      compute budget in the sense of ``order``: monotone, never a trade-off.
-
-    In calm the weights settle on the least-hedged rung consistent with the quiet (so the
-    mixture pays the BOTTOM rung's calm cost and detects at its frontier), and an actual fault
-    re-weights the ladder upward: the filter reports the regime instead of being told it.
-    """
-    T = 1.0 / max(1.0 - forget, 1e-12)
-    J = 1 + max(1, math.ceil(math.log10(0.5 * T)))
-    return tuple(0.5 * 10.0 ** -j for j in range(J))
+_HAZARDS = (0.5, 0.05, 5e-3, 5e-4)   # default hazard box for the fault class -- a broad box in
+                                     #   the exact sense of `_PHIS`/`_SS`, not a fitted value
+                                     #   and not derived from `forget` (research 0009, corrected:
+                                     #   an earlier revision derived the bottom from the weight
+                                     #   memory, which made the one engineering parameter
+                                     #   load-bearing and the construction invalid at the
+                                     #   nominal ``forget = 1``).  A pinned hazard is a knob --
+                                     #   calm cost and detection delay move monotonically in
+                                     #   opposite directions in rho -- so the hazard gets the
+                                     #   `(phi, s)` treatment: grid it, let evidence weight it.
+                                     #   Events identify the rate (~log 10 nats per event
+                                     #   between adjacent decades); the quiet direction (WHICH
+                                     #   small rho) is the hazard's identification ridge, and it
+                                     #   is measured-flat in what matters -- state tracking is
+                                     #   unchanged across the box and across a decade appended
+                                     #   below it (0009: calm/recovery/settled all within
+                                     #   noise).  Only the fault REPORT's crossing time reads
+                                     #   the bottom (log(10)/KL deeper per decade) -- a
+                                     #   reporting convention the consumer prices, not the
+                                     #   filter.  The TOP, 1/2, is the class's own persistence
+                                     #   boundary: above it the dynamics would leave a
+                                     #   hypothesis more often than persist, which contradicts
+                                     #   "a fault persists" rather than parameterising it (it
+                                     #   is also the largest hazard whose uniform-leak kernel
+                                     #   stays stochastic for every bank size).  Decade rungs
+                                     #   with uniform initial weights are the log-uniform
+                                     #   reference prior; refining the spacing is a compute
+                                     #   budget in the sense of `order`.  Pass `faults=(...)`
+                                     #   to widen or shift the box -- give-what-you-know.
 _RANK_TOL = 1e-8            # numerical rank tolerance (the order used for structural activation)
 _OFFSET_CLASSES = 5         # rungs of the offset channel's class ladder -- a compute budget in
                             # the sense of `order`, not a fitted value: the two ENDS are derived
@@ -2165,13 +2170,16 @@ class LucidFilter:
     faults : True, float, or sequence, optional
         Turn on the dynamics channel around a SUPPLIED ``F``: the dynamics may CHANGE, at some
         per-step hazard.  ``True`` (and the default under ``dynamics=None``) mixes over the
-        derived hazard LADDER -- decade rungs from the class's own persistence boundary (1/2)
-        down past one fault per weight memory, each rung a complete conditional model weighted
-        by its own running predictive likelihood -- so the rate is read off the data and
-        reported (``LucidStep.hazard``), never asserted.  A float pins the ladder to that one
-        rung (give-what-you-know, for a caller who truly knows the rate; must lie in
-        (0, 1/2]), and a sequence is an explicit ladder.  Per rung the detection delay is
-        derived, ``log(1/rho_j) / KL-rate``; see `_hazard_ladder` and research 0009.
+        broad hazard BOX ``_HAZARDS`` -- decade rungs down from the class's own persistence
+        boundary (1/2), each rung a complete conditional model weighted by its own running
+        predictive likelihood -- so the rate is read off the data and reported
+        (``LucidStep.hazard``), never asserted.  The box is a class-breadth convention like
+        ``phis``/``ss`` (state tracking is measured-flat across it and below it; only the
+        fault report's crossing time reads the bottom, log(10)/KL per decade) and is valid at
+        ``forget = 1``.  A float pins the box to that one rung (give-what-you-know, for a
+        caller who truly knows the rate; must lie in (0, 1/2]), and a sequence is an explicit
+        box.  Per rung the detection delay is derived, ``log(1/rho_j) / KL-rate``; see
+        `_HAZARDS` and research 0009.
     departures : sequence, optional
         The directions the dynamics may move along: each an ``(n, n)`` matrix, or an
         ``(A, C)`` pair when the same physical parameter moves ``F`` and ``B`` together (a
@@ -2200,9 +2208,29 @@ class LucidFilter:
         the walk breathes around them with unbounded reach, so a rough base is fine.
     n : int, optional
         State dimension, when it cannot be inferred from ``dynamics``/``process``/``H`` (default 1).
-    phis, ss : sequences, optional  
+    phis, ss : sequences, optional
         The ``(phi, s)`` box the bank averages over.  Defaults to a broad dead-zone-free range;
-        not a fitted value.  ``forget`` (default 0.999) is the weight memory -- the one residual.
+        not a fitted value.
+    forget : float, optional
+        The bank's weight memory (default 0.999) -- **a theoretically relevant free parameter,
+        included deliberately, and the only one**.  It is NOT part of the solved filter: the
+        nominal filter is ``forget = 1``, pure Bayes, exact under the one shape assumption the
+        class makes (the log-scales are a stationary AR(1) family).  That assumption was chased
+        to its residue and the residue measured before this parameter was admitted
+        (research/adaptive-grid findings 13-16): the class coordinates ``(phi, s)`` are
+        identified but SLOPPY -- their loose combination is a flat identification ridge, the
+        provably least impactful axis that still matters -- and the bank marginalises the
+        ridge by evidence weighting, which at ``forget = 1`` concentrates and then freezes.
+        ``forget < 1`` is the engineering escape for the stationarity assumption ITSELF being
+        violated -- how fast the world may leave the class -- and it is admissible only
+        because it acts on that ridge, where its value provably barely reaches the estimate
+        (0029: tracking identical across {1.0, 0.999, 0.99} and even frozen stale; any value
+        near 1 is free).  Nothing structural may read it: no floor, box end, or class bound
+        derives from ``forget``, and every construction in this filter must remain valid at
+        ``forget = 1`` (research 0009, corrected).  It is eliminable in principle -- deriving
+        the class drift rate from the shape assumption already made -- without violating the
+        no-free-parameters commitment; ~0.999 is measurably indistinguishable from that
+        optimum.
     timestep : float, optional
         How long ONE NOMINAL STEP is, in whatever units the timestamps are in (default 1.0,
         i.e. time is counted in steps).  Everything supplied about the model -- ``dynamics``,
@@ -2277,13 +2305,13 @@ class LucidFilter:
         timestep = float(timestep)
         if not timestep > 0.0:
             raise ValueError("timestep (the duration of one nominal step) must be positive")
-        # The fault hazard: a LADDER the evidence weights, never a number the caller tunes
-        # (see `_hazard_ladder`).  A supplied float pins the ladder to one rung -- the
+        # The fault hazard: a BOX the evidence weights, never a number the caller tunes
+        # (see `_HAZARDS`).  A supplied float pins the box to one rung -- the
         # give-what-you-know form, for a caller who truly knows the rate -- and a sequence is
-        # an explicit ladder.  1/2 is the class's own persistence boundary, so nothing above
+        # an explicit box.  1/2 is the class's own persistence boundary, so nothing above
         # it is a fault hypothesis at all.
         if faults is None or faults is True:
-            hazards = _hazard_ladder(forget)
+            hazards = _HAZARDS
         else:
             hz = np.atleast_1d(np.asarray(faults, float)).ravel()
             if hz.size == 0 or np.any(hz <= 0.0) or np.any(hz > 0.5):

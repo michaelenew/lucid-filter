@@ -135,17 +135,18 @@ as extra state, so the noise machinery above runs on top of it unchanged, which
 is what separating a wrong `F` from elevated `Q` requires — the two compete as
 hypotheses under a live noise walk rather than through a whiteness statistic
 bolted on the side. A fault is a **jump process** — rare, large, persistent —
-and its hazard is a nuisance, not a knob: the filter mixes over a derived hazard
-**ladder** (decade rungs from the class's own persistence boundary, 1/2 per
-step, down to one fault per weight memory) and each rung's running predictive
-likelihood weights it, so the rate is *read off the data and reported*
-(`r.hazard`), never asserted. Per rung everything follows: the departure's
+and its hazard is a nuisance, not a knob: the filter mixes over a broad hazard
+**box** (decade rungs down from the class's own persistence boundary, 1/2 per
+step — a class-breadth convention in the exact sense of the `(phi, s)` box,
+valid at `forget = 1`) and each rung's running predictive likelihood weights
+it, so the rate is *read off the data and reported* (`r.hazard`), never
+asserted. Per rung everything follows: the departure's
 drift is that rung's own second moment `sigma^2 rho_j`, its variance is bounded
 at the class size (bounded, never frozen — an axis the data cannot see today
 must still move when excitation arrives), and the detection frontier is
 `log(1/rho_j) / KL`, computed rather than tuned. In a quiet world the weights
-settle on the least-hedged rung, so the ladder costs what its bottom rung
-costs; when faults recur the ladder climbs and later ones are caught faster
+settle on the least-hedged rung, so the box costs what its bottom rung
+costs; when faults recur the weights climb and later ones are caught faster
 (measured in [`0009`](research/dynamics-learning/exploration/0009_hazard_ladder.md)).
 The nominal model never leaves the bank, so a false alarm costs almost nothing —
 and that is what makes the fast end of the frontier affordable. A caller who

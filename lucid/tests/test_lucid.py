@@ -372,14 +372,21 @@ def test_faults_hazard_validated():
         LucidFilter(dynamics=[[0.5]], faults=1e-4, anchors=[np.eye(2)])
 
 
-def test_hazard_ladder_is_derived_from_forget():
-    """faults=True mixes over the derived ladder: 1/2 down past one fault per memory."""
+def test_hazard_box_is_structural_not_forget_derived():
+    """faults=True mixes over the fixed broad box: decade rungs down from the class's own
+    persistence boundary.  Nothing structural reads ``forget`` -- the box is identical at any
+    memory, and the construction is valid at the NOMINAL filter, ``forget = 1`` (pure Bayes):
+    forget is the engineering escape for the stationarity assumption being violated, and it
+    is admissible only because nothing depends on it (adaptive-grid 0029, research 0009)."""
     f = LucidFilter(dynamics=[[0.9]], faults=True)
     assert f.hazards[0] == 0.5                      # the class's persistence boundary
-    assert f.hazards[-1] <= 1.0 - f.forget          # reaches one fault per weight memory
     assert np.allclose(f.hazards[:-1] / f.hazards[1:], 10.0)     # decade rungs
-    short = LucidFilter(dynamics=[[0.9]], faults=True, forget=0.99)
-    assert len(short.hazards) < len(f.hazards)      # a shorter memory derives a shorter ladder
+    for fg in (0.99, 1.0):                          # forget never reaches the box
+        g = LucidFilter(dynamics=[[0.9]], faults=True, forget=fg)
+        assert np.array_equal(g.hazards, f.hazards)
+    pure = LucidFilter(dynamics=[[0.9]], faults=True, forget=1.0)
+    st = pure.update([0.3])
+    assert np.isfinite(st.loglik) and 0.0 <= st.fault <= 1.0 and st.hazard > 0.0
 
 
 def test_hazard_is_read_not_told():

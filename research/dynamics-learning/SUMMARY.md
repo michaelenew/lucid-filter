@@ -22,10 +22,11 @@ The class commitment: a dynamics fault is a **jump process** — rare, large, pe
 a class scale (the cap) and a hazard.  The hazard is NOT a labeled prior (0009 retired that
 claim: it fails the monotonicity test that separates a budget from a knob — calm cost rises
 monotonically in `rho`, delay falls, so a pinned value sits on a trade-off): it is a nuisance,
-laddered and mixed by evidence like every other nuisance here.  The ladder's ends are derived
-(top 1/2 = the class's own persistence boundary; bottom = one fault per weight memory, the most
-quiet the filter's memory can ever claim to have witnessed; decade rungs = the log-uniform
-reference prior).  Every gain, drift rate, restart width, and spawn mass derives per rung from
+gridded and mixed by evidence like every other nuisance here.  The box is a class-breadth
+convention in the exact sense of the `(phi, s)` box (top 1/2 = the class's own persistence
+boundary; decade rungs = the log-uniform reference prior; the bottom is the box's reach --
+state tracking is measured-flat across and below it, so only the fault REPORT's crossing time
+reads it), valid at the nominal ``forget = 1`` and reading nothing from ``forget``.  Every gain, drift rate, restart width, and spawn mass derives per rung from
 `(rho_j, cap)`, and the posterior-mean hazard is REPORTED — the filter reads the regime off the
 data instead of being told it.  Zero tuning constants.
 
@@ -81,10 +82,12 @@ data instead of being told it.  Zero tuning constants.
    its bottom pin's (0.32460 ± 0.00219 vs 0.32440 ± 0.00219) with delay slightly better
    (82.0 ± 8.3 vs 91.8 ± 8.1).  A fault-rich world climbs the ladder — late events caught 31%
    faster than the static pin, and `r.hazard` reads 4.4e-3 against a true event rate of 5e-3.
-   The rungs below one-per-memory are excluded because the calm equilibrium would keep sliding
-   onto them and drag the launch depth without the memory ever having witnessed the quiet that
-   justifies it — measured: one extra decade costs +18 steps (82.0 → 100.5) for a calm gain
-   of 0.00005 RMSE.
+   The box bottom is breadth, not theory: state tracking is flat across a decade appended
+   below (calm Δ 0.00005, recovery/settled within noise), and only the report's ½-crossing
+   deepens (+18 steps ≈ log 10/KL at the measured partial re-weighting) — the reporting
+   convention's price, the consumer's to set.  0009's first revision derived the bottom from
+   the weight memory 1/(1−forget); that is RETIRED — it made the one engineering parameter
+   load-bearing and failed at the nominal ``forget = 1`` (0009, corrected).
 8. **Anchors in parameter space when faults are nameable; anchors in TIME when not** (0006).
    `dynamics=None` proper has no F0 and no fault classes, hence no detection edge; the jump
    class's Bayes posterior is then a mixture over jump times, realized as pruned run-length
