@@ -35,7 +35,7 @@ is a scalar random-walk level observed directly.
 ```
 theta_t = F theta_{t-1} + B u_t + w_t,   w_t ~ N(0, Q(t))
 y_t     = H theta_t          + v_t,      v_t ~ N(0, R(t))
-Q(t) = V diag(lam_k e^{xi_k(t)}) V^T     R(t) = diag(rho_i e^{eta_i(t)})
+Q(t) = V diag(lam_k e^{xi_k(t)}) V^T     R(t) = diag(r_i e^{eta_i(t)})
 ```
 
 Every process eigenmode and every sensor carries its own log-scale (`xi_k`,
@@ -64,7 +64,7 @@ Configure by **give-what-you-know**; every argument has a working default.
 | `process` | base process covariance `Q0` (n, n, PD) | identity |
 | `measurement` | base per-sensor variances `R0` (m,) | ones |
 | `n` | state dimension, when nothing else fixes it | 1 |
-| `faults` | hazard `rho`: the supplied dynamics may **change** | none → they are fixed |
+| `faults` | the supplied dynamics may **change**: `True` mixes over the derived hazard ladder (the rate is read off the data); a float pins it | none → they are fixed |
 | `departures` | the directions the dynamics may move along — each an `(n, n)` matrix, an `(A, C)` pair when one physical parameter moves `F` and `B` together, or a callable of the state when the direction rotates with the operating point | every entry of `F` (and `B`) |
 | `anchors` | named fault hypotheses, each carried as its own full filter | none |
 | `offsets` | carry a constant **process offset** — a drift, a climbing bias | `False` |
@@ -86,7 +86,7 @@ A row of `Y` that is all-`NaN` is a clean gap: the filter predicts through it.
 ## The dynamics channel
 
 `dynamics=None` learns `F` (and `B`) online from the random-walk prior.
-`dynamics=F0, faults=rho` says the supplied dynamics may **change** — a payload
+`dynamics=F0, faults=True` says the supplied dynamics may **change** — a payload
 picked up by a drone, a tyre blown out — and the filter detects the change and
 recovers the new dynamics with no refit and no threshold.
 
@@ -99,18 +99,25 @@ r = f.filter(Y, U)
 r.dynamics   # (T, n, n) the dynamics as currently believed
 r.control    # (T, n, p) the learned B — read the physical parameter off it
 r.fault      # (T,) posterior probability they have left the nominal
+r.hazard     # (T,) posterior-mean fault hazard — the regime the data supports
 ```
 
 It is the same construction one level up: the departure from nominal is carried
 as extra state, so the noise machinery above runs on top of it unchanged — which
 is what separating a wrong `F` from an elevated `Q` requires, since the two then
 compete as hypotheses under a live noise walk rather than through a whiteness
-statistic bolted on the side. A fault is a **jump process**, so its one labeled
-prior is the hazard `rho` and everything else follows: the departure's drift is
-`sigma^2 rho`, its variance is bounded at the class size (bounded, never frozen —
-an axis the data cannot see today must still move when excitation arrives), and
-the detection delay is `log(1/rho) / KL`, computed rather than tuned. The nominal
-model never leaves the bank, so a false detection costs almost nothing.
+statistic bolted on the side. A fault is a **jump process** — rare, large,
+persistent — and its hazard is a nuisance, not a knob: the filter mixes over a
+derived hazard **ladder** (decade rungs from the class's own persistence
+boundary, 1/2 per step, down to one fault per weight memory — see
+`_hazard_ladder`) and each rung's running predictive likelihood weights it, so
+the rate is *read off the data and reported* (`r.hazard`), never asserted. Per
+rung everything follows: the departure's drift is that rung's own second moment
+`sigma^2 rho_j`, its variance is bounded at the class size (bounded, never
+frozen — an axis the data cannot see today must still move when excitation
+arrives), and the detection frontier is `log(1/rho_j) / KL`, computed rather
+than tuned. A caller who truly knows the rate can pin it (`faults=rho`). The
+nominal model never leaves the bank, so a false detection costs almost nothing.
 
 One thing `departures=` asks of you: a direction's class size is scale-free
 ("this part of the dynamics changed by about its own magnitude") and is tied to

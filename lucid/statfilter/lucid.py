@@ -10,7 +10,7 @@ tracking is identical for any value near 1).
 
     theta_t = F theta_{t-1} + B u_t + w_t,   w_t ~ N(0, Q(t))
     y_t     = H theta_t          + v_t,      v_t ~ N(0, R(t))
-    Q(t) = V diag(lam_k e^{xi_k(t)}) V^T,     R(t) = diag(rho_i e^{eta_i(t)})     (per-component scales, walked)
+    Q(t) = V diag(lam_k e^{xi_k(t)}) V^T,     R(t) = diag(r_i e^{eta_i(t)})     (per-component scales, walked)
 
 Configure by the give-what-you-know / infer-the-rest rule -- for each input pass an explicit value
 ("I know this"), a null/zero ("there is none"), or leave the default:
@@ -33,12 +33,13 @@ a fully synchronous row at a fixed rate is the special case, ``filter(Y)``, and 
 arithmetic it always did.  ``timestep`` fixes the time unit: everything supplied about the
 model and every class timescale is per NOMINAL STEP, and an event ``a = dt / timestep``
 steps after the last takes each of them to that power -- ``F(a) = exp(a log F)``,
-``Q -> Q a``, ``phi -> phi**a``, ``forget -> forget**a``, ``rho -> 1 - (1-rho)**a``.
+``Q -> Q a``, ``phi -> phi**a``, ``forget -> forget**a``, and the fault kernel to its exact
+``a``-step chain power ``M**a``.
 ``R`` alone is not scaled: a measurement variance belongs to the reading, not to the gap
 before it.  See ``research/pointwise-streaming/SUMMARY.md``.
 
 **The dynamics channel.**  `dynamics=None` learns `F` (and `B`) online from the random-walk prior;
-`dynamics=F0, faults=rho` says the supplied dynamics may CHANGE -- a payload attached to a drone, a
+`dynamics=F0, faults=True` says the supplied dynamics may CHANGE -- a payload attached to a drone, a
 tire blown out -- and the filter detects the change and recovers the new dynamics without a refit, a
 threshold, or a fitted constant.  It is realised as a state augmentation `(x, g)` with
 `F = F0 + sum_j g_j A_j`, so the noise machinery above runs on top of it unchanged, which is what
@@ -46,10 +47,17 @@ separating a wrong `F` from elevated `Q` requires: the two compete as hypotheses
 walk rather than through a bolted-on whiteness statistic.  The bank carries the nominal member
 forever (a false detection then costs ~nothing), optional named fault `anchors` (the fastest
 detector when the failure modes can be named), and a departure walker whose variance is bounded at
-the class cap and re-priced to it when a fault is confirmed -- bounded, never frozen.  The one
-labeled prior is the fault hazard `rho`; every gain, drift, cap and restart width follows from it
-and the class size, and the detection delay it buys is derived (`log(1/rho) / KL-rate`), not tuned.
-The derivations and the measured acceptance results are `research/dynamics-learning/SUMMARY.md`.
+the class cap and re-priced to it when a fault is confirmed -- bounded, never frozen.  The fault
+hazard is NOT a labeled prior: it is a nuisance, and this filter has one way of handling those --
+grid it and let the evidence weight it.  The bank runs a derived hazard LADDER (top: the class's
+own persistence boundary, 1/2 per step; bottom: one fault per weight memory; decade rungs between,
+so uniform initial weights ARE the log-uniform prior) and each rung's running predictive
+likelihood weights it; the reported `hazard` is the posterior mean, the regime the data currently
+supports.  Each rung's gain, drift, cap and restart width derive from its own `(rho_j, class
+size)`, and its detection frontier is derived (`log(1/rho_j) / KL-rate`), not tuned.  Passing a
+number (`faults=rho`) pins the ladder to that one rung -- give-what-you-know, for a caller who
+truly knows the rate.  The derivations and the measured acceptance results are
+`research/dynamics-learning/SUMMARY.md` and exploration 0009.
 
 This is a benchmark toy: the RMSE for a given amount of supplied knowledge is the bound a real
 implementation can aim at.  The mechanism (per-component walk, axial GPB1, structural axis
@@ -99,10 +107,34 @@ _SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weigh
                                            #   changes in this repository's own rigs.
 _SERIES_REACH = 4.0         # gaps out to 4 nominal steps: how far the pre-factored Q(a)
                             # series must stay accurate before the exact route is used instead
-_HAZARD = 1e-4              # default fault rate: ~1 dynamics fault per 10,000 steps.  A LABELED
-                            # prior of the same standing as `forget`, not a tuning constant: it is
-                            # the operating point on the false-alarm/delay frontier, and the delay
-                            # it buys is derived, log(1/rho) / KL-rate (research 0001).
+def _hazard_ladder(forget):
+    """The derived hazard ladder the fault class is mixed over (research 0009).
+
+    A pinned hazard fails the monotonicity test that separates a compute budget from a tuning
+    constant: calm accuracy degrades monotonically in ``rho`` (0006: 1/7000 -> calm 1.148,
+    1/50000 -> 1.066) while detection delay improves monotonically (``log(1/rho)/KL``), so a
+    single ``rho`` sits on a trade-off no caller can defend.  The filter's rule for such a
+    nuisance is the ``(phi, s)`` rule: grid it and let the evidence weight it.  Both ends are
+    derived, neither fitted:
+
+    * TOP ``1/2`` -- the fault class's own persistence boundary.  The class says a fault
+      PERSISTS; a hazard above 1/2 would have the dynamics leave a hypothesis more often than
+      stay, which contradicts the class rather than parameterising it.  (It is also the
+      largest hazard whose uniform-leak kernel stays a stochastic matrix for every bank size.)
+    * BOTTOM one fault per weight memory ``T = 1/(1 - forget)`` -- rungs below are INERT: their
+      calm tax (~rho per step) and their share of the detection launch both vanish against the
+      ladder above, so further rungs change nothing the weights can hold.
+    * DECADE spacing -- the scale-free convention; uniform initial weights on geometric rungs
+      are exactly the log-uniform reference prior over the rate.  Refining the spacing is a
+      compute budget in the sense of ``order``: monotone, never a trade-off.
+
+    In calm the weights settle on the least-hedged rung consistent with the quiet (so the
+    mixture pays the BOTTOM rung's calm cost and detects at its frontier), and an actual fault
+    re-weights the ladder upward: the filter reports the regime instead of being told it.
+    """
+    T = 1.0 / max(1.0 - forget, 1e-12)
+    J = 1 + max(1, math.ceil(math.log10(0.5 * T)))
+    return tuple(0.5 * 10.0 ** -j for j in range(J))
 _RANK_TOL = 1e-8            # numerical rank tolerance (the order used for structural activation)
 _OFFSET_CLASSES = 5         # rungs of the offset channel's class ladder -- a compute budget in
                             # the sense of `order`, not a fitted value: the two ENDS are derived
@@ -473,10 +505,15 @@ class _MeanChannel:
     not on the class, so a rung costs one k-dimensional update and nothing else.
 
     The walk on each rung is the hazard times its own class, ``rho * cls`` -- the departure
-    walker's rule -- so an offset that MOVES is tracked, and none of it is frozen.
+    walker's rule -- so an offset that MOVES is tracked, and none of it is frozen.  The hazard
+    itself is the same nuisance one level up and gets the same treatment: the hazard ladder is
+    CROSSED into the class ladder (a rung is a ``(class width, hazard)`` pair), so a constant
+    that never moves and one that jumps at the class boundary rate are both in the mixture,
+    each a k-dimensional recursion, weighted by its own evidence (research 0009).
     """
 
-    def __init__(self, basis, n, F, H, Q0, R0, rho, mem, feedback=True):
+    def __init__(self, basis, n, F, H, Q0, R0, hazards, mem, feedback=True):
+        hazards = np.atleast_1d(np.asarray(hazards, float))   # a pinned scalar is a 1-ladder
         self.k = basis.shape[1]
         # FEEDBACK returns the estimate to the members' own prediction, which is worth about
         # twice the state repair of correcting only the output (`0008`: 0.392 against 0.471 on
@@ -498,8 +535,9 @@ class _MeanChannel:
         top = np.maximum(top, 1e-300)
         floor = top / max(mem, 1.0)
         step = (top / floor) ** (1.0 / max(_OFFSET_CLASSES - 1, 1))
-        self.cls = np.stack([floor * step ** j for j in range(_OFFSET_CLASSES)])   # (J, k)
-        self.q = rho * self.cls
+        cls = np.stack([floor * step ** j for j in range(_OFFSET_CLASSES)])   # (J0, k)
+        self.cls = np.concatenate([cls] * len(hazards))            # (J0 * Jh, k) crossed
+        self.q = np.concatenate([hz * cls for hz in hazards])
         self.forget = 1.0 - 1.0 / max(mem, 1.0)
         self.reset()
 
@@ -614,6 +652,9 @@ class LucidStep:
     fault: float = 0.0             #: posterior probability the dynamics have left the NOMINAL --
     #: which is the supplied ``F`` under ``faults=``, and the random walk ``F = I`` under
     #: ``dynamics=None`` (where it therefore reads "the dynamics are not a random walk")
+    hazard: float = None           #: posterior-mean fault hazard (per nominal step) -- the
+    #: regime the data currently supports, read off the hazard ladder's weights.  ``None``
+    #: when the fault class is off; constant when the caller pinned ``faults=rho``.
     time: float = math.nan         #: the filter clock after this event (see ``timestep``)
 
     @property
@@ -636,6 +677,7 @@ class LucidResult:
     dynamics: np.ndarray = None    #: (T, n, n) learned ``F``, or ``None`` when supplied fixed
     control: np.ndarray = None     #: (T, n, p) learned ``B``, or ``None``
     fault: np.ndarray = None       #: (T,) posterior probability of a dynamics fault
+    hazard: np.ndarray = None      #: (T,) posterior-mean fault hazard, or ``None`` when off
     time: np.ndarray = None        #: (T,) the filter clock at each event
     sensor: np.ndarray = None      #: (T,) which sensor each event carried -- streams only
 
@@ -1905,6 +1947,8 @@ class _Departure:
       has that mean square per step) and its variance is capped at ``sigma^2`` -- **bounded,
       never frozen**: the gain stays live so an axis the data cannot see today still moves when
       excitation arrives (research 0003 measured the latched-freeze alternative at 20x worse).
+      ``rho`` here is ONE RUNG of the hazard ladder: each rung carries its own walker, so the
+      drift is the rung's own second moment, never a co-declared diffusion prior (0009).
     * ``g``'s scale axes are excluded from the noise walk: their drift is a class commitment,
       not a live noise scale.  (Structural, per 0024 -- ``[H | 0]`` cannot see ``g`` directly,
       so the engine's own activation rule already reaches this conclusion; the mask makes it
@@ -2118,13 +2162,16 @@ class LucidFilter:
         The linear state dynamics ``F``.  ``0`` (default) means no dynamics -> a random-walk level.
         ``None`` means **learn them**: the prior is the random walk (``F = I``) and the filter
         recovers ``F`` (and ``B``) online.  See *The dynamics channel* below.
-    faults : float or True, optional
-        Turn on the dynamics channel around a SUPPLIED ``F``: the value is the hazard ``rho``,
-        the per-step probability that the dynamics change (``True`` -> ``1e-4``, about one fault
-        per 10,000 steps).  Implied by ``dynamics=None``.  This is a labeled prior of the same
-        standing as ``forget``, not a tuning constant -- it is the operating point on the
-        false-alarm/delay frontier, and the detection delay it buys is derived,
-        ``log(1/rho) / KL-rate``.
+    faults : True, float, or sequence, optional
+        Turn on the dynamics channel around a SUPPLIED ``F``: the dynamics may CHANGE, at some
+        per-step hazard.  ``True`` (and the default under ``dynamics=None``) mixes over the
+        derived hazard LADDER -- decade rungs from the class's own persistence boundary (1/2)
+        down past one fault per weight memory, each rung a complete conditional model weighted
+        by its own running predictive likelihood -- so the rate is read off the data and
+        reported (``LucidStep.hazard``), never asserted.  A float pins the ladder to that one
+        rung (give-what-you-know, for a caller who truly knows the rate; must lie in
+        (0, 1/2]), and a sequence is an explicit ladder.  Per rung the detection delay is
+        derived, ``log(1/rho_j) / KL-rate``; see `_hazard_ladder` and research 0009.
     departures : sequence, optional
         The directions the dynamics may move along: each an ``(n, n)`` matrix, or an
         ``(A, C)`` pair when the same physical parameter moves ``F`` and ``B`` together (a
@@ -2177,12 +2224,6 @@ class LucidFilter:
                  n=None, faults=None, departures=None, anchors=None, offsets=False,
                  phis=_PHIS, ss=_SS, forget=0.999, timestep=1.0):
         learn = dynamics is None or faults is not None
-        if faults is None or faults is True:
-            rho = _HAZARD
-        else:
-            rho = float(faults)
-            if not 0.0 < rho < 1.0:
-                raise ValueError("faults (the hazard rho) must lie in (0, 1)")
         if anchors is not None and not learn:
             learn = True                        # named fault hypotheses imply a fault class
         h_moving = callable(H)
@@ -2236,6 +2277,22 @@ class LucidFilter:
         timestep = float(timestep)
         if not timestep > 0.0:
             raise ValueError("timestep (the duration of one nominal step) must be positive")
+        # The fault hazard: a LADDER the evidence weights, never a number the caller tunes
+        # (see `_hazard_ladder`).  A supplied float pins the ladder to one rung -- the
+        # give-what-you-know form, for a caller who truly knows the rate -- and a sequence is
+        # an explicit ladder.  1/2 is the class's own persistence boundary, so nothing above
+        # it is a fault hypothesis at all.
+        if faults is None or faults is True:
+            hazards = _hazard_ladder(forget)
+        else:
+            hz = np.atleast_1d(np.asarray(faults, float)).ravel()
+            if hz.size == 0 or np.any(hz <= 0.0) or np.any(hz > 0.5):
+                raise ValueError(
+                    "faults (the hazard) must lie in (0, 1/2] -- above 1/2 the dynamics "
+                    "would leave a hypothesis more often than persist, which contradicts "
+                    "the fault class; omit the value (faults=True) to mix over the derived "
+                    "hazard ladder instead of pinning one")
+            hazards = tuple(sorted({float(v) for v in hz}, reverse=True))
 
         self.n, self.m, self.D = n, m, n + m
         self.p = 0 if B is None else B.shape[1]
@@ -2283,7 +2340,7 @@ class LucidFilter:
             mem = 1.0 / max(1.0 - self.forget, 1e-12)
             basis = _mean_basis(F, Hm)
             if basis.shape[1]:
-                self._mean = _MeanChannel(basis, n, F, Hm, Q0, R0, rho, mem,
+                self._mean = _MeanChannel(basis, n, F, Hm, Q0, R0, hazards, mem,
                                           feedback=not learn)
             # The per-sensor read-out is a pure OBSERVER: the same recursion on the sensor
             # entry's own quotient, whose estimate is reported and whose every output is
@@ -2295,7 +2352,8 @@ class LucidFilter:
             # its innocent neighbour move its `eta` the same way.
             sb = _mean_basis(F, Hm, sensor_only=True)
             if sb.shape[1]:
-                self._sensor = _MeanChannel(sb, n, F, Hm, Q0, R0, rho, mem, feedback=False)
+                self._sensor = _MeanChannel(sb, n, F, Hm, Q0, R0, hazards, mem,
+                                            feedback=False)
         probe = _WalkEngine(Q0, R0, Hm, F, B, phis[0], ss[0])
         self.groups = probe._groups
         self.split_arr = _split_star(np.log(_rung_odds(self.forget)), len(self.groups))
@@ -2320,10 +2378,15 @@ class LucidFilter:
                 raise ValueError(f"each anchor must be ({n}, {n})")
             specs.append((None, Fa,
                           None if Ba is None else np.atleast_2d(np.asarray(Ba, float)), None))
+        nb = len(specs)                       # nominal + anchors: shared by every hazard rung
         if learn:
-            specs.append((base, F, B,
-                          _Departure(const, _basis(n, self.p, departures),
-                                     rho, n, self.p)))
+            # One walker per hazard rung: a rung is a complete conditional model of the world
+            # at its own rate, so its walker carries the rung's own drift ``sigma^2 rho_j``.
+            # The nominal and the anchors carry no rate at all, so those FILTERS are shared
+            # across rungs and only their WEIGHTS are per-rung (the `_wm` map below).
+            dirs = _basis(n, self.p, departures)
+            for hzj in hazards:
+                specs.append((base, F, B, _Departure(const, dirs, hzj, n, self.p)))
 
         self._members, self._pidx, self._specs = [], [], specs
         for bs, Fs, Bs, dep in specs:
@@ -2363,15 +2426,36 @@ class LucidFilter:
                     e._hook = _augment_hook(hbase, n, dep.k)
                 self._members.append(e)
                 self._pidx.append(xmode)
-        self._nd, self._nc = len(specs), len(cells)
-        k = self._nd
-        # The fault class's kernel: a uniform-leak chain with probability rho per step of
-        # leaving the current dynamics hypothesis (Shiryaev's rule for a jump process).  It
-        # mixes WITHIN each (phi, s) cell -- a dynamics fault does not change the noise class,
-        # so the joint kernel over the two nuisances is their product.
-        self._Md = (np.eye(k) * (1.0 - rho * k / (k - 1)) + np.ones((k, k)) * (rho / (k - 1))
-                    if k > 1 else np.ones((1, 1)))
-        self._learn, self.hazard = learn, rho
+        self._nspec, self._nc = len(specs), len(cells)
+        # The posterior lives on (hazard rung j) x (dynamics hypothesis d) x (noise cell c):
+        # under rung j the hypotheses are {nominal, anchors, walker_j}, so the WEIGHT rows are
+        # J * ndbase while the member FILTERS are deduplicated (nb shared + J walkers, times
+        # nc) -- the shared rows differ only through the kernel, never through the recursion.
+        self._J = len(hazards) if learn else 1
+        self._ndbase = nb + (1 if learn else 0)
+        self._ndw = self._J * self._ndbase
+        wspec = np.array([d if d < nb else nb + j
+                          for j in range(self._J) for d in range(self._ndbase)])
+        self._wspec = wspec                   # weight row -> member spec
+        self._wm = (wspec[:, None] * self._nc + np.arange(self._nc)).ravel()
+        # The fault class's kernel, one block per hazard rung: a uniform-leak chain with
+        # probability rho_j per step of leaving the current dynamics hypothesis (Shiryaev's
+        # rule for a jump process).  It mixes WITHIN each (phi, s) cell and WITHIN each rung
+        # -- a dynamics fault changes neither the noise class nor the rate regime, so the
+        # joint kernel over the three nuisances is their product (identity on the other two).
+        # Eigenform: uniform stationary plus a (k-1)-fold second eigenvalue ``lam2``, which is
+        # what makes the gap power in `_hazard_kernel` EXACT rather than the O(rho^2)
+        # at-least-one-event approximation, and keeps the top rung (lam2 = 0 at k = 2) on the
+        # simplex where the old closed form left it.
+        k = self._ndbase
+        if k > 1:
+            self._lam2 = 1.0 - np.asarray(hazards) * k / (k - 1)          # (J,)
+            self._Md = (self._lam2[:, None, None] * np.eye(k)
+                        + (1.0 - self._lam2)[:, None, None] * np.full((k, k), 1.0 / k))
+        else:
+            self._lam2 = np.ones(1)
+            self._Md = np.ones((1, 1, 1))
+        self._learn, self.hazards = learn, np.asarray(hazards)
         # report the dynamics whenever they are not a fixed matrix the caller already has
         self._report = learn or base is not None
         self.reset()
@@ -2419,7 +2503,7 @@ class LucidFilter:
             # split ladder follows one level down, for the same reason.
             self._mean_src = np.repeat(
                 np.array([sp[3] is None for sp in self._specs]), self._nc)
-        self._logw = np.zeros(len(self._members))
+        self._logw = np.zeros(self._ndw * self._nc)
         self.loglik = 0.0
         self._alarm = False
         self._t = None
@@ -2461,39 +2545,46 @@ class LucidFilter:
         return a
 
     def _hazard_kernel(self, a):
-        """The fault class's mixing kernel over ``a`` nominal steps: a hazard ``rho`` per
-        nominal step is ``1 - (1 - rho)**a`` over the gap."""
+        """Each rung's mixing kernel over ``a`` nominal steps -- the EXACT chain power.
+
+        The uniform-leak chain shares eigenvectors at every rate (uniform stationary plus a
+        (k-1)-fold ``lam2``), so ``M**a`` is ``lam2**a`` in the same frame.  The survival
+        closed form ``1 - (1-rho)**a`` this replaced treats "at least one jump over the gap"
+        as one jump -- correct to O(rho^2), but off the simplex above ``rho = (k-1)/k``, which
+        the ladder's top rung reaches.
+        """
         if a == 1.0:
             return self._Md
         M = self._Mdcache.get(a)
         if M is None:
-            k = self._nd
+            k = self._ndbase
             if k > 1:
-                rho_a = -math.expm1(a * math.log1p(-self.hazard))
-                M = (np.eye(k) * (1.0 - rho_a * k / (k - 1))
-                     + np.ones((k, k)) * (rho_a / (k - 1)))
+                lam = self._lam2 ** a
+                M = (lam[:, None, None] * np.eye(k)
+                     + (1.0 - lam)[:, None, None] * np.full((k, k), 1.0 / k))
             else:
-                M = np.ones((1, 1))
+                M = np.ones((1, 1, 1))
             if len(self._Mdcache) < 512:
                 self._Mdcache[a] = M
         return M
 
-
-
     def _hazard_mix(self, logw, a=1.0):
-        """Propagate the bank prior through the fault class's kernel."""
-        W = np.exp(logw - float(logw.max())).reshape(self._nd, self._nc)
-        out = np.log(np.maximum(self._hazard_kernel(a).T @ W, 1e-300)).ravel()
+        """Propagate the bank prior through the fault class's kernel, rung by rung."""
+        W = np.exp(logw - float(logw.max())).reshape(self._J, self._ndbase, self._nc)
+        mixed = np.einsum("jdk,jdc->jkc", self._hazard_kernel(a), W)
+        out = np.log(np.maximum(mixed, 1e-300)).ravel()
         return out - _logsumexp(out)
 
     def _dynamics_mean(self, post):
         """Posterior-mean (F, B) across the bank -- fixed members contribute their own."""
-        W = post.reshape(self._nd, self._nc)
+        W = post.reshape(self._ndw, self._nc)
         Fh = np.zeros((self.n, self.n))
         Bh = None if self.B is None else np.zeros((self.n, self.p))
-        for d, (bs, Fs, Bs, dep) in enumerate(self._specs):
+        for row in range(self._ndw):
+            d = int(self._wspec[row])
+            bs, Fs, Bs, dep = self._specs[d]
             if dep is None and bs is None:
-                w = float(W[d].sum())
+                w = float(W[row].sum())
                 Fh += w * Fs
                 if Bh is not None and Bs is not None:
                     Bh += w * Bs
@@ -2506,9 +2597,9 @@ class LucidFilter:
                 else:
                     g = np.zeros(dep.k) if e._m is None else e._m[self.n:]
                     Fg, Bg = dep.dynamics_of(x, g)
-                Fh += W[d, c] * Fg
+                Fh += W[row, c] * Fg
                 if Bh is not None and Bg is not None:
-                    Bh += W[d, c] * Bg
+                    Bh += W[row, c] * Bg
         return Fh, Bh
 
     def _reprice(self):
@@ -2534,7 +2625,7 @@ class LucidFilter:
         a = self._elapsed(t, dt)
         M = len(self._members)
         prior = self._logw - _logsumexp(self._logw)
-        if self._nd > 1:
+        if self._ndbase > 1:
             prior = self._hazard_mix(prior, a)
         n = self.n
         mn = np.empty((M, n)); vr = np.empty((M, n, n)); inn = np.empty((M, self.m))
@@ -2565,28 +2656,33 @@ class LucidFilter:
                 self._Kb[ix] = bK[:, :n]
                 self._Sb[ix] = bS
         yv = np.atleast_1d(np.asarray(yb, float))
+        # A weight row is a (hazard rung, hypothesis, cell); its member filter is `_wm[row]`.
+        # Rows sharing a filter (the nominal and the anchors, across rungs) share its
+        # likelihood exactly, so the dedup is arithmetic-free: gather llv, scatter post.
+        llw = llv[self._wm]
         if np.any(np.isfinite(yv)):
-            bank_ll = _logsumexp(prior + llv)
+            bank_ll = _logsumexp(prior + llw)
             # ``forget`` is a memory PER NOMINAL STEP, so over a gap of ``a`` it is
             # ``forget**a`` -- the bank's weight memory is a duration, not a count of events.
-            self._logw = (self.forget ** a) * prior + llv
+            self._logw = (self.forget ** a) * prior + llw
         else:
             bank_ll = 0.0
             self._logw = prior
         post = np.exp(self._logw - _logsumexp(self._logw))
-        mean = post @ mn
+        pm = np.bincount(self._wm, weights=post, minlength=M)      # member marginals
+        mean = pm @ mn
         dmn = mn - mean
-        var = (np.einsum("b,bij->ij", post, vr)
-               + np.einsum("b,bi,bj->ij", post, dmn, dmn))
-        ps = post @ psc
-        ms = post @ msc
-        innov = post @ inn
+        var = (np.einsum("b,bij->ij", pm, vr)
+               + np.einsum("b,bi,bj->ij", pm, dmn, dmn))
+        ps = pm @ psc
+        ms = pm @ msc
+        innov = pm @ inn
         self.loglik += bank_ll
         off_out = sen_out = None
         if need:
             # the channel's view of the recursion it rides on: the model-averaged mean gain and
             # innovation covariance, over the members that report them
-            wk = post * kw
+            wk = pm * kw
             tot = wk.sum()
             if tot > 0.0:
                 wk = wk / tot
@@ -2614,13 +2710,17 @@ class LucidFilter:
         # thresholds, it mixes.  Its RISING EDGE re-prices the walkers' ignorance: a jump has
         # just been confirmed, so what the walkers think they know about the departure is
         # priced back to the class prior (research 0003).
-        fault = float(1.0 - post.reshape(self._nd, self._nc)[0].sum())
+        W3 = post.reshape(self._J, self._ndbase, self._nc)
+        fault = float(1.0 - W3[:, 0, :].sum())
+        # The regime readout: the hazard ladder's posterior mean -- what the data says about
+        # how failure-prone this world is, not what the caller asserted (research 0009).
+        hz = float(W3.sum(axis=(1, 2)) @ self.hazards) if self._learn else None
         alarm = fault > 0.5
         if alarm and not self._alarm:
             self._reprice()
         self._alarm = alarm
         return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out, Fh, Bh, fault,
-                         self._t)
+                         hz, self._t)
 
     def observe(self, sensor, value, t=None, dt=None, u=None) -> LucidStep:
         """One ``(sensor, timestamp, value)`` point -- the filter's most general input.
@@ -2690,6 +2790,7 @@ class LucidFilter:
         dyn = np.empty((T, self.n, self.n)) if live else None
         ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
         flt = np.empty(T) if live else None
+        hzr = np.empty(T) if self._learn else None
         total = 0.0
         for i, row in enumerate(Y):
             ti, di = when[i]
@@ -2705,10 +2806,12 @@ class LucidFilter:
                 dyn[i] = st.dynamics; flt[i] = st.fault
                 if ctl is not None:
                     ctl[i] = st.control
+            if hzr is not None:
+                hzr[i] = st.hazard
         return LucidResult(mean=mean, var=var, innovation=inn,
                            process_scale=ps, measurement_scale=ms, loglik=total,
                            offset=offs, sensor_offset=sens,
-                           dynamics=dyn, control=ctl, fault=flt, time=clock)
+                           dynamics=dyn, control=ctl, fault=flt, hazard=hzr, time=clock)
 
     def stream(self, points, U=None) -> LucidResult:
         """Filter a stream of ``(sensor, timestamp, value)`` points -- one sensor at a time.
@@ -2737,6 +2840,7 @@ class LucidFilter:
         dyn = np.empty((T, self.n, self.n)) if live else None
         ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
         flt = np.empty(T) if live else None
+        hzr = np.empty(T) if self._learn else None
         total = 0.0
         for i, pt in enumerate(pts):
             try:
@@ -2761,10 +2865,13 @@ class LucidFilter:
                 dyn[i] = st.dynamics; flt[i] = st.fault
                 if ctl is not None:
                     ctl[i] = st.control
+            if hzr is not None:
+                hzr[i] = st.hazard
         return LucidResult(mean=mean, var=var, innovation=inn,
                            process_scale=ps, measurement_scale=ms, loglik=total,
                            offset=offs, sensor_offset=sens,
-                           dynamics=dyn, control=ctl, fault=flt, time=clock, sensor=which)
+                           dynamics=dyn, control=ctl, fault=flt, hazard=hzr, time=clock,
+                           sensor=which)
 
     def loglik_of(self, Y, U=None, t=None, dt=None) -> float:
         return self.filter(Y, U, t=t, dt=dt).loglik
