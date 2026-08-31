@@ -77,11 +77,14 @@ data instead of being told it.  Zero tuning constants.
    A pinned hazard fails the monotonicity test (calm cost and delay move monotonically in
    opposite directions in `rho` — a trade-off, hence a knob), and it has the user telling the
    filter the regime.  Mixed over the derived ladder, calm weight settles on the least-hedged
-   rung (the mixture detects at the bottom rung's frontier and pays ~its calm cost), a
-   fault-rich world climbs the ladder and is caught faster, and `r.hazard` reports the regime.
+   rung: on the 0009 scalar rig (20 seeds) the ladder's calm RMSE is indistinguishable from
+   its bottom pin's (0.32460 ± 0.00219 vs 0.32440 ± 0.00219) with delay slightly better
+   (82.0 ± 8.3 vs 91.8 ± 8.1).  A fault-rich world climbs the ladder — late events caught 31%
+   faster than the static pin, and `r.hazard` reads 4.4e-3 against a true event rate of 5e-3.
    The rungs below one-per-memory are excluded because the calm equilibrium would keep sliding
    onto them and drag the launch depth without the memory ever having witnessed the quiet that
-   justifies it — measured as +13 steps of delay per extra decade for ~nothing in calm.
+   justifies it — measured: one extra decade costs +18 steps (82.0 → 100.5) for a calm gain
+   of 0.00005 RMSE.
 8. **Anchors in parameter space when faults are nameable; anchors in TIME when not** (0006).
    `dynamics=None` proper has no F0 and no fault classes, hence no detection edge; the jump
    class's Bayes posterior is then a mixture over jump times, realized as pruned run-length
