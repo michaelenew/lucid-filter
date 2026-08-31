@@ -19,100 +19,66 @@
 
 **A state estimator that finds its own settings — and tells you what it found.**
 
-You supply what you know about a system: its dynamics, which sensor reads what,
-rough noise magnitudes. It works out the rest online — every scale, per
-component, per step — and it works it out *fast*: told nothing at all it lands
-**3.5% above an oracle-tuned Kalman filter** on the scalar benchmark, and
-**1.03×** an oracle handed both the true noise schedule and the true payload on
-the drone below. The bill is largest where a burst hits the sensors that carry
-most of the information while the walk is still reaching them — the worst window
-on any rig here is 2.8× the oracle, dominated by its first half-second — and the
-same model with fixed noise pays 2–7× *steadily* on those same runs. A regime
-change is absorbed in steps, not windows. There is no `fit()`, no
-threshold, no forgetting factor, no window and no changepoint detector; the
-single residual knob does nothing near its default.
+You supply what you know about a system — its dynamics, which sensor reads what,
+rough noise magnitudes — and it works the rest out online: every noise scale, per
+component, per step, and optionally the dynamics themselves. There is no `fit()`,
+no threshold, no forgetting factor, no window and no changepoint detector. And it
+hands those numbers back live, which is the part you can act on: which sensor is
+failing and by how much, which mechanical mode is being shaken, and whether the
+vehicle it is flying is still the one you described.
 
-It is **lucid** because it tells you what the data is, rather than making you
-tell it. A conventional filter takes your `Q` and your `R` and believes them: if
-the sensor you trusted has died, it goes on trusting it, and you find out
-somewhere downstream. This one reads those numbers off the data and hands them
-back live, per component — which sensor is failing and by how much, which
-mechanical mode is being shaken, and whether the vehicle it is flying is still
-the one you described. The state estimate is what you give the control loop; the
-read-out is what you can act on.
+![the lucid filter and an oracle-tuned Kalman filter on the same scalar series, through three regimes: a steady stretch the Kalman filter is tuned exactly right for, a level jump the lucid filter absorbs in three steps against the Kalman filter's sixteen, and a stretch where the sensor gets three times noisier and the Kalman filter keeps chasing noise it should be ignoring. A third panel shows the reported uncertainty: the Kalman filter's is flat by construction, the lucid filter's rises at the jump and stays raised once the sensor degrades](research/random-walk-filter/figures/hero-lucidfilter-vs-kalman.png)
 
-## It picks a heavy crate up off centre, and works out what changed
+*Told nothing at all, against a Kalman filter told the truth: **3.5% above the
+oracle** in steady state, the level jump absorbed in **3 steps to its 16**, and
+honest error bars where the fixed filter is **4.6× overconfident**
+([`README-004`](research/random-walk-filter/scripts/README-004-hero-lucidfilter.py)).*
 
-The animation is real output of the public filter, and the filter is **flying the
-aircraft**. Two quadrotors fly the same delivery job, in the same air, on the
-same sensor noise, and each is flown by its own estimator — nothing else reaches
-the autopilot. One flies on `LucidFilter`. The other flies on the honest
-alternative, because some filter is not optional on an airframe and racing
-against a raw GPS fix would prove nothing: a fixed Kalman filter on the same
-nominal airframe, with its noise levels **tuned in hindsight on this very
-flight**, truth included — the best a fixed filter could have been set to if you
-had already flown it and kept the recording.
+## A 5-DOF arm: real kinematics, and no constant `H`
 
-Both are handed the **empty** aircraft — its mass and inertias, which of the
-twelve noisy channels reads what — and nothing else. Mid-flight each grabs a
-0.42 kg crate that hangs out on the arms: mass ×1.38, roll and pitch inertia
-×1.8, and the centre of mass shifted **1.6 cm off the thrust axis**. A gust hits;
-the GPS **cuts out** — position *and* velocity together, because they come out of
-one receiver — and comes back degraded; the crate is set down again; and a
-damaged rotor leaves the gyros noisy on the way home. The autopilots are told
-none of it either — they trim the crate away and fly on, so the aircraft's
-*behaviour* does not give the payload up; only the residual does.
+A 5-DOF arm — yaw and shoulder pitch at the base, elbow pitch and a forearm roll,
+one wrist flex — works a pick-and-place cycle through five noise regimes: calm,
+the accelerometers swamped, **vibration shaking the arm itself** (the arm moves;
+the sensors are fine), one joint's potentiometer **failing outright**, then both
+at once. Every joint fuses a bad potentiometer (σ ≈ 3.4°) with a link-mounted
+MEMS accelerometer, and that accelerometer is why no constant `H` exists here
+even approximately: it reads gravity resolved in a frame that moves with every
+joint below it, plus lever arms on the joint accelerations and terms quadratic in
+the rates. So the measurement map reaches the filter as a **callable** and is
+linearised at every step, exactly as `F` is. Through the bursts the tip estimate
+holds **0.010 m RMSE** against the raw potentiometer's 0.221 m and a fixed-noise
+Kalman filter's 0.042 m — and the chip grid names *which* joint's sensor died.
 
-The dropout is where the two part company, and it is the ordinary avionics case
-rather than a rig contrivance. While the fix is gone there is nothing to
-distrust and no noise level to have tuned: the only thing carrying the estimate
-across the gap is the model of the aircraft. The fixed filter's model is the
-empty airframe it was handed, and the mass error alone is worth 3.7 m/s² of
-dead-reckoned vertical acceleration.
+![a 5-DOF robotic arm in 3D working a slow pick-and-place cycle, tracked live through five noise regimes — calm, noisy accelerometers, vibration shaking the arm, a failing position sensor, and both at once; an ACTIVE REGIME label names each phase, a chip grid of learned noise scales turns orange on the hot channel, the raw potentiometer estimate flails while the lucid estimate stays locked on the true arm](research/multivariate-statfilter/figures/arm5dof-lucid.gif)
+
+*Also as [an MP4](research/multivariate-statfilter/figures/arm5dof-lucid.mp4).*
+
+## A delivery drone, with the filter in the loop
+
+Two quadrotors fly the same delivery job, in the same air, on the same sensor
+noise, each flown by its own estimator and by nothing else. One flies on
+`LucidFilter`. The other flies on the honest alternative — a fixed Kalman filter
+on the same nominal airframe, its noise levels **tuned in hindsight on this very
+flight**, which is the best a fixed filter could have been set to. Mid-flight
+both grab a 0.42 kg crate that hangs 1.6 cm off the thrust axis; neither is told.
+
+Through the calm and the gust the two fly the same job to within a few
+centimetres: a well-tuned fixed filter is genuinely good. Then the GPS **cuts
+out** — position and velocity together, because they come out of one receiver.
+There is nothing left to distrust and no noise level to have tuned; the only
+thing carrying the estimate across the gap is the model of the aircraft, and the
+fixed filter's is the empty airframe it was handed. **4.1 cm against 30.6 cm**,
+and the two aircraft end up **0.86 m apart**. That is the shape of the whole
+claim: as good as the best fixed filter while nothing is changing, and several
+times better exactly when something breaks.
 
 ![two 3D quadrotors flying the same delivery mission side by side, one flown on the lucid filter and one on a hindsight-tuned fixed Kalman filter, against the dashed path both were commanded to fly. Each picks up a crate that hangs visibly off-centre and carries it through a gust and a GPS dropout. A chip grid of learned per-channel noise scales turns orange on whichever channel has gone bad and dotted red on the channels that stop reading at all; a payload panel reports the crate's mass and off-centre lever arm within a few steps of the grab and returns to zero when it is released; a log-scale error trace shows the raw GPS fix at metres, the Kalman-flown aircraft's estimate spiking to 30 cm through the dropout and the lucid one holding at 4 cm — and on screen the two aircraft drift almost a metre apart before the fix returns](research/dynamics-learning/figures/drone3d-lucid.gif)
 
 *The same animation as [an MP4](research/dynamics-learning/figures/drone3d-lucid.mp4)
-— open it on GitHub for pause, scrubbing and 0.25×–2× playback.*
-
-Everything in the right-hand column is filter output:
-
-1. **Which noise is hot** — the learned per-channel scales. A chip turns orange
-   when the filter has decided *that* channel is bad right now: the GPS block
-   when the fix comes back degraded, the gyro row under rotor vibration, the wind
-   row under the gust. It goes dotted red when a channel stops reading at all,
-   which is a different thing and is treated as one. Nothing is told — and a gust
-   is not mistaken for a payload: fly the same mission with no crate and 0.64% of
-   steps are ever flagged as a dynamics change. Underneath sits the single fixed
-   setting its opponent had to commit to for the whole flight.
-2. **What it says it is carrying** — read straight off `.control`, the dynamics
-   as currently believed. Within a handful of steps of the grab (2.8 ± 0.4 over
-   five seeds in [`0008`](research/dynamics-learning/exploration/0008_drone3d_payload.md);
-   4 in the run shown) it reports a payload, and it settles at **0.43 kg hung
-   1.6 cm off centre** against a truth of 0.42 kg and 1.63 cm. When the crate is
-   released the same read-out comes home to 0.00 kg and 0.1 cm: the original
-   dynamics, recovered, with no refit.
-3. **Position error**, each aircraft against its own truth — which is what its
-   autopilot was handed. Over the whole mission the lucid estimate holds **3.1 cm**
-   RMSE against the hindsight-tuned Kalman's 12.5 cm. Nearly all of that gap is
-   in two windows: **4.1 cm against 30.6 cm through the GPS dropout — 7.5×** — and
-   2.8 cm against 16.2 cm over the recovery after it, while the raw fix reads
-   6.3 m. Through the gust and the vibration the two are within 1.0–1.6× of each
-   other, and in the opening calm lucid is the *worse* of the two (3.9 cm against
-   2.0 cm) while it is still working out what its own noise is. A well-tuned fixed
-   filter is genuinely good; it is the *change* it cannot follow.
-
-What that costs the flying, which is the point of putting a filter in the loop
-at all: through the dropout the Kalman-flown aircraft is **0.56 m RMS off the
-path it was commanded to fly against the lucid one's 0.17 m**, and the two end up
-**0.86 m apart** — more than an airframe and a half, and visible on screen. Away
-from the dropout they fly the same job to within a few centimetres of each other.
-
-The off-centre part is the one a planar rig cannot pose. A displaced centre of
-mass turns collective thrust into a standing torque — a thrust→roll/pitch
-coupling that is **exactly zero** on the vehicle the filter was given. It is
-found from a residual, with no fault named and no threshold crossed
-([`0008`](research/dynamics-learning/exploration/0008_drone3d_payload.md)).
+— open it on GitHub for pause, scrubbing and 0.25×–2× playback. Everything in the
+right-hand column is filter output: the learned per-channel noise scales, the
+payload read off `.control` (0.425 kg and 1.62 cm against a truth of 0.42 and
+1.63, home to 0.00 when the crate is released), and the error scope.*
 
 ```python
 from lucid import LucidFilter
@@ -130,71 +96,6 @@ s.measurement_scale     # (m,) which sensor is hot right now — the chip grid
 s.process_scale         # (n,) which dynamics mode is being disturbed
 s.control               # (n, p) the dynamics as currently believed — the payload
 ```
-
-## The same machinery, five joints deep
-
-The noise channel alone, with the dynamics held fixed: a 5-DOF robotic arm works
-through a slow pick-and-place cycle while its operating conditions change out
-from under it, regime after regime — a calm stretch, the accelerometers turning
-noisy, **vibration shaking the arm itself** (the arm moves — the sensors are
-fine), a position sensor **failing outright**, and vibration and sensor noise
-together. The `ACTIVE REGIME` line names the ground truth as it evolves, so you
-can watch the chips find it.
-
-![a 5-DOF robotic arm in 3D working a slow pick-and-place cycle, tracked live through five noise regimes — calm, noisy accelerometers, vibration shaking the arm, a failing position sensor, and both at once; an ACTIVE REGIME label names each phase, a chip grid of learned noise scales turns orange on the hot channel, the raw potentiometer estimate flails while the lucid estimate stays locked on the true arm](research/multivariate-statfilter/figures/arm5dof-lucid.gif)
-
-*Also as [an MP4](research/multivariate-statfilter/figures/arm5dof-lucid.mp4).*
-
-The arm is the chain most 5-DOF arms share — yaw and shoulder pitch at the base,
-elbow pitch and a forearm roll, one wrist flex holding the effector — and every
-joint fuses a **bad potentiometer** (angle, σ ≈ 0.06 rad ≈ 3.4°) with the two
-lateral axes of a **link-mounted MEMS accelerometer** (σ ≈ 0.03 m/s²). The servo
-tracks minimum-jerk waypoint moves *on the potentiometers*, and the commanded
-forcing is the known input `U`. The regimes: accelerometers ×15, vibration ×20,
-one joint's potentiometer ×15, then both at once.
-
-The accelerometers are why `H` here is a **callable**. What each axis reads is
-proper acceleration: gravity resolved in a link frame that moves with every
-joint below it, configuration-dependent lever arms on the joint accelerations,
-and centripetal terms quadratic in the rates. No constant `H` exists at all, so
-the map is linearised at every step, exactly as `F` is — by a batched
-complex-step Jacobian, exact to 1e-9. Freeze that linearisation at the home pose
-and the same filter is **15–195× the oracle** on the same data, while its noise
-machinery works flawlessly — faithfully booking the linearisation error as
-sensor noise, which is exactly the wrong thing to trust a reading by
-([`0054`](research/multivariate-statfilter/exploration/0054_physical_sensors.md)).
-
-Through the bursts the lucid tip estimate holds **0.010 m RMSE**. The raw
-potentiometer reads 0.221 m — **22× worse** — and a fixed-noise Kalman filter
-given the *same model and the same live measurement map* reads 0.042 m (4.3×
-worse, and 2.1–7.3× the oracle per regime: on this rig the accelerometers double
-as inclinometers, so knowing *when* to trust them is worth more than ever). That
-gap widens with how long each regime lasts, which is the shape of the whole
-claim: an adaptive filter converges *inside* a regime and a fixed one has
-nowhere to go — at half these regime lengths the same run reads 0.019 m against
-0.031 m. The learned scales double as a live diagnosis: the chip grid pinpoints
-*which joint's* potentiometer died.
-
-**What one update costs.** Per bank member, per step, the arithmetic is one
-small Kalman update per scale-window node:
-
-$$\text{cost} \approx G\,(2n^2m + 2nm^2 + m^3) \quad\text{multiply-adds},
-\qquad G = 1 + 4r,$$
-
-where $n$ is the state dimension, $m$ the sensor count, and $r \le n+m$ the
-number of active noise axes ($G$ is the node count of the axial scale windows —
-linear in the axes; a joint grid would be $5^r$). For the arm above
-($n{=}15$, $m{=}15$, $r{=}30$, $G{=}121$, and the default bank of 15 members)
-that is **≈ 31 million multiply-adds per update — measured 76 ms/step in pure
-numpy**, the complex-step measurement Jacobian included, where profiling
-attributes most of the wall time to interpreter overhead rather than flops. The
-drone above runs the same engine with a dynamics channel on top ($n{=}12$ plus
-six departure coefficients, $m{=}12$, 30 members) at **≈ 60 ms/step**. The two levers that matter for embedded use: the
-bank multiplier (a 1–3 member bank tracks the same — the bank exists to average
-away the class choice, not for accuracy; pass `phis=`/`ss=`), and structure —
-when the model is block-diagonal (independent joints), five separate per-joint
-filters ($n{=}3$, $m{=}2$, $G{=}21$) cost ≈ 30 k multiply-adds each per update,
-microsecond-scale in a compiled implementation.
 
 ## What a lucid filter is
 
@@ -315,6 +216,13 @@ would have had.
 
 ## Measured behaviour
 
+Everything below is a ratio to an oracle told the truth. Told nothing at all the
+filter lands **3.5% above an oracle-tuned Kalman** on the scalar benchmark and
+**1.03×** an oracle handed both the true noise schedule and the true payload on
+the drone; the worst window on any rig here is 2.8× the oracle, dominated by its
+first half-second, while the same model at fixed noise pays 2–7× *steadily* on
+those same runs.
+
 On the arm rig (3 seeds, tip RMSE ratio to an oracle Kalman filter told the true
 noise schedule; `fixed` is the same model frozen at the base noise; `frozen-H` is
 the same lucid filter with the measurement map linearised once at the home pose
@@ -372,6 +280,37 @@ limit below. After the release the same read-out returns to 1.100 ± 0.001 kg an
 where an oracle *told* the new sensor noise is 1.37/1.12 = 22% better than one
 still walking towards it — the transient-attribution open, on a bigger rig.
 
+The off-centre part is the one a planar rig cannot pose. A displaced centre of
+mass turns collective thrust into a standing torque — a thrust→roll/pitch
+coupling that is **exactly zero** on the vehicle the filter was given. It is
+found from a residual, with no fault named and no threshold crossed.
+
+The animation above asks a different question of the same rig — not how close
+each filter gets to an oracle, but how the aircraft *flies* when that filter is
+the one in the loop, against a fixed Kalman filter whose noise was tuned in
+hindsight on the flight it is judged on (`drone3d.tune_fixed`; multi-start
+coordinate descent with a don't-crash guard, since tuning on estimator error
+alone picks a setting that trusts nothing but the GPS velocity and scores well on
+a flight nobody walks away from). Position RMSE in metres, one seed, each
+aircraft against its own truth:
+
+| window | raw GPS fix | hindsight Kalman | lucid | ratio | off the commanded path: Kalman / lucid |
+|---|---|---|---|---|---|
+| whole mission | 1.599 | 0.125 | 0.031 | 4.1× | 0.275 / 0.189 |
+| opening calm | 0.519 | 0.020 | 0.039 | 0.5× | 0.203 / 0.207 |
+| gust | 0.516 | 0.019 | 0.019 | 1.0× | 0.261 / 0.268 |
+| **GPS dropout** | 6.304 | 0.306 | 0.041 | **7.5×** | **0.557 / 0.169** |
+| recovery calm | 0.521 | 0.162 | 0.028 | 5.8× | 0.288 / 0.170 |
+| gyro vibration | 0.516 | 0.038 | 0.024 | 1.6× | 0.139 / 0.148 |
+
+Level where nothing is changing — and in the *opening* calm the lucid filter is
+the worse of the two, while it is still working out what its own noise is. The
+gap is the failures, and it reaches the flying: through the dropout the
+Kalman-flown aircraft is 0.56 m RMS off the path it was commanded against the
+lucid one's 0.17 m, and the two end up 0.86 m apart. The dropout is scheduled by
+`drone3d.dropouts`, which is off by default, so the acceptance rig above is the
+one `0008` measured.
+
 On the earlier dynamics rigs (`0007`, the shipped filter re-measured): a scalar
 step change in `F` is detected in **15.7 ± 1.7 steps against a derived frontier
 of 15** — on the frontier, not near it. On a differential drive whose wheel blows
@@ -382,6 +321,30 @@ model pays 5.06×. The research prototypes that fixed the design go further wher
 the failure modes are *named*: the same blowout in 18 ms, and a planar quadrotor
 that has a payload attached mid-flight in 28.9 ± 1.7 steps against a frontier of
 29.6 ([`dynamics-learning/`](research/dynamics-learning/SUMMARY.md)).
+
+## What one update costs
+
+Per bank member, per step, the arithmetic is one small Kalman update per
+scale-window node:
+
+$$\text{cost} \approx G\,(2n^2m + 2nm^2 + m^3) \quad\text{multiply-adds},
+\qquad G = 1 + 4r,$$
+
+where $n$ is the state dimension, $m$ the sensor count, and $r \le n+m$ the
+number of active noise axes ($G$ is the node count of the axial scale windows —
+linear in the axes; a joint grid would be $5^r$). For the arm above
+($n{=}15$, $m{=}15$, $r{=}30$, $G{=}121$, and the default bank of 15 members)
+that is **≈ 31 million multiply-adds per update — measured 76 ms/step in pure
+numpy**, the complex-step measurement Jacobian included, where profiling
+attributes most of the wall time to interpreter overhead rather than flops. The
+drone runs the same engine with a dynamics channel on top ($n{=}12$ plus six
+departure coefficients, $m{=}12$, 30 members) at **≈ 60 ms/step**. The two levers
+that matter for embedded use: the bank multiplier (a 1–3 member bank tracks the
+same — the bank exists to average away the class choice, not for accuracy; pass
+`phis=`/`ss=`), and structure — when the model is block-diagonal (independent
+joints), five separate per-joint filters ($n{=}3$, $m{=}2$, $G{=}21$) cost
+≈ 30 k multiply-adds each per update, microsecond-scale in a compiled
+implementation.
 
 ## Current limits, measured
 
