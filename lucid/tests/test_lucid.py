@@ -475,8 +475,8 @@ def test_callable_H_nonlinear_pair_and_stacked_bank():
     from lucid.statfilter.lucid import _WalkEngine
 
     class _Looped(_WalkEngine):
-        def update(self, y, u=None):
-            return _WalkEngine.update(self, y, u=u)
+        def update(self, y, u=None, a=1.0):
+            return _WalkEngine.update(self, y, u=u, a=a)
 
     r = rng(7)
     F = np.array([[1.0, 0.1], [0.0, 0.98]])
