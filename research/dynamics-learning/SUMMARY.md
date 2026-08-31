@@ -24,7 +24,9 @@ claim: it fails the monotonicity test that separates a budget from a knob — ca
 monotonically in `rho`, delay falls, so a pinned value sits on a trade-off): it is a nuisance,
 gridded and mixed by evidence like every other nuisance here.  The box is a class-breadth
 convention in the exact sense of the `(phi, s)` box (top 1/2 = the class's own persistence
-boundary; decade rungs = the log-uniform reference prior; the bottom is the box's reach --
+boundary; rung gap = 1.5 nats of log-hazard, the walk grid's Sparrow rule at this axis's blur
+width -- one e-fold per event, at the rare class's operative single event; uniform weights on
+the geometric rungs = the log-uniform reference prior; the bottom is the box's reach --
 state tracking is measured-flat across and below it, so only the fault REPORT's crossing time
 reads it), valid at the nominal ``forget = 1`` and reading nothing from ``forget``.  Every gain, drift rate, restart width, and spawn mass derives per rung from
 `(rho_j, cap)`, and the posterior-mean hazard is REPORTED — the filter reads the regime off the

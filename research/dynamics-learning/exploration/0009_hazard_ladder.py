@@ -13,7 +13,8 @@ same state at 2x the single-sensor variance -- same total information, but no si
 mode, so the (orthogonal) split ladder stays out of the bank and the probe measures the
 hazard machinery alone at 24x less compute.  20 seeds,
 with a no-change arm for calm costs.  Contenders: the derived hazard LADDER
-(faults=True: rungs 1/2 ... 5e-4, decades; see `_HAZARDS`) against PINNED hazards
+(faults=True: rungs at gap 1.5 nats from 1/2 down, see `_HAZARD_GAP`) against the
+retired decade box and PINNED hazards
 spanning it, plus a rung-count perturbation (one extra decade below) for the inertness claim.
 Measured per arm: detection delay (first fault > 0.5 after t*, the 0001 reporting
 convention), false-crossing fraction on [300, t*), state RMSE on calm/recovery/settled
@@ -104,9 +105,12 @@ def run_recurrent(faults, seed, period=150, nev=8):
 
 
 def main(ns=20):
+    import math as _m
+    E15 = tuple(0.5 * _m.exp(-1.5 * j) for j in range(6))     # the shipped box (derived gap)
     arms = [
-        ("ladder (faults=True)", True),
-        ("ladder + decade below", (0.5, 0.05, 5e-3, 5e-4, 5e-5)),
+        ("box e^1.5 (faults=True)", True),
+        ("box + rung below", E15 + (E15[-1] * _m.exp(-1.5),)),
+        ("box @ decades (retired)", (0.5, 0.05, 5e-3, 5e-4)),
         ("pinned 0.5", 0.5),
         ("pinned 0.05", 0.05),
         ("pinned 5e-3", 5e-3),
@@ -136,8 +140,9 @@ def main(ns=20):
     print(f"fault-RICH world (A alternates every 150 steps, 8 events), {ns} seeds:")
     hdr2 = f"{'arm':>22} | {'first delay':>11} | {'late delays':>11} | {'rmse':>8} | {'hz(end)':>9}"
     print(hdr2); print("-" * len(hdr2))
-    for name, fa in [("ladder (faults=True)", True), ("pinned 5e-4", 5e-4),
-                     ("pinned 5e-3", 5e-3)]:
+    for name, fa in [("box e^1.5 (faults=True)", True),
+                     ("box @ decades (retired)", (0.5, 0.05, 5e-3, 5e-4)),
+                     ("pinned 5e-4", 5e-4), ("pinned 5e-3", 5e-3)]:
         rows = [run_recurrent(fa, 500 + s_) for s_ in range(ns)]
         d0, d0se = agg(rows, "delay_first")
         dl, dlse = agg(rows, "delay_late")

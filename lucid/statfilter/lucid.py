@@ -52,10 +52,11 @@ forever (a false detection then costs ~nothing), optional named fault `anchors` 
 detector when the failure modes can be named), and a departure walker whose variance is bounded at
 the class cap and re-priced to it when a fault is confirmed -- bounded, never frozen.  The fault
 hazard is NOT a labeled prior: it is a nuisance, and this filter has one way of handling those --
-grid it and let the evidence weight it.  The bank runs a broad hazard BOX (`_HAZARDS`, decade
-rungs down from the class's own persistence boundary 1/2, so uniform initial weights ARE the
-log-uniform prior -- a class-breadth convention in the exact sense of the `(phi, s)` box, valid
-at ``forget = 1`` and reading nothing from ``forget``) and each rung's running predictive
+grid it and let the evidence weight it.  The bank runs a broad hazard BOX (`_HAZARDS`: rungs 1.5 nats apart in log-hazard -- the
+walk grid's own Sparrow spacing rule at this axis's blur width, one e-fold per event at the
+class's operative single event -- down from the class's persistence boundary 1/2; uniform
+initial weights ARE the log-uniform prior; a class-breadth convention in the exact sense of
+the `(phi, s)` box, valid at ``forget = 1`` and reading nothing from ``forget``) and each rung's running predictive
 likelihood weights it; the reported `hazard` is the posterior mean, the regime the data currently
 supports.  Each rung's gain, drift, cap and restart width derive from its own `(rho_j, class
 size)`, and its detection frontier is derived (`log(1/rho_j) / KL-rate`), not tuned.  Passing a
@@ -111,35 +112,49 @@ _SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weigh
                                            #   changes in this repository's own rigs.
 _SERIES_REACH = 4.0         # gaps out to 4 nominal steps: how far the pre-factored Q(a)
                             # series must stay accurate before the exact route is used instead
-_HAZARDS = (0.5, 0.05, 5e-3, 5e-4)   # default hazard box for the fault class -- a broad box in
-                                     #   the exact sense of `_PHIS`/`_SS`, not a fitted value
-                                     #   and not derived from `forget` (research 0009, corrected:
-                                     #   an earlier revision derived the bottom from the weight
-                                     #   memory, which made the one engineering parameter
-                                     #   load-bearing and the construction invalid at the
-                                     #   nominal ``forget = 1``).  A pinned hazard is a knob --
-                                     #   calm cost and detection delay move monotonically in
-                                     #   opposite directions in rho -- so the hazard gets the
-                                     #   `(phi, s)` treatment: grid it, let evidence weight it.
-                                     #   Events identify the rate (~log 10 nats per event
-                                     #   between adjacent decades); the quiet direction (WHICH
-                                     #   small rho) is the hazard's identification ridge, and it
-                                     #   is measured-flat in what matters -- state tracking is
-                                     #   unchanged across the box and across a decade appended
-                                     #   below it (0009: calm/recovery/settled all within
-                                     #   noise).  Only the fault REPORT's crossing time reads
-                                     #   the bottom (log(10)/KL deeper per decade) -- a
-                                     #   reporting convention the consumer prices, not the
-                                     #   filter.  The TOP, 1/2, is the class's own persistence
-                                     #   boundary: above it the dynamics would leave a
-                                     #   hypothesis more often than persist, which contradicts
-                                     #   "a fault persists" rather than parameterising it (it
-                                     #   is also the largest hazard whose uniform-leak kernel
-                                     #   stays stochastic for every bank size).  Decade rungs
-                                     #   with uniform initial weights are the log-uniform
-                                     #   reference prior; refining the spacing is a compute
-                                     #   budget in the sense of `order`.  Pass `faults=(...)`
-                                     #   to widen or shift the box -- give-what-you-know.
+_HAZARD_GAP = 1.5                    # rung spacing of the hazard box, in NATS of log-hazard --
+                                     #   the same Sparrow rule that spaces the walk grid
+                                     #   (`_GAP_FACTOR`), evaluated at this axis's own blur
+                                     #   width.  A rate observed through rare events is
+                                     #   informed by the events: one event carries exactly
+                                     #   ``log(rho_1/rho_2)`` nats between two rungs, so
+                                     #   log-hazard is the information coordinate and its
+                                     #   Fisher information is the EVENT COUNT -- posterior
+                                     #   width ``1/sqrt(n)`` e-folds after ``n`` events.  The
+                                     #   class is rare, so the operative count is n = 1 and
+                                     #   the blur width is one e-fold; gap = 1.5 of those.
+                                     #   (The survival channel's tax difference, ``c drho``
+                                     #   per step, is sub-nat exactly where the class lives --
+                                     #   that flat direction is the hazard's identification
+                                     #   ridge, 0009 -- and dominates only near the top of the
+                                     #   box, where finer-than-needed spacing wastes nothing.)
+                                     #   The retired base-10 spacing (2.3 nats) sat PAST the
+                                     #   ~2-blur dead-zone threshold of the house rule -- too
+                                     #   coarse by the filter's own criterion, and underived.
+_HAZARDS = tuple(0.5 * math.exp(-_HAZARD_GAP * j) for j in range(6))
+                                     # default hazard box for the fault class -- broad in the
+                                     #   exact sense of `_PHIS`/`_SS`, not a fitted value and
+                                     #   not derived from `forget` (0009, corrected: an earlier
+                                     #   revision read the bottom off the weight memory, which
+                                     #   made the one engineering parameter load-bearing and
+                                     #   failed at the nominal ``forget = 1``).  A pinned
+                                     #   hazard is a knob -- calm cost and detection delay move
+                                     #   monotonically in opposite directions in rho -- so the
+                                     #   hazard gets the `(phi, s)` treatment: grid it, let
+                                     #   evidence weight it.  State tracking is measured-flat
+                                     #   across the box and below it (0009), so only the fault
+                                     #   REPORT's crossing time reads the bottom (1/KL steps
+                                     #   deeper per nat) -- a reporting convention the consumer
+                                     #   prices, not the filter.  The TOP, 1/2, is the class's
+                                     #   own persistence boundary: above it the dynamics would
+                                     #   leave a hypothesis more often than persist,
+                                     #   contradicting "a fault persists" rather than
+                                     #   parameterising it (it is also the largest hazard whose
+                                     #   uniform-leak kernel stays stochastic for every bank
+                                     #   size).  Uniform initial weights on the geometric rungs
+                                     #   are the log-uniform reference prior; the REACH (six
+                                     #   rungs, to ~3e-4) is the box's breadth, a convention.
+                                     #   Pass `faults=(...)` to widen or shift it.
 _RANK_TOL = 1e-8            # numerical rank tolerance (the order used for structural activation)
 _OFFSET_CLASSES = 5         # rungs of the offset channel's class ladder -- a compute budget in
                             # the sense of `order`, not a fitted value: the two ENDS are derived
@@ -2170,12 +2185,13 @@ class LucidFilter:
     faults : True, float, or sequence, optional
         Turn on the dynamics channel around a SUPPLIED ``F``: the dynamics may CHANGE, at some
         per-step hazard.  ``True`` (and the default under ``dynamics=None``) mixes over the
-        broad hazard BOX ``_HAZARDS`` -- decade rungs down from the class's own persistence
-        boundary (1/2), each rung a complete conditional model weighted by its own running
-        predictive likelihood -- so the rate is read off the data and reported
-        (``LucidStep.hazard``), never asserted.  The box is a class-breadth convention like
-        ``phis``/``ss`` (state tracking is measured-flat across it and below it; only the
-        fault report's crossing time reads the bottom, log(10)/KL per decade) and is valid at
+        broad hazard BOX ``_HAZARDS`` -- rungs 1.5 nats apart in log-hazard (the derived
+        Sparrow spacing, see `_HAZARD_GAP`) down from the class's own persistence boundary
+        (1/2), each rung a complete conditional model weighted by its own running predictive
+        likelihood -- so the rate is read off the data and reported (``LucidStep.hazard``),
+        never asserted.  The box is a class-breadth convention like ``phis``/``ss`` (state
+        tracking is measured-flat across it and below it; only the fault report's crossing
+        time reads the bottom, 1/KL steps per nat) and is valid at
         ``forget = 1``.  A float pins the box to that one rung (give-what-you-know, for a
         caller who truly knows the rate; must lie in (0, 1/2]), and a sequence is an explicit
         box.  Per rung the detection delay is derived, ``log(1/rho_j) / KL-rate``; see

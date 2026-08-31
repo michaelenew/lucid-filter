@@ -108,9 +108,10 @@ is what separating a wrong `F` from an elevated `Q` requires, since the two then
 compete as hypotheses under a live noise walk rather than through a whiteness
 statistic bolted on the side. A fault is a **jump process** — rare, large,
 persistent — and its hazard is a nuisance, not a knob: the filter mixes over a
-broad hazard **box** (decade rungs down from the class's own persistence
-boundary, 1/2 per step — a class-breadth convention like the `(phi, s)` box,
-valid at `forget = 1`; see `_HAZARDS`) and each rung's running predictive
+broad hazard **box** (rungs 1.5 nats apart in log-hazard — the walk grid's own
+Sparrow spacing rule at this axis's one-event blur width — down from the
+class's persistence boundary, 1/2 per step; a class-breadth convention like
+the `(phi, s)` box, valid at `forget = 1`; see `_HAZARDS`) and each rung's running predictive
 likelihood weights it, so the rate is *read off the data and reported*
 (`r.hazard`), never asserted. Per
 rung everything follows: the departure's drift is that rung's own second moment

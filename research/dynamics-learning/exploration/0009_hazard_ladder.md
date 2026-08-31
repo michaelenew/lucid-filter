@@ -48,9 +48,27 @@ measured here.
   consumer's operating point, not the filter's objective ("detection is a reporting
   convention; the filter itself only ever mixes", 0001).  Widen it via `faults=(...)` —
   give-what-you-know.
-- **Decade rungs, uniform initial weights** = the log-uniform reference prior over the rate.
-  Refining the spacing is a compute budget in the `order` sense: monotone, no trade-off.
-- Default: rungs (0.5, 0.05, 5e-3, 5e-4), independent of `forget`, valid at `forget = 1`.
+- **Rung gap = 1.5 nats of log-hazard, DERIVED** (second correction — the first revision
+  used decades, a guess wearing "scale-free convention" as a costume; base 10 has no
+  standing).  The derivation is the walk grid's own spacing rule (`_GAP_FACTOR`, finding 11's
+  Sparrow limit: node gap set by the likelihood's blur width on that axis) evaluated on this
+  axis:
+  * log-hazard is the information coordinate of a *rare-event* rate: one event carries
+    exactly `log(ρ₁/ρ₂)` nats between two rungs, so the Fisher information of log ρ is the
+    event count `n`, and the posterior width is `1/√n` e-folds.  (The survival channel —
+    calm tax difference `c·Δρ` per step — has √ρ geometry instead, but it is sub-nat exactly
+    where the class lives; it dominates only near the top of the box, where extra fineness
+    wastes nothing.  That flat survival direction *is* the hazard's identification ridge.)
+  * The class is rare: the operative event count is n = 1, so the blur width is **one
+    e-fold**, and the Sparrow gap is 1.5 of those — `_HAZARD_GAP = 1.5` nats, rung ratio
+    e^1.5 ≈ 4.48.
+  * The retired decade spacing (2.30 nats) sat **past** the ~2-blur dead-zone threshold of
+    the house's own rule — too coarse by the filter's own criterion, not merely underived.
+  Uniform initial weights on the geometric rungs are the log-uniform reference prior at any
+  gap.
+- Default: `0.5·e^(−1.5j)`, j = 0..5 → (0.5, 0.112, 0.0249, 5.55e-3, 1.24e-3, 2.77e-4) —
+  six rungs, reach ~3e-4 (the breadth convention), independent of `forget`, valid at
+  `forget = 1`.
 
 **The retraction.**  This probe's first revision derived the bottom from the weight memory,
 `1/T` with `T = 1/(1−forget)` ("the most quiet the memory can claim to have witnessed"), and
@@ -65,7 +83,7 @@ The corrected reading of the +18-step measurement: it is not evidence of a load-
 theoretical floor; it is the report's log-priced dependence on a breadth convention, sitting
 on a direction the *objective* is measured-flat along — the hazard's own identification
 ridge.  The schedule that produced the `(phi, s)` box applies verbatim: events identify the
-rate (~log 10 nats per event between adjacent decades; the ridge sharpens with events exactly
+rate (the gap in nats per event between adjacent rungs; the ridge sharpens with events exactly
 as finding 14's sharpens with n); the quiet direction is tracking-flat (measured); solve at
 stationarity by evidence-weighting a broad proper box, valid at `forget = 1`; `forget < 1`
 then only keeps the rate re-selectable if the world's rate itself drifts — the same
@@ -83,7 +101,9 @@ diff 8.9e-16, loglik diff 0.0 over 400 steps).
 
 ## Measured (scalar 0001-style rig, A 0.90 → 0.55 at t* = 1500, two sensors, 20 seeds)
 
-All arms 20 seeds (change world seeds 100–119, no-change 900–919); delay = first
+*(Measured at the decade revision of the box — `faults=True` then meant the decade rungs;
+the derived-gap rerun is tabled in the following section.)*  All arms 20 seeds (change world
+seeds 100–119, no-change 900–919); delay = first
 `fault > 0.5` after t* (the 0001 reporting convention); false = crossing fraction on
 [300, t*); calm rmse from the no-change arm; hz = the `r.hazard` readout.
 

@@ -373,14 +373,14 @@ def test_faults_hazard_validated():
 
 
 def test_hazard_box_is_structural_not_forget_derived():
-    """faults=True mixes over the fixed broad box: decade rungs down from the class's own
-    persistence boundary.  Nothing structural reads ``forget`` -- the box is identical at any
+    """faults=True mixes over the fixed broad box: rungs 1.5 nats apart (the Sparrow rule
+    at the axis's one-event blur width) down from the class's own persistence boundary.  Nothing structural reads ``forget`` -- the box is identical at any
     memory, and the construction is valid at the NOMINAL filter, ``forget = 1`` (pure Bayes):
     forget is the engineering escape for the stationarity assumption being violated, and it
     is admissible only because nothing depends on it (adaptive-grid 0029, research 0009)."""
     f = LucidFilter(dynamics=[[0.9]], faults=True)
     assert f.hazards[0] == 0.5                      # the class's persistence boundary
-    assert np.allclose(f.hazards[:-1] / f.hazards[1:], 10.0)     # decade rungs
+    assert np.allclose(np.log(f.hazards[:-1] / f.hazards[1:]), 1.5)   # 1.5-nat rungs
     for fg in (0.99, 1.0):                          # forget never reaches the box
         g = LucidFilter(dynamics=[[0.9]], faults=True, forget=fg)
         assert np.array_equal(g.hazards, f.hazards)
