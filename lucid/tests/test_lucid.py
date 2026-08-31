@@ -1001,6 +1001,25 @@ def test_a_partial_event_moves_the_total_and_holds_the_split():
     assert np.allclose(los, los2, atol=1e-9), "a single-sensor event moved a split it cannot see"
     assert not np.allclose(tots, tots2), "it must still move the total it can see"
 
+    # AND on a rig whose MODEL has no confounded pairs at all -- two sensors reading the
+    # same state, so no process mode is read by exactly one of them.  A single-sensor event
+    # still confounds, because its S is a scalar; gating the hold on the model's pairs
+    # instead of the event's silently drops it here, and full rows stay bit-identical while
+    # it does (that is how it got in: research/pointwise-streaming/0005 caught it, the
+    # bit-identity audit could not).
+    Hb = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])   # every state read by two sensors
+    kb = dict(dynamics=F, H=Hb, measurement=[0.3, 0.02, 0.4])
+    fb = LucidFilter(**kb)
+    eb = fb._members[0]
+    assert not eb._groups, "this rig's MODEL must have no pairs, or it tests nothing"
+    assert eb.event_groups(np.array([0]), 1)[0], "one sensor must still confound a pair"
+    for t in range(10):
+        fb.update(np.array([Y[t, 0], np.nan, np.nan]))
+    lo_b = [lo for _, lo in eb._group_read(eb.mu, eb.event_groups(np.array([0]), 1)[0])]
+    fb.update(np.array([Y[10, 0], np.nan, np.nan]))
+    lo_b2 = [lo for _, lo in eb._group_read(eb.mu, eb.event_groups(np.array([0]), 1)[0])]
+    assert np.allclose(lo_b, lo_b2, atol=1e-9), "the split moved on an event that cannot see it"
+
     # the full row is untouched by any of this: it moves the split
     g = LucidFilter(**kw)
     for t in range(12):
