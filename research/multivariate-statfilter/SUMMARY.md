@@ -276,6 +276,23 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
 
 ## Open items
 
+- **Physically-realisable sensing, and a relative-degree limit** ([`0054`](exploration/0054_physical_sensors.md)).
+  The arm rig's diagonal `H` was not a sensor anyone can buy, and its coplanar chain was not
+  an arm anyone builds.  The rig is now the common yaw/pitch + pitch/roll + wrist chain with
+  the two lateral axes of a MEMS accelerometer per link -- gravity, lever arms and
+  rate-quadratic terms, so no constant `H` exists -- and the shipped filter takes `H` as a
+  **callable** (Jacobian, or an `(H, y_pred)` pair when `h(x)` is not `H(x) x`).  Linearising
+  it once at the home pose instead of every step costs **15-195x the oracle** on the same
+  data.  The open it exposed: the scale walk's attribution of a process burst degrades with
+  the **relative degree** between the disturbance and the sensor that sees it -- on a rate
+  gyro, which a jerk reaches through `dt^2/2` instead of `dt`, a process burst is blamed on
+  the sensors at 103x the oracle; and the same pathology appeared inside the hero rig itself
+  while only one accelerometer axis per link was recorded (the forearm roll's tangential
+  acceleration is invisible to the radial axis, so its bursts were booked on a potentiometer,
+  4.7x the oracle until the second axis restored the lever arm).  Nothing in the construction
+  prices relative degree in; a rig audit is not done until every disturbance axis has a
+  sensor at comparable relative degree.
+
 **Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
 were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in
 idealized vs realistic regimes shows the triage mostly **holds** — but the *critical regime* was
