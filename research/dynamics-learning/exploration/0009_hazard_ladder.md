@@ -60,34 +60,55 @@ diff 8.9e-16, loglik diff 0.0 over 400 steps).
 
 ## Measured (scalar 0001-style rig, A 0.90 → 0.55 at t* = 1500, two sensors, 20 seeds)
 
-*(3-seed preview at commit time — the 20-seed run of `0009_hazard_ladder.py` is in flight;
-this table is replaced by the full run in the follow-up commit.)*
+All arms 20 seeds (change world seeds 100–119, no-change 900–919); delay = first
+`fault > 0.5` after t* (the 0001 reporting convention); false = crossing fraction on
+[300, t*); calm rmse from the no-change arm; hz = the `r.hazard` readout.
 
-| arm | delay | false% | calm rmse (no-change) | recov | settled | hz(calm) | hz(end) |
+| arm | delay | false% | calm rmse | recov | settled | hz(calm) | hz(end) |
 |---|---|---|---|---|---|---|---|
-| ladder (faults=True) | 88.3 ± 29.3 | 1.68% | 0.32192 ± 0.00274 | 0.2942 | 0.2906 | 1.1e-3 | 1.8e-3 |
-| ladder + decade below | 101.3 ± 34.6 | 1.17% | 0.32159 ± 0.00267 | 0.2943 | 0.2921 | 5.8e-4 | 1.3e-3 |
-| pinned 0.5 | 1.0 ± 0.5 | 36.15% | 0.34338 ± 0.00506 | 0.2934 | 0.2925 | 0.5 | 0.5 |
-| pinned 0.05 | 6.0 ± 1.6 | 18.85% | 0.33126 ± 0.00505 | 0.2912 | 0.2915 | 0.05 | 0.05 |
-| pinned 5e-3 | 25.3 ± 2.2 | 3.76% | 0.32330 ± 0.00279 | 0.2932 | 0.2912 | 5e-3 | 5e-3 |
-| pinned 5e-4 | 93.3 ± 28.1 | 1.28% | 0.32165 ± 0.00242 | 0.2946 | 0.2905 | 5e-4 | 5e-4 |
+| **ladder (faults=True)** | **82.0 ± 8.3** | **1.38%** | **0.32460 ± 0.00219** | 0.2902 | 0.2924 | 1.13e-3 | 1.77e-3 |
+| ladder + decade below | 100.5 ± 10.9 | 1.01% | 0.32455 ± 0.00220 | 0.2909 | 0.2927 | 6.2e-4 | 1.4e-3 |
+| pinned 0.5 | 1.4 ± 0.3 | 35.31% | 0.34310 ± 0.00247 | 0.2890 | 0.2978 | 0.5 | 0.5 |
+| pinned 0.05 | 11.4 ± 2.3 | 16.80% | 0.33199 ± 0.00244 | 0.2889 | 0.2977 | 0.05 | 0.05 |
+| pinned 5e-3 | 39.1 ± 4.4 | 3.51% | 0.32563 ± 0.00224 | 0.2893 | 0.2949 | 5e-3 | 5e-3 |
+| pinned 5e-4 | 91.8 ± 8.1 | 1.15% | 0.32440 ± 0.00219 | 0.2910 | 0.2916 | 5e-4 | 5e-4 |
 
 What the table says:
 
-1. **The pinned sweep exposes the knob exactly as charged** — delay and false rate fall,
-   calm cost rises, monotonically across three decades.  No pinned value is defensible.
+1. **The pinned sweep exposes the knob exactly as charged** — delay 1.4 → 91.8 and false
+   35.3% → 1.15% fall, calm cost 0.3431 → 0.3244 rises, monotonically across three decades.
+   No pinned value is defensible.
 2. **The ladder sits at its derived bottom rung's operating point without being told**:
-   delay, false rate and calm RMSE within noise of `pinned 5e-4`, at ~2.5× the members
-   (the shared-nominal dedup keeps it (nb+J)/(nb+1), not J×).
-3. **The bottom end is priced, not asserted**: one extra decade slides part of the calm
-   weight down and pays the predicted deeper launch (~+log10/KL steps) for no visible calm
-   gain — the `forget`-derived floor is where that slide is stopped by construction.
-4. **The regime is read, not told**: in calm the posterior-mean hazard settles near the
-   ladder floor; after the fault it rises; and in the fault-RICH world (below) it climbs to
-   the actual event rate and buys back detection speed on later events — the behavior a
-   pinned hazard cannot have at any value.
+   calm RMSE 0.32460 ± 0.00219 vs the bottom pin's 0.32440 ± 0.00219 (indistinguishable),
+   false 1.38% vs 1.15%, delay 82.0 ± 8.3 vs 91.8 ± 8.1 — slightly FASTER, because the upper
+   rungs' standing fault mass shallows the mixture's launch.  Cost: ~2.5× the members (the
+   shared-nominal dedup keeps it (nb+J)/(nb+1), not J×).
+3. **The bottom end is priced, not asserted**: one extra decade below the floor slides part
+   of the calm weight down (hz(calm) 1.13e-3 → 6.2e-4) and pays the predicted deeper launch
+   — delay 82.0 → 100.5, ≈ +log10/KL at the measured partial migration — for a calm gain of
+   0.00005 RMSE (nothing).  An unbounded ladder would keep sliding; the `forget`-derived
+   floor is where the slide is stopped by construction, at the most quiet the weight memory
+   can actually have witnessed.
+4. **The regime is read, not told**: calm settles the readout near the ladder floor
+   (1.13e-3), the one fault lifts it (1.77e-3), and in the fault-RICH world below it climbs
+   to 4.4e-3 against a true event rate of 8/1600 = 5e-3 — the filter reports, within 13%,
+   the rate of the world it is actually in.  A pinned hazard reports its own input back.
 
-*(Fault-rich world table lands with the 20-seed run in the follow-up commit.)*
+**The fault-rich world** (A alternates 0.90 ↔ 0.55 every 150 steps, 8 events, 20 seeds;
+delay per A0 → A1 edge, censored at 150):
+
+| arm | first-event delay | late-event delays | rmse | hz(end) |
+|---|---|---|---|---|
+| **ladder (faults=True)** | 66.6 ± 8.2 | **59.0 ± 7.4** | 0.3120 | **4.4e-3** |
+| pinned 5e-4 | 84.6 ± 7.8 | 85.0 ± 6.9 | 0.3129 | 5e-4 |
+| pinned 5e-3 (the oracle-rate pin) | 47.5 ± 7.8 | 47.5 ± 5.7 | 0.3120 | 5e-3 |
+
+The pin cannot adapt (85.0 late = 84.6 first, by construction).  The ladder climbs: later
+events are caught 31% faster than the bottom pin (59.0 vs 85.0), two-thirds of the way to
+the oracle-rate pin's 47.5, and its state RMSE matches the oracle-rate pin's.  Even its
+FIRST event is faster here (66.6 vs the single-fault world's 82.0): only 400 calm steps
+precede it, so the weights have not yet settled as deep — the launch depth tracks the quiet
+actually witnessed, which is the mechanism working as derived.
 
 ## What this does NOT claim
 
