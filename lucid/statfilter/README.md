@@ -79,9 +79,22 @@ learns the split rather than holding it.
 
 `f.filter(Y, U=None) -> LucidResult` runs a whole series; `f.update(y, u=None) ->
 LucidStep` is the same recursion one step at a time (the two agree exactly). Per
-step: `mean`, `var`, `innovation`, `loglik`, `process_scale`, `measurement_scale`
-— and, when the dynamics channel is on, `dynamics`, `control` and `fault`.
+step: `mean`, `var`, `innovation`, `forecast`, `loglik`, `process_scale`,
+`measurement_scale` — and, when the dynamics channel is on, `dynamics`,
+`control` and `fault`.
 A row of `Y` that is all-`NaN` is a clean gap: the filter predicts through it.
+
+**`forecast`, not `y − innovation`, is the causal one-step prediction.** The
+reported `innovation` is the *posterior*-weighted mixture of the members'
+one-step misses — the weights have already eaten `y_t`, so members that landed
+near it are upweighted and `y − innovation` leans toward the observation it
+nominally predicts (on iid noise its sign agrees with `y_t` measurably above
+chance; a caller conditioning decisions on it inherits that bias). `forecast`
+is the *prior*-weighted mixture prediction — the same weighting `loglik`
+scores under — and its sign agreement on iid noise is exactly chance. The same
+one-step-lag rule applies to every other readout a decision is conditioned on:
+`mean`, `dynamics`, the scales and `fault` are posteriors that have seen
+`y_t`.
 
 ## The dynamics channel
 

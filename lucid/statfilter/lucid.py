@@ -547,8 +547,14 @@ class LucidStep:
 
     mean: np.ndarray               #: posterior state mean (n,)
     var: np.ndarray                #: posterior state covariance (n, n)
-    innovation: np.ndarray         #: y_t - H (F prev_mean + B u)  (m,)
-    loglik: float                  #: mixture predictive log-density of y_t
+    innovation: np.ndarray         #: y_t minus the POSTERIOR-weighted mixture of the members'
+    #: one-step predictions -- a state-estimation diagnostic, not a forecast miss.  The mixture
+    #: weights have already been moved by this step's likelihoods, so members that happened to
+    #: land near y_t are upweighted and ``y - innovation`` leans toward the observation it
+    #: nominally predicts: on iid noise its sign agrees with y_t measurably above chance.
+    #: The causal one-step prediction is ``forecast`` below.
+    loglik: float                  #: mixture predictive log-density of y_t (PRIOR-weighted:
+    #: a proper causal score, unlike the innovation above)
     process_scale: np.ndarray      #: per process-eigenmode log-scale (n,)
     measurement_scale: np.ndarray  #: per-sensor log-scale (m,)
     offset: np.ndarray = None      #: the constant process offset ``d`` (n,) -- ``None`` when off
@@ -558,6 +564,11 @@ class LucidStep:
     fault: float = 0.0             #: posterior probability the dynamics have left the NOMINAL --
     #: which is the supplied ``F`` under ``faults=``, and the random walk ``F = I`` under
     #: ``dynamics=None`` (where it therefore reads "the dynamics are not a random walk")
+    forecast: np.ndarray = None    #: the CAUSAL one-step prediction of y_t (m,): the
+    #: PRIOR-weighted mixture of the members' predicted observations, formed before this
+    #: step's likelihoods touch the weights -- the same weighting ``loglik`` scores under.
+    #: This is the number to compare against y_t, condition on, or act on; on iid noise its
+    #: sign agreement with y_t is exactly chance.  ``NaN`` where the observation was missing.
 
     @property
     def scale(self) -> np.ndarray:
@@ -579,6 +590,7 @@ class LucidResult:
     dynamics: np.ndarray = None    #: (T, n, n) learned ``F``, or ``None`` when supplied fixed
     control: np.ndarray = None     #: (T, n, p) learned ``B``, or ``None``
     fault: np.ndarray = None       #: (T,) posterior probability of a dynamics fault
+    forecast: np.ndarray = None    #: (T, m) the causal one-step predictions (see LucidStep)
 
     def __len__(self) -> int:
         return len(self.mean)
@@ -1882,6 +1894,11 @@ class LucidFilter:
                 self._Kb[ix] = bK[:, :n]
                 self._Sb[ix] = bS
         yv = np.atleast_1d(np.asarray(yb, float))
+        # the causal one-step prediction: PRIOR weights, formed before this step's
+        # likelihoods move anything -- the weighting `loglik` scores under.  Each
+        # member's innovation is y minus its own (causal) prediction, so the raw
+        # observation minus the prior-weighted innovation is the mixture's forecast.
+        fc = np.atleast_1d(np.asarray(y, float)) - np.exp(prior) @ inn
         if np.all(np.isfinite(yv)):
             bank_ll = _logsumexp(prior + llv)
             self._logw = self.forget * prior + llv
@@ -1922,7 +1939,8 @@ class LucidFilter:
             if so is not None:
                 sen_out = so.C @ so.bbar
         if not self._report:
-            return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out)
+            return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out,
+                             forecast=fc)
         Fh, Bh = self._dynamics_mean(post)
         # The fault readout is a marginal of the posterior -- the filter itself never
         # thresholds, it mixes.  Its RISING EDGE re-prices the walkers' ignorance: a jump has
@@ -1933,7 +1951,8 @@ class LucidFilter:
         if alarm and not self._alarm:
             self._reprice()
         self._alarm = alarm
-        return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out, Fh, Bh, fault)
+        return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out, Fh, Bh,
+                         fault, forecast=fc)
 
     def filter(self, Y, U=None) -> LucidResult:
         Y = np.atleast_2d(np.asarray(Y, float))
@@ -1954,9 +1973,11 @@ class LucidFilter:
         ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
         flt = np.empty(T) if live else None
         total = 0.0
+        fct = np.empty((T, self.m))
         for i, row in enumerate(Y):
             st = self.update(row, None if U is None else U[i])
             mean[i] = st.mean; var[i] = st.var; inn[i] = st.innovation
+            fct[i] = st.forecast
             ps[i] = st.process_scale; ms[i] = st.measurement_scale; total += st.loglik
             if offs is not None:
                 offs[i] = st.offset
@@ -1969,7 +1990,7 @@ class LucidFilter:
         return LucidResult(mean=mean, var=var, innovation=inn,
                            process_scale=ps, measurement_scale=ms, loglik=total,
                            offset=offs, sensor_offset=sens,
-                           dynamics=dyn, control=ctl, fault=flt)
+                           dynamics=dyn, control=ctl, fault=flt, forecast=fct)
 
     def loglik_of(self, Y, U=None) -> float:
         return self.filter(Y, U).loglik
