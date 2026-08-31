@@ -50,7 +50,16 @@ of bank.
 The autopilot flies on an alpha-beta observer of the MEASUREMENTS, never on the truth: 0004
 measured that flying on the true state correlates ``u`` with process noise the filter cannot
 see and biases identification by +50%.  ``u`` must be measurable from the filter's own
-information set.
+information set.  ``fly()`` is the same mission with an ESTIMATOR in that seat instead --
+the aircraft flown on whatever filter you hand it -- which is legal for the same reason: an
+estimate is a function of past measurements and inputs, so it stays inside the information
+set that observer was standing in for.
+
+The mission's PACE is a parameter.  ``set_regime(f)`` runs every noise regime, every hover
+and the mission itself ``f`` times longer, by flying each cruise tour ``f`` times rather than
+flying the same waypoints slower -- leg duration sets the bank angle, and the bank is the
+excitation that separates ``1/I`` from the centre-of-mass coupling.  The default, ``1.0``, is
+the rig `0008` measures, step boundaries included.
 
 Sensors (m = 12), the arm rig's fusion shape one level up -- a bad absolute sensor and a good
 dynamic one per axis:
@@ -231,35 +240,91 @@ for _k in np.argsort(_lam)[-6:]:
     MODE_OF_AXIS[_j] = int(_k)
 
 # ------------------------------------------------------------------ the mission and the job
-T = 3200
+# The mission is written once, at REGIME = 1 -- a 32 s delivery run -- and then STRETCHED by
+# the demo's pacing factor (`set_regime`).  Everything below is what that stretch is derived
+# from, so the schedule and the flying stay in step with each other whatever the factor is.
 GPS_MULT, GYRO_MULT, WIND_MULT = 12.0, 12.0, 6.0
-T_PICK, T_DROP = 620, 2150
-PHASES = [("calm", 0, 950), ("WIND", 950, 1300), ("calm", 1300, 1550),
-          ("MULTIPATH", 1550, 1900), ("calm", 1900, 2500),
-          ("VIBRATION", 2500, 2850), ("calm", 2850, T)]
 
-#            t0     t1    (x, y, z, yaw) at t1 -- a punchy delivery run: the legs are short
-#                          enough that roll/pitch commands SWING, which is what separates the
-#                          torque effectiveness (1/I) from the thrust->torque coupling (c).
-_WAY = [(0.0, 0.8, (0.00, 0.00, 1.20, 0.00)),
-        (0.8, 2.3, (-0.60, -1.15, 1.35, 0.00)),
-        (2.3, 4.4, (-1.22, -0.79, 1.10, 0.00)),
-        (4.4, 5.9, (-1.22, -0.79, 0.77, 0.00)),
-        (5.9, 7.2, (-1.22, -0.79, 0.77, 0.00)),         # the pick-up hover
-        (7.2, 9.0, (-1.22, -0.79, 1.55, 0.00)),
-        (9.0, 10.9, (0.05, -0.25, 1.72, 0.50)),         # the carry legs (and a yaw slew)
-        (10.9, 12.8, (0.95, 1.10, 1.45, 0.95)),
-        (12.8, 14.7, (1.50, 0.25, 1.78, 0.35)),
-        (14.7, 16.5, (0.30, 0.95, 1.40, -0.25)),
-        (16.5, 18.3, (1.35, 1.30, 1.70, 0.30)),
-        (18.3, 19.8, (1.40, 0.94, 1.15, 0.00)),
-        (19.8, 21.0, (1.40, 0.94, 0.77, 0.00)),
-        (21.0, 22.6, (1.40, 0.94, 0.77, 0.00)),         # the set-down hover
-        (22.6, 24.2, (1.40, 0.94, 1.55, 0.00)),
-        (24.2, 26.2, (0.20, 0.15, 1.35, -0.45)),
-        (26.2, 28.2, (-0.95, 0.90, 1.65, -0.15)),
-        (28.2, 30.0, (0.15, -0.60, 1.25, 0.25)),
-        (30.0, 32.0, (-0.14, -0.22, 1.30, 0.00))]
+# The regimes, as fractions of the mission -- the numbers are 950/3200, 1300/3200, ... so
+# `set_regime(1.0)` reproduces the step boundaries 0008 measured exactly.
+_PHASE_FRAC = [("calm", 0.0, 0.296875), ("WIND", 0.296875, 0.40625),
+               ("calm", 0.40625, 0.484375), ("MULTIPATH", 0.484375, 0.59375),
+               ("calm", 0.59375, 0.78125), ("VIBRATION", 0.78125, 0.890625),
+               ("calm", 0.890625, 1.0)]
+# The crate is grabbed and released partway through the two HOVER legs -- the legs whose
+# target repeats the one before, the only two in the mission.  Placing the events that way
+# rather than at a step number keeps them inside the hover at any pacing factor.
+_PICK_FRAC, _DROP_FRAC = (6.2 - 5.9) / 1.3, (21.5 - 21.0) / 1.6
+
+# The mission in stages.  A "tour" is a loop of cruise legs that ends where it began and can
+# therefore be FLOWN AGAIN; a "fixed" stage is a manoeuvre whose legs are stretched instead.
+# The split matters: leg duration is what sets how hard the vehicle banks, and the bank is
+# what separates the torque effectiveness (1/I) from the thrust->torque coupling (c).  A
+# longer mission must therefore be MORE LAPS, not slower ones -- flying the same waypoints at
+# half speed would quarter the commanded acceleration and take the excitation with it.
+#                (duration, (x, y, z, yaw) at the end of the leg)
+_STAGES = [("fixed", [(0.8, (0.00, 0.00, 1.20, 0.00))]),                # climb to hover
+           ("tour",  [(1.5, (-0.60, -1.15, 1.35, 0.00)),                # out to the pick-up
+                      (2.1, (-1.22, -0.79, 1.10, 0.00))]),
+           ("fixed", [(1.5, (-1.22, -0.79, 0.77, 0.00)),                # descend
+                      (1.3, (-1.22, -0.79, 0.77, 0.00)),                # the pick-up hover
+                      (1.8, (-1.22, -0.79, 1.55, 0.00))]),              # climb out, loaded
+           ("tour",  [(1.9, (0.05, -0.25, 1.72, 0.50)),                 # the carry legs
+                      (1.9, (0.95, 1.10, 1.45, 0.95)),                  # (and a yaw slew)
+                      (1.9, (1.50, 0.25, 1.78, 0.35)),
+                      (1.8, (0.30, 0.95, 1.40, -0.25)),
+                      (1.8, (1.35, 1.30, 1.70, 0.30)),
+                      (1.5, (1.40, 0.94, 1.15, 0.00))]),
+           ("fixed", [(1.2, (1.40, 0.94, 0.77, 0.00)),                  # descend
+                      (1.6, (1.40, 0.94, 0.77, 0.00)),                  # the set-down hover
+                      (1.6, (1.40, 0.94, 1.55, 0.00))]),                # climb out, empty
+           ("tour",  [(2.0, (0.20, 0.15, 1.35, -0.45)),                 # the way home
+                      (2.0, (-0.95, 0.90, 1.65, -0.15)),
+                      (1.8, (0.15, -0.60, 1.25, 0.25)),
+                      (2.0, (-0.14, -0.22, 1.30, 0.00))])]
+_NOMINAL = 32.0                               # seconds of mission at REGIME = 1
+
+
+def _build(factor):
+    """The waypoint list, T, the payload events and the regimes at a pacing ``factor``.
+
+    Tours are flown ``round(factor)`` times and the fixed manoeuvres are stretched to make up
+    the rest, so an INTEGER factor scales the whole timeline by exactly that factor -- every
+    regime, every hover and the mission itself -- and the fractions above land where they did.
+    """
+    tour = sum(d for k, legs in _STAGES if k == "tour" for d, _ in legs)
+    held = sum(d for k, legs in _STAGES if k == "fixed" for d, _ in legs)
+    rep = max(1, int(round(factor)))
+    stretch = min(4.0, max(0.5, (factor * _NOMINAL - rep * tour) / held))
+    # Leg boundaries are accumulated in STEPS, not seconds: they then land exactly on the
+    # sample grid the rest of the rig indexes by, and `set_regime(1.0)` reproduces the
+    # hand-written mission bit for bit rather than to within a rounding of 1e-15.
+    way, k = [], 0
+    for kind, legs in _STAGES:
+        for _ in range(rep if kind == "tour" else 1):
+            for d, tgt in legs:
+                dk = max(1, int(round(d * (1.0 if kind == "tour" else stretch) / DT)))
+                way.append((round(k * DT, 10), round((k + dk) * DT, 10), tgt)); k += dk
+    n = k
+    phases = [(nm, int(round(a * n)), int(round(b * n))) for nm, a, b in _PHASE_FRAC]
+    hover = [(t0, t1) for i, (t0, t1, tgt) in enumerate(way) if i and way[i - 1][2] == tgt]
+    ev = [int(round((t0 + f * (t1 - t0)) / DT))
+          for (t0, t1), f in zip(hover, (_PICK_FRAC, _DROP_FRAC))]
+    return way, n, ev[0], ev[1], phases
+
+
+def set_regime(factor=1.0):
+    """Set the demo's pacing: every regime, hover and mission stage runs ``factor`` times
+    longer.  ``1.0`` is the rig `0008` measures and is the default -- the animation asks for
+    more so that a viewer has time to read each regime before the next one starts."""
+    global REGIME, _WAY, T, T_PICK, T_DROP, PHASES
+    REGIME = float(factor)
+    _WAY, T, T_PICK, T_DROP, PHASES = _build(REGIME)
+    return T
+
+
+REGIME = 1.0
+_WAY, T, T_PICK, T_DROP, PHASES = _build(REGIME)
 
 
 def reference():
@@ -286,18 +351,56 @@ def reference():
     return pos, vel, acc
 
 
-def schedule():
-    """Per-step sensor sigmas and disturbance sigmas -- the noise regimes."""
+def schedule(gps=None, gyro=None, wind=None):
+    """Per-step sensor sigmas and disturbance sigmas -- the noise regimes.
+
+    The three multipliers default to the rig's own (``GPS_MULT``, ``GYRO_MULT``,
+    ``WIND_MULT``); they are arguments so that a demo can say what it is changing at the
+    point it changes it, rather than by editing the rig underneath 0008.
+    """
+    gps = GPS_MULT if gps is None else gps
+    gyro = GYRO_MULT if gyro is None else gyro
+    wind = WIND_MULT if wind is None else wind
     sv = np.tile(SV, (T, 1))
     sw = np.tile(SIGW, (T, 1))
     for name, a, b in PHASES:
         if name == "MULTIPATH":
-            sv[a:b, 0:3] *= GPS_MULT
+            sv[a:b, 0:3] *= gps
         elif name == "VIBRATION":
-            sv[a:b, 9:12] *= GYRO_MULT
+            sv[a:b, 9:12] *= gyro
         elif name == "WIND":
-            sw[a:b, 0:3] *= WIND_MULT
+            sw[a:b, 0:3] *= wind
     return sv, sw
+
+
+def dropouts(on=0.5, off=0.5, phase="MULTIPATH", sensors=slice(0, 6)):
+    """Which sensors READ, per step: a (T, m) boolean, ``False`` where nothing arrives.
+
+    A degraded fix and no fix at all are different failures and the second one is the one an
+    airframe actually meets -- a building goes past, the constellation is gone, and both the
+    position and the velocity solution go with it, because they come out of the same receiver.
+    There is then nothing to distrust: what carries the estimate across the gap is the model,
+    and whether that model is the aircraft you are flying is exactly the question this rig
+    asks.  Off by default; the demo turns it on inside the ``MULTIPATH`` regime.
+    """
+    ok = np.ones((T, M), bool)
+    per, gap = int(round((on + off) / DT)), int(round(off / DT))
+    for name, a, b in PHASES:
+        if name == phase:
+            for t0 in range(a, b, max(per, 1)):
+                ok[t0:min(t0 + gap, b), sensors] = False
+    return ok
+
+
+def draw_noise(seed, sv, sw):
+    """The disturbance and sensor noise for one mission, drawn UP FRONT.
+
+    Two aircraft flown on two different filters take two different paths, so the only way to
+    put them in the same air is to fix the noise by step index before either takes off.  A
+    per-step draw inside the loop would give each of them its own weather.
+    """
+    rng = np.random.default_rng(seed)
+    return sw * rng.standard_normal((T, 6)), sv * rng.standard_normal((T, M))
 
 
 class Autopilot:
@@ -375,7 +478,159 @@ def simulate(seed=0, carry=True):
     return U, X, Y, hold
 
 
-def make_filter(hazard=1.0 / T):
+# ------------------------------------------------- flying ON the filter (the closed loop)
+# `simulate` above flies the alpha-beta observer of `Autopilot`, which is what 0008 measures.
+# The demo asks a different question -- not "how well can each filter track this flight" but
+# "how well does this aircraft FLY when that filter is the one in the loop" -- and for that
+# the estimator has to be the autopilot's only source of state.  That is legal for exactly the
+# reason 0004's closed-loop-bias probe demands: an estimate is a function of past measurements
+# and past inputs, so `u` stays inside the filter's own information set.  Flying on the TRUTH
+# would not be, and is what biased identification by +50% there.
+
+
+def fly(estimate, W, V, carry=True, sense=None):
+    """Fly the mission with ``estimate`` in the loop.  Returns ``(U, X, Y, XH, carrying)``.
+
+    ``estimate(k, y, u)`` is handed the new measurement and the input that produced it, and
+    returns its estimate of the state ``y`` measures.  The autopilot then commands off that
+    estimate alone.  ``W, V`` come from :func:`draw_noise` -- pass the same pair to every
+    contender.  ``sense`` is an optional :func:`dropouts` mask; a sensor that is not reading
+    arrives as ``nan``, which is how ``LucidFilter`` is told a channel is absent rather than
+    zero, and ``Y`` carries those entries out as ``nan`` for the drawing.
+
+    The bookkeeping matches ``filter(Y, U)`` exactly: ``X[k]`` is the state after ``U[k]``
+    was applied, ``Y[k]`` measures it, and the command at step ``k`` is computed from the
+    posterior for ``X[k-1]`` -- the last thing the estimator could possibly have known.
+    """
+    ref, dref, ddref = reference()
+    x = np.zeros(N); x[:3] = ref[0, :3]
+    ap = Autopilot()
+    X = np.zeros((T, N)); Y = np.zeros((T, M)); U = np.zeros((T, P)); XH = np.zeros((T, N))
+    hold = np.zeros(T, bool)
+    xh = np.zeros(N); xh[:3] = ref[0, :3]
+    for k in range(T):
+        on = carry and (T_PICK <= k < T_DROP)
+        hold[k] = on
+        m, I, c = inertia(on)
+        ap.p, ap.v = xh[PX].copy(), xh[VX].copy()
+        ap.a, ap.w = xh[AT].copy(), xh[OM].copy()
+        u = ap.control(ref[k], dref[k], ddref[k])
+        Gw = _GW.copy()                       # a disturbance TORQUE is a body angular
+        Gw[AT, 3:6] = 0.5 * DT ** 2 * Tmat(x[AT])   # acceleration; it reaches the Euler
+        x = Fof(x[AT], x[OM], I) @ x + Bof(x[AT], m, I, c) @ u + Gw @ W[k]   # angles through T
+        y = x + V[k]
+        if sense is not None:
+            y = np.where(sense[k], y, np.nan)
+        X[k], Y[k], U[k] = x, y, u
+        xh = np.asarray(estimate(k, y, u), float)
+        XH[k] = xh
+    return U, X, Y, XH, hold
+
+
+def fixed_pilot(scale=None):
+    """A FIXED Kalman filter as an in-the-loop estimator: the nominal airframe, one ``(Q, R)``
+    for the whole mission.  ``scale`` is ``(q, r_gps_pos, r_gps_vel, r_ahrs, r_gyro)`` --
+    variance multipliers on the base magnitudes, which is the only freedom a fixed filter has
+    and the freedom :func:`tune_fixed` searches."""
+    q, rp, rv, ra, rg = (1.0, 1.0, 1.0, 1.0, 1.0) if scale is None else scale
+    Rd = R0 * np.concatenate([np.full(3, rp), np.full(3, rv), np.full(3, ra), np.full(3, rg)])
+    Q = q * Q0
+    st = {"m": np.zeros(N), "P": np.eye(N)}
+    st["m"][:3] = reference()[0][0, :3]
+
+    def estimate(k, y, u):
+        m, Pm = st["m"], st["P"]
+        Fk = Fof(m[AT], m[OM], I0)
+        mp = Fk @ m + Bof(m[AT], M0, I0, np.zeros(3)) @ u
+        Pp = Fk @ Pm @ Fk.T + Q
+        obs = np.flatnonzero(np.isfinite(y))          # the channels that actually read
+        if obs.size == M:                             # H is the identity on this rig
+            S = Pp + np.diag(Rd)
+            K = np.linalg.solve(S.T, Pp.T).T
+            st["m"] = mp + K @ (y - mp)
+            st["P"] = Pp - K @ Pp
+        elif obs.size:
+            Ps = Pp[:, obs]
+            S = Pp[np.ix_(obs, obs)] + np.diag(Rd[obs])
+            K = np.linalg.solve(S.T, Ps.T).T
+            st["m"] = mp + K @ (y[obs] - mp[obs])
+            st["P"] = Pp - K @ Ps.T
+        else:
+            st["m"], st["P"] = mp, Pp
+        return st["m"]
+    return estimate
+
+
+def lucid_pilot(record=None, hazard=None):
+    """``LucidFilter`` as an in-the-loop estimator, stepped one event at a time.
+
+    ``record`` is an optional dict of pre-allocated ``(T, ...)`` arrays -- any of
+    ``measurement_scale``, ``process_scale``, ``control``, ``dynamics``, ``fault`` -- filled
+    as the flight goes.  The animation reads its right-hand column straight out of it: what
+    the filter reports is the same object the autopilot is flying on, not a second pass.
+    """
+    f = make_filter(hazard)
+
+    def estimate(k, y, u):
+        st = f.update(y, u)
+        if record is not None:
+            for key, arr in record.items():
+                arr[k] = getattr(st, key)
+        return st.mean
+    estimate.filter = f
+    return estimate
+
+
+_TUNE_GRID = (1.0, 4.0, 16.0, 64.0, 256.0, 1024.0)
+
+
+def tune_fixed(W, V, sense=None, grid=_TUNE_GRID, rounds=3, floor=0.20,
+               verbose=False):
+    """HINDSIGHT-tune the fixed filter: the ``(q, r...)`` that minimise its own position RMSE
+    **on this very mission**, truth included.  Nobody can do this before the flight -- that is
+    the point of quoting it, it is the best a fixed filter could have been set to.
+
+    Coordinate descent over a log grid, from several starts, with one constraint that is not
+    about accuracy: a flight that puts the aircraft below ``floor`` metres is rejected however
+    well it scored, because the metric cannot see a landing it did not survive.  (Tuning on
+    estimator error alone, with no such guard, picks a setting that trusts nothing but the
+    GPS velocity and flies the aircraft into the ground -- a good score on a flight nobody
+    walks away from.)  The multiple starts are the point of the exercise: this number is
+    quoted as what a fixed filter COULD have been set to, so leaving it in a local minimum
+    would be beating a baseline of one's own making.
+    """
+    seen = {}
+
+    def cost(c):
+        key = tuple(c)
+        if key not in seen:
+            U, X, Y, XH, _ = fly(fixed_pilot(c), W, V, sense=sense)
+            seen[key] = (math.inf if X[:, 2].min() < floor else
+                         float(np.sqrt(np.mean(np.sum((XH[:, PX] - X[:, PX]) ** 2, 1)))))
+        return seen[key]
+
+    best, arg = math.inf, None
+    for start in (grid[0], grid[len(grid) // 2], grid[-1]):
+        cur = [float(start)] * 5
+        val = cost(cur)
+        for _ in range(rounds):
+            for j in range(5):
+                for g in grid:
+                    c = list(cur); c[j] = g
+                    v = cost(c)
+                    if v < val - 1e-9:
+                        val, cur = v, c
+                        if verbose:
+                            print(f"    tune {tuple(cur)} -> {val:.5f}")
+        if val < best:
+            best, arg = val, tuple(cur)
+    return arg, best
+
+
+def make_filter(hazard=None):
+    """The public filter on this rig.  The default hazard is one fault per mission, so it
+    follows ``T`` -- a bound default would still say 1/3200 after ``set_regime(2.0)``."""
+    hazard = 1.0 / T if hazard is None else hazard
     return LucidFilter(dynamics=base, control=B_NOM, H=H, process=Q0, measurement=R0,
                        departures=DEPARTURES, faults=hazard)
 

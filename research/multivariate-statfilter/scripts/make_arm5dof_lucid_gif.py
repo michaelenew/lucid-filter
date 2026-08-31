@@ -22,6 +22,12 @@ modes), and a tip-error scope racing the raw pot and a fixed-noise KF against th
 estimate.  The camera sweeps a full 360 degrees over the loop, so the loop is seamless.
 
     python make_arm5dof_lucid_gif.py            # writes ../figures/arm5dof-lucid.gif
+
+Two knobs at the top set the pacing, and they are the ones to reach for when the animation is
+hard to read: ``REGIME`` runs every regime -- and the job carrying it -- that many times
+longer, by working the same pick-and-place cycle more times rather than working it slower;
+``STEP`` is how many simulated steps one frame advances, so lower is slower and smoother on
+screen and costs frames.
 """
 import os
 import sys
@@ -43,10 +49,23 @@ OUT = os.path.join(HERE, "..", "figures", "arm5dof-lucid.gif")
 NJ, ORDER, DT = R.NJ, R.ORDER, R.DT
 POT_MULT, ACC_MULT, JERK_MULT = 15.0, 15.0, 20.0
 FAIL_J = 2                                   # the joint whose potentiometer dies in POTFAIL
-T = 1900
-PHASES = [("calm", 0, 250), ("SENSOR", 250, 500), ("calm", 500, 650),
-          ("PROCESS", 650, 900), ("calm", 900, 1050), ("POTFAIL", 1050, 1300),
-          ("calm", 1300, 1450), ("BOTH", 1450, 1700), ("calm", 1700, 1900)]
+
+# ------------------------------------------------------------------------- pacing
+# REGIME runs every regime -- and the job carrying it -- this many times longer.  The arm
+# works the same pick-and-place cycle more times rather than working it slower: segment
+# duration is what sets the commanded acceleration, and a slower arm is a less excited one.
+# STEP is how many simulated steps one frame advances; lower is smoother and costs frames.
+REGIME = 2.0
+STEP = 8
+FRAME_MS = 60
+COLORS = 96
+
+_CYCLE = int(round(R.CYCLE / DT))            # 1900 steps: one full pick-and-place cycle
+_PHASES = [("calm", 0, 250), ("SENSOR", 250, 500), ("calm", 500, 650),
+           ("PROCESS", 650, 900), ("calm", 900, 1050), ("POTFAIL", 1050, 1300),
+           ("calm", 1300, 1450), ("BOTH", 1450, 1700), ("calm", 1700, 1900)]
+T = int(round(_CYCLE * REGIME))
+PHASES = [(nm, int(round(a * REGIME)), int(round(b * REGIME))) for nm, a, b in _PHASES]
 MODE_OF_JOINT = R.MODE_OF_JOINT
 joints3d = R.joints3d
 EL = math.radians(22)
@@ -103,6 +122,49 @@ PHASE_TXT = {"calm": ("calm — everything nominal", MUT),
              "PROCESS": ("vibration shakes the arm itself", C_WARN),
              "POTFAIL": (f"position sensor J{FAIL_J + 1} starts failing", C_WARN),
              "BOTH": ("vibration + noisy accelerometers", C_WARN)}
+
+
+def palette_for(frames):
+    """One palette for the whole animation, with the colours that carry meaning nailed down.
+
+    A per-frame adaptive palette makes consecutive frames differ in every pixel, which costs
+    about twice the file size once frames are stored as differences.  A shared palette fixes
+    that, but a quantiser handed a screenful of dark panels spends its entries on the dark
+    and merges the accents -- and telling the three arms apart IS the figure.  So the
+    accents, their blends against both backgrounds, and the chip ramp are placed by hand, and
+    only the leftover entries are chosen from the frames.
+    """
+    rgb = matplotlib.colors.to_rgb
+    bg, panel = np.array(rgb(BG)), np.array(rgb(PANEL))
+    fixed = []
+
+    def ramp(base, col, n):
+        c = np.array(rgb(col))
+        for a in np.linspace(1.0 / n, 1.0, n):
+            fixed.append(tuple(np.round(255 * (base + a * (c - base))).astype(int)))
+
+    ramp(bg, C_WARN, 10)                                  # the chip heat scale
+    for col in (C_POT, C_LU, C_FIX, C_TRUE, INK, MUT, LINE):
+        ramp(bg, col, 4)
+    for col in (C_POT, C_LU, C_FIX, C_TRUE, INK, MUT, LINE):
+        ramp(panel, col, 3)
+    fixed += [tuple(np.round(255 * bg).astype(int)), tuple(np.round(255 * panel).astype(int))]
+    seen, cols = set(), []
+    for c in fixed:
+        if c not in seen:
+            seen.add(c); cols.append(c)
+
+    keep = list(frames[::max(1, len(frames) // 12)])
+    spare = max(1, COLORS - len(cols))
+    extra = Image.fromarray(np.concatenate(keep, 0)).convert(
+        "P", palette=Image.ADAPTIVE, colors=spare)
+    for c in map(tuple, np.array(extra.getpalette()[:3 * spare]).reshape(-1, 3)):
+        if c not in seen:
+            seen.add(c); cols.append(c)
+    pal = Image.new("P", (1, 1))
+    flat = [int(v) for c in cols for v in c]
+    pal.putpalette(flat + flat[-3:] * (256 - len(cols)))   # pad with a real colour, not black
+    return pal
 
 
 def phase_at(i):
@@ -218,7 +280,6 @@ def render():
         c0 = np.array(matplotlib.colors.to_rgb(BG)); c1 = np.array(matplotlib.colors.to_rgb(C_WARN))
         return tuple(c0 + a * (c1 - c0))
 
-    STEP = 8
     frames = list(range(0, T, STEP))
 
     def draw(i):
@@ -232,7 +293,7 @@ def render():
         l_true.set_data(jt[:, 0], jt[:, 1])
         l_pot.set_data(jp[:, 0], jp[:, 1])
         l_lu.set_data(jl[:, 0], jl[:, 1])
-        lo = max(0, i - 70)
+        lo = max(0, i - int(round(70 * REGIME)))
         tr = project(P_lu[lo:i + 1, -1], az)
         trail.set_data(tr[:, 0], tr[:, 1])
         txt, col = PHASE_TXT[phase_at(i)]
@@ -247,14 +308,16 @@ def render():
 
     print("rendering", len(frames), "frames...")
     fig.canvas.draw()
-    imgs, raws = [], []
+    raws = []
     for i in frames:
         draw(i); fig.canvas.draw()
-        rgb = np.asarray(fig.canvas.buffer_rgba())[..., :3].copy()
-        raws.append(rgb)
-        imgs.append(Image.fromarray(rgb).convert("P", palette=Image.ADAPTIVE, colors=64))
-    imgs[0].save(OUT, save_all=True, append_images=imgs[1:], duration=60, loop=0,
-                 disposal=2, optimize=True)
+        raws.append(np.asarray(fig.canvas.buffer_rgba())[..., :3].copy())
+    master = palette_for(raws)
+    imgs = [Image.fromarray(rr).quantize(palette=master, dither=Image.NONE) for rr in raws]
+    # disposal=1 leaves each frame in place and stores the next as a difference; with the
+    # shared palette above that is worth about half the file.
+    imgs[0].save(OUT, save_all=True, append_images=imgs[1:], duration=FRAME_MS, loop=0,
+                 disposal=1, optimize=True)
     print("wrote", os.path.relpath(OUT), "-", os.path.getsize(OUT) // 1024, "KB,",
           len(frames), "frames")
     # the same animation as an H.264 video: GitHub's player gives pause / scrub / 0.25-2x speed
@@ -269,7 +332,7 @@ def render():
             for r in raws:
                 r[h:, :] = bg; r[:, w:] = bg
         mp4 = OUT[:-4] + ".mp4"
-        imageio.mimwrite(mp4, raws, fps=17, codec="libx264", quality=8,
+        imageio.mimwrite(mp4, raws, fps=1000.0 / FRAME_MS, codec="libx264", quality=8,
                          pixelformat="yuv420p")
         print("wrote", os.path.relpath(mp4), "-", os.path.getsize(mp4) // 1024, "KB")
     except ImportError:

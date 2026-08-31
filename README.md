@@ -43,17 +43,34 @@ read-out is what you can act on.
 
 ## It picks a heavy crate up off centre, and works out what changed
 
-The animation is real output of the public filter. A delivery quadrotor flies a
-job. The filter is handed the **empty** aircraft — its mass and inertias, which
-of the twelve noisy channels reads what — and nothing else. Mid-flight the drone
-grabs a 0.42 kg crate that hangs out on the arms: mass ×1.38, roll and pitch
-inertia ×1.8, and the centre of mass shifted **1.6 cm off the thrust axis**. A
-gust hits, the GPS goes multipath, the crate is set down again, and a damaged
-rotor leaves the gyros noisy on the way home. The autopilot is told none of it
-either — it trims the crate away and flies on, so the aircraft's *behaviour*
-does not give the payload up; only the residual does.
+The animation is real output of the public filter, and the filter is **flying the
+aircraft**. Two quadrotors fly the same delivery job, in the same air, on the
+same sensor noise, and each is flown by its own estimator — nothing else reaches
+the autopilot. One flies on `LucidFilter`. The other flies on the honest
+alternative, because some filter is not optional on an airframe and racing
+against a raw GPS fix would prove nothing: a fixed Kalman filter on the same
+nominal airframe, with its noise levels **tuned in hindsight on this very
+flight**, truth included — the best a fixed filter could have been set to if you
+had already flown it and kept the recording.
 
-![a 3D quadrotor flying a delivery mission, tracked live: it picks up a crate that hangs visibly off-centre, carries it through a gust and a GPS multipath burst, and sets it down. A chip grid of learned per-channel noise scales turns orange on whichever channel has gone bad; a payload panel reports the crate's mass and off-centre lever arm two steps after the grab and returns to zero when it is released; a log-scale error trace shows the raw GPS at metres, a fixed-model Kalman filter at 5 cm and the lucid estimate at 2 cm](research/dynamics-learning/figures/drone3d-lucid.gif)
+Both are handed the **empty** aircraft — its mass and inertias, which of the
+twelve noisy channels reads what — and nothing else. Mid-flight each grabs a
+0.42 kg crate that hangs out on the arms: mass ×1.38, roll and pitch inertia
+×1.8, and the centre of mass shifted **1.6 cm off the thrust axis**. A gust hits;
+the GPS **cuts out** — position *and* velocity together, because they come out of
+one receiver — and comes back degraded; the crate is set down again; and a
+damaged rotor leaves the gyros noisy on the way home. The autopilots are told
+none of it either — they trim the crate away and fly on, so the aircraft's
+*behaviour* does not give the payload up; only the residual does.
+
+The dropout is where the two part company, and it is the ordinary avionics case
+rather than a rig contrivance. While the fix is gone there is nothing to
+distrust and no noise level to have tuned: the only thing carrying the estimate
+across the gap is the model of the aircraft. The fixed filter's model is the
+empty airframe it was handed, and the mass error alone is worth 3.7 m/s² of
+dead-reckoned vertical acceleration.
+
+![two 3D quadrotors flying the same delivery mission side by side, one flown on the lucid filter and one on a hindsight-tuned fixed Kalman filter, against the dashed path both were commanded to fly. Each picks up a crate that hangs visibly off-centre and carries it through a gust and a GPS dropout. A chip grid of learned per-channel noise scales turns orange on whichever channel has gone bad and dotted red on the channels that stop reading at all; a payload panel reports the crate's mass and off-centre lever arm within a few steps of the grab and returns to zero when it is released; a log-scale error trace shows the raw GPS fix at metres, the Kalman-flown aircraft's estimate spiking to 30 cm through the dropout and the lucid one holding at 4 cm — and on screen the two aircraft drift almost a metre apart before the fix returns](research/dynamics-learning/figures/drone3d-lucid.gif)
 
 *The same animation as [an MP4](research/dynamics-learning/figures/drone3d-lucid.mp4)
 — open it on GitHub for pause, scrubbing and 0.25×–2× playback.*
@@ -62,18 +79,34 @@ Everything in the right-hand column is filter output:
 
 1. **Which noise is hot** — the learned per-channel scales. A chip turns orange
    when the filter has decided *that* channel is bad right now: the GPS block
-   under multipath, the gyro row under rotor vibration, the wind row under the
-   gust. Nothing is told — and a gust is not mistaken for a payload: fly the same
-   mission with no crate and 0.64% of steps are ever flagged as a dynamics change.
-2. **What it says it is carrying** — read straight off `r.control`, the dynamics
-   as currently believed. Two steps after the grab (2.8 ± 0.4 over five seeds) it
-   reports a payload, and it settles at **0.44 kg hung 1.6 cm off centre** against
-   a truth of 0.42 kg and 1.63 cm. When the crate is released the same read-out
-   comes home to 0.00 kg and 0.1 cm: the original dynamics, recovered, with no
-   refit.
-3. **Position error.** Over the whole mission the lucid estimate holds **2.0 cm**
-   RMSE through the bursts where the raw GPS reads 3.7 m and the same model
-   frozen at the nominal airframe and base noise reads 4.9 cm.
+   when the fix comes back degraded, the gyro row under rotor vibration, the wind
+   row under the gust. It goes dotted red when a channel stops reading at all,
+   which is a different thing and is treated as one. Nothing is told — and a gust
+   is not mistaken for a payload: fly the same mission with no crate and 0.64% of
+   steps are ever flagged as a dynamics change. Underneath sits the single fixed
+   setting its opponent had to commit to for the whole flight.
+2. **What it says it is carrying** — read straight off `.control`, the dynamics
+   as currently believed. Within a handful of steps of the grab (2.8 ± 0.4 over
+   five seeds in [`0008`](research/dynamics-learning/exploration/0008_drone3d_payload.md);
+   4 in the run shown) it reports a payload, and it settles at **0.43 kg hung
+   1.6 cm off centre** against a truth of 0.42 kg and 1.63 cm. When the crate is
+   released the same read-out comes home to 0.00 kg and 0.1 cm: the original
+   dynamics, recovered, with no refit.
+3. **Position error**, each aircraft against its own truth — which is what its
+   autopilot was handed. Over the whole mission the lucid estimate holds **3.1 cm**
+   RMSE against the hindsight-tuned Kalman's 12.5 cm. Nearly all of that gap is
+   in two windows: **4.1 cm against 30.6 cm through the GPS dropout — 7.5×** — and
+   2.8 cm against 16.2 cm over the recovery after it, while the raw fix reads
+   6.3 m. Through the gust and the vibration the two are within 1.0–1.6× of each
+   other, and in the opening calm lucid is the *worse* of the two (3.9 cm against
+   2.0 cm) while it is still working out what its own noise is. A well-tuned fixed
+   filter is genuinely good; it is the *change* it cannot follow.
+
+What that costs the flying, which is the point of putting a filter in the loop
+at all: through the dropout the Kalman-flown aircraft is **0.56 m RMS off the
+path it was commanded to fly against the lucid one's 0.17 m**, and the two end up
+**0.86 m apart** — more than an airframe and a half, and visible on screen. Away
+from the dropout they fly the same job to within a few centimetres of each other.
 
 The off-centre part is the one a planar rig cannot pose. A displaced centre of
 mass turns collective thrust into a standing torque — a thrust→roll/pitch
@@ -86,13 +119,16 @@ from lucid import LucidFilter
 
 f = LucidFilter(dynamics=airframe,          # F, B at an operating point (a callable)
                 departures=[mass, Ixx, Iyy, Izz, com_x, com_y],   # what may change
-                H=H, process=Q0, measurement=R0, faults=1/3200)   # rough magnitudes
-r = f.filter(Y, U)
+                H=H, process=Q0, measurement=R0, faults=1/6400)   # rough magnitudes
 
-r.mean                  # tracked state
-r.measurement_scale     # (T, m) which sensor is hot, per step — the chip grid
-r.process_scale         # (T, n) which dynamics mode is being disturbed
-r.control               # (T, n, p) the dynamics as currently believed — the payload
+s = f.update(y, u)      # one event — the autopilot flies on s.mean and nothing else.
+                        # A channel that is not reading is passed as nan, not as zero;
+                        # f.filter(Y, U) is the same recursion over a whole recording.
+
+s.mean                  # tracked state
+s.measurement_scale     # (m,) which sensor is hot right now — the chip grid
+s.process_scale         # (n,) which dynamics mode is being disturbed
+s.control               # (n, p) the dynamics as currently believed — the payload
 ```
 
 ## The same machinery, five joints deep
@@ -128,13 +164,16 @@ machinery works flawlessly — faithfully booking the linearisation error as
 sensor noise, which is exactly the wrong thing to trust a reading by
 ([`0054`](research/multivariate-statfilter/exploration/0054_physical_sensors.md)).
 
-Through the bursts the lucid tip estimate holds **0.019 m RMSE**. The raw
-potentiometer reads 0.227 m — **12× worse** — and a fixed-noise Kalman filter
-given the *same model and the same live measurement map* reads 0.031 m (1.6×
+Through the bursts the lucid tip estimate holds **0.010 m RMSE**. The raw
+potentiometer reads 0.221 m — **22× worse** — and a fixed-noise Kalman filter
+given the *same model and the same live measurement map* reads 0.042 m (4.3×
 worse, and 2.1–7.3× the oracle per regime: on this rig the accelerometers double
-as inclinometers, so knowing *when* to trust them is worth more than ever). The
-learned scales double as a live diagnosis: the chip grid pinpoints *which
-joint's* potentiometer died.
+as inclinometers, so knowing *when* to trust them is worth more than ever). That
+gap widens with how long each regime lasts, which is the shape of the whole
+claim: an adaptive filter converges *inside* a regime and a fixed one has
+nowhere to go — at half these regime lengths the same run reads 0.019 m against
+0.031 m. The learned scales double as a live diagnosis: the chip grid pinpoints
+*which joint's* potentiometer died.
 
 **What one update costs.** Per bank member, per step, the arithmetic is one
 small Kalman update per scale-window node:
