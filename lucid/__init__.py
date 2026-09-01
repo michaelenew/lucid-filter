@@ -18,7 +18,7 @@ channel: ``r.dynamics`` is the dynamics as currently believed, ``r.control`` the
 learned ``B``, and ``r.fault`` the posterior probability that they have left the
 nominal.  See ``research/dynamics-learning/SUMMARY.md``.
 """
-from .statfilter import LucidFilter, LucidStep, LucidResult
+from .filter import LucidFilter, LucidStep, LucidResult
 
 __all__ = ["LucidFilter", "LucidStep", "LucidResult"]
 __version__ = "2.0.0"

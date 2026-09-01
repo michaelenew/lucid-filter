@@ -4,27 +4,22 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lucid-filter"
-version = "0.2.0"
-description = "Adaptive filters that report the standing of their own answer, with no tuning parameters"
+version = "2.0.0"
+description = "An adaptive filter that reports the standing of its own answer, with no tuning parameters"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = ["numpy>=1.22"]
 
 [project.optional-dependencies]
-fit = ["scipy>=1.8"]                  # only needed to learn parameters, not to filter
-test = ["pytest>=7", "scipy>=1.8"]
+test = ["pytest>=7"]
 
 [project.urls]
 Homepage = "https://github.com/michaelenew/lucid-filter"
 Research = "https://github.com/michaelenew/lucid-filter/tree/main/research"
 
 [tool.setuptools]
-packages = ["statfilter", "odefilter", "lucid_kernel"]
-
-[tool.setuptools.package-data]
-lucid_kernel = ["*.c", "*.h"]   # so an installed copy can rebuild
+packages = ["filter"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["slow: calls fit(); about a minute per series"]

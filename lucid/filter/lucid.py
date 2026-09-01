@@ -91,6 +91,7 @@ such pair, gets no ladder, and costs exactly what it did before.
 """
 from __future__ import annotations
 
+import functools
 import math
 from dataclasses import dataclass
 
@@ -1048,6 +1049,8 @@ class _WalkEngine:
         self.phi, self.s = float(phi), float(s)
         self._cap = None if cap is None else np.asarray(cap, float)
         self._dyn = None            # optional (mean, u) -> (Jacobian, predicted mean) callable
+        self._dep = None            # the `_Departure` `_dyn` came from, when it came from one:
+                                    # members sharing it run their linearisation stacked
         self._prop = prop if prop is not None else _Propagator(F)
         self._Tcache = {}           # the AR(1) scale kernel per elapsed time (D x nn x nn)
         self._Qc = False            # the recovered spectral density: lazy, see _base_Q
@@ -1523,7 +1526,7 @@ class _WalkEngine:
         if add_S is not None:
             S = S + (add_S if mo == m else add_S[np.ix_(range(add_S.shape[0]), obs, obs)]
                      if add_S.ndim == 3 else add_S[np.ix_(obs, obs)])
-        Si = np.linalg.inv(S)
+        Si = _inv_sym(S, mo)
         sgn, logdet = np.linalg.slogdet(S)
         maha = np.einsum("i,gij,j->g", e, Si, e)
         lg = -0.5 * (mo * _LOG2PI + logdet + maha)
@@ -1618,16 +1621,260 @@ class _WalkEngine:
                          self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
 
 
+try:                                    # the compiled step, when it is built
+    from .. import lucid_kernel as _kernel
+except ImportError:                     # pragma: no cover - standalone checkout
+    try:
+        import lucid_kernel as _kernel
+    except ImportError:
+        _kernel = None
+
+
+def _inv_sym(S, mo):
+    """``inv`` for a stack of ``mo x mo`` innovation covariances.
+
+    One reporting sensor is the ordinary case (and the only case a scalar rig ever has), and
+    there the LAPACK call is all overhead.  The reciprocal is what LAPACK returns for a
+    1 x 1 anyway, bit for bit.
+    """
+    if mo == 1:
+        with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+            return 1.0 / S
+    return np.linalg.inv(S)
+
+
+def _bytes(a):
+    return None if a is None else np.ascontiguousarray(a, float).tobytes()
+
+
+# --------------------------------------------- the step, as NumPy and as C
+# The stacked recursion below is dispatch-bound in the way the whole bank is: a
+# step is forty einsums over (M, G, n, n) arrays with n and m in single digits,
+# so NumPy spends longer deciding than doing.  These two functions are that
+# arithmetic, written once; `lucid_kernel` carries a compiled transcription of
+# them, and `_bank_modes` verifies it against THESE -- not against a second copy
+# of them -- before it is used for a shape.
+#
+# They are split where LAPACK is: the predictive covariance up to S, then the
+# inverse and log-determinant NumPy's own linalg takes, then the rest.
+
+
+def _bank_predict_np(F, P, Qg, rg, H):
+    """FPFt, the per-node predictive covariance, and the innovation covariance."""
+    FPFt = np.einsum("bij,bjk,blk->bil", F, P, F)
+    Ppred = FPFt[:, None] + Qg
+    PHt = np.einsum("bgij,kj->bgik", Ppred, H)
+    S = np.einsum("ij,bgjk->bgik", H, PHt)
+    mo = H.shape[0]
+    S[:, :, np.arange(mo), np.arange(mo)] += rg
+    return Ppred, PHt, S
+
+
+def _bank_correct_np(Ppred, PHt, Si, logdet, e, mpred, H, pi, axwin, cap, mo):
+    """The correction, the window softmaxes and the two collapses.
+
+    ``pi`` is finished IN PLACE, as the recursion does; ``axwin`` is the active
+    axes' node windows, one row each.
+    """
+    M, G = Si.shape[0], Si.shape[1]
+    n, m = Ppred.shape[2], Si.shape[3]
+    r = axwin.shape[0]
+    maha = np.einsum("bi,bgij,bj->bg", e, Si, e)
+    lg = -0.5 * (mo * _LOG2PI + logdet + maha)
+    if r:
+        logZ = np.empty((M, r))
+        for ax in range(r):
+            lgi = lg[:, axwin[ax]]
+            mi = lgi.max(1)
+            wk = pi[:, ax] * np.exp(lgi - mi[:, None])
+            Zi = wk.sum(1)
+            pi[:, ax] = wk / Zi[:, None]
+            logZ[:, ax] = mi + np.log(Zi)
+        mz = logZ.max(1)
+        aw = np.exp(logZ - mz[:, None])
+        ll = mz + np.log(aw.mean(1))
+        alpha = aw / aw.sum(1, keepdims=True)
+        w = np.zeros((M, G))
+        for ax in range(r):
+            w[:, axwin[ax]] += alpha[:, ax, None] * pi[:, ax]
+    else:
+        ll = lg[:, 0].copy()
+        w = np.zeros((M, G))
+        w[:, 0] = 1.0
+    K = np.einsum("bgik,bgkl->bgil", PHt, Si)
+    Kbar = np.einsum("bg,bgil->bil", w, K)
+    m_new = mpred + np.einsum("bil,bl->bi", Kbar, e)
+    mpost = mpred[:, None] + np.einsum("bgil,bl->bgi", K, e)
+    dm = mpost - m_new[:, None]
+    HPp = np.einsum("ij,bgjk->bgik", H, Ppred)
+    Ppost = Ppred - np.einsum("bgil,bglk->bgik", K, HPp)
+    P_new = (np.einsum("bg,bgij->bij", w, Ppost)
+             + np.einsum("bg,bgi,bgj->bij", w, dm, dm))
+    P_new = 0.5 * (P_new + np.swapaxes(P_new, 1, 2))
+    if cap is not None:
+        d = np.einsum("bii->bi", P_new)
+        sc = np.ones_like(d)
+        capb = np.broadcast_to(cap, d.shape)
+        over = d > capb
+        sc[over] = np.sqrt(capb[over] / np.maximum(d[over], 1e-300))
+        P_new *= sc[:, :, None] * sc[:, None, :]
+    return w, ll, m_new, P_new, Kbar
+
+
+def _einsum_orders(n):
+    """Ask NumPy which way round it sums the two contractions it decides itself.
+
+    ``FPFt`` sums two contracted axes, as one flat run or as a nested pair, and
+    which it picks moves with the operand size rather than with the arithmetic.
+    The `P_new` collapse reduces over the NODES and turns vectorised when the
+    per-node covariance is contiguous in the node index.  Both are asked of the
+    NumPy in hand rather than tabulated -- a table would be a claim about every
+    NumPy on every CPU.
+    """
+    rng = np.random.default_rng(11)
+    B = 4
+    F = rng.random((B, n, n))
+    P = rng.random((B, n, n))
+    ref = np.einsum("bij,bjk,blk->bil", F, P, F)
+    flat = np.zeros_like(ref)
+    for j in range(n):
+        for k in range(n):
+            flat += F[:, :, None, j] * P[:, None, None, j, k] * F[:, None, :, k]
+    nested = np.zeros_like(ref)
+    for j in range(n):
+        inner = np.zeros_like(ref)
+        for k in range(n):
+            inner += F[:, :, None, j] * P[:, None, None, j, k] * F[:, None, :, k]
+        nested += inner
+    ap = (_kernel.AP_FLAT if np.array_equal(ref.view(np.uint64),
+                                            flat.view(np.uint64))
+          else _kernel.AP_NESTED if np.array_equal(ref.view(np.uint64),
+                                                   nested.view(np.uint64))
+          else None)
+    return ap
+
+
+#: the state and sensor widths the compiled step is a transcription OF.  Outside
+#: them NumPy reduces the contractions in its vector registers, and the fold it
+#: uses at those widths is not one hand-written C reproduces -- so the kernel
+#: declines those shapes rather than answering differently, and does so quietly,
+#: because declining is what it is built to do there.  Inside them a failure to
+#: reproduce NumPy is news, and says so.
+_BANK_WIDTHS = ((2, 4), (1, 3))         # (n_lo, n_hi), (m_lo, m_hi)
+
+
+@functools.lru_cache(maxsize=None)
+def _bank_modes(n, m, G, nw, r, has_cap):
+    """The verified evaluation order for a bank of this shape, or None.
+
+    Verified END TO END, on four random problems of the shape in hand -- one of
+    them with a weight already concentrated on a node and one with a process
+    covariance four orders up, because the branches a bank spends its life in
+    are not the ones a single well-conditioned draw reaches.  The compiled step
+    and `_bank_predict_np` / `_bank_correct_np` are run against each other and
+    compared on raw bits, every output of both halves.  A shape that disagrees
+    anywhere falls back to NumPy.
+    """
+    if _kernel is None or not _kernel.available():
+        return None
+    ap = _einsum_orders(n)
+    if ap is None:
+        return None
+    ext = _kernel.ext()
+    rng = np.random.default_rng(7 + n + 3 * m + 5 * G)
+    M = 6
+    # SEVERAL draws, and one of them with a cap the state is already over: a
+    # single well-conditioned draw agrees by luck often enough to be worthless
+    # as evidence, and the branches a bank actually spends its life in -- a
+    # capped departure axis, a weight concentrated on one node -- are the ones
+    # a random draw does not reach.
+    draws = []
+    for d in range(4):
+        A = rng.standard_normal((M, n, n))
+        F = rng.standard_normal((M, n, n))
+        P = np.einsum("bij,bkj->bik", A, A) + n * np.eye(n)
+        B = rng.standard_normal((M, G, n, n))
+        Qg = np.einsum("bgij,bgkj->bgik", B, B) * (10.0 ** d)
+        rg = rng.uniform(0.2, 2.0, (M, G, m))
+        H = rng.standard_normal((m, n))
+        mpred = rng.standard_normal((M, n))
+        e = rng.standard_normal((M, m))
+        pi0 = rng.uniform(0.1, 1.0, (M, max(r, 1), nw))
+        if d == 1:                              # a weight already concentrated
+            pi0[:, :, 0] *= 1e6
+        pi0 /= pi0.sum(2, keepdims=True)
+        aw = np.stack([rng.permutation(G)[:nw] for _ in range(max(r, 1))]
+                      ).astype(np.intp)
+        aw = np.ascontiguousarray(aw[:r] if r else aw[:0])
+        cap = (rng.uniform(0.5, 4.0, n) if has_cap else None)
+        draws.append((F, P, Qg, rg, H, mpred, e, pi0, aw, cap))
+
+    def flat(parts):
+        return np.concatenate([np.asarray(a, float).ravel() for a in parts
+                               if a is not None])
+
+    def reference():
+        parts = []
+        for F, P, Qg, rg, H, mpred, e, pi0, axwin, cap in draws:
+            Ppred, PHt, S = _bank_predict_np(F, P, Qg, rg, H)
+            Si = _inv_sym(S, m)
+            _, ld = np.linalg.slogdet(S)
+            pi = pi0[:, :r].copy()
+            out = _bank_correct_np(Ppred, PHt, Si, ld, e, mpred, H, pi,
+                                   axwin, cap, m)
+            parts += [Ppred, PHt, S, pi] + list(out)
+        return flat(parts)
+
+    def compiled(ap_mode, sc_mode, dot_mode, node_mode):
+        parts = []
+        for F, P, Qg, rg, H, mpred, e, pi0, axwin, cap in draws:
+            try:
+                Ppred, PHt, S = ext.lucid_bank_predict(
+                    np.ascontiguousarray(F), np.ascontiguousarray(P),
+                    np.ascontiguousarray(Qg), np.ascontiguousarray(rg),
+                    np.ascontiguousarray(H), int(ap_mode), int(dot_mode))
+                Si = _inv_sym(S, m)
+                _, ld = np.linalg.slogdet(S)
+                # a fresh copy per candidate: the compiled step finishes `pi` in
+                # place, so a candidate that fails would otherwise hand the next
+                # one a mutated start
+                pi = np.array(pi0[:, :r], dtype=float, order="C")
+                out = ext.lucid_bank_correct(
+                    Ppred, PHt, Si, np.ascontiguousarray(ld),
+                    np.ascontiguousarray(e), np.ascontiguousarray(mpred),
+                    np.ascontiguousarray(H), pi, axwin, cap, m, int(sc_mode),
+                    int(dot_mode), int(node_mode))
+            except (ValueError, TypeError):
+                return None
+            parts += [Ppred, PHt, S, pi] + list(out)
+        return flat(parts)
+
+    (nlo, nhi), (mlo, mhi) = _BANK_WIDTHS
+    covered = nlo <= n <= nhi and mlo <= m <= mhi
+    return _kernel.verify(
+        ("lucid-bank", n, m, G, nw, r, has_cap), compiled, reference,
+        candidates=[(ap, _kernel.SC_NAIVE, d, g)
+                    for d in (0, 1, 2, 3) for g in (0, 1, 2, 3)],
+        warn=covered)
+
+
 # ------------------------------------------------- stacked execution of the bank
 # AUDIT[derived] stacked execution is an equivalence, pinned step-for-step by
 # test_bank_matches_the_looped_members.
 def _bank_key(f):
     """Members that can run as one stacked recursion: same shapes, same index tables, same
-    model objects -- they differ only in parameters and state."""
+    model -- they differ only in parameters and state.
+
+    The model is compared by VALUE, not by object identity.  The hazard ladder builds one
+    spec per rung, and a rung differs from its neighbours only in the drift of its own
+    departure walker -- which is per-member state the stack already carries.  Keying on
+    identity would give each rung its own executor and pay the per-step dispatch (the
+    dominant cost) once per rung instead of once for all of them.
+    """
     return (type(f).update is _WalkEngine.update, f.n, f.m, f.D, f._G,
             tuple(f._act), tuple((k, i) for k, i, _ in f._groups),
-            f._dyn is None, id(f.H), id(f.F), f._hook is None,
-            None if f._cap is None else id(f._cap), f._revert is None)
+            f._dyn is None, _bytes(f.H), _bytes(f.F), _bytes(f.B), f._hook is None,
+            _bytes(f._cap), f._revert is None)
 
 
 class _LoopBank:
@@ -1675,6 +1922,20 @@ class _EngineBank:
         self.H, self.B, self.F = e0.H, e0.B, e0.F
         self._dyns = None if e0._dyn is None else [f._dyn for f in members]
         self._hooks = None if e0._hook is None else [f._hook for f in members]
+        # Members grouped into one bank share a departure object (the bank key separates the
+        # specs), so the per-member linearisation loop is one stacked call -- see
+        # `_Departure.batch_for`.  Anything it cannot express keeps the loop.
+        dep = e0._dep
+        self._dynb = (dep.batch_for()
+                      if dep is not None and dep.fixed
+                      and all(f._dep is not None and f._dep.batch_key == dep.batch_key
+                              for f in members) else None)
+        if self._dynb is not None:
+            # zeros, not empty: `_dynb` writes every block of the Jacobian EXCEPT the
+            # bottom-left one, which is structurally zero (g does not move with x) and is
+            # therefore only ever written here.
+            self._Jb = np.zeros((M, e0.n, e0.n))
+            self._mpb = np.empty((M, e0.n))
         self._cap = e0._cap
         self._groups = e0._groups
         st = lambda name: np.ascontiguousarray(np.stack([getattr(f, name) for f in members]))
@@ -1700,6 +1961,13 @@ class _EngineBank:
                     if ng else np.zeros((M, 0)))
         self._anchor = st("_anchor_lo") if ng else np.zeros((M, 0))
         self._revert = np.array([f._revert for f in members], float)
+        # the active axes' node windows as one table, and the compiled step's
+        # verified evaluation order for this shape (None = stay in NumPy)
+        self._axtab = np.ascontiguousarray(
+            np.stack([e0._axwin[k] for k in self._act]).astype(np.intp)
+            if self._act else np.zeros((0, e0._nn), dtype=np.intp))
+        self._modes = _bank_modes(self.n, self.m, self._G, e0._nn,
+                                  len(self._act), self._cap is not None)
         # state, stacked -- and handed back to the members as views
         self.mu, self._Pmu = st("mu"), st("_Pmu")
         self._m = np.zeros((M, self.n))
@@ -1800,11 +2068,10 @@ class _EngineBank:
         """The stacked twin of ``_WalkEngine._dS_axis``, over the sensors ``obs`` carried."""
         e = np.exp(np.minimum(self.mu[:, k, None] + self._off[:, k], 60.0))
         if k < self.n:
-            if Hout is None:
-                hv = self.HV[:, obs, k]
-                hout = np.einsum("bi,bj->bij", hv, hv)
-            else:                                  # a live H: its own outer, sub-selected
-                hout = Hout[:, k][np.ix_(range(self.M), obs, obs)]
+            # a live H brings its own outer; a fixed one's is `_Hout`, built once
+            hout = (self._Hout if Hout is None else Hout)[:, k]
+            if obs.size != self.m:
+                hout = hout[np.ix_(range(self.M), obs, obs)]
             return (a * self.lam[:, k, None] * e)[:, :, None, None] * hout[:, None]
         out = np.zeros((self.M, self._nn, obs.size, obs.size))
         i = k - self.n
@@ -1864,6 +2131,13 @@ class _EngineBank:
             Fa, Psi = self._props[0].at(a)          # one generator, shared by these members
             F = np.broadcast_to(Fa, (M, n, n))
             mpred = self._m @ Fa.T + ((Psi @ (self.B @ u)) if self.B is not None else 0.0)
+        elif self._dynb is not None:                # one stacked linearisation for the bank
+            F, mpred = self._Jb, self._mpb
+            self._dynb(self._m, u, F, mpred)
+            if a != 1.0:                            # the first-order elapsed map, as looped
+                I = np.eye(n)
+                F = I + a * (F - I)
+                mpred = self._m + a * (mpred - self._m)
         else:
             F = np.empty((M, n, n)); mpred = np.empty((M, n))
             I = np.eye(n)
@@ -1876,7 +2150,10 @@ class _EngineBank:
                     mpred[j] = self._m[j] + a * (mj - self._m[j])
         if off is not None:
             mpred = mpred + (off if a == 1.0 else a * off)
-        FPFt = np.einsum("bij,bjk,blk->bil", F, self._P, F)
+        use_k = (ok and mo == m and self._hooks is None and add_S is None
+                 and self._modes is not None)
+        if not use_k:
+            FPFt = np.einsum("bij,bjk,blk->bil", F, self._P, F)
         if not ok:
             self._pi[:] = pi
             w = self._star_w(pi, None)
@@ -1889,6 +2166,25 @@ class _EngineBank:
             sc = self.mu + self._wmean(pi)
             return (self._m.copy(), self._P.copy(), np.full((M, m), np.nan),
                     np.zeros(M), sc[:, :n], sc[:, n:], None, None)
+        if use_k:
+            # the compiled step: one call for the predictive covariance, NumPy's own
+            # linalg for the inverse and the log-determinant, one call for the rest
+            Hs, Hb, Hout = H, None, None
+            e = y[None] - mpred @ H.T
+            Ppred, PHt, S = _kernel.ext().lucid_bank_predict(
+                np.ascontiguousarray(F), self._P, Qg, rg, H,
+                int(self._modes[0]), int(self._modes[2]))
+            Si = _inv_sym(S, mo)
+            _, logdet = np.linalg.slogdet(S)
+            pi = np.ascontiguousarray(pi)
+            w, ll, m_new, P_new, Kbar = _kernel.ext().lucid_bank_correct(
+                Ppred, PHt, Si, np.ascontiguousarray(logdet),
+                np.ascontiguousarray(e), np.ascontiguousarray(mpred), H, pi,
+                self._axtab, self._cap, mo, int(self._modes[1]),
+                int(self._modes[2]), int(self._modes[3]))
+            Sbar = np.einsum("bg,bgij->bij", w, S) if want_S else None
+            return self._finish(pi, ll, m_new, P_new, Kbar, Sbar, Si, e,
+                                obs, mo, a, aQ, Hout, want_S)
         Ppred = FPFt[:, None] + Qg
         # The live measurement map, per member (each evaluates its own mean).  With no hook
         # this is exactly the shared-H arithmetic it always was, contraction order included --
@@ -1913,7 +2209,7 @@ class _EngineBank:
         S[:, :, np.arange(mo), np.arange(mo)] += rg[:, :, obs]
         if add_S is not None:
             S = S + (add_S if mo == m else add_S[..., obs, :][..., :, obs])
-        Si = np.linalg.inv(S)
+        Si = _inv_sym(S, mo)
         _, logdet = np.linalg.slogdet(S)
         maha = np.einsum("bi,bgij,bj->bg", e, Si, e)
         lg = -0.5 * (mo * _LOG2PI + logdet + maha)
@@ -1945,6 +2241,16 @@ class _EngineBank:
         P_new = (np.einsum("bg,bgij->bij", w, Ppost)
                  + np.einsum("bg,bgi,bgj->bij", w, dm, dm))
         P_new = self._cap_P(0.5 * (P_new + np.swapaxes(P_new, 1, 2)))
+        Sbar = np.einsum("bg,bgij->bij", w, S) if want_S else None
+        return self._finish(pi, ll, m_new, P_new, Kbar, Sbar, Si, e,
+                            obs, mo, a, aQ, Hout, want_S)
+
+    def _finish(self, pi, ll, m_new, P_new, Kbar, Sbar, Si, e,
+                obs, mo, a, aQ, Hout, want_S):
+        """The scale walk and the book-keeping, shared by the NumPy step and the
+        compiled one: everything downstream of the correction, which is the same
+        arithmetic whichever of the two produced it."""
+        M, n, m = self.M, self.n, self.m
         # See `_WalkEngine.update`: a partial event gets its share of the step budget, and
         # holds the split of every pair its own subset confounds.
         budget = self.gap if mo == m else self.gap * (mo / m)
@@ -1993,9 +2299,8 @@ class _EngineBank:
         self._ll += ll
         sc = self.mu + self._wmean(pi)
         # The offset channel needs the collapsed response of THIS bank: the mean gain `Kbar`
-        # (already formed above) and the star-collapsed innovation covariance.  Both are pure
-        # read-outs of the step that just ran, and neither is computed when the channel is off.
-        Sbar = np.einsum("bg,bgij->bij", w, S) if want_S else None
+        # and the star-collapsed innovation covariance.  Both are pure read-outs of the step
+        # that just ran, and neither is computed when the channel is off.
         innov = e
         if mo != m:
             innov = np.full((M, m), np.nan)
@@ -2069,6 +2374,14 @@ class _Departure:
             if dn == 0.0:
                 raise ValueError("a departure direction must be non-zero")
             div.append(dn * dn / math.hypot(aN * fn, cN * bn))
+        # Neither the base nor a direction moving with the state is the common case (a
+        # supplied matrix, or the learned random-walk prior), and it is the one where the
+        # whole bank linearises in one call and the report collapses by linearity.
+        self.fixed = bool(getattr(base, "constant", False)) and not self.moving
+        self.F0, self.B0 = (F_rep, B_rep) if self.fixed else (None, None)
+        # What the stacked linearisation depends on -- the rate a rung carries is not part of
+        # it, so rungs sharing this key share one executor (see `_bank_key`).
+        self.batch_key = None
         self._div = np.array(div)
         self.A = np.stack([a for a, _ in ref]) / self._div[:, None, None]
         self.C = np.stack([c for _, c in ref]) / self._div[:, None, None]
@@ -2077,6 +2390,9 @@ class _Departure:
         self.cap = np.concatenate([np.full(n, np.inf), sig2])
         self.q_g = sig2 * rho
         self.gidx = np.arange(n, self.na)
+        if self.fixed:
+            self.batch_key = (n, self.k, _bytes(self.A), _bytes(self.C),
+                              _bytes(self.F0), _bytes(self.B0))
 
     @staticmethod
     def _pair(d, n, p):
@@ -2118,25 +2434,68 @@ class _Departure:
 
     def callable_for(self):
         """The (mean, u) -> (Jacobian, predicted mean) hook the engine calls each step."""
-        n, k = self.n, self.k
+        n, k, na = self.n, self.k, self.na
+        eye_k = np.eye(k)               # the g-block of J is the identity at every step
 
         def _dyn(m, u):
             x, g = m[:n], m[n:]
-            F, B = self.dynamics_of(x, g)
+            F0, B0 = self.base(x)
+            A, C = self.at(x)           # one evaluation, shared by F(g), B(g) and dF/dg
+            if k:
+                F = F0 + np.einsum("j,jab->ab", g, A)
+                B = None if B0 is None else B0 + np.einsum("j,jab->ab", g, C)
+            else:
+                F, B = F0, B0
             mp = np.empty_like(m)
             mp[:n] = F @ x + (B @ u if B is not None else 0.0)
             mp[n:] = g
-            J = np.zeros((self.na, self.na))
+            J = np.zeros((na, na))
             J[:n, :n] = F
-            J[n:, n:] = np.eye(k)
+            J[n:, n:] = eye_k
             if k:
-                A, C = self.at(x)
                 J[:n, n:] = np.einsum("jab,b->aj", A, x)
                 if B is not None:
                     J[:n, n:] += np.einsum("jab,b->aj", C, np.atleast_1d(u))
             return J, mp
 
         return _dyn
+
+    def batch_for(self):
+        """The same hook for a whole STACK of members at once, or ``None`` where there is no
+        such thing.
+
+        Every member of a bank carries this one departure, and the linearisation is the same
+        arithmetic on each of their means -- so with a fixed base and fixed directions the
+        loop over members is pure interpreter overhead (it was ~60% of a learned-dynamics
+        step).  A moving base or a moving direction has to be evaluated at each member's own
+        operating point and stays on the looped path.
+        """
+        if not self.fixed:
+            return None
+        n, k = self.n, self.k
+        F0, B0 = self.F0, self.B0
+        A, C = self.A, self.C
+        eye_k = np.eye(k)
+        # Every contraction below is the looped one with a member axis prepended, in the same
+        # order over the same summation index, so the stack reproduces the loop bit for bit
+        # (`test_bank_matches_the_looped_members` pins it).
+
+        def _dynb(m, u, J, mp):
+            """Fill ``J`` (M, na, na) and ``mp`` (M, na) from the stacked means ``m``."""
+            x, g = m[:, :n], m[:, n:]
+            F = F0 + np.einsum("cj,jab->cab", g, A)
+            J[:, :n, :n] = F
+            J[:, n:, n:] = eye_k
+            J[:, :n, n:] = np.einsum("jab,cb->caj", A, x)
+            mp[:, :n] = (F @ x[:, :, None])[:, :, 0]
+            if B0 is not None:
+                uu = np.atleast_1d(u)
+                B = B0 + np.einsum("cj,jab->cab", g, C)
+                mp[:, :n] += (B @ uu[:, None])[:, :, 0]
+                J[:, :n, n:] += np.einsum("jab,b->aj", C, uu)
+            mp[:, n:] = g
+
+        return _dynb
 
 
 def _as_base(dynamics, B, n):
@@ -2153,7 +2512,20 @@ def _as_base(dynamics, B, n):
         F_, B_ = out if isinstance(out, tuple) else (out, B)
         return (np.atleast_2d(np.asarray(F_, float)),
                 None if B_ is None else np.atleast_2d(np.asarray(B_, float)))
+    base.constant = False           # it moves with the state: no stacked linearisation
     return base, base(np.zeros(n))[0]
+
+
+def _const_base(F, B):
+    """``base(x) -> (F, B)`` for dynamics that were supplied as matrices.
+
+    Flagged constant so a departure built on it can linearise a whole bank at once
+    (`_Departure.batch_for`); a moving base cannot, and says so.
+    """
+    def base(x, _F=F, _B=B):
+        return _F, _B
+    base.constant = True
+    return base
 
 
 def _as_hbase(H):
@@ -2474,7 +2846,7 @@ class LucidFilter:
         # failure modes can be named, they are the fastest detector there is (0005).  The
         # WALKER refines whatever the anchors only bracket: detection degrades gracefully under
         # a mis-specified anchor set, recovery does not (0001 s4).
-        const = base if base is not None else (lambda x, _F=F, _B=B: (_F, _B))
+        const = base if base is not None else _const_base(F, B)
         specs = [(base, F, B, None)]
         for a in (anchors or []):
             Fa, Ba = a if isinstance(a, tuple) else (a, B)
@@ -2527,6 +2899,7 @@ class LucidFilter:
                                 fisher_Si=Si_c)
                 Si_c = e._fisher_Si
                 e._dyn = dep.callable_for()
+                e._dep = dep
                 if hbase is not None:
                     e._hook = _augment_hook(hbase, n, dep.k)
                 self._members.append(e)
@@ -2598,6 +2971,28 @@ class LucidFilter:
             bank.idx = np.array(idx)
             banks.append(bank)
         self._banks = banks
+        # Where a spec's departure does not move with the state, the per-step (F, B) report is
+        # affine in the cells' coefficients (`_dynamics_mean`), so all it needs from them is
+        # their stacked g.  Record where to gather that from -- grouping is by structure, so a
+        # spec's cells can be spread over several banks.
+        where = {}
+        for bank in banks:
+            for row, gi in enumerate(bank.idx):
+                where[int(gi)] = (bank, row)
+        self._gplan = []
+        for d, (_, _, _, dep) in enumerate(self._specs):
+            if dep is None or not dep.fixed:
+                self._gplan.append(None)
+                continue
+            per = {}
+            for c in range(self._nc):
+                bank, row = where[d * self._nc + c]
+                rows, slots = per.setdefault(id(bank), (bank, [], []))[1:]
+                rows.append(row); slots.append(c)
+            plan = [(bk, np.array(r), np.array(s)) for bk, r, s in per.values()]
+            # a looped executor keeps its state on the members, not stacked: no gather
+            self._gplan.append(plan if all(isinstance(bk, _EngineBank)
+                                           for bk, _, _ in plan) else None)
         if self._mean is not None or self._sensor is not None:
             M = len(self._members)
             self._Kb = np.zeros((M, self.n, self.m))
@@ -2688,6 +3083,19 @@ class LucidFilter:
         out = np.log(np.maximum(mixed, 1e-300)).ravel()
         return out - _logsumexp(out)
 
+    def _spec_g(self, d):
+        """The departure coefficients of spec ``d``'s cells, stacked ``(nc, k)``.
+
+        The cells' means are views into their banks' stacked state, so this is a handful of
+        gathers rather than one attribute lookup per member -- which matters because the
+        report below runs every step and the cell count is the product of the (phi, s) box
+        with the split ladder.
+        """
+        out = np.empty((self._nc, self._specs[d][3].k))
+        for bank, rows, slots in self._gplan[d]:
+            out[slots] = bank._m[rows, self.n:]
+        return out
+
     # AUDIT[derived] posterior-mean report over the weight rows.
     def _dynamics_mean(self, post):
         """Posterior-mean (F, B) across the bank -- fixed members contribute their own."""
@@ -2702,6 +3110,18 @@ class LucidFilter:
                 Fh += w * Fs
                 if Bh is not None and Bs is not None:
                     Bh += w * Bs
+                continue
+            if dep is not None and self._gplan[d] is not None:
+                # ``F(g) = F0 + sum_j g_j A_j`` is affine in g, so the average over the cells
+                # is the same expression at their average g -- one contraction instead of one
+                # per cell.  Only exact where the base and the directions do not themselves
+                # move with the state, which is what `_gplan` records.
+                w = W[row]
+                gbar = w @ self._spec_g(d)
+                tot = float(w.sum())
+                Fh += tot * dep.F0 + np.einsum("j,jab->ab", gbar, dep.A)
+                if Bh is not None and dep.B0 is not None:
+                    Bh += tot * dep.B0 + np.einsum("j,jab->ab", gbar, dep.C)
                 continue
             for c in range(self._nc):
                 e = self._members[d * self._nc + c]
@@ -2727,8 +3147,17 @@ class LucidFilter:
         for d, (_, _, _, dep) in enumerate(self._specs):
             if dep is None or (spec is not None and d != spec):
                 continue
-            for c in range(self._nc):
-                self._members[d * self._nc + c].reprice(dep.gidx)
+            plan, idx = self._gplan[d], dep.gidx
+            if plan is None or not len(idx):       # a looped executor keeps its own state
+                for c in range(self._nc):
+                    self._members[d * self._nc + c].reprice(idx)
+                continue
+            # the same three assignments as `_WalkEngine.reprice`, over the cells at once
+            for bank, rows, _slots in plan:
+                P, na = bank._P, bank.n
+                P[np.ix_(rows, idx)] = 0.0
+                P[np.ix_(rows, np.arange(na), idx)] = 0.0
+                P[rows[:, None], idx[None, :], idx[None, :]] = dep.cap[idx]
 
     def update(self, y, u=None, t=None, dt=None) -> LucidStep:
         """One event: the readings in ``y`` that are finite, at time ``t`` (or ``dt`` after the

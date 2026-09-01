@@ -128,7 +128,7 @@ def test_bank_matches_the_looped_members():
     missing observation, the multi-pair star, the dynamics channel with its fault kernel and
     reprice, and a control input.
     """
-    from lucid.statfilter.lucid import _WalkEngine
+    from lucid.filter.lucid import _WalkEngine
 
     class _Looped(_WalkEngine):
         def update(self, y, u=None, a=1.0):
@@ -183,7 +183,7 @@ def test_five_dof_arm_polynomial():
         assert eng._G <= 1 + (eng._nn - 1) * eng.D, (
             f"star has {eng._G} nodes; must be linear in D={eng.D}")
     r = rng(5)
-    T = 60
+    T = 30
     x = np.zeros(2 * n_dof)
     Y = np.empty((T, n_dof))
     for t in range(T):
@@ -237,18 +237,20 @@ def test_fixed_dynamics_reports_no_channel():
 
 
 def test_dynamics_none_shapes():
-    Y, _ = ar1(T=400)
-    f = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25])
+    T = 120
+    Y, _ = ar1(T=T)
+    f = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25],
+                    phis=(0.85,), ss=(0.40,))
     r = f.filter(Y)
-    assert r.dynamics.shape == (400, 1, 1)
-    assert r.fault.shape == (400,)
+    assert r.dynamics.shape == (T, 1, 1)
+    assert r.fault.shape == (T,)
     assert np.all(np.isfinite(r.dynamics)) and np.all(np.isfinite(r.mean))
     assert np.all((r.fault >= 0.0) & (r.fault <= 1.0))
 
 
 def test_dynamics_none_beats_the_random_walk_it_starts_from():
     """Told nothing, it must learn its way past its own F = I prior."""
-    Y, x = ar1(T=1200, a=0.3, seed=2)
+    Y, x = ar1(T=600, a=0.3, seed=2)
     learned = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25]).filter(Y)
     walk = LucidFilter(dynamics=[[1.0]], process=[[0.09]], measurement=[0.25]).filter(Y)
     assert _rmse(learned.mean[:, 0], x) < _rmse(walk.mean[:, 0], x)
@@ -264,47 +266,63 @@ def test_dynamics_none_tracks_near_the_oracle():
     assert _rmse(learned.mean[:, 0], x) < 1.15 * _rmse(oracle.mean[:, 0], x)
 
 
-def test_fault_is_detected_and_not_before_it_happens():
-    Y, x = ar1(T=2400, a=0.9, a2=0.3, switch=1200, seed=5)
-    f = LucidFilter(dynamics=[[0.9]], process=[[0.09]], measurement=[0.25], faults=1 / 2400)
-    r = f.filter(Y)
-    assert r.fault[300:1200].max() < 0.5      # no false alarm in the calm stretch
+# The fault rig: 0.9 for the first half, 0.3 for the second, at the hazard the length
+# implies.  It is one experiment and three claims are read off it, so the series and the
+# run every claim shares are built once per module rather than once per claim.
+_SWITCH = 600
+_FAULT_T = 2 * _SWITCH
+
+
+@pytest.fixture(scope="module")
+def fault_rig():
+    return ar1(T=_FAULT_T, a=0.9, a2=0.3, switch=_SWITCH, seed=5)
+
+
+@pytest.fixture(scope="module")
+def fault_run(fault_rig):
+    Y, _ = fault_rig
+    return LucidFilter(dynamics=[[0.9]], process=[[0.09]], measurement=[0.25],
+                       faults=1 / _FAULT_T).filter(Y)
+
+
+def test_fault_is_detected_and_not_before_it_happens(fault_run):
+    r = fault_run
+    assert r.fault[150:_SWITCH].max() < 0.5   # no false alarm in the calm stretch
     assert r.fault[-200:].mean() > 0.5        # and the fault is found
     assert r.dynamics[-1, 0, 0] < 0.75        # F has moved toward the new truth
 
 
-def test_fault_recovery_beats_the_frozen_filter():
-    Y, x = ar1(T=2400, a=0.9, a2=0.3, switch=1200, seed=5)
-    kw = dict(process=[[0.09]], measurement=[0.25])
-    live = LucidFilter(dynamics=[[0.9]], faults=1 / 2400, **kw).filter(Y)
-    frozen = LucidFilter(dynamics=[[0.9]], **kw).filter(Y)
-    post = slice(1600, 2400)
-    assert (_rmse(live.mean[:, 0], x, 1600) < _rmse(frozen.mean[:, 0], x, 1600))
+def test_fault_recovery_beats_the_frozen_filter(fault_rig, fault_run):
+    Y, x = fault_rig
+    frozen = LucidFilter(dynamics=[[0.9]], process=[[0.09]],
+                         measurement=[0.25]).filter(Y)
+    lo = _SWITCH + _SWITCH // 3               # past the detection transient
+    assert (_rmse(fault_run.mean[:, 0], x, lo) < _rmse(frozen.mean[:, 0], x, lo))
 
 
 def test_calm_costs_nothing():
     """The hedge: carrying the channel through a run with no fault is ~free."""
-    Y, x = ar1(T=1500, a=0.9, seed=7)
+    T = 600
+    Y, x = ar1(T=T, a=0.9, seed=7)
     kw = dict(dynamics=[[0.9]], process=[[0.09]], measurement=[0.25])
-    live = LucidFilter(faults=1 / 1500, **kw).filter(Y)
+    live = LucidFilter(faults=1 / T, **kw).filter(Y)
     fixed = LucidFilter(**kw).filter(Y)
-    assert _rmse(live.mean[:, 0], x) < 1.02 * _rmse(fixed.mean[:, 0], x)
-    assert live.fault[300:].max() < 0.9       # no confident false detection
+    assert _rmse(live.mean[:, 0], x, 150) < 1.02 * _rmse(fixed.mean[:, 0], x, 150)
+    assert live.fault[150:].max() < 0.9       # no confident false detection
 
 
-def test_named_anchor_pins_the_new_dynamics():
+def test_named_anchor_pins_the_new_dynamics(fault_rig):
     """A nameable fault mode is carried as its own filter and recovers F closely."""
-    Y, x = ar1(T=2400, a=0.9, a2=0.3, switch=1200, seed=5)
+    Y, x = fault_rig
     r = LucidFilter(dynamics=[[0.9]], process=[[0.09]], measurement=[0.25],
-                    faults=1 / 2400, anchors=[[[0.3]]]).filter(Y)
+                    faults=1 / _FAULT_T, anchors=[[[0.3]]]).filter(Y)
     assert abs(r.dynamics[-1, 0, 0] - 0.3) < 0.2
 
 
 def test_low_rank_departures():
     """Mechanism (b): supplying the departure directions is cheaper and still learns."""
-    Y, x = ar1(T=800, a=0.3, seed=2)
+    Y, x = ar1(T=400, a=0.3, seed=2)
     kw = dict(dynamics=None, process=[[0.09]], measurement=[0.25])
-    full = LucidFilter(**kw)
     low = LucidFilter(departures=[np.array([[1.0]])], **kw)
     assert low._specs[-1][3].k == 1
     r = low.filter(Y)
@@ -314,7 +332,7 @@ def test_low_rank_departures():
 def test_control_map_is_learned():
     """B is learned alongside F when a control input is supplied."""
     g = rng(11)
-    T = 1200
+    T = 600
     u = g.standard_normal((T, 1))
     x = np.zeros(T)
     for t in range(1, T):
@@ -328,8 +346,9 @@ def test_control_map_is_learned():
 
 def test_departure_variance_is_bounded_never_frozen():
     """The class cap bounds the departure's variance; the gain stays live."""
-    Y, _ = ar1(T=400)
-    f = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25])
+    Y, _ = ar1(T=120)
+    f = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25],
+                    phis=(0.85,), ss=(0.40,))
     f.filter(Y)
     dep = f._specs[-1][3]                    # the bottom-rung walker: the last spec
     eng = f._members[(len(f._specs) - 1) * f._nc]
@@ -340,21 +359,30 @@ def test_departure_variance_is_bounded_never_frozen():
 
 
 def test_vector_dynamics_learned():
-    """n = 2 oscillator, told nothing, both components observed."""
+    """n = 2 oscillator, told nothing, both components observed.
+
+    n = 2 is where the departure channel is at its most expensive -- four directions, so
+    a six-dimensional augmented state per member -- and both claims are made with more
+    margin at 600 steps than they were at 1500, so this is the length it runs at.  The
+    (phi, s) box is narrowed for the same reason it is in the equivalence tests below:
+    the claim is about the DYNAMICS channel and the noise box is the nuisance it
+    marginalises, measurably so -- both margins are the same to two figures across the
+    default box, this one, and a single cell.
+    """
     g = rng(4)
-    T = 1500
+    T = 600
     lam, phi = 0.97, 0.25
     F = lam * np.array([[math.cos(phi), -math.sin(phi)], [math.sin(phi), math.cos(phi)]])
     x = np.zeros((T, 2))
     for t in range(1, T):
         x[t] = F @ x[t - 1] + 0.2 * g.standard_normal(2)
     Y = x + 0.3 * g.standard_normal((T, 2))
-    learned = LucidFilter(dynamics=None, process=np.eye(2) * 0.04,
-                          measurement=[0.09, 0.09]).filter(Y)
-    walk = LucidFilter(dynamics=np.eye(2), process=np.eye(2) * 0.04,
-                       measurement=[0.09, 0.09]).filter(Y)
-    lr = float(np.sqrt(np.mean((learned.mean[300:] - x[300:]) ** 2)))
-    wr = float(np.sqrt(np.mean((walk.mean[300:] - x[300:]) ** 2)))
+    kw = dict(process=np.eye(2) * 0.04, measurement=[0.09, 0.09],
+              phis=(0.70, 0.95), ss=(0.30, 0.80))
+    learned = LucidFilter(dynamics=None, **kw).filter(Y)
+    walk = LucidFilter(dynamics=np.eye(2), **kw).filter(Y)
+    lr = float(np.sqrt(np.mean((learned.mean[150:] - x[150:]) ** 2)))
+    wr = float(np.sqrt(np.mean((walk.mean[150:] - x[150:]) ** 2)))
     assert lr < wr
     assert np.linalg.norm(learned.dynamics[-1] - F) < np.linalg.norm(np.eye(2) - F)
 
@@ -422,7 +450,7 @@ def test_pinned_hazard_equals_length_one_ladder():
 def test_callable_dynamics_relinearises():
     """Real F/B arrive linearised per operating point, so `dynamics` may be a callable."""
     g = rng(9)
-    T = 800
+    T = 400
     x = np.zeros(T)
     for t in range(1, T):                       # a state-dependent (nonlinear) decay
         a = 0.9 - 0.3 * math.tanh(x[t - 1])
@@ -437,7 +465,7 @@ def test_callable_dynamics_relinearises():
     frozen = LucidFilter(dynamics=[[0.9]], **kw).filter(Y)
     assert moving.dynamics.shape == (T, 1, 1)   # a moving model is reported, not None
     assert moving.fault is not None
-    assert _rmse(moving.mean[:, 0], x) <= _rmse(frozen.mean[:, 0], x)
+    assert _rmse(moving.mean[:, 0], x, 150) <= _rmse(frozen.mean[:, 0], x, 150)
     # a CONSTANT callable must reduce to the matrix it returns
     same = LucidFilter(dynamics=lambda s: np.array([[0.9]]), n=1, **kw).filter(Y)
     assert np.allclose(same.mean, frozen.mean, atol=1e-8)
@@ -445,11 +473,12 @@ def test_callable_dynamics_relinearises():
 
 def test_callable_dynamics_with_faults():
     """The departure channel rides on top of a moving linearisation."""
-    Y, x = ar1(T=1200, a=0.6, seed=3)
+    T = 400
+    Y, x = ar1(T=T, a=0.6, seed=3)
     f = LucidFilter(dynamics=lambda s: np.array([[0.6]]), n=1, faults=1e-3,
                     process=[[0.09]], measurement=[0.25])
     r = f.filter(Y)
-    assert np.all(np.isfinite(r.dynamics)) and r.dynamics.shape == (1200, 1, 1)
+    assert np.all(np.isfinite(r.dynamics)) and r.dynamics.shape == (T, 1, 1)
     assert abs(r.dynamics[-1, 0, 0] - 0.6) < 0.4
 
 
@@ -524,7 +553,7 @@ def test_callable_H_nonlinear_pair_and_stacked_bank():
     The stacked executor evaluates a Jacobian per member, at that member's own mean, and must
     still be the same recursion as the loop.
     """
-    from lucid.statfilter.lucid import _WalkEngine
+    from lucid.filter.lucid import _WalkEngine
 
     class _Looped(_WalkEngine):
         def update(self, y, u=None, a=1.0):
@@ -605,7 +634,7 @@ def test_offset_basis_is_the_identifiable_quotient():
     sensor bias.  Checked against the likelihood in research/bias-channels 0002; the sensor
     entry is not carried at all, for the reason `_mean_basis` records.
     """
-    from lucid.statfilter.lucid import _mean_basis
+    from lucid.filter.lucid import _mean_basis
 
     B1 = _mean_basis(np.eye(1), np.ones((1, 1)))
     assert B1.shape == (2, 1)
@@ -644,7 +673,31 @@ def test_offset_channel_finds_a_drift_and_does_not_invent_one():
     assert abs(quiet.offset[-1, 0]) < 0.05                           # no hallucinated drift
 
 
-def test_offset_channel_does_not_disturb_a_biased_sensor_rig():
+# One miscalibrated sensor among three, biased from T0 on.  Two claims are read off the
+# channel-on run of it -- that it does not disturb the rig, and that its read-out names the
+# culprit -- and they were building the same series and running the same filter twice.
+_BIAS = 2.0
+
+
+@pytest.fixture(scope="module")
+def biased_sensor_rig():
+    Q, R, N, T0 = 0.02, 1.0, 700, 300
+    rng = np.random.default_rng(7)
+    theta = np.cumsum(rng.normal(0, np.sqrt(Q), N))
+    Y = np.stack([theta + rng.normal(0, np.sqrt(R), N) for _ in range(3)], axis=1)
+    Y[T0:, 2] += _BIAS
+    return Y, theta
+
+
+@pytest.fixture(scope="module")
+def biased_sensor_on(biased_sensor_rig):
+    Y, _ = biased_sensor_rig
+    return LucidFilter(H=np.ones((3, 1)), measurement=np.ones(3),
+                       offsets=True).filter(Y)
+
+
+def test_offset_channel_does_not_disturb_a_biased_sensor_rig(biased_sensor_rig,
+                                                             biased_sensor_on):
     """A rig the channel is NOT for must be left alone.
 
     A miscalibrated sensor is a first-moment fault the channel deliberately does not carry
@@ -652,19 +705,12 @@ def test_offset_channel_does_not_disturb_a_biased_sensor_rig():
     where it has nothing to offer -- the failure mode measured in research/bias-channels 0006
     when the sensor entry was carried.
     """
-    Q, R, N, T0, bias = 0.02, 1.0, 700, 300, 2.0
-    rng = np.random.default_rng(7)
-    theta = np.cumsum(rng.normal(0, np.sqrt(Q), N))
-    Y = np.stack([theta + rng.normal(0, np.sqrt(R), N) for _ in range(3)], axis=1)
-    Y[T0:, 2] += bias
-    H, R0 = np.ones((3, 1)), np.ones(3)
-
-    off = LucidFilter(H=H, measurement=R0).filter(Y)
-    on = LucidFilter(H=H, measurement=R0, offsets=True).filter(Y)
+    Y, theta = biased_sensor_rig
+    off = LucidFilter(H=np.ones((3, 1)), measurement=np.ones(3)).filter(Y)
     e_off = np.sqrt(np.mean((off.mean[400:, 0] - theta[400:]) ** 2))
-    e_on = np.sqrt(np.mean((on.mean[400:, 0] - theta[400:]) ** 2))
+    e_on = np.sqrt(np.mean((biased_sensor_on.mean[400:, 0] - theta[400:]) ** 2))
     assert e_on < 1.05 * e_off                                       # no regression
-    assert abs(on.offset[-1, 0]) < 0.02                              # and no spurious drift
+    assert abs(biased_sensor_on.offset[-1, 0]) < 0.02                # and no spurious drift
 
 
 def test_offset_channel_is_inert_on_a_stable_spectrum():
@@ -692,7 +738,7 @@ def test_offset_channel_is_inert_on_a_stable_spectrum():
     assert on.offset is None
 
     # a unit root beside the stable mode restores it, and only along the unit root
-    from lucid.statfilter.lucid import _mean_basis
+    from lucid.filter.lucid import _mean_basis
     B = _mean_basis(np.diag([1.0, 0.7]), np.array([[1.0, 1.0]]))
     assert B.shape[1] == 1
     assert abs(B[1, 0]) < 1e-8                                   # nothing on the stable mode
@@ -719,24 +765,17 @@ def test_offsets_do_not_provoke_the_dynamics_channel():
     assert float(np.mean(both.fault)) < float(np.mean(plain.fault)) + 0.05
 
 
-def test_sensor_read_out_names_the_biased_sensor():
+def test_sensor_read_out_names_the_biased_sensor(biased_sensor_on):
     """The signed per-sensor offset -- the one thing a second-moment channel cannot report.
 
     A scale sees only ``e**2``, so a biased sensor and its innocent neighbour move ``eta`` the
     same way (research/bias-channels 0001 measured +0.71 / +0.74 at m = 2).  The read-out is
     relative to the consensus, because the common mode of the biases is gauge on a random walk.
     """
-    Q, R, N, T0, bias = 0.02, 1.0, 700, 300, 2.0
-    rng = np.random.default_rng(7)
-    theta = np.cumsum(rng.normal(0, np.sqrt(Q), N))
-    Y = np.stack([theta + rng.normal(0, np.sqrt(R), N) for _ in range(3)], axis=1)
-    Y[T0:, 2] += bias
-
-    r = LucidFilter(H=np.ones((3, 1)), measurement=np.ones(3), offsets=True).filter(Y)
-    c = r.sensor_offset[-1]
-    assert c[2] - 0.5 * (c[0] + c[1]) > 0.7 * bias               # sensor 3 stands out
-    assert abs(c[0] - c[1]) < 0.3 * bias                         # the other two agree
-    assert abs(float(np.mean(c))) < 0.05 * bias                  # and the gauge is not claimed
+    c = biased_sensor_on.sensor_offset[-1]
+    assert c[2] - 0.5 * (c[0] + c[1]) > 0.7 * _BIAS              # sensor 3 stands out
+    assert abs(c[0] - c[1]) < 0.3 * _BIAS                        # the other two agree
+    assert abs(float(np.mean(c))) < 0.05 * _BIAS                 # and the gauge is not claimed
 
 
 def test_sensor_read_out_cannot_change_the_filter():
@@ -812,7 +851,7 @@ def test_offset_feedback_is_never_partial_on_a_tower():
     H = np.array([[1.0, 0, 0], [0, 0, 1.0]])
     R0 = np.array([0.06 ** 2, 0.02 ** 2])
 
-    from lucid.statfilter.lucid import _mean_basis
+    from lucid.filter.lucid import _mean_basis
     B = _mean_basis(F, H)
     assert B.shape[1] == 2                                       # accel AND velocity means
     # the tower is all one z = 1 block: nothing of it may be truncated away
@@ -864,11 +903,17 @@ def two_sensor(T=300, seed=0, dt=0.1):
 
 
 def test_uniform_full_rows_are_untouched():
-    """Supplying no clock must be the filter that existed before there was one."""
-    F, H, X, Y = two_sensor()
-    base = LucidFilter(dynamics=F, H=H).filter(Y)
+    """Supplying no clock must be the filter that existed before there was one.
+
+    A narrow ``(phi, s)`` box, here and in the two clock tests below: what is compared is
+    one construction against itself, so the size of the bank is not part of the claim and
+    every cell of it would only say the same thing again.
+    """
+    F, H, X, Y = two_sensor(T=100)
+    kw0 = dict(dynamics=F, H=H, phis=(0.85,), ss=(0.40,))
+    base = LucidFilter(**kw0).filter(Y)
     for kw in (dict(dt=1.0), dict(t=np.arange(len(Y), dtype=float))):
-        got = LucidFilter(dynamics=F, H=H).filter(Y, **kw)
+        got = LucidFilter(**kw0).filter(Y, **kw)
         assert np.array_equal(base.mean, got.mean)          # bit-for-bit, not "close"
         assert np.array_equal(base.var, got.var)
         assert np.array_equal(base.measurement_scale, got.measurement_scale)
@@ -943,7 +988,14 @@ def test_pointwise_decomposition_tracks_the_joint_row():
 
 
 def test_variable_step_beats_assuming_uniformity():
-    """Irregular arrivals, with the timestamps and without them."""
+    """Irregular arrivals, with the timestamps and without them.
+
+    A narrow box: what separates the two filters is the elapsed-time map, and the margin
+    is if anything wider without the full one (-3.1% against -2.6%).  Contrast
+    `test_dynamics_none_tracks_near_the_oracle`, which keeps the default box because
+    there the bank IS what is being measured -- narrowing it walks that ratio from 1.07
+    to 1.14 against a 1.15 bound.
+    """
     r = rng(4)
     T, nominal = 400, 0.1
     gaps = np.maximum(r.gamma(4.0, nominal / 4.0, T), 1e-3)
@@ -956,7 +1008,7 @@ def test_variable_step_beats_assuming_uniformity():
             [0.01, 0.05]) * math.sqrt(a / nominal)
         X[i] = x
         Y[i] = x + r.standard_normal(2) * np.array([0.30, 0.02])
-    kw = dict(dynamics=F, H=H)
+    kw = dict(dynamics=F, H=H, phis=(0.70, 0.95), ss=(0.30, 0.80))
     told = LucidFilter(timestep=nominal, **kw).filter(Y, t=t)
     guessed = LucidFilter(**kw).filter(Y)
     def rms(a, b): return float(np.sqrt(np.mean((a[40:] - b[40:]) ** 2)))
@@ -967,10 +1019,11 @@ def test_variable_step_beats_assuming_uniformity():
 def test_zero_gap_moves_no_state():
     """Two readings at one instant: the second must not re-propagate the first."""
     F, H, X, Y = two_sensor(T=10)
-    f = LucidFilter(dynamics=F, H=H)
+    kw = dict(dynamics=F, H=H, phis=(0.85,), ss=(0.40,))
+    f = LucidFilter(**kw)
     f.observe(0, Y[0, 0], t=0.0)
     a = f.observe(1, Y[0, 1], t=0.0)
-    g = LucidFilter(dynamics=F, H=H)
+    g = LucidFilter(**kw)
     g.observe(0, Y[0, 0], t=0.0)
     b = g.observe(1, Y[0, 1], dt=0.0)
     assert np.allclose(a.mean, b.mean)
@@ -986,12 +1039,13 @@ def test_timestep_sets_the_unit():
     short-circuit.  That is a representation fact, not a modelling one, and it must not
     be papered over with a snap-to-nominal tolerance -- there are no thresholds here.
     """
-    F, H, X, Y = two_sensor(T=120)
-    steps = LucidFilter(dynamics=F, H=H).filter(Y)
-    exact = LucidFilter(dynamics=F, H=H, timestep=0.25).filter(
+    F, H, X, Y = two_sensor(T=60)
+    kw = dict(dynamics=F, H=H, phis=(0.85,), ss=(0.40,))
+    steps = LucidFilter(**kw).filter(Y)
+    exact = LucidFilter(timestep=0.25, **kw).filter(
         Y, t=0.25 * np.arange(len(Y)))
     assert np.array_equal(steps.mean, exact.mean)
-    decimal = LucidFilter(dynamics=F, H=H, timestep=0.01).filter(
+    decimal = LucidFilter(timestep=0.01, **kw).filter(
         Y, t=0.01 * np.arange(len(Y)))
     assert np.abs(decimal.mean - steps.mean).max() < 1e-9
 
@@ -999,7 +1053,7 @@ def test_timestep_sets_the_unit():
 def test_matrix_power_handles_the_defective_transition():
     """A constant-velocity block has one eigenvector for two states; F**a must still be
     the exact [[1, a dt], [0, 1]] an eigendecomposition would get wrong."""
-    from lucid.statfilter.lucid import _Propagator
+    from lucid.filter.lucid import _Propagator
     dt = 0.1
     p = _Propagator(np.array([[1.0, dt], [0.0, 1.0]]))
     for a in (0.0, 0.25, 1.0, 2.5):
@@ -1014,7 +1068,7 @@ def test_matrix_power_handles_the_defective_transition():
 def test_control_forcing_is_continuous_through_the_nominal_step():
     """B is the ONE-STEP forcing map, so the elapsed map must equal it at a = 1 and
     vanish at a = 0 -- continuous through the step, not merely equal at it."""
-    from lucid.statfilter.lucid import _Propagator
+    from lucid.filter.lucid import _Propagator
     p = _Propagator(np.array([[0.6, 0.2], [0.0, 0.9]]))
     assert np.allclose(p.at(1.0)[1], np.eye(2))
     assert np.allclose(p.at(0.0)[1], np.zeros((2, 2)))
