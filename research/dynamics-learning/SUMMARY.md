@@ -19,8 +19,18 @@ bottom for what is left.
 ## The settled design (each element pinned by a numbered probe)
 
 The class commitment: a dynamics fault is a **jump process** — rare, large, persistent — with
-one labeled prior, the hazard `rho` (~1/mission), and a class scale (the cap).  Every gain,
-drift rate, restart width, and spawn mass derives from `(rho, cap)`.  Zero tuning constants.
+a class scale (the cap) and a hazard.  The hazard is NOT a labeled prior (0009 retired that
+claim: it fails the monotonicity test that separates a budget from a knob — calm cost rises
+monotonically in `rho`, delay falls, so a pinned value sits on a trade-off): it is a nuisance,
+gridded and mixed by evidence like every other nuisance here.  The box is a class-breadth
+convention in the exact sense of the `(phi, s)` box (top 1/2 = the class's own persistence
+boundary; rung gap = 1.5 nats of log-hazard, the walk grid's Sparrow rule at this axis's blur
+width -- one e-fold per event, at the rare class's operative single event; uniform weights on
+the geometric rungs = the log-uniform reference prior; the bottom is the box's reach --
+state tracking is measured-flat across and below it, so only the fault REPORT's crossing time
+reads it), valid at the nominal ``forget = 1`` and reading nothing from ``forget``.  Every gain, drift rate, restart width, and spawn mass derives per rung from
+`(rho_j, cap)`, and the posterior-mean hazard is REPORTED — the filter reads the regime off the
+data instead of being told it.  Zero tuning constants.
 
 1. **Detect by hazard-mixed bank of anchored full filters** (0001).  The hazard-mixed bank is
    Shiryaev's rule; its delay frontier is `D(rho) = log(1/rho) / KL-rate` with the KL rate
@@ -66,7 +76,27 @@ drift rate, restart width, and spawn mass derives from `(rho, cap)`.  Zero tunin
    flying on measurements removes it exactly), and the walker should use the **linearizing
    parameter coordinates** the physics offers (Newton is linear in 1/m, 1/I; wheel radii are
    already effectiveness gains).
-7. **Anchors in parameter space when faults are nameable; anchors in TIME when not** (0006).
+7. **The hazard is a ladder the evidence weights, never a number the caller tunes** (0009).
+   A pinned hazard fails the monotonicity test (calm cost and delay move monotonically in
+   opposite directions in `rho` — a trade-off, hence a knob), and it has the user telling the
+   filter the regime.  Mixed over the derived ladder, calm weight settles on the least-hedged
+   rung: on the 0009 scalar rig (20 seeds, shipped e^1.5 box) the box's calm RMSE is
+   indistinguishable from its bottom pin's (0.32463 ± 0.00220 vs 0.32440 ± 0.00219) with
+   delay slightly better (83.1 ± 8.3 vs 91.8 ± 8.1).  A fault-rich world climbs the box —
+   late events caught 32% faster than the static pin, and `r.hazard` reads 5.7e-3 against a
+   true event rate of 5e-3.  The box bottom is breadth, not theory: state tracking is flat
+   with a rung appended below (calm Δ 0.00013, recovery/settled within noise), and only the
+   report's ½-crossing deepens (+13 steps ≈ 1.5 nats/KL at the measured partial
+   re-weighting) — the reporting convention's price, the consumer's to set.  The 0003
+   restart is RUNG-LOCAL under the box: a global edge on the mixture's marginal was measured
+   to self-oscillate (43 restarts, the readout regulated to ~0.5), while dropping the restart
+   loses 0003's derived post-jump calibration (12% state cost where the departure is large
+   from t = 0) — each rung's own marginal edge re-prices its own walker, no rung's report
+   gates another's model, and the pinned form is the J = 1 case bit for bit (0009 addendum).
+   Two retired revisions are recorded in 0009: the bottom derived from the weight memory (made the one
+   engineering parameter load-bearing; failed at the nominal ``forget = 1``) and decade
+   spacing (underived, and past the axis's own dead-zone threshold).
+8. **Anchors in parameter space when faults are nameable; anchors in TIME when not** (0006).
    `dynamics=None` proper has no F0 and no fault classes, hence no detection edge; the jump
    class's Bayes posterior is then a mixture over jump times, realized as pruned run-length
    (BOCPD-style) spawn hypotheses at the same hazard.  Measured on a full-state-observed rig
@@ -115,13 +145,15 @@ diagnostic a validity flag).
 
 ```python
 LucidFilter(dynamics=None)                       # learn F (and B) from nothing
-LucidFilter(dynamics=F0, faults=1e-4)            # supplied F0 that may CHANGE
-LucidFilter(dynamics=F0, faults=..., anchors=[F_left, F_right])   # named fault modes
+LucidFilter(dynamics=F0, faults=True)            # supplied F0 that may CHANGE (hazard ladder)
+LucidFilter(dynamics=F0, faults=rho)             # ...pinned to a rate you truly know
+LucidFilter(dynamics=F0, faults=True, anchors=[F_left, F_right])  # named fault modes
 LucidFilter(dynamics=linearise, departures=[...])  # callables: moving linearisation,
                                                    # and directions that rotate with it
 r.dynamics    # (T, n, n) the dynamics as currently believed
 r.control     # (T, n, p) the learned B
 r.fault       # (T,) posterior probability they have left the nominal
+r.hazard      # (T,) posterior-mean fault hazard — the regime the data supports (0009)
 ```
 
 Realised as the state augmentation `(x, g)` with `F = F0 + sum_j g_j A_j`, so the noise
@@ -177,3 +209,10 @@ dissolved hover-honesty scenario, the dormant spawns) is filed in place.
   `dynamics=None`) — where BOCPD anchors should finally bind.
 - Per-cluster factorization with callable (operating-point-dependent) block structure — the
   0053 §5 caveat, unchanged.
+- **The acceptance rigs under the ladder.**  0009 measures `faults=True` on the scalar rig
+  only; the 0004/0005/0008 numbers above are pinned-hazard (`faults=1/T`, now the
+  give-what-you-know form).  Re-measure the drone and the blowout under the default ladder —
+  expected from 0009: detection at the bottom rung's frontier (log(1/5e-4) = 7.6 nats vs the
+  pinned 8.7, so ~12% FASTER), calm within noise, ~2.5x members.  And the walker-count/member
+  dedup already shares the nominal and anchors across rungs; the remaining cost is the J
+  walkers.

@@ -106,7 +106,7 @@ running. The model:
 ```
 theta_t = F theta_{t-1} + B u_t + w_t,   w_t ~ N(0, Q(t))
 y_t     = H theta_t          + v_t,      v_t ~ N(0, R(t))
-Q(t) = V diag(lam_k e^{xi_k(t)}) V^T     R(t) = diag(rho_i e^{eta_i(t)})
+Q(t) = V diag(lam_k e^{xi_k(t)}) V^T     R(t) = diag(r_i e^{eta_i(t)})
 ```
 
 Every process eigenmode and every sensor carries its own log-scale
@@ -127,20 +127,32 @@ predictive likelihood weight it. The single residual knob is `forget`
 near 1.
 
 **The dynamics can be learned too.** `dynamics=None` learns `F` (and `B`) from the
-random-walk prior; `dynamics=F0, faults=rho` says the supplied dynamics may
+random-walk prior; `dynamics=F0, faults=True` says the supplied dynamics may
 *change* — a payload attached to a drone, a tire blown out — and the filter
 detects the change and recovers the new dynamics with no refit and no threshold.
 It is the same construction one level up: the departure from nominal is carried
 as extra state, so the noise machinery above runs on top of it unchanged, which
 is what separating a wrong `F` from elevated `Q` requires — the two compete as
 hypotheses under a live noise walk rather than through a whiteness statistic
-bolted on the side. A fault is a **jump process**, so its one labeled prior is
-the hazard `rho` and everything else follows: the departure's drift is
-`sigma^2 rho`, its variance is bounded at the class size (bounded, never frozen
-— an axis the data cannot see today must still move when excitation arrives),
-and the detection delay is `log(1/rho) / KL`, computed rather than tuned. The
-nominal model never leaves the bank, so a false alarm costs almost nothing —
-and that is what makes the fast end of the frontier affordable.
+bolted on the side. A fault is a **jump process** — rare, large, persistent —
+and its hazard is a nuisance, not a knob: the filter mixes over a broad hazard
+**box** (rungs 1.5 nats apart in log-hazard — the walk grid's own Sparrow
+spacing rule, at this axis's blur width of one e-fold per event — down from
+the class's persistence boundary, 1/2 per step; a class-breadth convention in
+the exact sense of the `(phi, s)` box, valid at `forget = 1`) and each rung's running predictive likelihood weights
+it, so the rate is *read off the data and reported* (`r.hazard`), never
+asserted. Per rung everything follows: the departure's
+drift is that rung's own second moment `sigma^2 rho_j`, its variance is bounded
+at the class size (bounded, never frozen — an axis the data cannot see today
+must still move when excitation arrives), and the detection frontier is
+`log(1/rho_j) / KL`, computed rather than tuned. In a quiet world the weights
+settle on the least-hedged rung, so the box costs what its bottom rung
+costs; when faults recur the weights climb and later ones are caught faster
+(measured in [`0009`](research/dynamics-learning/exploration/0009_hazard_ladder.md)).
+The nominal model never leaves the bank, so a false alarm costs almost nothing —
+and that is what makes the fast end of the frontier affordable. A caller who
+truly knows the rate can pin it (`faults=rho`) — give-what-you-know — and the
+filter then just reports it back.
 
 Configure by **give-what-you-know**; every argument has a working default:
 
@@ -151,7 +163,7 @@ Configure by **give-what-you-know**; every argument has a working default:
 | `H` | measurement matrix; a **callable** of the state when the sensors are not a fixed linear functional of it — every inertial sensor on a moving linkage — returning the Jacobian, or an `(H, y_predicted)` pair when `h(x)` is not `H(x) x` | identity |
 | `process` | base process covariance `Q0` | identity |
 | `measurement` | base per-sensor variances `R0` | ones |
-| `faults` | hazard `rho`: the supplied dynamics may **change** | none → they are fixed |
+| `faults` | the supplied dynamics may **change**: `True` mixes over the derived hazard ladder (the rate is read off the data); a float pins it | none → they are fixed |
 | `departures` | the directions the dynamics may move along — a matrix, an `(A, C)` pair when one physical parameter moves `F` and `B` together, or a callable of the state when the direction rotates with the operating point | full basis |
 | `anchors` | named fault hypotheses, each carried as its own full filter | none |
 | `timestep` | how long one nominal step is, in your timestamps' units | `1` → time counted in steps |
@@ -199,7 +211,7 @@ class timescale is per *nominal step*, and an event `a = dt/timestep` steps afte
 the last takes each of them to that power: `F(a) = exp(a log F)` (exact — via a
 matrix logarithm, because the commonest transition of all, a constant-velocity
 block, is defective and an eigendecomposition gets it wrong), `Q → Q·a`,
-`phi → phi^a`, `forget → forget^a`, `rho → 1-(1-rho)^a`. `R` alone is not scaled:
+`phi → phi^a`, `forget → forget^a`, the fault kernel to its exact chain power `M^a`. `R` alone is not scaled:
 a measurement variance belongs to the reading, not to the gap before it.
 
 What it buys, measured

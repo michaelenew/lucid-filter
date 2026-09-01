@@ -115,7 +115,8 @@ def test_missing_obs():
 def test_dynamics_none_is_implemented():
     """The cell is filled: dynamics=None learns F online (see the block at the bottom)."""
     f = LucidFilter(dynamics=None)
-    assert f._learn and f._nd == 2          # the nominal hedge plus the departure walker
+    assert f._learn and f._ndbase == 2      # per rung: the nominal hedge plus its walker
+    assert len(f._specs) == 1 + len(f.hazards)   # the nominal filter is shared across rungs
 
 
 def test_bank_matches_the_looped_members():
@@ -330,8 +331,8 @@ def test_departure_variance_is_bounded_never_frozen():
     Y, _ = ar1(T=400)
     f = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25])
     f.filter(Y)
-    dep = f._specs[-1][3]
-    eng = f._members[(f._nd - 1) * f._nc]
+    dep = f._specs[-1][3]                    # the bottom-rung walker: the last spec
+    eng = f._members[(len(f._specs) - 1) * f._nc]
     assert np.all(np.diag(eng._P)[dep.gidx] <= dep.cap[dep.gidx] * (1 + 1e-9))
     assert np.all(np.diag(eng._P)[dep.gidx] > 0.0)      # never frozen at zero
     eng.reprice(dep.gidx)                                # the detection restart
@@ -363,8 +364,59 @@ def test_faults_hazard_validated():
         LucidFilter(dynamics=[[0.5]], faults=1.5)
     with pytest.raises(ValueError):
         LucidFilter(dynamics=[[0.5]], faults=0.0)
+    with pytest.raises(ValueError):                 # above the class's persistence boundary
+        LucidFilter(dynamics=[[0.5]], faults=0.7)
+    with pytest.raises(ValueError):                 # one bad rung poisons a supplied ladder
+        LucidFilter(dynamics=[[0.5]], faults=[0.05, 0.7])
     with pytest.raises(ValueError):
         LucidFilter(dynamics=[[0.5]], faults=1e-4, anchors=[np.eye(2)])
+
+
+def test_hazard_box_is_structural_not_forget_derived():
+    """faults=True mixes over the fixed broad box: rungs 1.5 nats apart (the Sparrow rule
+    at the axis's one-event blur width) down from the class's own persistence boundary.  Nothing structural reads ``forget`` -- the box is identical at any
+    memory, and the construction is valid at the NOMINAL filter, ``forget = 1`` (pure Bayes):
+    forget is the engineering escape for the stationarity assumption being violated, and it
+    is admissible only because nothing depends on it (adaptive-grid 0029, research 0009)."""
+    f = LucidFilter(dynamics=[[0.9]], faults=True)
+    assert f.hazards[0] == 0.5                      # the class's persistence boundary
+    assert np.allclose(np.log(f.hazards[:-1] / f.hazards[1:]), 1.5)   # 1.5-nat rungs
+    for fg in (0.99, 1.0):                          # forget never reaches the box
+        g = LucidFilter(dynamics=[[0.9]], faults=True, forget=fg)
+        assert np.array_equal(g.hazards, f.hazards)
+    pure = LucidFilter(dynamics=[[0.9]], faults=True, forget=1.0)
+    st = pure.update([0.3])
+    assert np.isfinite(st.loglik) and 0.0 <= st.fault <= 1.0 and st.hazard > 0.0
+
+
+def test_hazard_is_read_not_told():
+    """The regime readout: calm drives the posterior-mean hazard toward the ladder's floor,
+    and a pinned hazard just reports itself.  Two sensors of one state keep the split ladder
+    (an orthogonal mechanism) out of the bank so the test is cheap."""
+    r = rng(11)
+    T = 900
+    x = np.zeros(T)
+    for t in range(1, T):
+        x[t] = 0.9 * x[t - 1] + 0.3 * r.standard_normal()
+    Y = x[:, None] + 0.7 * r.standard_normal((T, 2))
+    kw = dict(dynamics=[[0.9]], H=[[1.0], [1.0]], process=[[0.09]],
+              measurement=[0.49, 0.49])
+    ladder = LucidFilter(faults=True, **kw).filter(Y)
+    assert ladder.hazard.shape == (T,)
+    assert ladder.hazard[0] > 0.05                  # the log-uniform prior's mean, pre-data
+    assert ladder.hazard[-1] < 0.01                 # a quiet run reads as a quiet regime
+    pinned = LucidFilter(faults=1e-3, **kw).filter(Y)
+    assert np.allclose(pinned.hazard, 1e-3)         # give-what-you-know reports what you gave
+    off = LucidFilter(**kw).filter(Y)
+    assert off.hazard is None                       # no fault class, no regime to report
+
+
+def test_pinned_hazard_equals_length_one_ladder():
+    Y, _ = ar1(T=400, a=0.9, seed=3)
+    kw = dict(dynamics=[[0.9]], process=[[0.09]], measurement=[0.25])
+    a = LucidFilter(faults=2e-3, **kw).filter(Y)
+    b = LucidFilter(faults=[2e-3], **kw).filter(Y)
+    assert np.allclose(a.mean, b.mean) and np.allclose(a.fault, b.fault)
 
 
 def test_callable_dynamics_relinearises():
