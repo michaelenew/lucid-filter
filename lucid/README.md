@@ -42,6 +42,7 @@ pip install -e .            # from the repository root
 |---|---|
 | [`filter/lucid.py`](filter/lucid.py) | `LucidFilter` — the product, and its reference [README](filter/README.md) |
 | [`filter/AUDIT.md`](filter/AUDIT.md) | every derived-vs-proxy claim in it, and the open items |
+| [`lucid_kernel/`](lucid_kernel/README.md) | the same step in C, bit-for-bit — optional, and verified against the NumPy path for a shape before it is used for it |
 | [`tests/`](tests/) | the suite |
 
 The earlier fitted and walking filters this one generalises — `AdaptiveFilter`,

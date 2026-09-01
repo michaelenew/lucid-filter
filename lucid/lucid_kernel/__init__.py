@@ -1,10 +1,9 @@
-"""A compiled kernel for the filter recursions, byte-identical to the NumPy one.
+"""A compiled kernel for the filter recursion, byte-identical to the NumPy one.
 
-Both filters are dispatch-bound rather than arithmetic-bound: a step is a
-handful of einsums over arrays small enough that deciding what to do costs
-more than doing it.  On a p = 3, order = 5 fit of 500 points, 99% of the wall
-clock is inside `_loglik_batch` and 79% of the whole fit is inside
-`c_einsum` alone.  This package is that loop in C.
+`LucidFilter` is dispatch-bound rather than arithmetic-bound: it runs its
+members stacked, so a step is around forty einsums over (M, G, n, n) arrays
+with n and m in single digits, and deciding what to do costs more than doing
+it.  This package is that step in C.
 
 **It is not a second implementation.**  Every result it returns is bit-for-bit
 what the NumPy code returns -- the same IEEE-754 bits, not the same number to

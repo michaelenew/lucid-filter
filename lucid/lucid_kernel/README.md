@@ -91,26 +91,34 @@ with the operand sizes rather than with the arithmetic:
 
 | contraction | what NumPy does |
 |---|---|
-| `bgxw,bgwv,bgzv->bgxz` (`F P0 F'`) | one flat run over both contracted axes at p ≥ 3; a nested pair — inner sum over `v`, accumulated over `w` — at p = 2 |
-| `bgxz,bgz->bgx` (`F m0`) | a contiguous reduction with a stride-0 output, which is the shape that goes vectorised: the products land in SIMD lanes and come back through a butterfly, `(t0 + t2) + (t1 + t3)`. Reproducible up to p = 4, where four and eight lanes agree; above that they part company and neither is what NumPy gives |
-| `g,gxz->xz` and `g,gx,gz->xz` (the reporting collapse in `filter()`) | vectorised at p = 1, where the per-node covariance is contiguous in the node index, and left-to-right above it — and at p = 1 which way it goes depends on the *grid size* |
+| `bij,bjk,blk->bil` (`F P F'`) | one flat run over both contracted axes, or a nested pair — inner sum over `k`, accumulated over `j` — and which it picks moves with `n` |
+| `bgij,kj->bgik` (`P Hᵀ`), `bil,bl->bi` and `bgil,bl->bgi` (the gains against the innovation) | a contiguous reduction with a stride-0 output, which is the shape that goes vectorised: the products land in SIMD lanes and come back through a butterfly, `(t0 + t2) + (t1 + t3)`. Reproducible up to width 4, where four and eight lanes agree; above that they part company |
+| `bg,bgil->bil` and the two halves of the covariance collapse | the same, one level up, over the *nodes* — and it goes vectorised exactly when the per-node block is a single element, which is the scalar rig |
 
 A table of what NumPy does would be a claim about every NumPy on every CPU.
-So the kernel **asks**: `odefilter.core._einsum_orders` runs each contraction
-both ways on data of the shape in hand and compares the bits, and where the
-answer is beyond what C can reproduce (`F m0` above p = 4) the kernel hands
-that one contraction back to NumPy — one call per step against O(B G p²)
-arithmetic, which does not show up in the timings.
+So the kernel **asks**: `lucid.filter.lucid._einsum_orders` runs the first
+contraction both ways on data of the shape in hand and compares the bits, and
+the end-to-end verification below tries every candidate fold for the others.
+Where no candidate reproduces NumPy the kernel declines that shape and the
+step stays in NumPy.
 
 ### And then the whole thing is checked
 
 The probe is evidence; it is not the decision. Before the kernel is used for a
-given problem shape it is run against the NumPy path on a short, deliberately
-awkward series — a missing observation, parameter vectors spread far enough
-apart that the nodes disagree — and every number that comes out is compared
-bit for bit. For `filter()` that is all thirteen reported fields plus the
-state mean and covariance, not just the likelihood. A shape that fails falls
-back to NumPy and warns once.
+given bank shape it is run against `_bank_predict_np` and `_bank_correct_np` —
+the code the filter would otherwise have run, not a second copy of it — on
+four deliberately awkward problems: one with a weight already concentrated on
+a node, one with a process covariance four orders up, one with a class cap the
+state is already over. Every array that comes out of both halves is compared
+bit for bit, not just the likelihood. A shape that fails falls back to NumPy.
+
+Four, rather than one, because a single well-conditioned draw agrees by luck
+often enough to be worthless as evidence: it is what let a `w * (dm_i * dm_j)`
+through, where einsum multiplies `(w * dm_i) * dm_j`.
+
+A shape *inside* the widths the transcription claims that fails to reproduce
+NumPy is news, and warns. Outside them, declining is what the kernel is built
+to do there, and it does it quietly.
 
 There is no configuration in which a mismatched kernel is used. That is what
 makes this safe across NumPy versions and CPUs: a future NumPy that
@@ -122,13 +130,6 @@ optimisation one: with contraction on, the compiler may fuse `a * b + c` into
 a single rounded operation, which is a different — and better — number than
 the NumPy expression the kernel has to reproduce.
 
-## Borrowing it
-
-Another extension module can call the recursion rather than reimplement it,
-which is the only way a second module can share the bit-exactness guarantee.
-`_kernel.c` exports a versioned struct of function pointers through a capsule;
-`lucid_kernel.h` is the interface and says how to import it.
-
 ## Tests
 
 `../tests/test_kernel.py`. Everything there compares raw payloads through
@@ -137,6 +138,6 @@ reassociated a sum, and would say nothing about whether a fit lands in the
 same place. The bit comparison is also strict about the two things `==` gets
 wrong — it separates `0.0` from `-0.0` and holds NaN equal to itself.
 
-The slow one is the test worth reading: the same `fit()` run twice, once with
-the kernel and once without, landing on the same nine parameters to the last
-bit.
+The one worth reading is `test_the_filter_goes_through_the_kernel_and_gets_the_same_bits`:
+not that the two agree in the abstract, but that `filter()` is the one that ran
+the compiled step, and that turning it off changes nothing at all.

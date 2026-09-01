@@ -1,14 +1,17 @@
 """Tests for the compiled kernel.
 
-What survives here is the part of the kernel that stands on its own: the
-NumPy-owned primitives it borrows rather than implements, and the verify-or-fall-back
-gate that is the whole safety argument.
+There is one claim to check and it is a strong one: **the kernel returns the same
+bits as NumPy**.  Not the same number to a tolerance -- `np.allclose` would pass on
+a kernel that had quietly reassociated a sum and would say nothing useful about
+whether a filter run lands in the same place.  So everything here compares raw
+IEEE-754 payloads through `.view(np.uint64)`, which also makes the comparison strict
+about the two things `==` is wrong about: it separates 0.0 from -0.0, and it holds
+NaN equal to itself.
 
-Its three NUMERIC entry points -- ``ode_loglik_batch``, ``ode_filter`` and
-``stat_loglik_batch`` -- are the recursions of `OdeFilter` and `AdaptiveFilter`, the
-prototypes this package no longer ships, so there is at present nothing in the library
-for them to be compared against.  Until the kernel carries a `LucidFilter` step, that
-comparison cannot be written; see `lucid/lucid_kernel/README.md`.
+Three things are pinned: the NumPy-owned primitives the kernel borrows rather than
+implements, the verify-or-fall-back gate that is the whole safety argument, and the
+compiled bank step itself -- field by field at every width it claims, and on a live
+`LucidFilter` run against the same run with the kernel switched off.
 
 If the kernel is not built, the whole module skips: nothing here is a claim about the
 filter, only about the kernel, and without one there is nothing to compare.
