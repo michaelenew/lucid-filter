@@ -155,6 +155,37 @@ FIRST event is faster here (66.6 vs the single-fault world's 82.0): only 400 cal
 precede it, so the weights have not yet settled as deep — the launch depth tracks the quiet
 actually witnessed, which is the mechanism working as derived.
 
+## Re-measured at the derived gap (the shipped box)
+
+Same rig, same seeds (deterministic: every decade-revision and pinned row reproduces
+bit-for-bit, which is the cross-revision control).  The shipped `faults=True` is now the
+e^1.5 box; the retired decade box runs as an explicit sequence.
+
+| arm | delay | false% | calm rmse | recov | settled | hz(calm) | hz(end) |
+|---|---|---|---|---|---|---|---|
+| **box e^1.5 (faults=True)** | **83.1 ± 8.3** | **1.30%** | **0.32463 ± 0.00220** | 0.2903 | 0.2923 | 1.05e-3 | 1.93e-3 |
+| box + rung below | 96.3 ± 10.4 | 1.13% | 0.32450 ± 0.00220 | 0.2905 | 0.2927 | 7.1e-4 | 1.5e-3 |
+| box @ decades (retired) | 82.0 ± 8.3 | 1.38% | 0.32460 ± 0.00219 | 0.2902 | 0.2924 | 1.13e-3 | 1.77e-3 |
+| pinned 5e-4 | 91.8 ± 8.1 | 1.15% | 0.32440 ± 0.00219 | 0.2910 | 0.2916 | 5e-4 | 5e-4 |
+
+Fault-rich world (delay per A0 → A1 edge; truth rate 8/1600 = 5e-3):
+
+| arm | first delay | late delays | rmse | hz(end) |
+|---|---|---|---|---|
+| **box e^1.5 (faults=True)** | 68.0 ± 8.3 | **57.5 ± 7.8** | 0.3120 | **5.7e-3** |
+| box @ decades (retired) | 66.6 ± 8.2 | 59.0 ± 7.4 | 0.3120 | 4.4e-3 |
+| pinned 5e-4 | 84.6 ± 7.8 | 85.0 ± 6.9 | 0.3129 | 5e-4 |
+| pinned 5e-3 (oracle-rate pin) | 47.5 ± 7.8 | 47.5 ± 5.7 | 0.3120 | 5e-3 |
+
+What the re-measurement says: the spacing change is derivation-soundness and readout
+resolution, not tracking — every tracking column is statistically identical between the
+two boxes (delay 83.1 ± 8.3 vs 82.0 ± 8.3; calm 0.32463 vs 0.32460), exactly the flatness
+the gap derivation predicts.  The extra-rung arm prices the reach at the derived rate
+(+13.2 steps ≈ 1.5 nats / KL, at partial re-weighting).  Where the finer grid shows is the
+REGIME READOUT: in the fault-rich world it reads 5.7e-3 against a true 5e-3 (14% high)
+where the decade grid read 4.4e-3 (12% low with 2.3-nat quantisation), and late events are
+caught at the same improved rate (57.5 vs the static pin's 85.0).
+
 ## What this does NOT claim
 
 - The box does not beat every pin on every rig — it cannot; pins span a Pareto frontier.

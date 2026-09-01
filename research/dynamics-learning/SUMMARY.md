@@ -80,16 +80,17 @@ data instead of being told it.  Zero tuning constants.
    A pinned hazard fails the monotonicity test (calm cost and delay move monotonically in
    opposite directions in `rho` — a trade-off, hence a knob), and it has the user telling the
    filter the regime.  Mixed over the derived ladder, calm weight settles on the least-hedged
-   rung: on the 0009 scalar rig (20 seeds) the ladder's calm RMSE is indistinguishable from
-   its bottom pin's (0.32460 ± 0.00219 vs 0.32440 ± 0.00219) with delay slightly better
-   (82.0 ± 8.3 vs 91.8 ± 8.1).  A fault-rich world climbs the ladder — late events caught 31%
-   faster than the static pin, and `r.hazard` reads 4.4e-3 against a true event rate of 5e-3.
-   The box bottom is breadth, not theory: state tracking is flat across a decade appended
-   below (calm Δ 0.00005, recovery/settled within noise), and only the report's ½-crossing
-   deepens (+18 steps ≈ log 10/KL at the measured partial re-weighting) — the reporting
-   convention's price, the consumer's to set.  0009's first revision derived the bottom from
-   the weight memory 1/(1−forget); that is RETIRED — it made the one engineering parameter
-   load-bearing and failed at the nominal ``forget = 1`` (0009, corrected).
+   rung: on the 0009 scalar rig (20 seeds, shipped e^1.5 box) the box's calm RMSE is
+   indistinguishable from its bottom pin's (0.32463 ± 0.00220 vs 0.32440 ± 0.00219) with
+   delay slightly better (83.1 ± 8.3 vs 91.8 ± 8.1).  A fault-rich world climbs the box —
+   late events caught 32% faster than the static pin, and `r.hazard` reads 5.7e-3 against a
+   true event rate of 5e-3.  The box bottom is breadth, not theory: state tracking is flat
+   with a rung appended below (calm Δ 0.00013, recovery/settled within noise), and only the
+   report's ½-crossing deepens (+13 steps ≈ 1.5 nats/KL at the measured partial
+   re-weighting) — the reporting convention's price, the consumer's to set.  Two retired
+   revisions are recorded in 0009: the bottom derived from the weight memory (made the one
+   engineering parameter load-bearing; failed at the nominal ``forget = 1``) and decade
+   spacing (underived, and past the axis's own dead-zone threshold).
 8. **Anchors in parameter space when faults are nameable; anchors in TIME when not** (0006).
    `dynamics=None` proper has no F0 and no fault classes, hence no detection edge; the jump
    class's Bayes posterior is then a mixture over jump times, realized as pruned run-length
