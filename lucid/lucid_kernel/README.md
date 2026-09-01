@@ -14,52 +14,48 @@ does not building it.
 
 ## Why
 
-The recursion is *dispatch-bound*, not arithmetic-bound. A step is a handful
-of einsums over arrays small enough that NumPy spends longer deciding what to
-do than doing it. Profiling one `OdeFilter.fit(y, p=3)` on 500 points:
+The recursion is *dispatch-bound*, not arithmetic-bound. `LucidFilter` runs its
+members **stacked** — one recursion with a leading member axis over the (phi, s)
+box crossed with the split ladder crossed with the hazard ladder's walkers,
+which on a scalar rig is a few thousand members — so a step is around forty
+einsums over `(M, G, n, n)` arrays with `n` and `m` in single digits. NumPy
+spends longer deciding what to do than doing it.
 
-| where | share of wall clock |
-|---|---|
-| `_loglik_batch` | 99% |
-| — of which, inside `c_einsum` | 79% |
-
-So there is nothing clever to do. The arithmetic is already minimal; what
-costs is asking NumPy for it half a million times.
+So there is nothing clever to do. The arithmetic is already minimal; what costs
+is asking NumPy for it forty times a step.
 
 ## What it covers, and what it buys
 
-Measured on this machine (a 4-core x86-64 with AVX-512), against the same
-call with the kernel off:
+The compiled step is `lucid_bank_predict` and `lucid_bank_correct`: the stacked
+bank step, split where LAPACK is. The first builds the predictive covariance
+and stops at the innovation covariance `S`; NumPy's own `linalg` takes its
+inverse and log-determinant, exactly as it always did; the second finishes the
+correction, the per-axis window softmaxes and the two collapses. **Two compiled
+calls and two NumPy ones per bank step, against forty.**
+
+Measured on this machine (a 4-core x86-64 with AVX-512), against the same call
+with the kernel off:
 
 | call | shape | speed-up |
 |---|---|---|
-| `odefilter._loglik_batch` | p = 2, order 5, 104 vectors | 10.8× |
-| `odefilter._loglik_batch` | p = 3, order 5, 104 vectors | 8.4× |
-| `odefilter._loglik_batch` | p = 3, order 5, dynamics channel on | 7.9× |
-| `odefilter._loglik_batch` | p = 5, order 5 | 5.1× |
-| `odefilter._loglik_batch` | p = 1, order 7 | 2.1× |
-| `OdeFilter.loglik` | p = 3, order 5 | 10.7× |
-| `OdeFilter.filter` | p = 3, order 5 | 7.8× |
-| `statfilter._loglik_batch` | order 3 … 9 | 8.2× … 1.7× |
-| a whole `OdeFilter.fit(y, p=3)` | 600 points | **6.9×** (1196 s → 174 s) |
-| a whole `OdeFilter.fit(y, p=3)` | 250 points | 3.7× (42 s → 11 s) |
-| a whole `OdeFilter.fit(y, p=1)` | 250 points | 2.8× |
+| `LucidFilter(dynamics=F, H=H).filter` | n = 2, m = 2, 400 points | 1.9× |
+| `LucidFilter(dynamics=None).filter` | scalar, 400 points | 1.4× |
+| the suite | 60 tests | 335s → 268s |
 
-The two fit rows are the same code and differ only in the length of the
-series, which is worth reading rather than averaging: the fit's fixed costs —
-`scipy`'s optimiser bookkeeping, the grid rebuild per likelihood evaluation,
-the one-off verification — do not shrink with the recursion, so on a short
-series they are what is left, and on a long one they are not. Long series are
-where a fit is actually slow, so 6.9× is the number to plan with.
+The learned-dynamics figure is lower than the two-sensor one for a reason worth
+reading rather than averaging: that filter carries a *nominal* bank at n = 1
+beside its walkers at n = 2, and n = 1 is one of the widths the kernel declines
+(below).
 
-At 250 points the largest single thing left is `_face_profile`, the scalar
-Kalman pass over the `s = 0` face that pass 1 optimises: 0.4% of that fit
-before the kernel and 22% of it after. It is the next thing worth compiling.
-
-`OdeFilter.update` — one observation at a time — stays in NumPy: there is one
-step's work to amortise a call over and nothing to win. So does a run with
-caller-supplied transitions (`Fs=`, or `linearized_dynamics`), where the
-dynamics come from a Python callable anyway.
+**What it does not cover.** A state-dependent measurement map, a partially
+observed row, and a step the offset channel rides on stay in NumPy — each is a
+branch, not a cost. And the transcription is of the narrow widths only:
+`2 <= n <= 4` with `1 <= m <= 3`. Outside them NumPy reduces the contractions
+inside its vector registers, and the fold it uses there — which depends on the
+register width the build dispatched to — is not one hand-written C reproduces.
+The kernel declines those shapes rather than answering differently. Widening it
+means either matching those folds or handing the four affected contractions back
+to `np.einsum`, the way `mp_contract` already does for the same reason.
 
 ## How "identical" is arranged
 

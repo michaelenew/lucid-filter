@@ -91,6 +91,7 @@ such pair, gets no ladder, and costs exactly what it did before.
 """
 from __future__ import annotations
 
+import functools
 import math
 from dataclasses import dataclass
 
@@ -1620,6 +1621,15 @@ class _WalkEngine:
                          self.mu[:n] + wmean[:n], self.mu[n:] + wmean[n:])
 
 
+try:                                    # the compiled step, when it is built
+    from .. import lucid_kernel as _kernel
+except ImportError:                     # pragma: no cover - standalone checkout
+    try:
+        import lucid_kernel as _kernel
+    except ImportError:
+        _kernel = None
+
+
 def _inv_sym(S, mo):
     """``inv`` for a stack of ``mo x mo`` innovation covariances.
 
@@ -1635,6 +1645,217 @@ def _inv_sym(S, mo):
 
 def _bytes(a):
     return None if a is None else np.ascontiguousarray(a, float).tobytes()
+
+
+# --------------------------------------------- the step, as NumPy and as C
+# The stacked recursion below is dispatch-bound in the way the whole bank is: a
+# step is forty einsums over (M, G, n, n) arrays with n and m in single digits,
+# so NumPy spends longer deciding than doing.  These two functions are that
+# arithmetic, written once; `lucid_kernel` carries a compiled transcription of
+# them, and `_bank_modes` verifies it against THESE -- not against a second copy
+# of them -- before it is used for a shape.
+#
+# They are split where LAPACK is: the predictive covariance up to S, then the
+# inverse and log-determinant NumPy's own linalg takes, then the rest.
+
+
+def _bank_predict_np(F, P, Qg, rg, H):
+    """FPFt, the per-node predictive covariance, and the innovation covariance."""
+    FPFt = np.einsum("bij,bjk,blk->bil", F, P, F)
+    Ppred = FPFt[:, None] + Qg
+    PHt = np.einsum("bgij,kj->bgik", Ppred, H)
+    S = np.einsum("ij,bgjk->bgik", H, PHt)
+    mo = H.shape[0]
+    S[:, :, np.arange(mo), np.arange(mo)] += rg
+    return Ppred, PHt, S
+
+
+def _bank_correct_np(Ppred, PHt, Si, logdet, e, mpred, H, pi, axwin, cap, mo):
+    """The correction, the window softmaxes and the two collapses.
+
+    ``pi`` is finished IN PLACE, as the recursion does; ``axwin`` is the active
+    axes' node windows, one row each.
+    """
+    M, G = Si.shape[0], Si.shape[1]
+    n, m = Ppred.shape[2], Si.shape[3]
+    r = axwin.shape[0]
+    maha = np.einsum("bi,bgij,bj->bg", e, Si, e)
+    lg = -0.5 * (mo * _LOG2PI + logdet + maha)
+    if r:
+        logZ = np.empty((M, r))
+        for ax in range(r):
+            lgi = lg[:, axwin[ax]]
+            mi = lgi.max(1)
+            wk = pi[:, ax] * np.exp(lgi - mi[:, None])
+            Zi = wk.sum(1)
+            pi[:, ax] = wk / Zi[:, None]
+            logZ[:, ax] = mi + np.log(Zi)
+        mz = logZ.max(1)
+        aw = np.exp(logZ - mz[:, None])
+        ll = mz + np.log(aw.mean(1))
+        alpha = aw / aw.sum(1, keepdims=True)
+        w = np.zeros((M, G))
+        for ax in range(r):
+            w[:, axwin[ax]] += alpha[:, ax, None] * pi[:, ax]
+    else:
+        ll = lg[:, 0].copy()
+        w = np.zeros((M, G))
+        w[:, 0] = 1.0
+    K = np.einsum("bgik,bgkl->bgil", PHt, Si)
+    Kbar = np.einsum("bg,bgil->bil", w, K)
+    m_new = mpred + np.einsum("bil,bl->bi", Kbar, e)
+    mpost = mpred[:, None] + np.einsum("bgil,bl->bgi", K, e)
+    dm = mpost - m_new[:, None]
+    HPp = np.einsum("ij,bgjk->bgik", H, Ppred)
+    Ppost = Ppred - np.einsum("bgil,bglk->bgik", K, HPp)
+    P_new = (np.einsum("bg,bgij->bij", w, Ppost)
+             + np.einsum("bg,bgi,bgj->bij", w, dm, dm))
+    P_new = 0.5 * (P_new + np.swapaxes(P_new, 1, 2))
+    if cap is not None:
+        d = np.einsum("bii->bi", P_new)
+        sc = np.ones_like(d)
+        capb = np.broadcast_to(cap, d.shape)
+        over = d > capb
+        sc[over] = np.sqrt(capb[over] / np.maximum(d[over], 1e-300))
+        P_new *= sc[:, :, None] * sc[:, None, :]
+    return w, ll, m_new, P_new, Kbar
+
+
+def _einsum_orders(n):
+    """Ask NumPy which way round it sums the two contractions it decides itself.
+
+    ``FPFt`` sums two contracted axes, as one flat run or as a nested pair, and
+    which it picks moves with the operand size rather than with the arithmetic.
+    The `P_new` collapse reduces over the NODES and turns vectorised when the
+    per-node covariance is contiguous in the node index.  Both are asked of the
+    NumPy in hand rather than tabulated -- a table would be a claim about every
+    NumPy on every CPU.
+    """
+    rng = np.random.default_rng(11)
+    B = 4
+    F = rng.random((B, n, n))
+    P = rng.random((B, n, n))
+    ref = np.einsum("bij,bjk,blk->bil", F, P, F)
+    flat = np.zeros_like(ref)
+    for j in range(n):
+        for k in range(n):
+            flat += F[:, :, None, j] * P[:, None, None, j, k] * F[:, None, :, k]
+    nested = np.zeros_like(ref)
+    for j in range(n):
+        inner = np.zeros_like(ref)
+        for k in range(n):
+            inner += F[:, :, None, j] * P[:, None, None, j, k] * F[:, None, :, k]
+        nested += inner
+    ap = (_kernel.AP_FLAT if np.array_equal(ref.view(np.uint64),
+                                            flat.view(np.uint64))
+          else _kernel.AP_NESTED if np.array_equal(ref.view(np.uint64),
+                                                   nested.view(np.uint64))
+          else None)
+    return ap
+
+
+#: the state and sensor widths the compiled step is a transcription OF.  Outside
+#: them NumPy reduces the contractions in its vector registers, and the fold it
+#: uses at those widths is not one hand-written C reproduces -- so the kernel
+#: declines those shapes rather than answering differently, and does so quietly,
+#: because declining is what it is built to do there.  Inside them a failure to
+#: reproduce NumPy is news, and says so.
+_BANK_WIDTHS = ((2, 4), (1, 3))         # (n_lo, n_hi), (m_lo, m_hi)
+
+
+@functools.lru_cache(maxsize=None)
+def _bank_modes(n, m, G, nw, r, has_cap):
+    """The verified evaluation order for a bank of this shape, or None.
+
+    Verified END TO END, on four random problems of the shape in hand -- one of
+    them with a weight already concentrated on a node and one with a process
+    covariance four orders up, because the branches a bank spends its life in
+    are not the ones a single well-conditioned draw reaches.  The compiled step
+    and `_bank_predict_np` / `_bank_correct_np` are run against each other and
+    compared on raw bits, every output of both halves.  A shape that disagrees
+    anywhere falls back to NumPy.
+    """
+    if _kernel is None or not _kernel.available():
+        return None
+    ap = _einsum_orders(n)
+    if ap is None:
+        return None
+    ext = _kernel.ext()
+    rng = np.random.default_rng(7 + n + 3 * m + 5 * G)
+    M = 6
+    # SEVERAL draws, and one of them with a cap the state is already over: a
+    # single well-conditioned draw agrees by luck often enough to be worthless
+    # as evidence, and the branches a bank actually spends its life in -- a
+    # capped departure axis, a weight concentrated on one node -- are the ones
+    # a random draw does not reach.
+    draws = []
+    for d in range(4):
+        A = rng.standard_normal((M, n, n))
+        F = rng.standard_normal((M, n, n))
+        P = np.einsum("bij,bkj->bik", A, A) + n * np.eye(n)
+        B = rng.standard_normal((M, G, n, n))
+        Qg = np.einsum("bgij,bgkj->bgik", B, B) * (10.0 ** d)
+        rg = rng.uniform(0.2, 2.0, (M, G, m))
+        H = rng.standard_normal((m, n))
+        mpred = rng.standard_normal((M, n))
+        e = rng.standard_normal((M, m))
+        pi0 = rng.uniform(0.1, 1.0, (M, max(r, 1), nw))
+        if d == 1:                              # a weight already concentrated
+            pi0[:, :, 0] *= 1e6
+        pi0 /= pi0.sum(2, keepdims=True)
+        aw = np.stack([rng.permutation(G)[:nw] for _ in range(max(r, 1))]
+                      ).astype(np.intp)
+        aw = np.ascontiguousarray(aw[:r] if r else aw[:0])
+        cap = (rng.uniform(0.5, 4.0, n) if has_cap else None)
+        draws.append((F, P, Qg, rg, H, mpred, e, pi0, aw, cap))
+
+    def flat(parts):
+        return np.concatenate([np.asarray(a, float).ravel() for a in parts
+                               if a is not None])
+
+    def reference():
+        parts = []
+        for F, P, Qg, rg, H, mpred, e, pi0, axwin, cap in draws:
+            Ppred, PHt, S = _bank_predict_np(F, P, Qg, rg, H)
+            Si = _inv_sym(S, m)
+            _, ld = np.linalg.slogdet(S)
+            pi = pi0[:, :r].copy()
+            out = _bank_correct_np(Ppred, PHt, Si, ld, e, mpred, H, pi,
+                                   axwin, cap, m)
+            parts += [Ppred, PHt, S, pi] + list(out)
+        return flat(parts)
+
+    def compiled(ap_mode, sc_mode, dot_mode, node_mode):
+        parts = []
+        for F, P, Qg, rg, H, mpred, e, pi0, axwin, cap in draws:
+            try:
+                Ppred, PHt, S = ext.lucid_bank_predict(
+                    np.ascontiguousarray(F), np.ascontiguousarray(P),
+                    np.ascontiguousarray(Qg), np.ascontiguousarray(rg),
+                    np.ascontiguousarray(H), int(ap_mode), int(dot_mode))
+                Si = _inv_sym(S, m)
+                _, ld = np.linalg.slogdet(S)
+                # a fresh copy per candidate: the compiled step finishes `pi` in
+                # place, so a candidate that fails would otherwise hand the next
+                # one a mutated start
+                pi = np.array(pi0[:, :r], dtype=float, order="C")
+                out = ext.lucid_bank_correct(
+                    Ppred, PHt, Si, np.ascontiguousarray(ld),
+                    np.ascontiguousarray(e), np.ascontiguousarray(mpred),
+                    np.ascontiguousarray(H), pi, axwin, cap, m, int(sc_mode),
+                    int(dot_mode), int(node_mode))
+            except (ValueError, TypeError):
+                return None
+            parts += [Ppred, PHt, S, pi] + list(out)
+        return flat(parts)
+
+    (nlo, nhi), (mlo, mhi) = _BANK_WIDTHS
+    covered = nlo <= n <= nhi and mlo <= m <= mhi
+    return _kernel.verify(
+        ("lucid-bank", n, m, G, nw, r, has_cap), compiled, reference,
+        candidates=[(ap, _kernel.SC_NAIVE, d, g)
+                    for d in (0, 1, 2, 3) for g in (0, 1, 2, 3)],
+        warn=covered)
 
 
 # ------------------------------------------------- stacked execution of the bank
@@ -1740,6 +1961,13 @@ class _EngineBank:
                     if ng else np.zeros((M, 0)))
         self._anchor = st("_anchor_lo") if ng else np.zeros((M, 0))
         self._revert = np.array([f._revert for f in members], float)
+        # the active axes' node windows as one table, and the compiled step's
+        # verified evaluation order for this shape (None = stay in NumPy)
+        self._axtab = np.ascontiguousarray(
+            np.stack([e0._axwin[k] for k in self._act]).astype(np.intp)
+            if self._act else np.zeros((0, e0._nn), dtype=np.intp))
+        self._modes = _bank_modes(self.n, self.m, self._G, e0._nn,
+                                  len(self._act), self._cap is not None)
         # state, stacked -- and handed back to the members as views
         self.mu, self._Pmu = st("mu"), st("_Pmu")
         self._m = np.zeros((M, self.n))
@@ -1922,7 +2150,10 @@ class _EngineBank:
                     mpred[j] = self._m[j] + a * (mj - self._m[j])
         if off is not None:
             mpred = mpred + (off if a == 1.0 else a * off)
-        FPFt = np.einsum("bij,bjk,blk->bil", F, self._P, F)
+        use_k = (ok and mo == m and self._hooks is None and add_S is None
+                 and self._modes is not None)
+        if not use_k:
+            FPFt = np.einsum("bij,bjk,blk->bil", F, self._P, F)
         if not ok:
             self._pi[:] = pi
             w = self._star_w(pi, None)
@@ -1935,6 +2166,25 @@ class _EngineBank:
             sc = self.mu + self._wmean(pi)
             return (self._m.copy(), self._P.copy(), np.full((M, m), np.nan),
                     np.zeros(M), sc[:, :n], sc[:, n:], None, None)
+        if use_k:
+            # the compiled step: one call for the predictive covariance, NumPy's own
+            # linalg for the inverse and the log-determinant, one call for the rest
+            Hs, Hb, Hout = H, None, None
+            e = y[None] - mpred @ H.T
+            Ppred, PHt, S = _kernel.ext().lucid_bank_predict(
+                np.ascontiguousarray(F), self._P, Qg, rg, H,
+                int(self._modes[0]), int(self._modes[2]))
+            Si = _inv_sym(S, mo)
+            _, logdet = np.linalg.slogdet(S)
+            pi = np.ascontiguousarray(pi)
+            w, ll, m_new, P_new, Kbar = _kernel.ext().lucid_bank_correct(
+                Ppred, PHt, Si, np.ascontiguousarray(logdet),
+                np.ascontiguousarray(e), np.ascontiguousarray(mpred), H, pi,
+                self._axtab, self._cap, mo, int(self._modes[1]),
+                int(self._modes[2]), int(self._modes[3]))
+            Sbar = np.einsum("bg,bgij->bij", w, S) if want_S else None
+            return self._finish(pi, ll, m_new, P_new, Kbar, Sbar, Si, e,
+                                obs, mo, a, aQ, Hout, want_S)
         Ppred = FPFt[:, None] + Qg
         # The live measurement map, per member (each evaluates its own mean).  With no hook
         # this is exactly the shared-H arithmetic it always was, contraction order included --
@@ -1991,6 +2241,16 @@ class _EngineBank:
         P_new = (np.einsum("bg,bgij->bij", w, Ppost)
                  + np.einsum("bg,bgi,bgj->bij", w, dm, dm))
         P_new = self._cap_P(0.5 * (P_new + np.swapaxes(P_new, 1, 2)))
+        Sbar = np.einsum("bg,bgij->bij", w, S) if want_S else None
+        return self._finish(pi, ll, m_new, P_new, Kbar, Sbar, Si, e,
+                            obs, mo, a, aQ, Hout, want_S)
+
+    def _finish(self, pi, ll, m_new, P_new, Kbar, Sbar, Si, e,
+                obs, mo, a, aQ, Hout, want_S):
+        """The scale walk and the book-keeping, shared by the NumPy step and the
+        compiled one: everything downstream of the correction, which is the same
+        arithmetic whichever of the two produced it."""
+        M, n, m = self.M, self.n, self.m
         # See `_WalkEngine.update`: a partial event gets its share of the step budget, and
         # holds the split of every pair its own subset confounds.
         budget = self.gap if mo == m else self.gap * (mo / m)
@@ -2039,9 +2299,8 @@ class _EngineBank:
         self._ll += ll
         sc = self.mu + self._wmean(pi)
         # The offset channel needs the collapsed response of THIS bank: the mean gain `Kbar`
-        # (already formed above) and the star-collapsed innovation covariance.  Both are pure
-        # read-outs of the step that just ran, and neither is computed when the channel is off.
-        Sbar = np.einsum("bg,bgij->bij", w, S) if want_S else None
+        # and the star-collapsed innovation covariance.  Both are pure read-outs of the step
+        # that just ran, and neither is computed when the channel is off.
         innov = e
         if mo != m:
             innov = np.full((M, m), np.nan)
