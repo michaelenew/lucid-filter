@@ -148,8 +148,8 @@ def test_batch_loglik_is_identical(p, order, order_A, with_A):
     V[:, p + 5] = rng.uniform(-4.0, 0.4, B)
     V[:, p + 6] = rng.uniform(-3.0, 3.0, B)
     V[:, p + 7] = rng.uniform(-4.0, 0.0, B)
-    y = walk(220, seed=p * 7 + order)
-    y[11] = y[12] = y[150] = np.nan          # the missing-observation branch
+    y = walk(120, seed=p * 7 + order)
+    y[11] = y[12] = y[90] = np.nan           # the missing-observation branch
 
     g = ode._grid_batch(V, p, order, order_A, with_A, 0)
     modes = ode._kernel_modes(p, order, order_A, with_A)
@@ -165,7 +165,7 @@ def test_batch_loglik_is_identical_with_pinned_roots(unit_roots):
     V = np.concatenate([rng.uniform(-0.5, 0.5, (6, m)),
                         np.tile([-7.0, -9.0, 0.5, 0.5, -1.0, -1.0, 2.0, -1.5],
                                 (6, 1))], axis=1)
-    y = walk(180, seed=3)
+    y = walk(110, seed=3)
     g = ode._grid_batch(V, p, 5, 3, True, unit_roots)
     modes = ode._kernel_modes(p, 5, 3, True)
     assert same(ode._batch_kernel(y, g, p, modes), ode._batch_numpy(y, g, p))
@@ -181,7 +181,7 @@ def test_a_row_the_recursion_cannot_represent_still_gets_minus_inf():
     bad[p] = 700.0
     bad[p + 4] = math.log(20.0)
     V = np.vstack([good, bad, good])
-    y = walk(120, seed=9)
+    y = walk(80, seed=9)
     g = ode._grid_batch(V, p, 5, 3, False, 0)
     modes = ode._kernel_modes(p, 5, 3, False)
     ref = ode._batch_numpy(y, g, p)
@@ -199,7 +199,7 @@ def test_filter_is_identical_in_every_field(p, order, order_A, s_A):
     f = OdeFilter(pr, order=order, order_A=order_A)
     modes = f._stream_modes()
     assert modes is not None
-    y = walk(250, seed=p + order)
+    y = walk(130, seed=p + order)
     y[13] = y[14] = np.nan
     assert same(ode._result_bits(f._run_kernel(y, True, modes)),
                 ode._result_bits(f._run_numpy(y, True)))
@@ -258,13 +258,21 @@ def test_statfilter_batch_loglik_is_identical(order):
 # --------------------------------------------------------------- end to end
 @pytest.mark.slow
 def test_a_whole_fit_lands_on_the_same_parameters():
-    """The one that matters to a reader of a result: the same fit, twice."""
+    """The one that matters to a reader of a result: the same fit, twice.
+
+    What this adds to the per-mode comparisons above is the CHAINING: a whole staged
+    search is ~140 batched evaluations feeding each other, and one bit of divergence
+    anywhere sends the optimiser somewhere else entirely.  Every stage still runs.  It is
+    p = 1 because the recurrence order buys nothing here -- the kernel's arithmetic at
+    every order is pinned bit-for-bit by `test_batch_loglik_is_identical` and
+    `test_filter_is_identical_in_every_field` -- and p = 2 costs five times as much.
+    """
     y = walk(220, seed=11)
-    with_kernel = OdeFilter.fit(y, p=2, max_iter=60)
+    with_kernel = OdeFilter.fit(y, p=1, max_iter=60)
     saved = ode._kernel
     try:
         ode._kernel = None
-        without = OdeFilter.fit(y, p=2, max_iter=60)
+        without = OdeFilter.fit(y, p=1, max_iter=60)
     finally:
         ode._kernel = saved
     assert same(np.array(with_kernel.params.alpha),

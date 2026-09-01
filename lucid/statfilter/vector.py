@@ -266,8 +266,20 @@ class VectorFilter:
                p.Q0.tobytes(), p.R0.tobytes(), n)
         if self._built is not None and self._built[0] == key:
             return self._built[1]
-        lamP, wP, TP = _chain(p.phi_P, p.s_P, n)
-        lamM, wM, TM = _chain(p.phi_M, p.s_M, n)
+        if not (p.s_P > 0.0 or p.s_M > 0.0):
+            # THE s = 0 FACE.  Neither log-scale walks, so `_chain` puts every one of its
+            # nodes at lam = 0 and the order x order grid is one state repeated -- an
+            # ordinary multivariate local-level model paying order**2 times over for it.
+            # This is the whole of a `dynamics=False` fit and the first stage of any other,
+            # so it is where that factor was being spent.  The collapsed grid IS the model:
+            # one node, weight one, at the base covariances.
+            n = 1
+            lamP = lamM = np.zeros(1)
+            wP = wM = np.ones(1)
+            TP = TM = np.ones((1, 1))
+        else:
+            lamP, wP, TP = _chain(p.phi_P, p.s_P, n)
+            lamM, wM, TM = _chain(p.phi_M, p.s_M, n)
         LP = np.repeat(lamP, n)
         LM = np.tile(lamM, n)
         g = {
@@ -277,6 +289,9 @@ class VectorFilter:
             "Qg": p.Q0[None] * np.exp(np.clip(LP, -60.0, 60.0))[:, None, None],
             "Rg": p.R0[None] * np.exp(np.clip(LM, -60.0, 60.0))[:, None, None],
         }
+        # the process share's numerator: fixed by H and the node covariances, so it belongs
+        # to the grid rather than to the step that used to rebuild it every time
+        g["HQHt"] = np.einsum("ij,gjk,lk->gil", self.H, g["Qg"], self.H)
         self._built = (key, g)
         return g
 
@@ -296,6 +311,17 @@ class VectorFilter:
 
         A row that is all-NaN is treated as missing: the state is propagated but
         not corrected.  Partially missing observations are not supported yet.
+        """
+        return self._advance(y, True)
+
+    def _advance(self, y, want):
+        """One step.  ``want`` asks for the full `VecStep`; without it only the
+        log-likelihood is returned and the read-outs are not formed at all.
+
+        A fit is a few hundred likelihood evaluations over the whole series and looks at
+        nothing else, so the shares, the regime split and the state copies were most of
+        what the search spent its time on.  The recursion itself is one code path either
+        way -- everything below the branch is the arithmetic the state depends on.
         """
         if self.params is None:
             raise ValueError("filter is not fitted; call fit() or pass params")
@@ -328,7 +354,8 @@ class VectorFilter:
             step = VecStep(self._m.copy(), self._P.copy(),
                            np.full(m, np.nan), 0.0, 1.0, 0.0, 0.0,
                            lamP - p.phi_P * self._prev_lamP, p.phi_P * self._prev_lamP,
-                           lamM - p.phi_M * self._prev_lamM, p.phi_M * self._prev_lamM)
+                           lamM - p.phi_M * self._prev_lamM, p.phi_M * self._prev_lamM) \
+                if want else 0.0
             self._prev_lamP, self._prev_lamM = lamP, lamM
             return step
 
@@ -360,22 +387,24 @@ class VectorFilter:
                  + np.einsum("g,gi,gj->ij", pi, dm, dm))
         P_new = 0.5 * (P_new + P_new.T)               # symmetrise against drift
 
-        # trace-form shares: S = H P H^T + H Qg H^T + Rg  (pieces sum to S)
-        HPHt = H @ P @ H.T                            # (m, m), same for every node
-        HQHt = np.einsum("ij,gjk,lk->gil", H, Qg, H)  # (G, m, m)
-        sh_prior = float(pi @ (np.einsum("gij,ji->g", Sinv, HPHt) / m))
-        sh_proc = float(pi @ (np.einsum("gij,gji->g", Sinv, HQHt) / m))
-        sh_meas = float(pi @ (np.einsum("gij,gji->g", Sinv, Rg) / m))
-
-        lamP = float(pi @ g["LP"]); lamM = float(pi @ g["LM"])
-        step = VecStep(
-            mean=m_new.copy(), var=P_new.copy(), innovation=e.copy(), loglik=ll,
-            share_prior=sh_prior, share_process=sh_proc, share_measurement=sh_meas,
-            process_anomaly=lamP - p.phi_P * self._prev_lamP,
-            process_regime=p.phi_P * self._prev_lamP,
-            measurement_anomaly=lamM - p.phi_M * self._prev_lamM,
-            measurement_regime=p.phi_M * self._prev_lamM,
-        )
+        if want:
+            # trace-form shares: S = H P H^T + H Qg H^T + Rg  (pieces sum to S)
+            HPHt = H @ P @ H.T                        # (m, m), same for every node
+            sh_prior = float(pi @ (np.einsum("gij,ji->g", Sinv, HPHt) / m))
+            sh_proc = float(pi @ (np.einsum("gij,gji->g", Sinv, g["HQHt"]) / m))
+            sh_meas = float(pi @ (np.einsum("gij,gji->g", Sinv, Rg) / m))
+            lamP = float(pi @ g["LP"]); lamM = float(pi @ g["LM"])
+            step = VecStep(
+                mean=m_new.copy(), var=P_new.copy(), innovation=e.copy(), loglik=ll,
+                share_prior=sh_prior, share_process=sh_proc, share_measurement=sh_meas,
+                process_anomaly=lamP - p.phi_P * self._prev_lamP,
+                process_regime=p.phi_P * self._prev_lamP,
+                measurement_anomaly=lamM - p.phi_M * self._prev_lamM,
+                measurement_regime=p.phi_M * self._prev_lamM,
+            )
+        else:
+            lamP = float(pi @ g["LP"]); lamM = float(pi @ g["LM"])
+            step = ll
         self._pi, self._m, self._P = pi, m_new, P_new
         self._prev_lamP, self._prev_lamM = lamP, lamM
         self._loglik += ll
@@ -418,7 +447,7 @@ class VectorFilter:
             if not want:
                 total = 0.0
                 for row in Y:
-                    total += self.update(row).loglik
+                    total += self._advance(row, False)
                 return total
             T, n, m = Y.shape[0], self.params.n, self.params.m
             out = {c: np.empty(T) for c in
