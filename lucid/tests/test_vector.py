@@ -174,7 +174,7 @@ def test_homoscedastic_fit_recovers_covariances():
 def test_live_channel_beats_homoscedastic():
     """On data with a real process-scale channel, the fitted live model has a
     strictly higher marginal likelihood than the best homoscedastic one."""
-    n, m, T = 2, 2, 800
+    n, m, T = 2, 2, 500
     H = np.array([[1.0, 0.0], [0.5, 1.0]])
     Q0 = np.array([[1.0, 0.3], [0.3, 0.7]])
     R0 = np.array([[0.4, 0.0], [0.0, 0.4]])

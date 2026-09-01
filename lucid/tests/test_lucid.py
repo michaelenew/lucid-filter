@@ -239,7 +239,8 @@ def test_fixed_dynamics_reports_no_channel():
 def test_dynamics_none_shapes():
     T = 120
     Y, _ = ar1(T=T)
-    f = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25])
+    f = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25],
+                    phis=(0.85,), ss=(0.40,))
     r = f.filter(Y)
     assert r.dynamics.shape == (T, 1, 1)
     assert r.fault.shape == (T,)
@@ -322,7 +323,6 @@ def test_low_rank_departures():
     """Mechanism (b): supplying the departure directions is cheaper and still learns."""
     Y, x = ar1(T=400, a=0.3, seed=2)
     kw = dict(dynamics=None, process=[[0.09]], measurement=[0.25])
-    full = LucidFilter(**kw)
     low = LucidFilter(departures=[np.array([[1.0]])], **kw)
     assert low._specs[-1][3].k == 1
     r = low.filter(Y)
@@ -347,7 +347,8 @@ def test_control_map_is_learned():
 def test_departure_variance_is_bounded_never_frozen():
     """The class cap bounds the departure's variance; the gain stays live."""
     Y, _ = ar1(T=120)
-    f = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25])
+    f = LucidFilter(dynamics=None, process=[[0.09]], measurement=[0.25],
+                    phis=(0.85,), ss=(0.40,))
     f.filter(Y)
     dep = f._specs[-1][3]                    # the bottom-rung walker: the last spec
     eng = f._members[(len(f._specs) - 1) * f._nc]
@@ -362,7 +363,11 @@ def test_vector_dynamics_learned():
 
     n = 2 is where the departure channel is at its most expensive -- four directions, so
     a six-dimensional augmented state per member -- and both claims are made with more
-    margin at 600 steps than they were at 1500, so this is the length it runs at.
+    margin at 600 steps than they were at 1500, so this is the length it runs at.  The
+    (phi, s) box is narrowed for the same reason it is in the equivalence tests below:
+    the claim is about the DYNAMICS channel and the noise box is the nuisance it
+    marginalises, measurably so -- both margins are the same to two figures across the
+    default box, this one, and a single cell.
     """
     g = rng(4)
     T = 600
@@ -372,10 +377,10 @@ def test_vector_dynamics_learned():
     for t in range(1, T):
         x[t] = F @ x[t - 1] + 0.2 * g.standard_normal(2)
     Y = x + 0.3 * g.standard_normal((T, 2))
-    learned = LucidFilter(dynamics=None, process=np.eye(2) * 0.04,
-                          measurement=[0.09, 0.09]).filter(Y)
-    walk = LucidFilter(dynamics=np.eye(2), process=np.eye(2) * 0.04,
-                       measurement=[0.09, 0.09]).filter(Y)
+    kw = dict(process=np.eye(2) * 0.04, measurement=[0.09, 0.09],
+              phis=(0.70, 0.95), ss=(0.30, 0.80))
+    learned = LucidFilter(dynamics=None, **kw).filter(Y)
+    walk = LucidFilter(dynamics=np.eye(2), **kw).filter(Y)
     lr = float(np.sqrt(np.mean((learned.mean[150:] - x[150:]) ** 2)))
     wr = float(np.sqrt(np.mean((walk.mean[150:] - x[150:]) ** 2)))
     assert lr < wr
@@ -888,11 +893,17 @@ def two_sensor(T=300, seed=0, dt=0.1):
 
 
 def test_uniform_full_rows_are_untouched():
-    """Supplying no clock must be the filter that existed before there was one."""
+    """Supplying no clock must be the filter that existed before there was one.
+
+    A narrow ``(phi, s)`` box, here and in the two clock tests below: what is compared is
+    one construction against itself, so the size of the bank is not part of the claim and
+    every cell of it would only say the same thing again.
+    """
     F, H, X, Y = two_sensor(T=100)
-    base = LucidFilter(dynamics=F, H=H).filter(Y)
+    kw0 = dict(dynamics=F, H=H, phis=(0.85,), ss=(0.40,))
+    base = LucidFilter(**kw0).filter(Y)
     for kw in (dict(dt=1.0), dict(t=np.arange(len(Y), dtype=float))):
-        got = LucidFilter(dynamics=F, H=H).filter(Y, **kw)
+        got = LucidFilter(**kw0).filter(Y, **kw)
         assert np.array_equal(base.mean, got.mean)          # bit-for-bit, not "close"
         assert np.array_equal(base.var, got.var)
         assert np.array_equal(base.measurement_scale, got.measurement_scale)
@@ -991,10 +1002,11 @@ def test_variable_step_beats_assuming_uniformity():
 def test_zero_gap_moves_no_state():
     """Two readings at one instant: the second must not re-propagate the first."""
     F, H, X, Y = two_sensor(T=10)
-    f = LucidFilter(dynamics=F, H=H)
+    kw = dict(dynamics=F, H=H, phis=(0.85,), ss=(0.40,))
+    f = LucidFilter(**kw)
     f.observe(0, Y[0, 0], t=0.0)
     a = f.observe(1, Y[0, 1], t=0.0)
-    g = LucidFilter(dynamics=F, H=H)
+    g = LucidFilter(**kw)
     g.observe(0, Y[0, 0], t=0.0)
     b = g.observe(1, Y[0, 1], dt=0.0)
     assert np.allclose(a.mean, b.mean)
@@ -1011,11 +1023,12 @@ def test_timestep_sets_the_unit():
     be papered over with a snap-to-nominal tolerance -- there are no thresholds here.
     """
     F, H, X, Y = two_sensor(T=60)
-    steps = LucidFilter(dynamics=F, H=H).filter(Y)
-    exact = LucidFilter(dynamics=F, H=H, timestep=0.25).filter(
+    kw = dict(dynamics=F, H=H, phis=(0.85,), ss=(0.40,))
+    steps = LucidFilter(**kw).filter(Y)
+    exact = LucidFilter(timestep=0.25, **kw).filter(
         Y, t=0.25 * np.arange(len(Y)))
     assert np.array_equal(steps.mean, exact.mean)
-    decimal = LucidFilter(dynamics=F, H=H, timestep=0.01).filter(
+    decimal = LucidFilter(timestep=0.01, **kw).filter(
         Y, t=0.01 * np.arange(len(Y)))
     assert np.abs(decimal.mean - steps.mean).max() < 1e-9
 

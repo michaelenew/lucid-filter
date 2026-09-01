@@ -1095,9 +1095,19 @@ class OdeFilter:
 
         start = np.array([math.log(0.5 * v0), math.log(0.5 * v0),
                           _logit(0.9), _logit(0.9), math.log(0.3), math.log(0.3)])
-        res = minimize(neg, start, method="Nelder-Mead",
+        if scales:
+            res = minimize(neg, start, method="Nelder-Mead",
+                           options={"maxiter": max_iter, "xatol": 1e-3, "fatol": 1e-3})
+            return build(res.x)
+        # `scales=False` pins the log-scale class off, so `build` reads only (Q, s2) and
+        # the other four coordinates are exactly flat.  Searching them anyway is not
+        # merely wasted -- a simplex with flat directions contracts along them and spends
+        # its budget there -- so the search runs in the two coordinates that exist.
+        def neg2(v2):
+            return neg(np.concatenate([v2, start[2:]]))
+        res = minimize(neg2, start[:2], method="Nelder-Mead",
                        options={"maxiter": max_iter, "xatol": 1e-3, "fatol": 1e-3})
-        return build(res.x)
+        return build(np.concatenate([res.x, start[2:]]))
 
     # ------------------------------------------------------------------ grid
     def _build(self):

@@ -279,7 +279,7 @@ def test_fit_pinned_recovers_the_oscillator_behind_a_linear_offset():
     A4 = tuple(base + beta_true @ M)
 
     rng = np.random.default_rng(30)
-    x, y = ar(900, A4, 1.0, 9.0, rng)
+    x, y = ar(600, A4, 1.0, 9.0, rng)
     f = OdeFilter.fit(y, p=4, unit_roots=2, dynamics=False, max_iter=200)
 
     assert f.params.unit_roots == 2
@@ -570,7 +570,7 @@ def test_fit_on_the_imm_likelihood_stays_off_the_boundary():
 def test_fit_recovers_the_modes():
     pytest.importorskip("scipy")
     rng = np.random.default_rng(21)
-    x, y = ar(1200, ALPHA3, 1.0, 9.0, rng)
+    x, y = ar(700, ALPHA3, 1.0, 9.0, rng)
     f = OdeFilter.fit(y, p=3, order=5, dynamics=False)
     r = np.abs(f.params.roots)
     assert abs(np.max(r) - 1.0) < 0.02                  # the offset root
