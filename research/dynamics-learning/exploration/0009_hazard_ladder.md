@@ -186,6 +186,36 @@ REGIME READOUT: in the fault-rich world it reads 5.7e-3 against a true 5e-3 (14%
 where the decade grid read 4.4e-3 (12% low with 2.3-nat quantisation), and late events are
 caught at the same improved rate (57.5 vs the static pin's 85.0).
 
+## Addendum: the 0003 restart under the box (found by the suite, fixed)
+
+The full suite caught it: on the `dynamics=None` rig (`test_dynamics_none_beats_the_random_
+walk_it_starts_from`, truth a = 0.3 against the F = I prior), the box's fault marginal sat
+pinned at ~0.5 (0.497; the decade box's earlier "pass" was 0.503 — a coin toss) where the
+pinned form reads a decisive 0.938.  Instrumented: the global restart, edge-triggered at the
+½ crossing, had fired **43 times** (once, at t = 9, in the pinned form), with 83 crossings
+after t = 100 — a self-sustained oscillation.  The mechanism: under the box the marginal is
+hazard-marginalised and sits lower; each restart wipes every rung's walker back to cap,
+which worsens their next-step fit, dips the marginal below ½, re-arms the edge, and the
+cycle repeats.  The report's threshold was feeding back into the inference.
+
+The class already says what should happen instead: each rung's walker carries its own
+plasticity (`q_g = σ²ρ_j`), so on a confirmed jump the rung posterior moves weight onto the
+plastic rungs and the quiet brings it back — the box IS the re-pricing, structurally, that
+the 0003 restart does by hand for the single-rate walker.  Measured (3 seeds, scalar change
+rig a 0.9 → 0.3 at t = 1200):
+
+| | delay | post-fault rmse | settled |
+|---|---|---|---|
+| box, restart ON | 68.7 | 0.2777 | 0.2742 |
+| box, restart OFF | 68.3 | 0.2754 | 0.2731 |
+
+and on the failing rig, restart OFF reads fault 0.668 with state RMSE 0.3034 against
+0.3114 restarted.  Nothing the restart provides under the box is missing without it, and
+the oscillator goes away.  **Fix shipped**: the explicit restart fires only in the pinned
+form (`J = 1`), where 0003 derived it; the box carries no report-to-inference feedback.
+This narrows the jump-hold open (SUMMARY): the exact theta-prior would retire the restart
+in the pinned form too.
+
 ## What this does NOT claim
 
 - The box does not beat every pin on every rig — it cannot; pins span a Pareto frontier.

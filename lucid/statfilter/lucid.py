@@ -2751,16 +2751,22 @@ class LucidFilter:
                              time=self._t)
         Fh, Bh = self._dynamics_mean(post)
         # The fault readout is a marginal of the posterior -- the filter itself never
-        # thresholds, it mixes.  Its RISING EDGE re-prices the walkers' ignorance: a jump has
-        # just been confirmed, so what the walkers think they know about the departure is
-        # priced back to the class prior (research 0003).
+        # thresholds, it mixes.  In the PINNED form its rising edge re-prices the walker's
+        # ignorance: a jump has just been confirmed, so what the walker thinks it knows about
+        # the departure is priced back to the class prior (research 0003 -- the restart was
+        # derived FOR the single-rate walker).  Under the hazard box the rung mixture IS the
+        # re-pricing -- a confirmed jump moves weight onto the plastic rungs and the quiet
+        # brings it back -- and wiring the report's edge into the inference there was measured
+        # to SELF-OSCILLATE (0009 addendum: 43 restarts on a dynamics=None rig, the marginal
+        # regulated to ~0.5, state 3% worse; restart-free, the box matches the restarted
+        # pinned recovery on the change rig), so the box carries no explicit restart.
         W3 = post.reshape(self._J, self._ndbase, self._nc)
         fault = float(1.0 - W3[:, 0, :].sum())
         # The regime readout: the hazard ladder's posterior mean -- what the data says about
         # how failure-prone this world is, not what the caller asserted (research 0009).
         hz = float(W3.sum(axis=(1, 2)) @ self.hazards) if self._learn else None
         alarm = fault > 0.5
-        if alarm and not self._alarm:
+        if alarm and not self._alarm and self._J == 1:
             self._reprice()
         self._alarm = alarm
         return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out, Fh, Bh, fault,
