@@ -87,11 +87,13 @@ data instead of being told it.  Zero tuning constants.
    true event rate of 5e-3.  The box bottom is breadth, not theory: state tracking is flat
    with a rung appended below (calm Δ 0.00013, recovery/settled within noise), and only the
    report's ½-crossing deepens (+13 steps ≈ 1.5 nats/KL at the measured partial
-   re-weighting) — the reporting convention's price, the consumer's to set.  The box also
-   SUBSUMES the 0003 restart: its rungs are the re-pricing, and the explicit edge-triggered
-   restart — which under the box was measured to self-oscillate (43 restarts, the marginal
-   regulated to ~0.5) — now fires only in the pinned form where it was derived (0009
-   addendum).  Two retired revisions are recorded in 0009: the bottom derived from the weight memory (made the one
+   re-weighting) — the reporting convention's price, the consumer's to set.  The 0003
+   restart is RUNG-LOCAL under the box: a global edge on the mixture's marginal was measured
+   to self-oscillate (43 restarts, the readout regulated to ~0.5), while dropping the restart
+   loses 0003's derived post-jump calibration (12% state cost where the departure is large
+   from t = 0) — each rung's own marginal edge re-prices its own walker, no rung's report
+   gates another's model, and the pinned form is the J = 1 case bit for bit (0009 addendum).
+   Two retired revisions are recorded in 0009: the bottom derived from the weight memory (made the one
    engineering parameter load-bearing; failed at the nominal ``forget = 1``) and decade
    spacing (underived, and past the axis's own dead-zone threshold).
 8. **Anchors in parameter space when faults are nameable; anchors in TIME when not** (0006).

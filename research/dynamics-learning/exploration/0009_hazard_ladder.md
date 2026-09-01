@@ -186,7 +186,7 @@ REGIME READOUT: in the fault-rich world it reads 5.7e-3 against a true 5e-3 (14%
 where the decade grid read 4.4e-3 (12% low with 2.3-nat quantisation), and late events are
 caught at the same improved rate (57.5 vs the static pin's 85.0).
 
-## Addendum: the 0003 restart under the box (found by the suite, fixed)
+## Addendum: the 0003 restart under the box (found by the suite; fixed rung-locally)
 
 The full suite caught it: on the `dynamics=None` rig (`test_dynamics_none_beats_the_random_
 walk_it_starts_from`, truth a = 0.3 against the F = I prior), the box's fault marginal sat
@@ -210,11 +210,34 @@ rig a 0.9 → 0.3 at t = 1200):
 | box, restart OFF | 68.3 | 0.2754 | 0.2731 |
 
 and on the failing rig, restart OFF reads fault 0.668 with state RMSE 0.3034 against
-0.3114 restarted.  Nothing the restart provides under the box is missing without it, and
-the oscillator goes away.  **Fix shipped**: the explicit restart fires only in the pinned
-form (`J = 1`), where 0003 derived it; the box carries no report-to-inference feedback.
-This narrows the jump-hold open (SUMMARY): the exact theta-prior would retire the restart
-in the pinned form too.
+0.3114 restarted.  So the first fix was subtraction: no restart under the box.
+
+**That was wrong too, and the neighbouring test caught it.**  On the a = 0.6
+`dynamics=None` rig the restart-free box pays 1.167× oracle where the pinned form pays
+1.046× — and pinned with its restarts disabled pays 1.166×: the entire 12% is 0003's
+restart doing exactly its derived job.  Under `dynamics=None` the world's departure is
+large from t = 0 (boot IS the jump), the walker alone is miscalibrated through the long
+climb, and the repeated restarts are the derived post-jump calibration, not an artefact.
+Subtraction kept the readout honest but lost the calibration.
+
+**The fix that keeps both is rung-LOCAL**: rung j's conditional model confirms a jump when
+ITS OWN fault marginal crosses ½, and that rising edge re-prices that rung's walker alone.
+No rung's report gates another's model, so the global oscillator cannot form; each rung
+keeps 0003's restart under its own rate; and the pinned form is the J = 1 case of the same
+rule, bit for bit (verified: max diff 9e-16 against the pre-box implementation).  Measured
+on the three rigs:
+
+| rig | old global edge | restart-free | **rung-local (shipped)** |
+|---|---|---|---|
+| a = 0.6, × oracle (bar 1.15) | 1.115 (110 restarts) | 1.167 | **1.073** |
+| a = 0.6, fault[-1] | 0.364 (wrecked) | 0.984 | **0.971** |
+| a = 0.3, fault[-1] (bar > 0.5) | 0.497 (oscillating) | 0.668 | **0.597** |
+| change rig delay / settled | 68.7 / 0.2742 | 68.3 / 0.2731 | 68.5 / 0.2734 |
+
+Better than the old behaviour on BOTH axes at once — tracking and readout — which is what
+"the restart belongs to the rung's model, the report stays a read-out" predicts.  The
+jump-hold open (SUMMARY) still stands: the exact theta-prior would retire the explicit
+restart per rung.
 
 ## What this does NOT claim
 

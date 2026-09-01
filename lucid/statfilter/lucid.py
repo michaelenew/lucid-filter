@@ -2476,6 +2476,7 @@ class LucidFilter:
         # J * ndbase while the member FILTERS are deduplicated (nb shared + J walkers, times
         # nc) -- the shared rows differ only through the kernel, never through the recursion.
         self._J = len(hazards) if learn else 1
+        self._nb = nb
         self._ndbase = nb + (1 if learn else 0)
         self._ndw = self._J * self._ndbase
         wspec = np.array([d if d < nb else nb + j
@@ -2549,7 +2550,7 @@ class LucidFilter:
                 np.array([sp[3] is None for sp in self._specs]), self._nc)
         self._logw = np.zeros(self._ndw * self._nc)
         self.loglik = 0.0
-        self._alarm = False
+        self._alarms = np.zeros(self._J, dtype=bool)
         self._t = None
         return self
 
@@ -2646,10 +2647,13 @@ class LucidFilter:
                     Bh += W[row, c] * Bg
         return Fh, Bh
 
-    def _reprice(self):
-        """Fire the shared-event restart on every walker (research 0003)."""
+    def _reprice(self, spec=None):
+        """Fire the 0003 restart: every axis of a walker's departure, as ONE shared event.
+
+        ``spec`` names one walker spec (a hazard rung's); ``None`` restarts every walker --
+        the research hook, and the J = 1 case where the two are the same thing."""
         for d, (_, _, _, dep) in enumerate(self._specs):
-            if dep is None:
+            if dep is None or (spec is not None and d != spec):
                 continue
             for c in range(self._nc):
                 self._members[d * self._nc + c].reprice(dep.gidx)
@@ -2751,24 +2755,28 @@ class LucidFilter:
                              time=self._t)
         Fh, Bh = self._dynamics_mean(post)
         # The fault readout is a marginal of the posterior -- the filter itself never
-        # thresholds, it mixes.  In the PINNED form its rising edge re-prices the walker's
-        # ignorance: a jump has just been confirmed, so what the walker thinks it knows about
-        # the departure is priced back to the class prior (research 0003 -- the restart was
-        # derived FOR the single-rate walker).  Under the hazard box the rung mixture IS the
-        # re-pricing -- a confirmed jump moves weight onto the plastic rungs and the quiet
-        # brings it back -- and wiring the report's edge into the inference there was measured
-        # to SELF-OSCILLATE (0009 addendum: 43 restarts on a dynamics=None rig, the marginal
-        # regulated to ~0.5, state 3% worse; restart-free, the box matches the restarted
-        # pinned recovery on the change rig), so the box carries no explicit restart.
+        # thresholds, it mixes.  The 0003 restart is PER RUNG: rung j's conditional model
+        # confirms a jump when ITS OWN fault marginal crosses 1/2, and that rising edge
+        # re-prices that rung's walker alone -- a jump has just been confirmed under that
+        # rate, so what its walker thinks it knows is priced back to the class prior.  The
+        # pinned form is the J = 1 case of the same rule, unchanged bit for bit.  A GLOBAL
+        # edge on the mixture's marginal was measured to SELF-OSCILLATE under the box (0009
+        # addendum: the hazard-marginalised readout sits lower, each all-rung restart dipped
+        # it below the edge and re-armed it -- 43 restarts, the readout regulated to ~0.5),
+        # while dropping the restart loses 0003's derived post-jump calibration (measured
+        # 12% state cost where the departure is large from t = 0).  Rung-local edges keep
+        # the derivation and remove the feedback: no rung's report gates another's model.
         W3 = post.reshape(self._J, self._ndbase, self._nc)
+        rung_w = W3.sum(axis=(1, 2))
+        rung_fault = 1.0 - W3[:, 0, :].sum(1) / np.maximum(rung_w, 1e-300)
         fault = float(1.0 - W3[:, 0, :].sum())
         # The regime readout: the hazard ladder's posterior mean -- what the data says about
         # how failure-prone this world is, not what the caller asserted (research 0009).
         hz = float(W3.sum(axis=(1, 2)) @ self.hazards) if self._learn else None
-        alarm = fault > 0.5
-        if alarm and not self._alarm and self._J == 1:
-            self._reprice()
-        self._alarm = alarm
+        alarms = rung_fault > 0.5
+        for j in np.flatnonzero(alarms & ~self._alarms):
+            self._reprice(spec=self._nb + int(j))
+        self._alarms = alarms
         return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out, Fh, Bh, fault,
                          hz, self._t)
 
