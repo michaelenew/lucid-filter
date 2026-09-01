@@ -536,6 +536,16 @@ resolving the tension under the process-side convention — **0.0053 at 0.83**, 
    is not settled is whether a caller who expects a large drift should get a wider ladder
    automatically, and from what — the base is the only thing the filter has to scale it by, and
    `0005` is the record of that being untrustworthy.
+3a. **The ladder's top from the class (statfilter audit AUD-4, extends 3).**  Open 3
+   prices the ceiling practically; the theoretical half is that "one noise sd per step" is
+   a convention — a derivation should say what the class itself puts at the top of the
+   offset ladder.
+3b. **The feedback equilibrium beside the dynamics channel (statfilter audit AUD-7).**
+   Feed-forward-under-`faults=` and the `_mean_src` walker mask are measured decisions
+   (dynamics-learning `0008`: fault locked at 1.000 under feedback; 0.37 with walkers in
+   the read-out) with structural rationales; the equilibrium of "a constant added to the
+   prediction vs a departure in `F` explaining one feature" is not derived, so the switch
+   is a verdict where the bar wants a theorem or a priced trade.
 4. **Whether the read-out should cost the scale walk something** (`0013`). The two channels
    spend the same evidence: the walk's down-weighting of a suspect sensor is what blinds the
    observer that could name it, and the observer sits at 0.90–0.99 of what is left. Nothing has

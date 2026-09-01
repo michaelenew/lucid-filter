@@ -649,6 +649,11 @@ spacing lesson (`ode-filter/0047`).
   shipped filter takes the capture side; the residual regime-dependent overshoot is
   characterised in `0031`. Entangled with the nonlinearity item above and banked
   with it.
+- **Derive the `(φ, s)` box (statfilter audit AUD-2).**  Findings 13–16 defend the box's
+  interior by ridge flatness, which does not clear the bar for the box itself: `_SS`'s top
+  end has a reach argument, but its ×2 ratio, its bottom, and `_PHIS`'s values are
+  conventions.  A derivation should place both ends and the ratio from the class (the
+  spacing half folds into the resolution open above).
 - **Eliminate `forget` from the AR(1) shape (finding 16).** There is one residual
   free parameter — the bank's weight persistence — but it governs the drift rate
   of `(φ, s)`, the slowest and least consequential channel (on the flat ridge).
@@ -758,3 +763,9 @@ tracking error and marginal fidelity across regimes, GH vs dense head-to-head on
 *filter* loss (not just the integral), and whether a GH/dense hybrid beats either.
 The grid spacing is a compute budget, but the *criterion that sets it* should be
 earned rather than borrowed.
+
+**Extended by the statfilter derivation audit (AUD-1, `lucid/statfilter/AUDIT.md`):** the
+same borrowed criterion now sets two more spacings — the split-ladder step
+(`_rung_odds`, Sparrow on the Whittle arclength) and the fault-hazard rung gap
+(`_HAZARD_GAP`, Sparrow on the one-event Fisher width).  One earned resolution
+criterion should replace all three at once.
