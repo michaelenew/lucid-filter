@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools>=61"]
+# numpy is a BUILD dependency as well as a runtime one: the optional C kernel
+# compiles against its C API and calls its own exp/log/dot loops, which is how
+# it stays bit-for-bit identical to the NumPy path (lucid/lucid_kernel/).
+requires = ["setuptools>=61", "numpy>=1.22"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -19,7 +22,10 @@ Homepage = "https://github.com/michaelenew/lucid-filter"
 Research = "https://github.com/michaelenew/lucid-filter/tree/main/research"
 
 [tool.setuptools]
-packages = ["lucid", "lucid.filter"]
+packages = ["lucid", "lucid.filter", "lucid.lucid_kernel"]
+
+[tool.setuptools.package-data]
+"lucid.lucid_kernel" = ["*.c", "*.h"]   # so an installed copy can rebuild
 
 [tool.pytest.ini_options]
 testpaths = ["lucid/tests"]

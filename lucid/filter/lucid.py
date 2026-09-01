@@ -1840,11 +1840,10 @@ class _EngineBank:
         """The stacked twin of ``_WalkEngine._dS_axis``, over the sensors ``obs`` carried."""
         e = np.exp(np.minimum(self.mu[:, k, None] + self._off[:, k], 60.0))
         if k < self.n:
-            if Hout is None:
-                hv = self.HV[:, obs, k]
-                hout = np.einsum("bi,bj->bij", hv, hv)
-            else:                                  # a live H: its own outer, sub-selected
-                hout = Hout[:, k][np.ix_(range(self.M), obs, obs)]
+            # a live H brings its own outer; a fixed one's is `_Hout`, built once
+            hout = (self._Hout if Hout is None else Hout)[:, k]
+            if obs.size != self.m:
+                hout = hout[np.ix_(range(self.M), obs, obs)]
             return (a * self.lam[:, k, None] * e)[:, :, None, None] * hout[:, None]
         out = np.zeros((self.M, self._nn, obs.size, obs.size))
         i = k - self.n
@@ -2889,8 +2888,17 @@ class LucidFilter:
         for d, (_, _, _, dep) in enumerate(self._specs):
             if dep is None or (spec is not None and d != spec):
                 continue
-            for c in range(self._nc):
-                self._members[d * self._nc + c].reprice(dep.gidx)
+            plan, idx = self._gplan[d], dep.gidx
+            if plan is None or not len(idx):       # a looped executor keeps its own state
+                for c in range(self._nc):
+                    self._members[d * self._nc + c].reprice(idx)
+                continue
+            # the same three assignments as `_WalkEngine.reprice`, over the cells at once
+            for bank, rows, _slots in plan:
+                P, na = bank._P, bank.n
+                P[np.ix_(rows, idx)] = 0.0
+                P[np.ix_(rows, np.arange(na), idx)] = 0.0
+                P[rows[:, None], idx[None, :], idx[None, :]] = dep.cap[idx]
 
     def update(self, y, u=None, t=None, dt=None) -> LucidStep:
         """One event: the readings in ``y`` that are finite, at time ``t`` (or ``dt`` after the

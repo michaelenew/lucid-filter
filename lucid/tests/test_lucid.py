@@ -988,7 +988,14 @@ def test_pointwise_decomposition_tracks_the_joint_row():
 
 
 def test_variable_step_beats_assuming_uniformity():
-    """Irregular arrivals, with the timestamps and without them."""
+    """Irregular arrivals, with the timestamps and without them.
+
+    A narrow box: what separates the two filters is the elapsed-time map, and the margin
+    is if anything wider without the full one (-3.1% against -2.6%).  Contrast
+    `test_dynamics_none_tracks_near_the_oracle`, which keeps the default box because
+    there the bank IS what is being measured -- narrowing it walks that ratio from 1.07
+    to 1.14 against a 1.15 bound.
+    """
     r = rng(4)
     T, nominal = 400, 0.1
     gaps = np.maximum(r.gamma(4.0, nominal / 4.0, T), 1e-3)
@@ -1001,7 +1008,7 @@ def test_variable_step_beats_assuming_uniformity():
             [0.01, 0.05]) * math.sqrt(a / nominal)
         X[i] = x
         Y[i] = x + r.standard_normal(2) * np.array([0.30, 0.02])
-    kw = dict(dynamics=F, H=H)
+    kw = dict(dynamics=F, H=H, phis=(0.70, 0.95), ss=(0.30, 0.80))
     told = LucidFilter(timestep=nominal, **kw).filter(Y, t=t)
     guessed = LucidFilter(**kw).filter(Y)
     def rms(a, b): return float(np.sqrt(np.mean((a[40:] - b[40:]) ** 2)))
