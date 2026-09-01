@@ -209,6 +209,14 @@ dissolved hover-honesty scenario, the dormant spawns) is filed in place.
   `dynamics=None`) — where BOCPD anchors should finally bind.
 - Per-cluster factorization with callable (operating-point-dependent) block structure — the
   0053 §5 caveat, unchanged.
+- **The hazard box reach (audit AUD-3).**  The bottom of `_HAZARDS` is a breadth
+  convention: state tracking is measured-flat across and below it (0009) and the report
+  crossing is priced at 1/KL steps per nat, but nothing derives how much standing readiness
+  the CLASS requires — a derivation would set the reach the way the top (1/2, the
+  persistence boundary) is set.
+- **The anchor-leak topology (audit AUD-9).**  The fault kernel leaks uniformly over the
+  k−1 other hypotheses — max-entropy by convention.  With named anchors (k > 2) nothing
+  measures sensitivity to that choice, and nothing derives the leak from the class.
 - **The acceptance rigs under the ladder.**  0009 measures `faults=True` on the scalar rig
   only; the 0004/0005/0008 numbers above are pinned-hazard (`faults=1/T`, now the
   give-what-you-know form).  Re-measure the drone and the blowout under the default ladder —

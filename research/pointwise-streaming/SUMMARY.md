@@ -212,6 +212,12 @@ checking.
   The state estimate needs only the total and is unaffected; this is the standing
   [`0027`](../multivariate-statfilter/exploration/0027_confound.md) confound showing up in
   a second, cleaner instance, not a streaming defect.
+- **Asserted consequence-freedom in the small numerics (statfilter audit AUD-8).**  Three
+  places assert rather than derive or measure: the partial-event walk-step budget share
+  (`gap · mo/m` — the rationale is stated, the linear form is not derived), the
+  `(_RIDGE, budget-clip)` pair that bounds a no-information Newton step, and the diffuse
+  init at the model's own magnitudes (washout asserted under observability).  Either derive
+  each, or measure the assertion.
 - **Per-sensor `timestep`.** One nominal step serves the whole filter. A suite whose rates
   differ by 40× has one class `(phi, s)` box measured in *that* unit, and whether the
   scale class should be per-sensor rather than per-filter is untested.

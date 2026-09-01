@@ -99,9 +99,15 @@ import numpy as np
 __all__ = ["LucidFilter", "LucidStep", "LucidResult"]
 
 _LOG2PI = math.log(2.0 * math.pi)
+# AUDIT[proxy] grid spacing at the Sparrow resolution limit (adaptive-grid finding 11,
+# dead zone measured at ~0.8 nats); sharp information-theoretic criterion missing -- open AUD-1.
 _GAP_FACTOR = 1.5           # grid spacing gap = 1.5 s (Sparrow resolution limit, finding 11)
+# AUDIT[proxy] window half-span = 3-sigma support of the class prior; trade uncharacterised -- open AUD-1.
 _SPAN_S = 3.0               # window half-span in units of s (support budget -> node count)
+# AUDIT[budget] Fisher stabiliser; absolute units, guarded by the step-budget clip -- open AUD-8.
 _RIDGE = 1e-4               # Fisher stabiliser
+# AUDIT[measured] class box defended by ridge flatness only (adaptive-grid 13-16);
+# ends/ratio underived -- open AUD-2.
 _PHIS = (0.70, 0.85, 0.95)                 # default (phi, s) box for the bank -- a broad range, not a
 _SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weights the unsupported corners.
                                            #   Geometric, and it has to reach: `s` is the SD of a
@@ -110,8 +116,11 @@ _SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weigh
                                            #   (`3 s` of half-span).  A box ending at 0.8 tops out
                                            #   at a factor of 11, which is smaller than the regime
                                            #   changes in this repository's own rigs.
+# AUDIT[budget] series-vs-exact switch radius; conservative, wrong only toward compute.
 _SERIES_REACH = 4.0         # gaps out to 4 nominal steps: how far the pre-factored Q(a)
                             # series must stay accurate before the exact route is used instead
+# AUDIT[proxy] gap = Sparrow factor on the one-event Fisher width (0009); same standing as
+# _GAP_FACTOR, same missing sharp criterion -- open AUD-1.
 _HAZARD_GAP = 1.5                    # rung spacing of the hazard box, in NATS of log-hazard --
                                      #   the same Sparrow rule that spaces the walk grid
                                      #   (`_GAP_FACTOR`), evaluated at this axis's own blur
@@ -131,6 +140,8 @@ _HAZARD_GAP = 1.5                    # rung spacing of the hazard box, in NATS o
                                      #   The retired base-10 spacing (2.3 nats) sat PAST the
                                      #   ~2-blur dead-zone threshold of the house rule -- too
                                      #   coarse by the filter's own criterion, and underived.
+# AUDIT[derived+proxy+measured] top 1/2 derived (class persistence boundary); gap proxy
+# (AUD-1); reach measured-flat only (0009) -- open AUD-3.
 _HAZARDS = tuple(0.5 * math.exp(-_HAZARD_GAP * j) for j in range(6))
                                      # default hazard box for the fault class -- broad in the
                                      #   exact sense of `_PHIS`/`_SS`, not a fitted value and
@@ -155,11 +166,15 @@ _HAZARDS = tuple(0.5 * math.exp(-_HAZARD_GAP * j) for j in range(6))
                                      #   are the log-uniform reference prior; the REACH (six
                                      #   rungs, to ~3e-4) is the box's breadth, a convention.
                                      #   Pass `faults=(...)` to widen or shift it.
+# AUDIT[budget] numerical tolerances.
 _RANK_TOL = 1e-8            # numerical rank tolerance (the order used for structural activation)
+# AUDIT[budget+convention] count is a budget; ladder floor derived (V/T), ceiling a
+# convention (one sd/step, bias-channels 0005/0012) -- open AUD-4.
 _OFFSET_CLASSES = 5         # rungs of the offset channel's class ladder -- a compute budget in
                             # the sense of `order`, not a fitted value: the two ENDS are derived
                             # (the memory's resolution floor, one noise sd per step above) and
                             # the rungs sit geometrically between them.
+# AUDIT[budget] caps the split ladder at forget = 1; rung-count monotonicity unverified -- open AUD-5.
 _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sense as _SPAN_S: the
                             # finest grid the engine will build is the one a thousand-step memory
                             # supports (24 rungs).  A longer `forget` still sharpens the bank's
@@ -168,6 +183,7 @@ _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sens
 
 
 # --------------------------------------------------- the per-step-blind directions
+# AUDIT[derived] steady-state Riccati at the balanced base; iteration count is a budget.
 def _steady_Si(eng, lam, rho):
     """The steady-state innovation precision at the base ``(lam, rho)`` -- the one Riccati solve.
 
@@ -190,6 +206,7 @@ def _steady_Si(eng, lam, rho):
     return np.linalg.inv(H @ Pp @ H.T + R0)
 
 
+# AUDIT[derived] exact Gaussian score identity at the steady state.
 def _scale_fisher(eng, lam, rho, Si):
     """Full per-step scale-Fisher ``I_ab = 0.5 tr(Si dS_a Si dS_b)`` at the steady state.
 
@@ -214,6 +231,7 @@ def _scale_fisher(eng, lam, rho, Si):
     return I
 
 
+# AUDIT[derived] Proposition 1 in coordinates (sequence-demix 0001).
 def _split_groups(eng, I):
     """Pairs whose SPLIT no per-step score can ever carry -- Proposition 1, in coordinates.
 
@@ -248,6 +266,7 @@ def _split_groups(eng, I):
     return out
 
 
+# AUDIT[derived] exact null flow: dQ = -dR, the level set of the total (sequence-demix 0001).
 def _apply_split(eng, lo_vec):
     """Divide each confounded pair's noise between process and sensor at a FIXED TOTAL.
 
@@ -267,6 +286,8 @@ def _apply_split(eng, lo_vec):
     return eng.V @ np.diag(lam) @ eng.V.T, rho
 
 
+# AUDIT[proxy] caltrop enumeration by analogy (multivariate-statfilter 0013); arm budget
+# split is a budget; no collapse error bound -- open AUD-6.
 def _split_star(los, n_pairs):
     """The split hypotheses: one reference vector, plus one pair moved off it at a time.
 
@@ -306,6 +327,8 @@ def _split_star(los, n_pairs):
     return np.array(out)
 
 
+# AUDIT[derived] single-sensor proportionality exact -- Prop 1 via packetisation
+# (pointwise-streaming 0002/0003).
 def _subset_groups(eng, obs):
     """The pairs a PARTIAL event's own observed subset confounds.
 
@@ -344,6 +367,9 @@ def _subset_groups(eng, obs):
     return out
 
 
+# AUDIT[derived+proxy] Whittle MA(1) arclength metric derived (sequence-demix 0002);
+# Sparrow spacing proxy (AUD-1).  The forget-read prunes redundant rungs only (capped by
+# _LADDER_MEM, valid at forget = 1); monotonicity of finer rungs unverified -- open AUD-5.
 def _rung_odds(forget):
     """The ladder of splits: complete, at the bank's own resolution, with no span constant.
 
@@ -372,6 +398,8 @@ def _rung_odds(forget):
 
 # --------------------------------------------------------------------- results
 # ------------------------------------------------------- the first-moment (offset) channel
+# AUDIT[derived] gauge/quotient analysis; z = 1 eigenspace rule; every branch measured
+# (bias-channels 0002/0003/0004/0007/0015).
 def _mean_basis(F, H, tol=_RANK_TOL, process_only=True, sensor_only=False):
     """An orthonormal basis for the IDENTIFIABLE constant offsets of ``(F, H)``.
 
@@ -484,6 +512,9 @@ def _mean_basis(F, H, tol=_RANK_TOL, process_only=True, sensor_only=False):
     return Vt[sv > tol * max(1.0, sv[0])].T
 
 
+# AUDIT[derived+measured] Friedland two-stage exact (pinned 1e-12, bias-channels 0003);
+# ladder per _OFFSET_CLASSES (AUD-4); feedback-off beside the dynamics channel is a
+# measured decision, equilibrium underived -- open AUD-7.
 class _MeanChannel:
     """The identifiable constant offsets, carried in TWO STAGES rather than as extra state.
 
@@ -719,6 +750,7 @@ def _logsumexp(a: np.ndarray) -> float:
 # carries a non-nominal gap -- ``a == 1`` and ``a == 0`` short-circuit to ``F`` and ``I``.
 
 
+# AUDIT[derived] standard matrix-function algorithms with stated validity; caps are budgets.
 def _expm(M):
     """Matrix exponential by scaling and squaring with a Taylor core."""
     M = np.asarray(M, float)
@@ -781,6 +813,8 @@ def _logm(F):
     return (2.0 ** k) * L
 
 
+# AUDIT[derived] generator semantics, Van Loan accumulation, verified spectral inversion,
+# guarded series (pointwise-streaming 0004/0005).
 class _Propagator:
     """The elapsed-time transition and forcing map of a FIXED one-nominal-step ``F``.
 
@@ -962,6 +996,8 @@ class _Propagator:
 
 
 # ------------------------------------------------------- the per-(phi,s) engine
+# AUDIT[mixed] per-chunk markers below; the caltrop/GPB1 collapse itself is proxy
+# (multivariate-statfilter 0013, measured match, no bound) -- open AUD-6.
 class _WalkEngine:
     """One bank member: the per-component walking CALTROP filter WITH supplied dynamics F (+ forcing B u).
 
@@ -984,6 +1020,8 @@ class _WalkEngine:
 
     def __init__(self, Q0, R0, H, F, B, phi, s, walk_axes=None, cap=None, group_class=None,
                  fisher_Si=None, prop=None):
+        # AUDIT[derived] the excursion is a log-scale displacement, so the class's own kernel
+        # is its return law; bounds measured load-bearing (sequence-demix 0002 s3).
         self._revert = float(phi)         # rate the walk's null excursion returns to that
                                           # hypothesis; the class's own persistence.  Named so
                                           # research can vary it -- both bounds are load-bearing
@@ -1029,6 +1067,7 @@ class _WalkEngine:
         # is seen by H; a sensor is always live.  The delocalisation the 0010 freeze prevented is
         # bounded instead: q_mu's Fisher is floored at the 0010 threshold and the walk covariance
         # is capped at the window (Var(mu) <= L^2 -- the 0010 localisation condition as a bound).
+        # AUDIT[derived] structural observability activation (multivariate-statfilter 0024/0036).
         hv_norm = np.linalg.norm(self.HV, axis=0)
         self.active = np.ones(self.D, dtype=bool)
         for k in range(n):
@@ -1059,6 +1098,8 @@ class _WalkEngine:
                 (self.phi_ax[k], self.s_ax[k]) = group_class[0]
                 (self.phi_ax[n + i], self.s_ax[n + i]) = group_class[1]
         self.gap = _GAP_FACTOR * self.s_ax
+        # AUDIT[derived] critical damping pins K* = (1-phi)/4 and q_mu with it
+        # (adaptive-grid 0030/0031); the floor is the 0010 localisation condition.
         self._Kstar = (1.0 - self.phi_ax) / 4.0
         # The DIAGONAL of that same solve is the characteristic Fisher, which sets `q_mu`, the
         # drift of the scale WALK.  The walk's business is the identifiable directions, not the
@@ -1074,6 +1115,8 @@ class _WalkEngine:
         self.reset()
 
     # -- caltrop star window (the 1-D pieces are unchanged from WalkingVectorFilter) --
+    # AUDIT[derived+proxy] node prior = the class prior, kernel exact AR(1); spacing/span
+    # are the Sparrow/support proxies -- open AUD-1.
     def _build_window(self):
         # One window per axis.  Every axis keeps the same NODE COUNT (so the axial posteriors stay
         # one rectangular array) and differs only in spacing, prior and kernel -- all three read
@@ -1105,6 +1148,7 @@ class _WalkEngine:
             w[arm] = 1 + i * (self._nn - 1) + np.arange(self._nn - 1)
             self._axwin[k] = w
 
+    # AUDIT[derived] exact accumulation with honest fallbacks (pointwise-streaming 0005).
     def _base_Q(self, a):
         """The base process covariance accumulated over ``a`` nominal steps.
 
@@ -1134,6 +1178,7 @@ class _WalkEngine:
             return a * self._Q0
         return self._prop.accumulate(self._Qc, a, self._Qterms)
 
+    # AUDIT[derived] congruence keeps PSD at every gap; rank-2 node update exact.
     def _star_QR(self, a=1.0):
         """(Q_g, r_g) at every star node: the centre pair plus a per-node one-axis change.
 
@@ -1186,6 +1231,7 @@ class _WalkEngine:
             Qg[g] = Qc + c * (np.outer(v, w) + np.outer(w, v)) + (c * c * float(v @ w)) * np.outer(v, v)
         return Qg, rg
 
+    # AUDIT[derived] OU sampling: phi**a exact for the class.
     def _kernel(self, a):
         """The scale classes' AR(1) transition over ``a`` nominal steps, per axis.
 
@@ -1242,6 +1288,8 @@ class _WalkEngine:
         Hk = np.atleast_2d(np.asarray(out, float))
         return Hk, Hk @ mean
 
+    # AUDIT[derived+measured] exact per-axis score; zero-gap live-process-time semantics
+    # measured (pointwise-streaming 0003).
     def _dS_axis(self, k, obs, a=1.0, HV=None):
         """dS/dxi_k at each of axis k's window nodes, over the sensors ``obs`` this event
         carried (dS_k depends only on the k-coordinate).
@@ -1274,6 +1322,8 @@ class _WalkEngine:
         return out
 
 
+    # AUDIT[derived] congruence scaling preserves PSD; bound-never-freeze measured 20x
+    # (dynamics-learning 0003).
     def _cap_P(self, P):
         """Bound a state's variance at its class cap by symmetric row/column scaling.
 
@@ -1295,6 +1345,8 @@ class _WalkEngine:
     def _R_of(self, eta):
         return np.diag(self.rho * np.exp(np.clip(eta, -60, 60)))
 
+    # AUDIT[derived] the split-agnostic point keeps the bank's hypothesis out of the walk's
+    # tuning (sequence-demix 0002, measured).
     def _balanced_base(self):
         """This member's base with every confounded pair's noise divided evenly.
 
@@ -1406,6 +1458,8 @@ class _WalkEngine:
         Qg, rg = self._star_QR(a)
         if self._pi_ax is None:
             self._pi_ax = self._w1[self._act].copy()
+            # AUDIT[convention] diffuse init at the model's own magnitudes; transient;
+            # consequence-freedom asserted, not measured -- open AUD-8.
             if self._m is None:
                 if mo:
                     # Initialise by linearising h at the origin.  With a constant H this is
@@ -1507,6 +1561,8 @@ class _WalkEngine:
         # verdict.  An event carrying part of the row carries part of the evidence that would
         # contradict such a step -- with one sensor reporting, nothing contradicts it at all
         # -- so it gets that part of the budget.  A full row is unchanged by construction.
+        # AUDIT[proxy] one-gap step budget guards the singular-Fisher verdict; the linear
+        # mo/m share is a stated rationale, not derived -- open AUD-8.
         budget = self.gap if mo == m else self.gap * (mo / m)
         # What a partial event may move.  The pairs its own subset confounds are directions it
         # cannot see AT ALL -- with one sensor reporting, ``S`` is a scalar and a process mode
@@ -1563,6 +1619,8 @@ class _WalkEngine:
 
 
 # ------------------------------------------------- stacked execution of the bank
+# AUDIT[derived] stacked execution is an equivalence, pinned step-for-step by
+# test_bank_matches_the_looped_members.
 def _bank_key(f):
     """Members that can run as one stacked recursion: same shapes, same index tables, same
     model objects -- they differ only in parameters and state."""
@@ -1947,6 +2005,9 @@ class _EngineBank:
 
 
 # ------------------------------------------------------- the dynamics channel
+# AUDIT[derived] exact augmentation algebra; q_g = sigma^2 rho_j is the rung's second
+# moment; class units are the scale-free size statement (existing open: per-direction
+# class size, dynamics-learning SUMMARY).
 class _Departure:
     """One learned-dynamics hypothesis: ``F(g) = F0 + sum_j g_j A_j``, ``B(g) = B0 + sum_j g_j C_j``.
 
@@ -2483,6 +2544,8 @@ class LucidFilter:
                           for j in range(self._J) for d in range(self._ndbase)])
         self._wspec = wspec                   # weight row -> member spec
         self._wm = (wspec[:, None] * self._nc + np.arange(self._nc)).ravel()
+        # AUDIT[derived] Shiryaev mixing; exact chain power (0009-corrected).  Uniform leak
+        # over k-1 alternatives is a max-entropy convention, unmeasured for k > 2 -- open AUD-9.
         # The fault class's kernel, one block per hazard rung: a uniform-leak chain with
         # probability rho_j per step of leaving the current dynamics hypothesis (Shiryaev's
         # rule for a jump process).  It mixes WITHIN each (phi, s) cell and WITHIN each rung
@@ -2546,6 +2609,8 @@ class LucidFilter:
             # dynamics channel: measured before this mask existed (`0008`), a driftless series
             # ran `fault` to 0.37 against 0.04 with the channel off.  This is the same rule the
             # split ladder follows one level down, for the same reason.
+            # AUDIT[measured] caller-space mask for the offset channel's read-out; measured
+            # (dynamics-learning 0008), equilibrium underived -- open AUD-7.
             self._mean_src = np.repeat(
                 np.array([sp[3] is None for sp in self._specs]), self._nc)
         self._logw = np.zeros(self._ndw * self._nc)
@@ -2560,6 +2625,8 @@ class LucidFilter:
         """The filter clock -- the timestamp of the last event, ``None`` before the first."""
         return self._t
 
+    # AUDIT[derived] per-nominal-step semantics; every class timescale to its exact elapsed
+    # power; R unscaled by the event model (pointwise-streaming 0001/0004).
     def _elapsed(self, t, dt):
         """Advance the clock and return the gap in NOMINAL STEPS.
 
@@ -2589,6 +2656,7 @@ class LucidFilter:
         self._t = now
         return a
 
+    # AUDIT[derived] exact a-step chain power in the shared eigenframe.
     def _hazard_kernel(self, a):
         """Each rung's mixing kernel over ``a`` nominal steps -- the EXACT chain power.
 
@@ -2620,6 +2688,7 @@ class LucidFilter:
         out = np.log(np.maximum(mixed, 1e-300)).ravel()
         return out - _logsumexp(out)
 
+    # AUDIT[derived] posterior-mean report over the weight rows.
     def _dynamics_mean(self, post):
         """Posterior-mean (F, B) across the bank -- fixed members contribute their own."""
         W = post.reshape(self._ndw, self._nc)
@@ -2647,6 +2716,9 @@ class LucidFilter:
                     Bh += W[row, c] * Bg
         return Fh, Bh
 
+    # AUDIT[derived+measured] the 0003 restart, rung-local: each rung's own marginal edge
+    # re-prices its own walker (0009 addendum; global edge oscillated, restart-free lost the
+    # derived calibration).  Jump-hold open would retire it per rung.
     def _reprice(self, spec=None):
         """Fire the 0003 restart: every axis of a walker's departure, as ONE shared event.
 
@@ -2754,6 +2826,9 @@ class LucidFilter:
             return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out,
                              time=self._t)
         Fh, Bh = self._dynamics_mean(post)
+        # AUDIT[convention+derived] the readouts are posterior marginals (derived); the 1/2
+        # crossing is a reporting convention, and the only inference it feeds is each rung's
+        # OWN 0003 restart -- rung-local by measurement (0009 addendum).
         # The fault readout is a marginal of the posterior -- the filter itself never
         # thresholds, it mixes.  The 0003 restart is PER RUNG: rung j's conditional model
         # confirms a jump when ITS OWN fault marginal crosses 1/2, and that rising edge

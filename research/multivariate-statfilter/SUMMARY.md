@@ -448,6 +448,16 @@ that.** See `exploration/0029_reprofile.md`.
   on the ODE filter, the multivariate analogue of the `linearized_dynamics`
   callable. This workstream fixes the noise machinery first.
 
+- **A caltrop/GPB1 collapse error bound (statfilter audit AUD-6).**  `0013` measures the
+  axial star matching the exact tensor grid for state tracking on its rigs, and
+  pointwise-streaming's "residual pointwise/joint gap" open already attributes a measured
+  2–10% residual to the caltrop-plus-GPB1 construction — but nothing bounds the collapse.
+  The bound is what would turn the star from a measured match into a derived approximation.
+- **Split-ladder resolution (statfilter audit AUD-5).**  `_rung_odds` prunes rungs the
+  weight memory cannot resolve (capped by `_LADDER_MEM` so `forget = 1` stays finite).
+  Believed behavior-monotone (finer rungs never worse, only costlier) but unverified, and
+  the Sparrow factor in the pruning belongs to adaptive-grid's resolution open.
+
 ## Opens imported from `wall-correspondence/`
 
 The sibling `wall-correspondence/` workstream (a filter↔QM/gravity correspondence)
