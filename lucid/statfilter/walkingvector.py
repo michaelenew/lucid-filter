@@ -152,6 +152,7 @@ class WalkingVectorFilter:
 
         # finding-18 walk loop, one copy per axis (parameter-free)
         self._Kstar = (1.0 - self.phi) / 4.0
+        self._dSs = self._dS_shapes()                   # (D, m, m), constant
         self._Ichar = self._steady_fisher()             # (D,) per-axis steady Fisher
         # SPECTRAL TRUNCATION -- derived, not tuned.  An axis is FROZEN when its walk
         # cannot stay localised in its own window: an unbounded walk on a near-zero-
@@ -207,17 +208,37 @@ class WalkingVectorFilter:
     def _R_of(self, eta):
         return np.diag(self.rho * np.exp(np.clip(eta, -60, 60)))
 
+    def _dS_shapes(self):
+        """The constant matrix each axis's ``dS/dpsi_k`` is a positive multiple of.
+
+        Only the multiple moves with the scale: a process mode contributes
+        ``outer(HV[:, k], HV[:, k])`` and a sensor contributes its own unit diagonal,
+        neither of which depends on where the walk is.  Built once.
+        """
+        out = [np.outer(self.HV[:, k], self.HV[:, k]) for k in range(self.n)]
+        for i in range(self.m):
+            E = np.zeros((self.m, self.m))
+            E[i, i] = 1.0
+            out.append(E)
+        return np.stack(out)                            # (D, m, m)
+
+    def _dS_coef(self, scale, k):
+        """The multiple in front of axis ``k``'s shape, at one scale vector."""
+        return (self.lam[k] if k < self.n else self.rho[k - self.n]) * math.exp(
+            min(scale[k], 60))
+
     def _dS_list(self, scale, Ppred):
         """dS/dpsi_k at a scale vector, given the current predictive S depends on it."""
-        out = []
-        for k in range(self.n):                         # process eigenmodes
-            hv = self.HV[:, k]
-            out.append(self.lam[k] * math.exp(min(scale[k], 60)) * np.outer(hv, hv))
-        for i in range(self.m):                         # sensors
-            E = np.zeros((self.m, self.m))
-            E[i, i] = self.rho[i] * math.exp(min(scale[self.n + i], 60))
-            out.append(E)
-        return out
+        return [self._dS_coef(scale, k) * self._dSs[k] for k in range(self.D)]
+
+    def _dS_axis(self, k, scales):
+        """``dS/dpsi_k`` at every node of the window, stacked (G, m, m).
+
+        The looped form built all D matrices for each node and kept one, which is D
+        times the work at every axis and D**2 times it per step.
+        """
+        c = np.array([self._dS_coef(sc, k) for sc in scales])
+        return c[:, None, None] * self._dSs[k]
 
     def _steady_fisher(self) -> np.ndarray:
         """Per-axis steady expected Fisher at the base regime (DARE fixed point)."""
@@ -304,7 +325,7 @@ class WalkingVectorFilter:
         for k in range(self.D):
             if not self.active[k]:
                 continue
-            dpk = np.stack([self._dS_list(sc, None)[k] for sc in scales])   # (G, m, m)
+            dpk = self._dS_axis(k, scales)                              # (G, m, m)
             score_g = 0.5 * (np.einsum("gi,gij,gj->g", Sie, dpk, Sie)
                              - np.einsum("gij,gji->g", Si, dpk))
             SidS = np.einsum("gij,gjk->gik", Si, dpk)
