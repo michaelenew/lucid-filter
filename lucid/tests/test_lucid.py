@@ -673,7 +673,31 @@ def test_offset_channel_finds_a_drift_and_does_not_invent_one():
     assert abs(quiet.offset[-1, 0]) < 0.05                           # no hallucinated drift
 
 
-def test_offset_channel_does_not_disturb_a_biased_sensor_rig():
+# One miscalibrated sensor among three, biased from T0 on.  Two claims are read off the
+# channel-on run of it -- that it does not disturb the rig, and that its read-out names the
+# culprit -- and they were building the same series and running the same filter twice.
+_BIAS = 2.0
+
+
+@pytest.fixture(scope="module")
+def biased_sensor_rig():
+    Q, R, N, T0 = 0.02, 1.0, 700, 300
+    rng = np.random.default_rng(7)
+    theta = np.cumsum(rng.normal(0, np.sqrt(Q), N))
+    Y = np.stack([theta + rng.normal(0, np.sqrt(R), N) for _ in range(3)], axis=1)
+    Y[T0:, 2] += _BIAS
+    return Y, theta
+
+
+@pytest.fixture(scope="module")
+def biased_sensor_on(biased_sensor_rig):
+    Y, _ = biased_sensor_rig
+    return LucidFilter(H=np.ones((3, 1)), measurement=np.ones(3),
+                       offsets=True).filter(Y)
+
+
+def test_offset_channel_does_not_disturb_a_biased_sensor_rig(biased_sensor_rig,
+                                                             biased_sensor_on):
     """A rig the channel is NOT for must be left alone.
 
     A miscalibrated sensor is a first-moment fault the channel deliberately does not carry
@@ -681,19 +705,12 @@ def test_offset_channel_does_not_disturb_a_biased_sensor_rig():
     where it has nothing to offer -- the failure mode measured in research/bias-channels 0006
     when the sensor entry was carried.
     """
-    Q, R, N, T0, bias = 0.02, 1.0, 700, 300, 2.0
-    rng = np.random.default_rng(7)
-    theta = np.cumsum(rng.normal(0, np.sqrt(Q), N))
-    Y = np.stack([theta + rng.normal(0, np.sqrt(R), N) for _ in range(3)], axis=1)
-    Y[T0:, 2] += bias
-    H, R0 = np.ones((3, 1)), np.ones(3)
-
-    off = LucidFilter(H=H, measurement=R0).filter(Y)
-    on = LucidFilter(H=H, measurement=R0, offsets=True).filter(Y)
+    Y, theta = biased_sensor_rig
+    off = LucidFilter(H=np.ones((3, 1)), measurement=np.ones(3)).filter(Y)
     e_off = np.sqrt(np.mean((off.mean[400:, 0] - theta[400:]) ** 2))
-    e_on = np.sqrt(np.mean((on.mean[400:, 0] - theta[400:]) ** 2))
+    e_on = np.sqrt(np.mean((biased_sensor_on.mean[400:, 0] - theta[400:]) ** 2))
     assert e_on < 1.05 * e_off                                       # no regression
-    assert abs(on.offset[-1, 0]) < 0.02                              # and no spurious drift
+    assert abs(biased_sensor_on.offset[-1, 0]) < 0.02                # and no spurious drift
 
 
 def test_offset_channel_is_inert_on_a_stable_spectrum():
@@ -748,24 +765,17 @@ def test_offsets_do_not_provoke_the_dynamics_channel():
     assert float(np.mean(both.fault)) < float(np.mean(plain.fault)) + 0.05
 
 
-def test_sensor_read_out_names_the_biased_sensor():
+def test_sensor_read_out_names_the_biased_sensor(biased_sensor_on):
     """The signed per-sensor offset -- the one thing a second-moment channel cannot report.
 
     A scale sees only ``e**2``, so a biased sensor and its innocent neighbour move ``eta`` the
     same way (research/bias-channels 0001 measured +0.71 / +0.74 at m = 2).  The read-out is
     relative to the consensus, because the common mode of the biases is gauge on a random walk.
     """
-    Q, R, N, T0, bias = 0.02, 1.0, 700, 300, 2.0
-    rng = np.random.default_rng(7)
-    theta = np.cumsum(rng.normal(0, np.sqrt(Q), N))
-    Y = np.stack([theta + rng.normal(0, np.sqrt(R), N) for _ in range(3)], axis=1)
-    Y[T0:, 2] += bias
-
-    r = LucidFilter(H=np.ones((3, 1)), measurement=np.ones(3), offsets=True).filter(Y)
-    c = r.sensor_offset[-1]
-    assert c[2] - 0.5 * (c[0] + c[1]) > 0.7 * bias               # sensor 3 stands out
-    assert abs(c[0] - c[1]) < 0.3 * bias                         # the other two agree
-    assert abs(float(np.mean(c))) < 0.05 * bias                  # and the gauge is not claimed
+    c = biased_sensor_on.sensor_offset[-1]
+    assert c[2] - 0.5 * (c[0] + c[1]) > 0.7 * _BIAS              # sensor 3 stands out
+    assert abs(c[0] - c[1]) < 0.3 * _BIAS                        # the other two agree
+    assert abs(float(np.mean(c))) < 0.05 * _BIAS                 # and the gauge is not claimed
 
 
 def test_sensor_read_out_cannot_change_the_filter():
