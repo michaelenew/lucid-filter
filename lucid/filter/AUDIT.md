@@ -2,7 +2,7 @@
 
 Every chunk of the shipped filter, tied to its derivation, with a grade for how far the
 justification actually reaches.  The inline markers in `lucid.py` are grep-able as
-`AUDIT[`; each points at an entry here.  Scope: `lucid/statfilter/lucid.py` — the single
+`AUDIT[`; each points at an entry here.  Scope: `lucid/filter/lucid.py` — the single
 public filter.  (`WalkingVectorFilter` and the odefilter are research specimens with their
 own records, out of scope.)
 

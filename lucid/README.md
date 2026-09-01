@@ -8,8 +8,7 @@ from lucid import LucidFilter
 ```
 
 That is the public API: one class. Its reference is
-[`statfilter/README.md`](statfilter/README.md), which is also the packaged
-readme.
+[`filter/README.md`](filter/README.md), which is also the packaged readme.
 
 A *lucid filter* is a state estimator — an observer, in the control-engineering
 sense — for systems whose noise environment, and optionally whose dynamics,
@@ -35,28 +34,31 @@ This directory is the product, and it is self-contained: it imports nothing from
 pip install -e .            # from the repository root
 ```
 
-`numpy` is the only runtime dependency; `scipy` is needed only by the test
-suite. Python ≥ 3.10.
+`numpy` is the only dependency, at runtime and in the tests alike. Python ≥ 3.10.
 
 ## Layout
 
 | path | what it is |
 |---|---|
-| [`statfilter/lucid.py`](statfilter/lucid.py) | `LucidFilter` — the product, and its reference [README](statfilter/README.md) |
-| [`odefilter/`](odefilter/README.md) | the locally-linear-ODE filter and its lead/lag offset channel: a **candidate**, fit-based, kept for the dynamics-channel work it seeded |
-| `statfilter/{core,vector,walking,walkingvector,adaptive}.py` | the earlier fitted/walking filters. **Not exported** and not the public API — retained so the suite can pin the reductions that must keep holding (a plain Kalman filter on the homoscedastic face, and each generalisation against its parent). Their story is [`research/multivariate-statfilter/specimens/`](../research/multivariate-statfilter/specimens/) |
+| [`filter/lucid.py`](filter/lucid.py) | `LucidFilter` — the product, and its reference [README](filter/README.md) |
+| [`filter/AUDIT.md`](filter/AUDIT.md) | every derived-vs-proxy claim in it, and the open items |
 | [`tests/`](tests/) | the suite |
+
+The earlier fitted and walking filters this one generalises — `AdaptiveFilter`,
+`VectorFilter`, `WalkingFilter`, `WalkingVectorFilter`, and the fit-based
+`odefilter` — are no longer shipped. They are preserved, with their story, under
+[`research/multivariate-statfilter/specimens/`](../research/multivariate-statfilter/specimens/).
 
 ## Tests
 
 ```bash
 pip install -e '.[test]'
-pytest                                  # from the repository root
-pytest -m 'not slow'                    # deselect the specimens' fits
+pytest                      # from the repository root
+pytest -n auto              # in parallel, with pytest-xdist installed
 ```
 
-The suite covers what breaks silently: exact reduction to a plain Kalman filter
-on the homoscedastic face, `odefilter`'s reduction to `statfilter`, streaming
-against batched, missing-value handling, the stacked bank pinned to the looped
-reference at machine precision, and the oracle-gap battery that pins the
-per-node covariance repair.
+The suite covers what breaks silently: the stacked bank pinned to the looped
+reference at machine precision, the clock and the partial row pinned bit-for-bit
+against the filter that had neither, the dynamics channel finding a fault and
+not finding one that is not there, and the offset channel's inertness where it
+has nothing to offer.

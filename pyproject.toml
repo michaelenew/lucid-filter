@@ -1,33 +1,25 @@
 [build-system]
-# numpy is a BUILD dependency as well as a runtime one: the optional C kernel
-# compiles against its C API and calls its own exp/log/dot loops, which is how
-# it stays bit-for-bit identical to the NumPy path (lucid/lucid_kernel/).
-requires = ["setuptools>=61", "numpy>=1.22"]
+requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "lucid-filter"
 version = "2.0.0"
-description = "Adaptive filters that report the standing of their own answer, with no tuning parameters"
-readme = "lucid/statfilter/README.md"
+description = "An adaptive filter that reports the standing of its own answer, with no tuning parameters"
+readme = "lucid/filter/README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = ["numpy>=1.22"]
 
 [project.optional-dependencies]
-fit = ["scipy>=1.8"]                  # only needed to learn parameters, not to filter
-test = ["pytest>=7", "scipy>=1.8"]
+test = ["pytest>=7"]
 
 [project.urls]
 Homepage = "https://github.com/michaelenew/lucid-filter"
 Research = "https://github.com/michaelenew/lucid-filter/tree/main/research"
 
 [tool.setuptools]
-packages = ["lucid", "lucid.statfilter", "lucid.odefilter", "lucid.lucid_kernel"]
-
-[tool.setuptools.package-data]
-"lucid.lucid_kernel" = ["*.c", "*.h"]   # so an installed copy can rebuild
+packages = ["lucid", "lucid.filter"]
 
 [tool.pytest.ini_options]
 testpaths = ["lucid/tests"]
-markers = ["slow: calls fit(); about a minute per series"]

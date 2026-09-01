@@ -1,8 +1,8 @@
-"""statfilter -- parameter-free adaptive filter with no tuning constants.
+"""The lucid filter -- parameter-free adaptive state estimation, no tuning constants.
 
 The single public API:
 
-    from statfilter import LucidFilter
+    from lucid import LucidFilter
 
     f = LucidFilter()                               # scalar random-walk level, direct observation
     f = LucidFilter(dynamics=F, H=H)                # supplied dynamics and sensors
@@ -20,9 +20,10 @@ dynamics channel: ``r.dynamics`` is the learned ``F`` per step, ``r.control``
 the learned ``B``, and ``r.fault`` the posterior probability that the dynamics
 have left the nominal.  See ``research/dynamics-learning/SUMMARY.md``.
 
-Prior specimens (AdaptiveFilter, VectorFilter, WalkingFilter, WalkingVectorFilter,
-AdaptiveKalmanFilter) are preserved in ``research/multivariate-statfilter/specimens/``
-for reference but are no longer part of the public API.
+The earlier fitted and walking filters this one generalises (AdaptiveFilter,
+VectorFilter, WalkingFilter, WalkingVectorFilter, AdaptiveKalmanFilter, and the
+fit-based odefilter) are preserved in
+``research/multivariate-statfilter/specimens/`` and are no longer shipped.
 """
 from .lucid import LucidFilter, LucidStep, LucidResult
 

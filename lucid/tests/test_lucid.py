@@ -128,7 +128,7 @@ def test_bank_matches_the_looped_members():
     missing observation, the multi-pair star, the dynamics channel with its fault kernel and
     reprice, and a control input.
     """
-    from lucid.statfilter.lucid import _WalkEngine
+    from lucid.filter.lucid import _WalkEngine
 
     class _Looped(_WalkEngine):
         def update(self, y, u=None, a=1.0):
@@ -553,7 +553,7 @@ def test_callable_H_nonlinear_pair_and_stacked_bank():
     The stacked executor evaluates a Jacobian per member, at that member's own mean, and must
     still be the same recursion as the loop.
     """
-    from lucid.statfilter.lucid import _WalkEngine
+    from lucid.filter.lucid import _WalkEngine
 
     class _Looped(_WalkEngine):
         def update(self, y, u=None, a=1.0):
@@ -634,7 +634,7 @@ def test_offset_basis_is_the_identifiable_quotient():
     sensor bias.  Checked against the likelihood in research/bias-channels 0002; the sensor
     entry is not carried at all, for the reason `_mean_basis` records.
     """
-    from lucid.statfilter.lucid import _mean_basis
+    from lucid.filter.lucid import _mean_basis
 
     B1 = _mean_basis(np.eye(1), np.ones((1, 1)))
     assert B1.shape == (2, 1)
@@ -738,7 +738,7 @@ def test_offset_channel_is_inert_on_a_stable_spectrum():
     assert on.offset is None
 
     # a unit root beside the stable mode restores it, and only along the unit root
-    from lucid.statfilter.lucid import _mean_basis
+    from lucid.filter.lucid import _mean_basis
     B = _mean_basis(np.diag([1.0, 0.7]), np.array([[1.0, 1.0]]))
     assert B.shape[1] == 1
     assert abs(B[1, 0]) < 1e-8                                   # nothing on the stable mode
@@ -851,7 +851,7 @@ def test_offset_feedback_is_never_partial_on_a_tower():
     H = np.array([[1.0, 0, 0], [0, 0, 1.0]])
     R0 = np.array([0.06 ** 2, 0.02 ** 2])
 
-    from lucid.statfilter.lucid import _mean_basis
+    from lucid.filter.lucid import _mean_basis
     B = _mean_basis(F, H)
     assert B.shape[1] == 2                                       # accel AND velocity means
     # the tower is all one z = 1 block: nothing of it may be truncated away
@@ -1046,7 +1046,7 @@ def test_timestep_sets_the_unit():
 def test_matrix_power_handles_the_defective_transition():
     """A constant-velocity block has one eigenvector for two states; F**a must still be
     the exact [[1, a dt], [0, 1]] an eigendecomposition would get wrong."""
-    from lucid.statfilter.lucid import _Propagator
+    from lucid.filter.lucid import _Propagator
     dt = 0.1
     p = _Propagator(np.array([[1.0, dt], [0.0, 1.0]]))
     for a in (0.0, 0.25, 1.0, 2.5):
@@ -1061,7 +1061,7 @@ def test_matrix_power_handles_the_defective_transition():
 def test_control_forcing_is_continuous_through_the_nominal_step():
     """B is the ONE-STEP forcing map, so the elapsed map must equal it at a = 1 and
     vanish at a = 0 -- continuous through the step, not merely equal at it."""
-    from lucid.statfilter.lucid import _Propagator
+    from lucid.filter.lucid import _Propagator
     p = _Propagator(np.array([[0.6, 0.2], [0.0, 0.9]]))
     assert np.allclose(p.at(1.0)[1], np.eye(2))
     assert np.allclose(p.at(0.0)[1], np.zeros((2, 2)))
