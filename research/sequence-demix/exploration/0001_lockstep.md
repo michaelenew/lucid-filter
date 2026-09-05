@@ -1,5 +1,7 @@
 # 0001 — the lockstep is the scale-Fisher's null direction, and it is exactly singular
 
+> **⚖️ ATTRIBUTION —** _Result: the per-step scale-Fisher is exactly rank-1 with null direction $(R,-Q)$ (only the total $Q+R$ is identifiable per step), and the "confounded pair" structural test is: a process eigenmode read by exactly one sensor. Both are exact re-derivations of the classical $Q$-vs-$R$ non-identifiability and the observability condition for separating them. The clean rank-1 statement and the structural test are a tidy contribution; the underlying facts are standard._ Prior art: noise-covariance identifiability — Mehra 1970; observability of a mode by a sensor — standard control theory. Status: REPRODUCTION.
+
 Replicates the scalar lockstep on the hero rig and locates it in the geometry, so that the rest
 of the workstream knows precisely which directions a per-step score can carry and which one it
 cannot.  Script: `0001_lockstep.py`.

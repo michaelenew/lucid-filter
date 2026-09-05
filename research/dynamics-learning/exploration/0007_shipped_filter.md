@@ -4,6 +4,8 @@
 `lucid.LucidFilter` itself — the shipped object, with its full 15-cell `(phi, s)` noise bank
 live underneath every dynamics hypothesis — on the same rigs and reports the same quantities.
 
+> **⚖️ ATTRIBUTION —** _Realizing "learn/adapt F" as a state augmentation `(x, g)` with `F = F0 + sum_j g_j A_j` is the standard augmented-state (dual) EKF construction; the value here is that the existing noise machinery runs on top unchanged, plus the measured shipped-filter numbers and the silent class-size (unit-Frobenius vs B-units) defect. The defect is a specific engineering negative result._ Prior art: augmented-state EKF for joint state-parameter estimation (Ljung recursive PEM; standard). Status: RECOMBINATION; §3 defect is NEGATIVE-RESULT.
+
 ## 1. The wiring: the dynamics channel is a state augmentation
 
 `dynamics=None` / `faults=rho` is realized as the augmentation `(x, g)` with

@@ -6,6 +6,8 @@
 named the one clause it assumed rather than measured: **why the
 amplitudes of alternatives are added.**
 
+> **⚖️ ATTRIBUTION —** _This is Sorkin's interference hierarchy verbatim: the Born rule corresponds to third-order interference I₃=0, reconstructing a rank-1 Hermitian decoherence functional D_ij=z̄_i z_j from single- and pair-records. The measured I₃=+0.00124±0.00130 (0.95σ) is a filter re-run of the triple-slit test. Reproduces Sorkin's framework and the experimental null; the degree-2 conclusion is standard._ Prior art: Sorkin 1994 (quantum measure / interference hierarchy); triple-slit test Sinha et al. 2010; Gleason/Born. Status: REPRODUCTION (Sorkin hierarchy + null measurement) + SPECULATIVE (the "source ledger closed" narrative).
+
 The route is Sorkin's interference hierarchy. I_k is the k-th finite
 difference of the measure over k disjoint bundles; a measure of
 **degree d** in the amplitude has I_{d+1} = 0 and I_d ≠ 0. So the

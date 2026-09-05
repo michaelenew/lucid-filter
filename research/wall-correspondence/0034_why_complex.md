@@ -7,6 +7,8 @@
 question in the program: *why do amplitudes compose by complex
 multiplication?*
 
+> **⚖️ ATTRIBUTION —** _The backbone is Frobenius's theorem (the only associative real division algebras with a multiplicative norm are ℝ, ℂ, ℍ), explicitly acknowledged as a century-old result not reproved here. The novel-seeming part — that measured filter signals (0033's 0.302 nats/trial excludes ℝ, an order-leak excludes ℍ) "select ℂ" — is a QM-reconstruction argument in the style of Hardy/Chiribella; it recovers a known conclusion (quantum theory is complex) by analogy, and is SPECULATIVE as a derivation._ Prior art: Frobenius 1878 (real division algebras); Hurwitz 1898 (normed); axiomatic reconstructions of QM (Hardy 2001; Chiribella–D'Ariano–Perinotti 2011). Status: REPRODUCTION (Frobenius) + SPECULATIVE (the filter-selects-ℂ claim).
+
 ## 1. The premise is already proved, and it is not about Hilbert space
 
 Concatenating two segments **adds** two things:

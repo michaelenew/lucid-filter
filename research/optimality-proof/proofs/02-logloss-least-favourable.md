@@ -13,6 +13,8 @@ which is closed by it.
 **It is not novel.** The content is the standard equalizer argument; the value
 is in the specialisation and in the delimitation of what it does not give.
 
+> **⚖️ ATTRIBUTION —** _Standard result, correctly labelled as such by the authors: the moment-constrained maximum-entropy law is the least-favourable / minimax-redundancy code over a convex class._ This is the redundancy–capacity theorem and Topsøe's robustness theorem (Gallager 1976; Davisson 1973; Csiszár & Körner; Topsøe 1979; universal-prediction framing Merhav & Feder 1998). That the max-entropy process with prescribed autocovariances $\gamma_0,\gamma_1$ is the Gaussian AR(1) is Burg's maximum-entropy spectral theorem (Burg 1967/1975; Cover & Thomas ch. 12), with the general max-entropy principle Jaynes 1957. Status: REPRODUCTION.
+
 ## Setup
 
 Fix a horizon $T$ and constants $\gamma_0>0$, $|\gamma_1|<\gamma_0$. Let

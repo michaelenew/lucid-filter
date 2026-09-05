@@ -13,6 +13,8 @@ Every load-bearing clause above is wrong. The channel is not dead, the
 conditioning story is not the mechanism, the proposed fix makes things worse,
 and the two datasets that reported a zero were reporting two different things.
 
+> **⚖️ ATTRIBUTION —** _A diagnostic study of why a stochastic-volatility (log-scale AR(1)) process-noise channel fits to its zero boundary. The pieces are standard: the GPB1 single-covariance collapse throwing away discrimination that per-node (IMM) covariances keep; a variance parameter whose MLE lands on an attainable boundary where Fisher information vanishes; the remedy of marginalizing the nuisance rather than plugging in a point estimate._ Prior art: GPB1 vs IMM (Ackerson & Fu 1970; Blom & Bar-Shalom 1988); boundary MLE for variance components (Self & Liang 1987; Stram & Lee 1994); stochastic volatility (Taylor 1986; Harvey–Ruiz–Shephard 1994). The specific decision-theoretic scoreboard is the original content. Status: NEGATIVE-RESULT.
+
 ## The channel is not dead
 
 The standing diagnosis is stated in the wrong currency. $\gamma_0$ is not what

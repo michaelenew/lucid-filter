@@ -9,6 +9,8 @@ walker = augmented EKF on (state, rL, rR) with jump-class drift, cap, shared-eve
 variance restart.  Radii are control-effectiveness gains, so the dynamics are already
 linear in θ — the linearizing coordinate is the physical one.  20 seeds × 4 scenarios.
 
+> **⚖️ ATTRIBUTION —** _Differential-drive wheel-blowout rig: a large (~29 nats/step) actuator-effectiveness fault detected in <1 step and the side pinned by the opposite-yaw-signature llr edge, with the healthy wheel recovered to ~1%. This is multiple-model actuator-fault detection + control-effectiveness identification; the 18 ms latency and ~1% leak are the measured content, and the frontier-scaling (30× KL buys 30× speed) is standard quickest-detection arithmetic._ Prior art: actuator-fault detection via multiple models / innovations (Willsky 1976); quickest-detection frontier (Lorden 1971). Status: RECOMBINATION with NEGATIVE-RESULT tables.
+
 ## Scorecard
 
 | criterion | measured | target | |

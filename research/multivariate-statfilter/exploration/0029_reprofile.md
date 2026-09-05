@@ -1,5 +1,7 @@
 # 0029 — reprofiling the discounted opens against the extended domain
 
+> **⚖️ ATTRIBUTION —** _Re-measures previously-discounted modeling opens (fixed V, diagonal R, dimension, static drift) across the extended rig and confirms they stay cheap for state, while the true expensive regime is adaptation lag when a degrading absolute sensor collapses position observability — specific oracle-gap numbers on a specific rig._ Prior art: observability of position from acceleration-only sensing (standard); adaptation-lag cost is filter-consistency folklore. Status: NEGATIVE-RESULT.
+
 Premise (user): many "that doesn't matter much" verdicts were filed on **simple** domains
 (scalar, `H=I`, quiet, orthogonal). The domain has since exploded (5-DOF IMU fusion, phased
 noise, mixing `H`, collinear modes, coupled dynamics). The tell — the robotics case gives

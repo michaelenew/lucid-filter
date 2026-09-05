@@ -4,6 +4,8 @@
 > 0011's posited Laplacian coupling derivable? Answer: split, with
 > the obstruction precisely located. Code: `0013_the_coupling_source.py`.
 
+> **⚖️ ATTRIBUTION —** _Standard facts: shared-evidence "explaining away" gives negative off-diagonal (competitive) coupling; strict hierarchies give ultrametric correlations; overlapping RG blocks give a log-correlated field. Whether the hierarchy's level weights reproduce Euclidean 1/r is left open (not derived). This is correlation-structure bookkeeping in RG language._ Prior art: explaining-away in graphical models (Pearl 1988); ultrametric/hierarchical correlations; log-correlated fields. Status: SPECULATIVE (gravity correspondence, 1/r explicitly not derived).
+
 - **Same-level link-sharing cannot supply it.** On the sibling's
   exact Gaussian network, the Fisher metric of a per-site scale
   field is nearest-neighbor structured but with *positive*

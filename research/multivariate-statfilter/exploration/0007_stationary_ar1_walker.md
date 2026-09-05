@@ -1,5 +1,7 @@
 # 0007 — stationary-AR(1) walker, a bug fix, and the real tension
 
+> **⚖️ ATTRIBUTION —** _A bug fix plus the measured "bracket": a stationary-AR(1) scale is stable but under-reaches, an unbounded walk reaches but drifts; both trace to running the state KF at a scale point estimate rather than mixing it (GPB1)._ Prior art: stochastic-volatility AR(1) scale — Taylor 1986; GPB1 collapse — Ackerson & Fu 1970. Status: NEGATIVE-RESULT.
+
 ## A bug found (corrects 0006)
 
 `steady_fisher` unpacked the wrong return of `score_fisher` — it took the **score**

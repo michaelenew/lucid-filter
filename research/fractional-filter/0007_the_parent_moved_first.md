@@ -1,5 +1,7 @@
 # 0007 — The parent moved first, and the seam held
 
+> **⚖️ ATTRIBUTION —** _This is a software-integration note (a parent-code change merged with zero edits here, and an observation that the fractional split kernel coincides with the parent's `unit_roots` pinning). Engineering verification, not a scientific result; the mathematical content — pinning $d$ roots at $z=1$ is integer differencing — is standard._ Prior art: integer differencing / unit-root pinning in ARIMA — textbook (Box & Jenkins 1970). Status: RECOMBINATION._
+
 The parent's flagged structural change landed on main: `unit_roots=d` pins
 $d$ characteristic roots at $z=1$ exactly, writing
 $\alpha = \text{base} + \beta M$ with $(\text{base}, M)$ the fixed linear map

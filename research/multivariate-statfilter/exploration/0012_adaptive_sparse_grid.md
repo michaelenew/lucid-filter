@@ -1,5 +1,7 @@
 # 0012 — the adaptive/sparse grid: a faithful base-reduction, not sub-exponential
 
+> **⚖️ ATTRIBUTION —** _Sparsifying the joint scale grid (a Smolyak-style adaptive sparse grid) gives only a base reduction (~2–3×), not sub-exponential cost, because a coupled, fully-identified r-dim posterior genuinely occupies ~cʳ cells — the honest bound._ Prior art: sparse grids — Smolyak 1963; adaptive sparse grids — Gerstner & Griebel 1998. Status: NEGATIVE-RESULT.
+
 Goal: make the per-component walker sub-exponential by instantiating only the
 high-weight nodes of the exact joint grid (0011 ruled out factoring — it loses the
 coupling — and showed per-component is load-bearing for state).

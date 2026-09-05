@@ -53,6 +53,13 @@ coupling, not a walk defect (a clean sensor stays clean when another is hot).  T
 only walk artifact is a ~0.1-nat static drift on the strong axis (bounded).  See
 ``research/multivariate-statfilter/SUMMARY.md``.
 """
+# ⚖️ ATTRIBUTION — Per-component multivariate walker: a vector of log-AR(1) noise scales (one
+# per significant process eigenmode, one per sensor) tracked online, with spectral truncation
+# to the identifiable modes and a per-axis finding-18 score walk. Standard parts; the joint
+# grid is exponential in active axes (a testbed, not production). Prior art: adaptive KF /
+# noise-covariance identifiability — Mehra 1970/1972; natural-gradient scale walk — Amari 1998;
+# GPB1 collapse — Ackerson & Fu 1970; sloppy-mode / Fisher-spectrum truncation — Transtrum
+# et al. 2011. Status: RECOMBINATION.
 from __future__ import annotations
 
 import math

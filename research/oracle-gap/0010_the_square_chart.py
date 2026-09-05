@@ -1,3 +1,10 @@
+# ⚖️ ATTRIBUTION — Reparameterising the ill-posed boundary estimate by tau = s_P^2
+# (estimate the variance, not the scale, near zero) so Fisher information is finite
+# at the boundary is standard statistical practice; the parameter-on-boundary /
+# variance-component-at-zero problem it cures is a known non-standard-asymptotics
+# result (Chernoff 1954; Self & Liang 1987). The "square is the well-posed
+# coordinate" packaging imported from the physics sibling program is an analogy,
+# not load-bearing. Status: REPRODUCTION.
 """The square chart: the boundary defect is the coordinate, not the model.
 
 Contributed from the sibling physics program (quantum-mechanics,

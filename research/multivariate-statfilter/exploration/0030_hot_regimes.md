@@ -1,5 +1,7 @@
 # 0030 — solving the hot regimes to the irreducible floor
 
+> **⚖️ ATTRIBUTION —** _Sheds a failing absolute sensor fast with two additions gated on a white channel: an instantaneous ~4σ robust innovation gate (per-update R inflation) and an outlier-boosted raise-rate — standard robust-KF outlier rejection plus an engineering shed; brings the failing-sensor regimes to the oracle-lagged floor._ Prior art: robust Kalman filtering / innovation outlier rejection — Masreliez & Martin 1977, Huber 1964. Status: RECOMBINATION.
+
 The reprofile (0029) found the expensive extreme is **adaptation lag when the absolute position
 sensor degrades** (pot-hot 1.86×, process+pot the old 3.72×). This is where the filter breaks.
 Target: bring it to the irreducible floor.

@@ -1,5 +1,7 @@
 # 0001 — The pinned root row: the bias theorem is their masslessness theorem
 
+> **⚖️ ATTRIBUTION —** _Filter fact (a persistent drift lives in a characteristic root pinned at z=1) is standard time-series: it is the unit-root / integrated-process I(1) structure of a random walk with drift; a free ML fit lands the root at 1±O(1/n)._ Prior art: unit-root / integrated ARIMA processes (Box–Jenkins; Dickey–Fuller 1979); a "symmetry-protected massless mode" is textbook (Goldstone). Status: SPECULATIVE (the physics-side "masslessness theorem" mapping is an unestablished analogy; the estimation fact underneath is REPRODUCTION).
+
 > **AI-generated, not peer-reviewed** — a correspondence record, not a
 > new filter result. Everything cited from this repository is this
 > repository's own measured work; everything from the sibling is

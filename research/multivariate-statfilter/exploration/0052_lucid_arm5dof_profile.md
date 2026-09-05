@@ -1,5 +1,7 @@
 # 0052 — LucidFilter on the 5-DOF arm: the freeze-lockout regression, and the 0024 fix restored
 
+> **⚖️ ATTRIBUTION —** _Profiling that catches a freeze-lockout regression (the delocalisation-floor froze all process eigenmodes, reinstating the research-0024 open-loop failure) and fixes it by structural-observability mode activation with the truncation criterion used as a bound not a freeze; the GPB1 grid-mixture resolves masked-Q via sequence evidence, landing BOTH below the EMA machinery's floor._ Prior art: Kalman observability for mode activation (standard); GPB1 mixture — Ackerson & Fu 1970; identifiability — Mehra 1972. Status: NEGATIVE-RESULT (regression caught and fixed); otherwise RECOMBINATION.
+
 > **Superseded in two respects, by [`0054`](0054_physical_sensors.md): the sensor model and
 > the chain.**  This probe's "accelerometer" reads its own joint's angular acceleration
 > through a constant diagonal `H` -- no sensor does that -- and its four coplanar pitch

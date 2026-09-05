@@ -10,6 +10,8 @@ anisotropic higher moments would pass it while being anisotropic.
 This module builds the test that sees such a thing — and measures
 whether the weakness is real.
 
+> **⚖️ ATTRIBUTION —** _A sound two-sample/higher-order test: compare field samples along equal-length rays of different orientation, coding one ensemble with a Markov predictor fit to the other — reads every order, needs no smearing kernel or free-field baseline (the ensembles are each other's control). Includes honest calibration and injection tests confirming the earlier Gaussian (Whittle) test is blind to phase-only anisotropy. Careful applied statistics._ Prior art: two-sample / higher-order statistics; predictive coding two-sample tests; anisotropy testing. Status: RECOMBINATION (a well-designed test); the physics framing is incidental.
+
 ## 1. The construction, which needs no kernel at all
 
 Compare the field sampled along rays that step by lattice vectors of

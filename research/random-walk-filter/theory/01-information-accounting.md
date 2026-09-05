@@ -22,6 +22,8 @@ I_{\sigma^2\sigma^2}=\tfrac12\sum_j\tau_j^2\lambda_j^{-2}$$
 Exact for every finite $n$, $O(n)$ to evaluate. Verified against the dense
 $\tfrac12\mathrm{tr}(\Sigma^{-1}\Sigma_a\Sigma^{-1}\Sigma_b)$ computation.
 
+> **⚖️ ATTRIBUTION —** _Exact finite-n Fisher information for the noise parameters via simultaneous diagonalisation of the tridiagonal Toeplitz increment covariance in the discrete sine basis (eigenvalues Q+σ²τ_j), collapsing every Fisher trace to an O(n) sum._ Prior art: Gaussian Fisher information ½tr(Σ⁻¹Σ_aΣ⁻¹Σ_b) is textbook; sine/DST diagonalisation of tridiagonal Toeplitz matrices and its use for Toeplitz/Whittle Fisher information is standard (Whittle 1953; Grenander & Szegő on Toeplitz forms). Status: REPRODUCTION.
+
 ## The nats
 
 The natural nat-valued quantity for parameter learning is the reduction in
@@ -33,6 +35,8 @@ $$\Delta_n = \tfrac12\log\det I_n - \tfrac12\log\det I_{n-1} \ \longrightarrow\ 
 Confirmed numerically to the $1/n$ asymptote for all three $q$ (fig01). The
 constant is the parameter *count*, not anything about the process — two
 parameters, so exactly $1/n$.
+
+> **⚖️ ATTRIBUTION —** _Marginal contribution of point n to the entropy-reduction ½logdet Iₙ tends to d/2n; the level channel instead contributes ½log(1/(1-K)) per point forever, so the two channels have different memory laws._ Prior art: d/2n follows from Fisher-information accumulation asymptotics (standard); the constant level-channel rate is the steady-state Kalman variance reduction (Kalman 1960). The juxtaposition is a clean framing, not a new result. Status: REPRODUCTION.
 
 Contrast the level channel. At steady state each new observation shrinks the
 posterior on $\theta_t$ from $P^-$ to $P=(1-K)P^-$, so it contributes
@@ -74,6 +78,8 @@ sensor jittered" except through the lag-1 autocovariance, so the two estimates
 trade off against each other. The correlation *does not go to zero* with $n$ —
 it plateaus. More data buys precision, never orthogonality.
 
+> **⚖️ ATTRIBUTION —** _Cramér–Rao relative-SD table for (Q,σ²,K): Q is essentially unidentifiable at small n and the persistent negative Q–σ² correlation (does not vanish with n) is the level-vs-noise identifiability limit of the local-level model._ Prior art: CRLB (Cramér 1946; Rao 1945); the near-non-identifiability / "pile-up" of the signal-to-noise ratio q in local-level models is well documented (Shephard & Harvey 1990 on the local-level model). The specific numbers are the measured content. Status: REPRODUCTION / NEGATIVE-RESULT (the plateauing correlation as a measured identifiability floor).
+
 ## The reframing that rescues the intuition (fig03)
 
 The filter does not need $Q$. It needs $K$, and MSE is quadratically flat near
@@ -95,6 +101,8 @@ So: **the instinct that 2000 points is too many is correct; the right number is
 100–500, not 20.** Below $n\approx30$ the normal approximation on $\log q$ stops
 meaning anything (open markers in fig03) — the parameters are not merely
 imprecise there, they are unidentified.
+
+> **⚖️ ATTRIBUTION —** _Decision-relevant reframing: propagate the parameter CRLB through the gain map q→K (Gauss–Hermite over log q) to get excess tracking MSE, which falls below 5% at n≈100/150/500 — far short of the 2000-point tail._ Prior art: propagating estimation uncertainty into a plug-in decision loss via the delta method / quadrature is standard; the crossover numbers are the measured original content. Status: RECOMBINATION.
 
 ## What this settles
 

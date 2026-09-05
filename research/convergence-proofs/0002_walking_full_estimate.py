@@ -1,3 +1,9 @@
+# ⚖️ ATTRIBUTION — The minimum tracking MSE for an AR(1) log-scale state observed in
+# noise is the scalar AR(1)-Kalman steady-state (DARE) — a standard Cramer-Rao-type
+# floor. The update direction being Fisher-efficient is natural-gradient = Fisher
+# scoring (Amari 1998). The realised-efficiency ratios (4.9x, 2.7x, 1.8x, 1.4x) of
+# the robust fixed-gain walk against that floor are the measured, quantitative
+# content. Status: REPRODUCTION with NEGATIVE-RESULT (the measured efficiency gap).
 """Walking filter: the full-estimate tracking-MSE floor, and the realised efficiency.
 
 AI-GENERATED, NOT PEER-REVIEWED -- produced by an AI system, not independently

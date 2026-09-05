@@ -1,5 +1,7 @@
 # 0053 — the de-mix mechanism is per-node MEANS; the walking-window realization regresses (reverted)
 
+> **⚖️ ATTRIBUTION —** _Isolates that the de-mix requires per-hypothesis MEANS (each hypothesis runs its own filter and mispredicts its own innovations — the no-EMA form of whiteness discrimination), i.e. full multiple-model estimation rather than a GPB1 collapse; the walking-window realization of it regressed and was reverted (recorded open)._ Prior art: multiple-model adaptive estimation with per-model filters (MMAE/GPB2) — Magill 1965, Ackerson & Fu 1970, Bar-Shalom; innovation-sequence Q/R discrimination — Mehra 1970. Status: NEGATIVE-RESULT.
+
 The 0052 residual: on the collinear accel↔jerk pair, attribution leaks both ways (an accel burst
 lifts the process scale +6.2 and vice versa) while state tracking sits at the floor.  This probe
 asked what the de-mix *requires*, found it, built it into the engine, and measured the build

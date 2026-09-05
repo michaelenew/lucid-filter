@@ -1,5 +1,7 @@
 # 0046 — robust-MAP target REJECTED; the magnitude keeps one not-delicate constant on a flat plateau
 
+> **⚖️ ATTRIBUTION —** _Negative result: a robust-MAP walk target is worse (it reads the instantaneous e² and is more reactive, not gentler), and the BOTH-safety comes from a finite quadratic soft-threshold surcharge (a bounded per-step move); q on a flat plateau in ~[1,8] is benign but not derived._ Prior art: soft-thresholding / graduated robustness (standard); Student-t gain inflation — Agamennoni et al. 2012. Status: NEGATIVE-RESULT.
+
 Tried to erase 0045's small BOTH regression two ways.
 
 ## Robust-MAP target makes it worse (rejected)

@@ -3,6 +3,8 @@
 > **AI-generated, not peer-reviewed.** A correction to 0031. Code:
 > `0033_two_channels.py`.
 
+> **⚖️ ATTRIBUTION —** _A clean self-correction separating two distinct effects: classical non-abelian composition carries order information but no interference (0009), while amplitude addition carries interference but is order-blind. Restates that interference specifically requires amplitudes; the two "records" just instantiate the textbook classical/quantum split._ Prior art: quantum interference vs classical mixing; non-commutativity (0009). Status: RECOMBINATION (measured separation) + SPECULATIVE (the "source ledger" physics framing).
+
 0031 concluded that the source ledger is "a statement about
 composition" and pointed at the order channel (0009). **That was
 sloppy.** 0009 composes *classical* group elements — no amplitudes

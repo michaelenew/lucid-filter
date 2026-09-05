@@ -4,6 +4,8 @@ Probe: [`0035`](0035_layer1_under_code_length.py) ·
 theorem: [`output/03`](proofs/03-logloss-shape-minimaxity.md) ·
 numbers: [`figures/fop0035.json`](figures/fop0035.json)
 
+> **⚖️ ATTRIBUTION —** _Meta-result: the layer-1/layer-2 "loss seam" is removed by proving layer 1 also under code length (Theorem A′), since both losses reach the shape only through $\mathbb E_p[e_t^2]$; committing toward MSE (PEM) is refused on the measured evidence of `0027`._ No new mathematics beyond Theorem A′ (itself a REPRODUCTION — the Gaussian innovation code inheriting the minimax saddle, see [`proofs/03`](proofs/03-logloss-shape-minimaxity.md)); this note is bookkeeping over prior measured/derived results. Status: RECOMBINATION.
+
 ## What was tried, and what happened
 
 The standing hypothesis (posed from `oracle-gap`, after the IMM patch

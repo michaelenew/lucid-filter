@@ -1,3 +1,11 @@
+# ⚖️ ATTRIBUTION — The p-state extension; all four results standard. Theorem 1 (grid
+# contraction x3 channels): Perron-Frobenius ergodicity again, with filter stability the
+# Le Gland-Mevel result. Theorem 2 (state steady-state covariance = stabilising DARE):
+# existence/uniqueness under observability+controllability is the standard steady-state
+# Kalman-stability theorem (Anderson & Moore 1979); the explosive-signal correction (the
+# real instability boundary is the signal's own Lyapunov variance) restates a known
+# distinction. Theorem 3 (reduction to parent at p=1): an internal consistency check.
+# Theorem 4 (dynamics channel): direct reuse of Theorem 1. Status: REPRODUCTION.
 """OdeFilter: asymptotic convergence and steady-state error bounds.
 
 AI-GENERATED, NOT PEER-REVIEWED -- produced by an AI system, not independently

@@ -7,6 +7,8 @@ First rung of the ladder (`0001_scalar_step_race.py`): `x_t = a x_{t-1} + b u_t 
 prior is the fault hazard `rho = 1/T` ("about one fault per mission"), and the
 augEKF/regwalk drift is `q_a = δ_class² · rho` (the class's matched random-walk rate).
 
+> **⚖️ ATTRIBUTION —** _Scalar changepoint-detection race: a hazard-mixed (Shiryaev) bank riding the quickest-detection frontier `D = log(1/rho)/KL`, verified against Monte-Carlo and an optional-stopping (Wald) audit, and shown to dominate a random-walk/augmented-EKF parameter surrogate on detection. Every ingredient is textbook; the specific dominance curves and audit numbers are the measured content._ Prior art: Bayesian quickest detection / CUSUM frontier (Page 1954; Lorden 1971; Shiryaev; Pollak 1985); Wald sequential analysis; augmented-EKF/dual estimation as the surrogate. Status: REPRODUCTION (mechanism) with NEGATIVE-RESULT tables.
+
 ## 1. The frontier, derived and verified
 
 The Bayes detector for the jump class is the hazard-mixed bank (Shiryaev).  Its delay

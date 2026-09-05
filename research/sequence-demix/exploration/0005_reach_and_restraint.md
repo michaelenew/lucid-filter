@@ -1,5 +1,7 @@
 # 0005 — reach and restraint are the same knob, and the class cannot separate them
 
+> **⚖️ ATTRIBUTION —** _An analysis/negative result: at the instant of a level jump vs a sensor degradation the two explanations are exactly tied (Proposition 1 / Mehra non-identifiability applied to the transient, not just the base), so no per-step prior separates them and only a second banked (multiple-model) coordinate over the excursion can. Sound reasoning resting on the standard non-identifiability; the specific "reach and restraint move together" measurement is original._ Prior art: $Q$-vs-$R$ non-identifiability — Mehra 1970; detection-latency frontier — Lorden 1971. Status: NEGATIVE-RESULT._
+
 The two open hero sub-gates looked like independent problems.  They are one problem, and this note
 pins it down, because the pinning is what says where the next mechanism has to live.
 

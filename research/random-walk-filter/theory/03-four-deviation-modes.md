@@ -32,6 +32,8 @@ correct for this model, and there is a clean reason: the observation law is
 Gaussian, so a change is a change in $\mu$ or in $\Sigma$, and each is either
 one-shot or persistent. $2\times2$, exhaustive.
 
+> **⚖️ ATTRIBUTION —** _Cataloguing the four ways the model can deviate — process/measurement × anomaly/regime — as one-parameter perturbations of the increment mean or covariance through H₀, exhaustive because a Gaussian is fully specified by (μ,Σ)._ Prior art: the taxonomy of additive vs innovational outliers and level/variance changes in time series is classic (Fox 1972 additive/innovational outliers; Tsay 1988 outliers, level shifts, variance changes). Status: REPRODUCTION (the 2×2 taxonomy), with the plain-language framing original.
+
 ## Result 1 — the 4-space factorises into two orthogonal planes
 
 For a Gaussian, mean-parameters and covariance-parameters have **exactly
@@ -47,6 +49,8 @@ measurement event. There is no tension: an outlier is a *location* event with a
 reversal signature, and it lands on the MA axis with zero projection onto MR.
 The four axes are not a heuristic decomposition; they are an orthogonal
 decomposition in two blocks.
+
+> **⚖️ ATTRIBUTION —** _For a Gaussian, mean-parameter scores and covariance-parameter scores are exactly Fisher-orthogonal, so the 4×4 Fisher matrix is block diagonal (location ⟂ scale)._ Prior art: mean/covariance parameter orthogonality of the Gaussian Fisher information is textbook (standard result in information geometry / exponential families; e.g. Cox & Reid 1987 on parameter orthogonality). Note: file 06 correctly retracts the *operational* headline — this orthogonality is an oracle artifact that vanishes once the event size is marginalised. Status: REPRODUCTION.
 
 ## Result 2 — one post-event point discriminates nothing
 
@@ -69,6 +73,8 @@ and 1.95 (scale) at $m=2$.
 **"After 2 points that agree the regime is changing" is not an approximation, it
 is the exact threshold at which the problem stops being singular.** The second
 point does not add to a distinction; it *creates* it.
+
+> **⚖️ ATTRIBUTION —** _At m=1 the two modes within each plane are exactly collinear (Fisher block singular, variance inflation 1/(1-ρ²) infinite); they separate only at m=2, and the within-plane correlation plateaus (never fully orthogonal)._ Prior art: rank-deficiency / non-identifiability of competing perturbations from a single observation is a standard Fisher-rank argument. The specific correlation values are the measured content. Status: REPRODUCTION.
 
 Note the correlations plateau rather than vanish (0.196 and 0.279). The modes
 never become orthogonal within a plane — there is a permanent 2–9% variance tax
@@ -106,6 +112,8 @@ An anomaly detector should be a fast, saturating, forget-it-afterwards test. A
 regime detector should be a slow accumulator with no natural stopping point.
 Every gate built in this project so far has tried to be both.
 
+> **⚖️ ATTRIBUTION —** _Anomaly evidence is a finite budget (≈80% delivered by m=2, complete by m=10) while regime evidence accrues linearly forever — a "budget vs rate" distinction between one-shot and persistent changes._ Prior art: this mirrors the finite-vs-infinite information content of transient vs sustained signals in detection theory (fixed-sample outlier tests vs sequential CUSUM-style accumulators, Page 1954). Framing is original; the numbers are measured. Status: RECOMBINATION.
+
 ## Result 4 — the exact pairwise evidence matrix (fig10)
 
 $E[\text{LLR}]=\mathrm{KL}(P_{\text{true}}\|P_{\text{alt}})$ in nats, exact for
@@ -132,6 +140,8 @@ $\sigma^2$ takes it to 6.05. The scale plane is badly conditioned *because the
 process noise is small*, and that is a property of the regime, not of the
 estimator.
 
+> **⚖️ ATTRIBUTION —** _Exact pairwise E[LLR]=KL matrix between the four modes: jump-vs-outlier is easy (~10.5 nats/2 points via the reversal signature E[d₀d₁]) while Q-change-vs-σ²-change is near-impossible (0.2–0.4 nats) because Q is only 2.4% of the increment variance._ Prior art: E[LLR]=KL is standard (Kullback 1959); additive-outlier reversal signature is the classic discriminator of additive vs innovational outliers (Fox 1972; Tsay 1988). The KL numbers are the measured content. Status: REPRODUCTION.
+
 ## The signed 4-vector
 
 The productive formulation guessed in the framing is the right one, and it has a
@@ -154,3 +164,5 @@ $H_0$ at $\psi=0$, and report $u = I_4^{-1/2}\,\nabla_\psi\log p$. Then:
 This is the same $u=(z,(z^2-1)/\sqrt2)$ basis established earlier in the thread,
 extended from one observation to an event window: components 1–2 are the mean
 channel over the window, components 3–4 the scale channel.
+
+> **⚖️ ATTRIBUTION —** _Reporting the whitened score u = I⁻¹/²∇log p, whose squared norm ‖u‖²/2 is the score-test statistic and whose components are the (z, (z²-1)/√2) Hermite mean/variance directions._ Prior art: the score (Lagrange-multiplier) test (Rao 1948; Neyman's C(α), 1959); the whitened/efficient score and the Hermite-polynomial mean/variance score basis are standard. Status: REPRODUCTION.

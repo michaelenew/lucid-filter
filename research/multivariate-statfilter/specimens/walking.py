@@ -56,6 +56,12 @@ Basic use::
         step = f.update(v)
         print(step.mean, step.process_scale)
 """
+# ⚖️ ATTRIBUTION — An online noise-scale tracker: a walking quadrature window whose centre
+# integrates the grid-shift score through a scalar Kalman gain, pinned to a critically-damped
+# steady value K* = (1-phi)/4. Standard parts assembled. Prior art: adaptive / online noise
+# estimation — Mehra 1970; critically-damped second-order tracking / alpha-beta(-gamma)
+# filters — Benedict & Bordner 1962; stochastic approximation — Robbins-Monro 1951;
+# stochastic-volatility log-AR(1) scale — Taylor 1986. Status: RECOMBINATION.
 from __future__ import annotations
 
 import math

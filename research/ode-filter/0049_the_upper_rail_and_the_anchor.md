@@ -7,6 +7,8 @@ in §3 as directions, not results.
 
 ## 1. The tube grid: "is it a pure delay?" is now a tracked posterior
 
+> **⚖️ ATTRIBUTION —** _Gridding the free coupling $b$ only in a tube around the delay manifold, and tracking $P(\eta{=}0)$ as a nested-model posterior (null $\subset$ delay $\subset$ free), is Bayesian nested-model selection / Occam-factor comparison; the "confirm slower than refute" asymmetry is the SPRT/confirmation-ledger arithmetic._ Prior art: Bayesian model comparison / Occam factor (Jeffreys; MacKay 1992); nested-hypothesis SPRT (Wald 1947). Status: RECOMBINATION.
+
 The free-coupling family $y^{(2)}=b^\top z+v$ grids exponentially in $p$ — but
 the delay manifold organises $b$-space around itself. In the delayed frame the
 manifold's tangent directions are `read` (the gain) and `read`$\cdot G$ (the
@@ -51,6 +53,8 @@ $\eta$ axis" becomes a choice of which violations to watch — the tube defers,
 not defeats, the dimensionality of $b$, and says so.
 
 ## 2. The anchor: slide the windows, but interpolate with $\gamma$
+
+> **⚖️ ATTRIBUTION —** _Estimating a fractional lag from the argmax/argmin of the sliding cross-covariance (unbiased under independent measurement noise, unlike the lag-0 autocovariance) with a model-shaped interpolant is generalized cross-correlation time-delay estimation with sub-sample interpolation._ Prior art: generalized cross-correlation TDE (Knapp & Carter 1976); sub-sample interpolation of the correlation peak (standard); it plays the closed-form-start role of the parent's variogram identity. Status: REPRODUCTION.
 
 The proposed static estimator — argmin of the covariance as the two windows
 slide across one another — is measured and adopted as the closed-form start,

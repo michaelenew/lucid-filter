@@ -1,5 +1,7 @@
 # 0008 — the windowed / GPB1 walker: walking-only is viable
 
+> **⚖️ ATTRIBUTION —** _A windowed scale posterior updated with 2D+1 sigma points, the state KF run at each and reweighted by likelihood then moment-matched — i.e. an unscented/GPB1 particle bank over the noise scales; reaches the grid at corr 0.99 once the window-growth q is large._ Prior art: unscented / sigma-point transform — Julier & Uhlmann 1997; GPB1 collapse — Ackerson & Fu 1970; multiple-model adaptive estimation — Magill 1965. Status: RECOMBINATION.
+
 Resolves the 0007 bracket. The walker carries a scale posterior `(mu, Sigma)`
 [diagonal] and uses **2D+1 sigma points** — the linear-in-D realisation of "simplex
 for direction + a marginal". Each step: place sigma points from the predicted

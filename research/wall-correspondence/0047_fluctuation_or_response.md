@@ -8,6 +8,8 @@ field-count independent, and the program has treated that as a
 **defect**. This asks the prior question: **are they the same
 quantity at all?**
 
+> **⚖️ ATTRIBUTION —** _The point is sound and standard: a "cut" (entanglement/mutual information across a boundary) and a "deformation" (stiffness/response) are the same only if a fluctuation–dissipation relation ties fluctuation to response; measuring πp/α running 2.64→123 with mass shows no such relation holds here, so expecting the two routes to G to agree was a category error. Directly invokes fluctuation–dissipation._ Prior art: fluctuation–dissipation theorem (Callen–Welton 1951); Kubo linear response. Status: SPECULATIVE (the G-correspondence) but the FDT reasoning is REPRODUCTION and correctly applied.
+
 If they are, their ratio is a pure number. If it moves when the field
 moves, they are two different measurements and expecting agreement
 was the error.

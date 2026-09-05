@@ -32,6 +32,8 @@ so the crate never shows in the vehicle's *behaviour* — only in the residual. 
 the autopilot flies on an alpha-beta observer of the measurements, so `u` is measurable from the
 filter's own information set.
 
+> **⚖️ ATTRIBUTION —** _Full 3D-quadrotor demo through the shipped API: an off-centre payload (a thrust→torque coupling that is zero on the nominal vehicle) detected in 28 ms and mass/lever-arm/inertia re-identified, versus noise-only and frozen oracles. Multiple-model detection + augmented-EKF identification of rigid-body inertial parameters; the oracle-gap ratios, parameter-recovery errors, the input-units sensitivity, and the "read-out returns but the fault flag latches" observation are the measured content._ Prior art: multiple-model fault detection (Willsky & Jones 1976); online rigid-body inertial-parameter identification (adaptive sysID; Ljung). Status: RECOMBINATION with NEGATIVE-RESULT tables.
+
 ## Acceptance scorecard (5 seeds; ± is the per-seed standard error)
 
 | criterion | measured | |

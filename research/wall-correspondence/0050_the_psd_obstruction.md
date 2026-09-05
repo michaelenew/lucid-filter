@@ -4,6 +4,8 @@
 > verdict from the port and the question it puts back to this side.
 > Their stones: 0146 / 0156.
 
+> **⚖️ ATTRIBUTION —** _Records a known kind of obstruction: an induced action Γ⁽²⁾=‖(1−B)AB‖²_F with B a projector is positive-semidefinite for every symmetric A, so it cannot be linearised Einstein–Hilbert (which needs the conformal mode to carry the opposite sign) — hence zero light bending, i.e. the field theory is Nordström/scalar gravity, not spin-2. This is the conformal-mode/sign problem of Euclidean and induced gravity, plus the classic fact that scalar gravity (Nordström) reproduces Newton but fails light bending. "A sum of PSD forms is PSD" is spectral/Bochner-type reasoning. The follow-up question (is the filter's lensing true null deflection or refractive routing?) is a sensible SPECULATIVE test._ Prior art: Nordström scalar gravity (1913) and its failure at light bending; conformal-factor problem in Euclidean/induced gravity (Gibbons–Hawking–Perry 1978); positive-semidefinite forms / Bochner. Status: NEGATIVE-RESULT (the PSD obstruction, reproduced) + SPECULATIVE (the lensing follow-up).
+
 ## What happened over there
 
 Their item 6 (classical tests) **failed**, and not numerically. With

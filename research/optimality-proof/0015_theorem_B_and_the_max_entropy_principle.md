@@ -4,6 +4,8 @@ Two things here. A **correction** that reverses much of `0009`, and a **theorem*
 that makes the shape adversary exactly computable — after which the whole
 structure looks like one principle applied twice rather than two arguments.
 
+> **⚖️ ATTRIBUTION —** _Theorem B is an elementary moment identity for Gaussian scale mixtures: an i.i.d. multiplicative factor adds $\operatorname{Var}(\log u)$ to the log-scale variance $\gamma_0$ and leaves $\gamma_1$ fixed, so a heavy tail relocates along a $\gamma_1$ level set to an ARMA(1,1) log-scale._ The scale-mixture / SV algebra (West 1987) and the correction that the right functional is $\operatorname{Var}(\log u)$ (not $\log(\kappa/3)$) are standard moment bookkeeping. The "max-entropy applied twice" conjecture floated here is retracted under MSE in `0017`. Status: RECOMBINATION (a correct, useful, but elementary derivation).
+
 ## 1. The correction: `Var(log u)`, not `log(κ/3)`
 
 `0005` §3 asserted that an i.i.d. shape with kurtosis $\kappa$ adds

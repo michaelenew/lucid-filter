@@ -10,6 +10,8 @@ already have the 1/r on this side — Green function α = 1.02, force law
 C(r) = a − b/r^1.04. So the physics is not the open part. Two
 engineering parts are.
 
+> **⚖️ ATTRIBUTION —** _Standard lattice field theory, carefully applied: a free massless 4D propagator gives different power laws under different projections (static/time-summed → 1/r, equal-time → 1/r², zero-spatial-momentum → non-decaying), so "read the 1/r" means the static projection. The methodological corrections are the valuable part — a Yukawa-vs-1/r fit on a periodic box absorbs artifacts into a fake mass and wrongly rejects a provably massless channel; use a same-volume massless reference with matched zero-mode removal instead. A genuine negative/caution._ Prior art: lattice propagators and projections; zero-mode subtraction; finite-volume artifacts. Status: REPRODUCTION (lattice correlators) + NEGATIVE-RESULT (the acceptance test as specified is unsafe, self-corrected).
+
 ## s1 — One massless field, three different answers
 
 Exact connected two-point function of a free massless 4D lattice

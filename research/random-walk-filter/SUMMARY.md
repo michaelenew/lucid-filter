@@ -18,6 +18,8 @@ are not four separate detectors. They are the two channels (P, M) crossed with
 the two ends of each channel's own persistence (`phi -> 0` impulsive, `phi -> 1`
 persistent): one continuous state, reported every step, no thresholds anywhere.
 
+> **⚖️ ATTRIBUTION —** _A local-level (random-walk + noise) Kalman filter whose two noise variances are each driven by a log-AR(1) latent state — i.e. a stochastic-volatility model on both channels — with the six parameters fit by maximum likelihood._ Prior art: Kalman filter (Kalman 1960); local-level/structural time-series model (Harvey 1989); log-variance AR(1) = discrete stochastic volatility (Taylor 1986; Harvey, Ruiz & Shephard 1994); MLE noise-covariance identification for state-space models (Mehra 1970). The "four modes = two channels × two persistence ends" framing is a clean re-labelling of these standard ingredients. Status: RECOMBINATION.
+
 ## Measured performance
 
 9-probe synthetic battery, 4 seeds, against a constant-gain Kalman filter tuned
@@ -29,12 +31,16 @@ in hindsight per series:
 | worst case | 1.017 |
 | stationary diffusions (Kalman is optimal there) | 1.001–1.005 |
 
+> **⚖️ ATTRIBUTION —** _Measured MSE ratios of the adaptive filter vs a per-series hindsight-tuned constant-gain Kalman on a 9-probe synthetic battery; adaptivity is near-free (ratio ~1.00) where the constant gain is already optimal and helps where it is not._ Prior art: adaptive filters beating a fixed-gain baseline on non-stationary data is the expected outcome (adaptive Kalman filtering, Mehra 1970, 1972); the specific numbers on this specific synthetic rig are the original content. Status: RECOMBINATION (the benchmark result itself); the honest oracle-gap numbers are the useful part.
+
 ## fit() vs filter()/update()
 
 `fit()` is offline calibration: it searches the 6-parameter space for the
 maximum-likelihood values given a batch of historical data. `filter()` (batch)
 and `update()` (streaming) apply an already-fitted filter and are cheap. Call
 `fit()` once on representative history, then filter/stream with the result.
+
+> **⚖️ ATTRIBUTION —** _Offline batch MLE calibration of the state-space noise parameters, then apply the fixed filter online — the standard train-then-run split for state-space models._ Prior art: maximum-likelihood identification of state-space noise covariances (Mehra 1970); prediction-error / ML identification (Ljung, *System Identification* 1987/1999). Status: REPRODUCTION.
 
 `fit()` is slow (~1 min per 1200-point series) because each likelihood
 evaluation replays the full recursion across the series — sequential in time,
@@ -43,6 +49,8 @@ evaluations to converge. Almost all of the per-step cost is numpy call
 overhead on a small (5×5) state grid, not arithmetic; a compiled
 implementation would be ~40x faster. This is a language cost, not an
 algorithmic one.
+
+> **⚖️ ATTRIBUTION —** _Measured profiling result: fit() cost is dominated by numpy dispatch overhead on a small state grid across ~1,300 sequential likelihood replays, so a compiled version would be ~40× faster — a language cost, not algorithmic._ Prior art: none needed; this is a measured engineering finding on a specific implementation. Status: NEGATIVE-RESULT.
 
 ## Known limitations (measured, not guessed)
 
@@ -54,6 +62,10 @@ algorithmic one.
   right about half the time.
 - The level posterior is a single-Gaussian collapse per step (GPB1); weakest
   exactly at a jump, where the true posterior is bimodal.
+
+> **⚖️ ATTRIBUTION —** _Measured identifiability limits: process-scale volatility `s_P` carries only ~0.0017 nats/point on homoscedastic data; a persistence `phi` is only meaningful where its scale `s` is above zero; and `phi` on ~12 sparse impulsive events per 1200 points is right about half the time._ Prior art: these are weak-identification / nuisance-parameter-only-under-the-alternative phenomena (Davies 1977 on parameters identified only under the alternative); the specific measured numbers are original. Status: NEGATIVE-RESULT.
+
+> **⚖️ ATTRIBUTION —** _The per-step single-Gaussian collapse of the level posterior is GPB1._ Prior art: Generalized Pseudo-Bayesian order 1 (Ackerson & Fu 1970; Bar-Shalom & Li). Status: REPRODUCTION.
 
 ## Open: drop the shape assumption — assume *stationarity*, learn the shape online
 
@@ -77,6 +89,8 @@ kernels/inducing points, a merge/prune rule, or a sufficient-statistic
 recursion — that preserves the "discover, don't assume" property while staying O(1)
 per step. That compression is the research; the seed above is only the shape of it.
 
+> **⚖️ ATTRIBUTION —** _The proposal to drop the Gaussian-AR(1) shape for the weaker assumption of stationarity and learn the (possibly multimodal) stationary law online via a running kernel-density estimate with a bandwidth that narrows as n→∞._ Prior art: kernel density estimation (Rosenblatt 1956; Parzen 1962) with consistent bandwidth→0 shrinkage (Silverman 1986) is textbook; online/streaming KDE with bounded-memory surrogates (merge/prune, inducing points) also exists (e.g. Kristan et al. 2011 online KDE; sparse GP inducing points). The *specific* framing — learn a stationary volatility law online, bounded-memory, to replace an SV shape assumption — is a plausible small research direction but not yet a result. Status: SPECULATIVE (open proposal, unmeasured).
+
 This is a foundational re-frame (it changes what the class *is*, cf.
 `optimality-proof/` which formalises the current Gaussian-AR(1) class), not an
 increment to the shipped filter.
@@ -89,6 +103,8 @@ count-generated, so the learned stationary law is embeddable/consistent by
 construction; and the KDE's bandwidth-narrowing is an **annealing** schedule
 (`0008`: smoothing is the search schedule, sharp likelihood combs trap local search) —
 one instrument for the shape-learning search.
+
+> **⚖️ ATTRIBUTION —** _An analogy borrowed from the sibling "wall-correspondence" work: a stationary count-generated record "embeds in continuous time" (a PSD transfer operator has a real generator) and bandwidth-narrowing is "annealing."_ Prior art: the embedding/generator statement rests on textbook operator theory (Stinespring / embeddability of stochastic matrices — Kingman 1962); annealing-as-search-schedule is standard (simulated annealing, Kirkpatrick et al. 1983; graduated non-convexity, Blake & Zisserman 1987). Applying them as *justification* for the online-KDE proposal is an unestablished analogy. Status: SPECULATIVE.
 
 ## Layout
 

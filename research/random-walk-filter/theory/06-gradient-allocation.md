@@ -24,6 +24,8 @@ marginalising $\delta\sim N(0,\tau^2)$ turns the mean shift into a rank-one
 covariance bump $\tau^2 e_0e_0^\top$. Once that happens all four modes are
 covariance perturbations and the block structure is gone.
 
+> **⚖️ ATTRIBUTION —** _Self-correction of 03: marginalising the unknown event size δ∼N(0,τ²) converts a mean shift into a rank-one covariance bump, so the location/scale Fisher block-orthogonality was an oracle artifact that disappears once δ is integrated out._ Prior art: a Gaussian mean with a Gaussian prior integrates to a covariance term (marginal likelihood / random-effects representation, standard); the honest re-analysis is the value here. Status: RECOMBINATION (a corrected framing of a standard fact).
+
 ## The unified family
 
 $$\Sigma(a,\varphi,A)=\Sigma_0 + A\sum_{t}\varphi^{\,t}\Big[a\,G^P_t+(1-a)\,G^M_t\Big]$$
@@ -51,6 +53,8 @@ literally the temporal accumulation of its own anomaly.** That is what makes the
 anomaly↔regime axis a continuum rather than a dichotomy, and it is why $\varphi$
 is the right coordinate for it.
 
+> **⚖️ ATTRIBUTION —** _A unified two-coordinate family Σ(a,φ,A): channel a∈[0,1] × persistence φ∈[0,1] (impulse→step, exponential in between) × amplitude A, with the four named modes as its corners and a regime change being the temporal accumulation of its own anomaly._ Prior art: parameterising a change as an exponentially-persistent covariance perturbation is a covariance-structure model; the specific (a,φ,A) embedding unifying outlier/level-shift/variance-change into one square is a plausibly-original packaging of standard perturbations, but the pieces are all standard. Status: RECOMBINATION.
+
 ## The Gram matrix that replaces the orthogonality claim (fig14)
 
 Fisher correlations between the four corner directions, evaluated at $H_0$:
@@ -66,6 +70,8 @@ Fisher correlations between the four corner directions, evaluated at $H_0$:
 shift correlates at 0.79/0.80 at $m$=2. Across channels it is 0.26–0.33. The
 previous framing had this exactly backwards in emphasis: process-vs-measurement
 was never the hard problem; impulse-vs-step is.
+
+> **⚖️ ATTRIBUTION —** _The Fisher-correlation Gram matrix between the four corners under the honest (marginalised) framing: within-channel spike-vs-shift correlates 0.79/0.80 at m=2, across-channel only 0.26–0.33 — so persistence, not channel, is the confusable axis._ Prior art: Fisher-information geometry of competing perturbations (standard); the reversal of emphasis and the specific Gram entries are the measured original content. Status: RECOMBINATION.
 
 ## Detection is fast; attribution is not; and they separate cleanly (fig18)
 
@@ -93,6 +99,8 @@ is not a policy choice. It is **forced**, because the level update depends only
 on $a$ (resolved at $m$=2) and the $Q$ update depends on $\varphi$ (never
 resolved). Allocate on the coordinates the data has pinned; stay spread on the
 ones it hasn't. No threshold is involved in either.
+
+> **⚖️ ATTRIBUTION —** _Detection and channel-attribution saturate fast (bounded, by m≈5) while persistence never resolves, so absorbing the excursion into the level while leaving Q,σ² untouched is forced by the information rather than chosen._ Prior art: the identifiable-fast vs slow-to-identify split of a Fisher/score analysis is standard in spirit; the numbers are the measured content. Status: RECOMBINATION.
 
 ## The "two-point rule" was an oracle artifact, and worse than I said
 
@@ -152,6 +160,8 @@ The "reversal test" that discriminated jumps from outliers is now just the
 orientation of the ridge — a feature of a smooth field, not a rule applied to it.
 There is no magnitude and no $m$ at which anything switches.
 
+> **⚖️ ATTRIBUTION —** _The allocator: exact Bayesian model averaging over the (a,φ,A) square (a ~4,901-component scale mixture including A=0) returning continuous fields E[Δθ], E[a], E[φ] with no event time, test, or gate; the plain Kalman filter is the degenerate flat-plane special case._ Prior art: Bayesian model averaging / continuous mixture of Kalman filters (multiple-model estimation, Magill 1965; MMAE; GPB) — the "no-threshold, allocate-not-detect" gradient framing is the original packaging of a standard mixture. Status: RECOMBINATION.
+
 ## Where the allocation correctly refuses to commit (fig14, fig15)
 
 Posterior-mean allocation on the square, exact expected posterior:
@@ -174,6 +184,8 @@ fig15 maps this as a landscape — the weakest Fisher eigenvalue over the square
 spans 2.4 decades, with the flat region running along the low-$a$/mid-$\varphi$
 band. Identifiability is terrain, not a yes/no, and the allocation should stay
 spread wherever the terrain is flat.
+
+> **⚖️ ATTRIBUTION —** _Measured: the allocator's posterior migrates three corners correctly but leaves PR (a Q-change) at the centroid at every m — a 3× Q change at q=0.05 carries essentially no information, so the failure mode is inaction, arising from a flat likelihood rather than a rule._ Prior art: flat-likelihood → diffuse-posterior is standard Bayesian behaviour; the finding that this specific model refuses to move on Q-changes is the measured content. Status: NEGATIVE-RESULT.
 
 ## What this changes going forward
 

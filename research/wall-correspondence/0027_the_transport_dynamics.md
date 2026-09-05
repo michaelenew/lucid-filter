@@ -4,6 +4,8 @@
 > dynamics as the tensor completion's remaining gap. Code:
 > `0027_the_transport_dynamics.py`.
 
+> **⚖️ ATTRIBUTION —** _Standard math: the holonomy of a loop of noisy group increments is Brownian motion on the group, whose class-function distribution is the heat kernel K_τ (verified against the character formula); the induced quadratic plaquette action gives 1/g²=record precision. The genuine observation is that a heat kernel is strictly positive and so cannot produce the sign-changing zeros of a Born weight |A|². Heat kernel on a Lie group is textbook._ Prior art: Brownian motion / heat kernel on compact Lie groups; character expansions; Wilson gauge action. Status: REPRODUCTION (heat-kernel math) + SPECULATIVE (the connection-dynamics correspondence).
+
 The filter answers structurally: the transport R_xy is **not a
 postulated field** — it is an *inferred nuisance parameter*, read
 from noisy frame-comparison records. Its action is therefore the

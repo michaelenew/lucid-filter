@@ -8,6 +8,8 @@ lattice carries one SU(2) per link, so it must be rebuilt — and the
 rebuild is worth doing here first, because the object it exists to
 expose is a filter object.
 
+> **⚖️ ATTRIBUTION —** _Reproduces known first-order-gravity structure: a simple (decomposable) bivector has equal self-dual and anti-self-dual magnitudes — Plebanski's simplicity constraint — and the spin-2 sector traceless-sym(B⁺⊗B⁻) sits in neither SU(2) marginal (a synergy/interaction term). The 9=1+3+5 decomposition is standard rep theory. Named a "graviton needing two records"; the underlying objects are Plebanski's._ Prior art: Plebanski action / simplicity constraint (Plebanski 1977); self-dual/anti-self-dual (Ashtekar); SO(4)=SU(2)×SU(2). Status: SPECULATIVE (correspondence) + REPRODUCTION (the bivector/rep-theory facts). References genuine.
+
 ## 1. What locks the two streams
 
 Spin(4) = SU(2)⁺ × SU(2)⁻, so a 2-form splits into self-dual and

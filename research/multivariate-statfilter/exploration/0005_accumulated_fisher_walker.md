@@ -1,5 +1,7 @@
 # 0005 — the faithful multivariate walker works (diagonal, linear in D)
 
+> **⚖️ ATTRIBUTION —** _Shows the walker works once it uses the expected (not observed) Fisher accumulated in a Kalman recursion — a standard natural-gradient / recursive-estimation assembly; "diagonal suffices" is a measured finding on this rig._ Prior art: expected Fisher / natural gradient — Amari 1998; recursive prediction-error estimation — Ljung & Söderström 1983. Status: RECOMBINATION.
+
 Fixes the two failures 0004 diagnosed by copying what the scalar walking filter
 actually does: the **expected** Fisher (deterministic given S, not a single-sample
 Hessian), an **unbounded** μ-walk (no reversion), and the finding-18 gain

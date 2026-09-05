@@ -9,6 +9,8 @@ worst case over directions — and **withdraws its conclusion.**
 
 ## 1. The impulsive end of the dynamics channel is multiplicative noise
 
+> **⚖️ ATTRIBUTION —** _Writing $\alpha_t=\bar\alpha+\delta_t$ so a white $\delta$ gives signal-proportional (multiplicative) noise and a persistent $\delta$ gives a coefficient regime change is the standard random-coefficient / time-varying-parameter model, with persistence as an AR(1) hyperparameter._ Prior art: random-coefficient autoregression (Nicholls & Quinn 1982); time-varying-parameter models (Harvey). That white $\delta$ moves only the predictive variance, not the mean, is a direct conditional-expectation calculation. Status: RECOMBINATION.
+
 Worth stating before measuring, because it is the point. Write
 $\alpha_t = \bar\alpha + \delta_t$. Then
 
@@ -71,6 +73,8 @@ Each has its own loss, and each is nearly invisible in the other two. Scoring
 the wrong one is how a real effect looks like nothing.
 
 ## 2. The minimax claim is withdrawn
+
+> **⚖️ ATTRIBUTION —** _Judging a drift law by its worst case over the unknown direction of parameter movement (rather than an average over hand-chosen scenarios) is the minimax / least-favorable-prior criterion._ Prior art: minimax decision theory (Wald 1950); least-favorable priors (Huber 1964 robust estimation). This is a self-correcting NEGATIVE-RESULT: the earlier worst-case claim is withdrawn under a proper direction sweep. Status: NEGATIVE-RESULT.
 
 [`0011`](0011_the_drift_shape.md) §3 rested the case for the invariant drift law
 on a worst case over three scenarios I chose. Three points with a `min()` on

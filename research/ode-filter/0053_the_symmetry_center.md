@@ -6,6 +6,8 @@ coupling that `0047` §4 item 3 flagged as a risk — and refuted it, in a way
 that replaces the phase picture with something simpler that unifies three
 earlier findings.
 
+> **⚖️ ATTRIBUTION —** _The delay estimate is the symmetry center of the cross-covariance $c\,\gamma(s-\tau)$, and since every stationary autocovariance is even about its center, $\hat\tau$ is first-order immune to arbitrary dynamics (spectral-shape) misspecification — only an odd component (a derivative coupling) can move it. This is the delay operator commuting with the stationary flow, and it is why cross-correlation TDE is known to be robust to the signal's spectral shape. Prior art: evenness of stationary autocovariances (textbook); robustness of cross-correlation time-delay estimation to spectral shape (Knapp & Carter 1976). The "symmetry-center" unification is a clean local exposition. Status: RECOMBINATION (arguably a small PLAUSIBLY-NOVEL framing)._
+
 ## 1. The prediction, and its refutation
 
 The phase argument said: the delay is read through each mode as the phase

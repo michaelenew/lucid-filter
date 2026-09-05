@@ -3,6 +3,8 @@
 > **AI-generated, not peer-reviewed.** The three opens left by the
 > nonlinear completion. Code: `0023_the_interior_and_rotation.py`.
 
+> **⚖️ ATTRIBUTION —** _Three analogy results: greybody/remnant floors from a finite level cutoff, "frame-dragging = order channel" (reusing 0009's non-commutativity), and dM/dt∝−1/M² ⟹ lifetime∝M₀³ — which is explicitly stated to be dimensional analysis (Stefan-type law with T=2/M, A∝M²), not a derived emission rate. Reproduces the shapes of Hawking evaporation by construction._ Prior art: Hawking evaporation scaling; greybody factors; black-hole remnants. Status: SPECULATIVE (analogy, self-labelled as dimensional analysis).
+
 **The interior.** Beyond the capacitance nothing goes complex — those
 masses are simply **unreachable**: M(s) rises to C and stops, no
 source strength produces more. At the extremal limit ψ = 0 through

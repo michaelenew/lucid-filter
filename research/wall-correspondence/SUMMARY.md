@@ -6,6 +6,8 @@
 > structural hypotheses until this repository's own harness has scored
 > them.
 
+> **⚖️ ATTRIBUTION (area-level) —** _This entire workstream builds an ANALOGY between adaptive-filter/estimation internals and physics (gravity, Lorentz invariance, Unruh/Hawking, Casimir, sigma models, Z_N, Λ, holographic "wall"). Treat every "correspondence" as SPECULATIVE. The underlying physics is textbook where invoked (fluctuation–dissipation = Callen–Welton 1951; Casimir; Unruh 1976 / Bisognano–Wichmann; Osterwalder–Schrader reflection positivity; Frobenius division algebras; Sorkin interference hierarchy; CKW monogamy; Hawking–Bekenstein thermodynamics) and the estimation facts are standard (Fisher information / information geometry = Amari; Kalman–Bucy; Rao–Blackwell; MDL; heat kernel on groups). No file establishes a physical result; the mappings are unestablished. The genuinely valuable content is (i) measured NEGATIVE-RESULTS on synthetic rigs (0005 coherent bank loses to IMM; 0008 node-barrier trapping; 0044 self-consistency does not fix a scale) and (ii) sound applied statistics/estimation dressed in physics language (0037/0039/0040 kernel-artifact and symmetry-as-model-comparison tests; 0038 acceptance-criterion false-positive rates; 0048 Rao–Blackwell; 0049 lattice-fit cautions). Per-file notes below/in each file give specifics._
+
 A workstream seed; the homomorphism is now proved on the free and
 cycle tiers with the failure located
 (see [`0002`](0002_the_homomorphism.md): a Kalman predict step and

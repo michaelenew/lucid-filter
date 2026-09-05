@@ -5,7 +5,9 @@ input then the vector row must be a *special case* of it and not a different obj
 feeding a row as `m` points sharing one timestamp has to mean what feeding the row means.
 For a plain Kalman filter with diagonal `R` that is an exact identity, and the probe
 carries it as a control — `m` sequential scalar corrections equal the joint one to
-**1e-15** at every size. Here it is not exact, because between the sub-updates the engine
+**1e-15** at every size.
+
+> **⚖️ ATTRIBUTION —** _That sequential scalar updates equal the joint vector update for a linear Kalman filter with diagonal $R$ is a textbook exact identity (the basis of sequential measurement processing). The novel-to-this-rig part is that the adaptive scale walk breaks the equivalence — a joint row identifies the process/sensor split a point cannot — which is the Mehra identifiability point again; plus the zero-gap process-scale-score bug found and fixed here (a measured implementation defect)._ Prior art: sequential vs joint Kalman update equivalence — standard (Bar-Shalom et al. 2001); noise identifiability — Mehra 1970. Status: REPRODUCTION (the identity); NEGATIVE-RESULT (the adaptive gap and the zero-gap defect)._ Here it is not exact, because between the sub-updates the engine
 does two things a Kalman filter does not: it GPB1-collapses the caltrop star back to one
 (mean, covariance), and it takes a walk step on every scale axis the sub-event can see.
 

@@ -40,6 +40,12 @@ median 1, so the overall magnitude lives in ``Q0`` and the breathing in the scal
 channel, and the two do not confound beyond the scalar ridge the core already
 documents.
 """
+# ⚖️ ATTRIBUTION — The vector generalisation: a multivariate KF node with a supplied H,
+# the scale mixture over grid nodes collapsed per step (multivariate GPB1). The amplitude
+# "conservation law" tr(S^-1 * piece)/m summing to 1 is a trivial algebraic identity (S is
+# the sum of the three pieces, so the shares sum to tr(S^-1 S)/m = 1) — a clean framing,
+# not a novel result. Prior art: multivariate Kalman filter — Kalman 1960; GPB1 —
+# Ackerson & Fu 1970; stochastic-volatility scale — Taylor 1986. Status: RECOMBINATION.
 from __future__ import annotations
 
 import math

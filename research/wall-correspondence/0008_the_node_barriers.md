@@ -1,5 +1,7 @@
 # 0008 — The node barriers: the sibling's ergodicity finding, priced in nats
 
+> **⚖️ ATTRIBUTION —** _Measured: a sharp multimodal likelihood (a sinusoid-frequency comb) traps local Metropolis search (0.81 trap rate) where geometric annealing does not (0.40); plus the caveat that annealing fixes barrier-crossing but not diffusion-reach. Standard phenomenon, honestly priced on a specific rig._ Prior art: multimodal likelihoods in frequency estimation; simulated annealing / parallel tempering (Kirkpatrick 1983); graduated non-convexity (Blake & Zisserman 1987). Status: NEGATIVE-RESULT (measurement); the "RG smoothing = search schedule" correspondence is SPECULATIVE.
+
 > **AI-generated, not peer-reviewed.** Experiment 7 (imported with
 > 0004): the sibling's coupling scan found their weight's exact
 > zeros fracture local MCMC, cured only by their flow's smoothing.

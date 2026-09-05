@@ -1,5 +1,7 @@
 # 0001 — The frame: one filter, several reported symptoms, and the suspicion they share a hole
 
+> **⚖️ ATTRIBUTION —** _This is a framing/diagnostic note: it scores an adaptive filter against a clairvoyant oracle told $Q_t$, and organises reported symptoms; the oracle-gap methodology and the tools named (GPB1 collapse, self-confirming boundary) are all standard._ Prior art: clairvoyant/oracle bounds and innovation-based diagnostics — Mehra 1970/72, Bar-Shalom; GPB1 — Ackerson & Fu 1970. Status: RECOMBINATION.
+
 ## Where this starts
 
 [`ode-filter/0039`](../ode-filter/0039_two_zeros.md)
@@ -58,6 +60,8 @@ with `0038`/`0039`, the entries sort into two piles.
   the whole fit **10 nats worse**; the one-line correction
   ($\log Q \mathrel{-}= s_P^2/2$) recovered it. Inert when $\hat s_P=0$ —
   which is why the ODE workstream never felt it.
+
+> **⚖️ ATTRIBUTION —** _The median-vs-mean correction is the elementary log-normal identity: if $\log$-scale has spread $s_P$, the mean variance is $e^{s_P^2/2}$ times the median. Standard._ Prior art: log-normal moment relation $E[e^X]=e^{\mu+\sigma^2/2}$ — textbook; the appearance of $\sigma^2/2$ terms in log-scale (stochastic-volatility) models is standard (Harvey/Ruiz/Shephard 1994). Status: REPRODUCTION.
 - **§1 related.** `_S_SPLITS` tops out at 0.6; the applied daily fits
   $s_P = 1.24$–2.04. A screen that cannot propose the answer cannot rank it.
 - **§5.** `_iv_alpha` defaults $m$ where `0028` measured it as a precondition

@@ -4,6 +4,8 @@
 > direct G reduces to the matter coupling. Code:
 > `0032_the_matter_coupling.py`.
 
+> **⚖️ ATTRIBUTION —** _Identifies the "stress tensor" with the Fisher information matrix, its trace with the earlier scalar mass source, conservation with information continuity (∇·T=0 as flux balance), and G=1/(4πp) with inverse record precision. The Fisher information matrix and its continuity are standard; equating them with T_μν and Newton's G is analogy. Turns G into a single number to hit (p≈0.0154) but derives nothing new._ Prior art: Fisher information matrix; stress-energy conservation in GR. Status: SPECULATIVE (the matter-coupling correspondence).
+
 - **T is the Fisher information matrix.** A lump of record at a node
   has one, and its **trace is exactly** the scalar mass source
   0010/0019 have been using (verified identically, d = 1 and d = 3).

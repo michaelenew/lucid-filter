@@ -44,6 +44,8 @@ The Kalman code is exactly minimax over shapes, the Gaussian is exactly least
 favourable, and the minimax code length is the Gaussian entropy rate of the
 Riccati path. Same saddle as Theorem A, same value class, different loss.
 
+> **⚖️ ATTRIBUTION —** _Theorem A restated under code length: the same equalizer, since both squared-error risk and Gaussian cross-entropy depend on the shape only through $\mathbb E_p[e_t^2]$._ The ingredients are all standard — the Kalman filter as one-step Gaussian predictor (Kalman 1960), the true conditional density minimizes expected code length by Gibbs'/the log-loss–entropy inequality, and Gaussian maximizes entropy at fixed variance (Shannon; Jaynes 1957). Recognizing that the Gaussian innovation code inherits the minimax-shape saddle is a tidy observation but not a new result. Status: REPRODUCTION.
+
 ## Proof
 
 **(i) $m^{\mathrm{KF}}$ is an equalizer.** For any $p\in\mathcal P(\pi)$,

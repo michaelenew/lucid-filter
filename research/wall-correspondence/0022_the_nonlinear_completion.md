@@ -3,6 +3,8 @@
 > **AI-generated, not peer-reviewed.** The road from Newton to
 > Einstein in filter space. Code: `0022_the_nonlinear_completion.py`.
 
+> **⚖️ ATTRIBUTION —** _The self-sourcing equation ∇²λ=−ρ+β|∇λ|² is linearized by ψ=e^{−βλ} — this is the Cole–Hopf transformation, a textbook PDE trick — yielding a Schwarzschild-like λ=−ln(1−MG) with a "horizon", plus mass≤capacitance and T=2/M (Hawking scaling by dimensional analysis). All of this is analogy: reproducing the shapes of black-hole thermodynamics with no derived emission mechanism._ Prior art: Cole–Hopf transform (Hopf 1950, Cole 1951); Schwarzschild solution; black-hole thermodynamics (Bekenstein 1973; Hawking 1975). Status: SPECULATIVE (the Newton→Einstein-in-filter-space correspondence is unestablished analogy).
+
 0019 derived the *linear* trust field: ratio records + pinned
 learning make the learning operator the Laplacian, and Newton
 follows. But the field's own gradients carry code, code is

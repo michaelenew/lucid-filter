@@ -11,6 +11,8 @@ shared covariance for every grid node — makes the likelihood **flat along
 the ridge $Q(s)=Q_{\text{eff}}e^{-s_P^2/2}$**: it measures the *mean*
 process variance and cannot split it between a constant level and a
 wandering scale ([`0005`](0005_the_hole_is_the_ridge.md)).
+
+> **⚖️ ATTRIBUTION —** _GPB1 (single-Gaussian collapse per step) and its per-node replacement IMM are both textbook multiple-model filters; that GPB1's collapse loses discrimination relative to a per-node bank is the standard known cost of the collapse._ Prior art: Generalized Pseudo-Bayesian GPB1 — Ackerson & Fu 1970, Bar-Shalom; Interacting Multiple Model (IMM) — Blom & Bar-Shalom 1988; the underlying "which variance level vs spread" degeneracy is a stochastic-volatility identifiability question (Taylor 1986; Harvey/Ruiz/Shephard 1994). Status: REPRODUCTION.
 Ridge relief 0.0022 nats/pt shipped against 0.0101 with per-node
 covariances (IMM — same model, no new parameters), whose argmin sits on the
 generating $s_P$. The full accounting of the static-to-oracle span
@@ -20,6 +22,8 @@ collapse (repairable), **6.8%** the AR(1)-vs-regime channel model, **3.7%**
 irreducible detection lag. The causal ceiling is **96.3%** of the oracle;
 almost nothing about this gap is fundamental. A no-mixing bank closes 0.0%
 — the kernel's forgetting is essential, not overhead.
+
+> **⚖️ ATTRIBUTION —** _The decomposition method (switch each error source independently, price the residual) is standard ablation; the value here is the specific measured budget on this synthetic rig — those numbers are original observations, though every phenomenon (collapse cost, model mismatch, irreducible causal detection lag) is known._ Prior art: oracle/clairvoyant-bound comparison and causal detection lag are standard in adaptive filtering / quickest-detection (Lorden 1971; Bar-Shalom); IMM vs GPB1 as above. Status: NEGATIVE-RESULT.
 
 **The fit follows the likelihood most of the way home.** The same staged
 search on the IMM likelihood moves every fitted coordinate toward the truth
@@ -33,7 +37,9 @@ negative of the workstream so far. The kick control
 $\hat s_P \in [0.3, 0.9]$ into kick-free homoscedastic windows, while
 GPB1-ML stares at three 6-SD kicks and reports a dead-flat model on one
 seed and $s_P=1.47$ on another. Fisher information in a spread parameter
-vanishes at zero spread; the plug-in is the defect, not the search. **A candidate cure is recorded in
+vanishes at zero spread; the plug-in is the defect, not the search.
+
+> **⚖️ ATTRIBUTION —** _"Fisher information in a spread/variance parameter vanishes at zero spread, so a point estimate on the boundary is ill-posed" is the classic parameter-on-the-boundary problem — a known non-standard-asymptotics result, not new._ Prior art: testing/estimating a variance component at zero — Chernoff 1954; Self & Liang 1987; boundary MLE has a half-normal (one-sided) limiting distribution — standard result in mathematical statistics, specific source not verified. Status: REPRODUCTION. **A candidate cure is recorded in
 [`0010`](0010_the_square_chart.py)** (contributed from the
 quantum-mechanics sibling program, AI-generated, unverified in this
 harness): the family depends on $s_P$ only through $s_P^2$ near the
@@ -41,7 +47,9 @@ boundary, so the defect is the *chart* — in $\tau=s_P^2$ the Fisher
 information is finite and flat at the boundary ($I(\tau)\to c/4$,
 measured $0.399$ on the one-step toy with analytic scores), and the
 boundary estimate becomes the standard well-posed one-sided case (no
-sign ambiguity; MLE demo included). Untested here: the full GPB1/IMM
+sign ambiguity; MLE demo included).
+
+> **⚖️ ATTRIBUTION —** _Reparameterising by $\tau=s_P^2$ so the family enters through the variance and Fisher information is finite at the boundary is standard practice (estimate the variance, not the standard deviation, near zero); the "square is the well-posed coordinate" framing is imported by analogy from a physics sibling program and is decorative, not a new result._ Prior art: variance-vs-scale parameterisation and Fisher information transformation under reparameterisation are textbook (Jacobian $I(\tau)=I(s)/(ds/d\tau)^{-2}$); parameter-on-boundary as above. Status: REPRODUCTION. Untested here: the full GPB1/IMM
 likelihood in $\tau$, and whether the $+0.0055$ nats/pt plug-in price
 survives the chart change on the kick control. This
 lands on `0039`'s item 0a from the opposite direction, with the prices now
@@ -54,6 +62,8 @@ costs the whole channel exactly when it is needed.
 way every other nuisance in this filter already is — meaningful only now,
 because a flat likelihood integrates to indifference and the IMM one does
 not.
+
+> **⚖️ ATTRIBUTION —** _Marginalising a nuisance parameter over a grid rather than plugging in a point estimate is standard Bayesian model averaging; over a bank of noise-parameter hypotheses this is exactly Multiple-Model Adaptive Estimation._ Prior art: MMAE — Magill 1965; IMM — Blom & Bar-Shalom 1988; Bayesian nuisance marginalisation is textbook. Status: RECOMBINATION.
 
 ## The scoreboard
 

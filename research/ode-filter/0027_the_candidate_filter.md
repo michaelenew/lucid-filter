@@ -3,6 +3,8 @@
 `output/odefilter/` is a working candidate. This is what it does and what it
 costs. The parent filter is untouched.
 
+> **⚖️ ATTRIBUTION —** _The candidate is an adaptive multiple-model Kalman filter over an AR($p$)-in-noise (probabilistic-ODE) state space, with a gridded (IMM/MMAE-style) noise-scale nuisance and GPB1 collapse — every ingredient is published; the specific assembly and the measured numbers are the local content._ Prior art: Kalman 1960; multiple-model adaptive estimation (Magill 1965; Blom & Bar-Shalom 1988); GPB1 (Ackerson & Fu 1970); probabilistic ODE filters (Schober–Särkkä–Hennig 2019). Status: RECOMBINATION.
+
 ---
 
 ## 1. It reduces to the parent, exactly
@@ -46,6 +48,8 @@ Worth noting the parent ties the last-value predictor on ODE data at low noise
 tracker, not a forecaster.
 
 ## 3. Two diagnostics that are orthogonal by construction
+
+> **⚖️ ATTRIBUTION —** _Separating a one-off event (first-moment innovation spike) from a parameter change (whiteness / residual autocorrelation, zero mean) is standard innovation-based fault detection and filter-consistency testing._ Prior art: innovation whiteness tests (Kailath 1968; Mehra; Bar-Shalom); GLR event detection (Willsky & Jones 1976). Status: REPRODUCTION.
 
 [`0025`](0025_event_versus_parameter_change.py) checked the user's caution that
 a one-off disturbance in any direction simply **is** process noise, and that

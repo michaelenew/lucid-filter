@@ -1,5 +1,7 @@
 # 0017 — the de-mix obstacle is deeper: a mixing H couples the sensors to each other
 
+> **⚖️ ATTRIBUTION —** _Negative result: with a mixing H the sensor-scale Fisher block is not diagonal (off-diagonal ~½ρᵢρⱼ(S⁻¹)ᵢⱼ²), so sensors couple to each other through the shared-state observation and no fixed low-dimensional hedge de-mixes a general H — only the full joint grid does._ Prior art: coupling structure of the innovation covariance S=HPHᵀ+R (standard KF algebra); Fisher information of Gaussian covariance parameters (standard). Status: NEGATIVE-RESULT.
+
 Built the 2-D coupling-grid de-mix cleanly (`0017_coupling_demix_clean.py`) — a distribution
 (hedge) over the global process/measurement split, caltrop within-block — and **hammered it
 over 6 seeds**. It **fails on the sensors**: when one sensor is hot, both read the same value

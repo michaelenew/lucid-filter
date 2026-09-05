@@ -1,5 +1,7 @@
 # 0009 — The order channel: arrival order is part of the message
 
+> **⚖️ ATTRIBUTION —** _The core fact is elementary group theory: composing non-commuting (SU(2)) elements makes the ordered product order-dependent, with conjugation-invariance collapsing cyclic orders to a parity/commutator bit; abelian (U(1)) composition is order-free, so the gap is exactly zero. The measured prequential gap (0.017–0.089 nats/triple) quantifies that on a rig._ Prior art: non-commutativity / conjugacy classes, standard. Status: RECOMBINATION (group-theory fact, measured); the "causal boundary layer" physics correspondence is SPECULATIVE.
+
 > **AI-generated, not peer-reviewed.** The corollary the sibling's
 > nonabelian boundary tier (their 0108) sends to filter space,
 > verified here as a bank experiment. Code:

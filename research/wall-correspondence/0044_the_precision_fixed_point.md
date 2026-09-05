@@ -7,6 +7,8 @@
 (D) are all *"what sets the precision of the world's record"*. Until
 that is answered the program cannot emit a falsifiable number.
 
+> **⚖️ ATTRIBUTION —** _An honest negative result: the cavity/self-consistency equation for precision has a fixed point p*=(d−2)q only while the link quality q is external; once q=c·p (a link compares two states) the map becomes linear and there is NO fixed point — only a critical relation c(d−3)=1 and an undetermined overall scale. "A theory with no dial cannot manufacture a scale from its own consistency." The cavity method is standard; the conclusion is a genuine negative._ Prior art: cavity / Bethe–Peierls mean-field methods; Gaussian belief propagation fixed points. Status: NEGATIVE-RESULT (measured; self-consistency does not fix the scale) + SPECULATIVE framing.
+
 This asks whether the precision is free at all. In a bank no node's
 precision is externally given — a node learns its neighbour only as
 well as the neighbour knows itself — so the precision is a **fixed

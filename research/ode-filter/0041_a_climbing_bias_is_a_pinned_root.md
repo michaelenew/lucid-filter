@@ -4,6 +4,8 @@ Probe: [`0040`](0040_can_it_find_a_climbing_bias.py) ·
 numbers: [`ode040.json`](figures/ode040.json) ·
 feature: `OdeFilter.fit(y, p, unit_roots=d)`
 
+> **⚖️ ATTRIBUTION —** _A constant offset is a single root at $z=1$ and a linear (climbing) bias is a double root at $z=1$ — pinning $d$ roots there (fitting only the quotient polynomial) is exactly integrator/bias state augmentation and the imposition of $d$ unit roots / integrated-model constraints._ Prior art: Friedland 1969 ("Treatment of bias in recursive filtering") for bias/integrator augmentation; integrated (ARIMA) and unit-root modeling (Box–Jenkins); that a free ML fit places the unit root at $1\pm O(1/n)$ rather than exactly is standard near-unit-root/Dickey–Fuller bias. That differencing converts iid measurement noise into an MA(1) is textbook over-differencing. Status: REPRODUCTION.
+
 ## The mechanism, before the numbers
 
 The model has no intercept anywhere. A constant offset can only live in a root

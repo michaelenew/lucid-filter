@@ -1,5 +1,7 @@
 # 0004 — The physical trust channel: first measured values
 
+> **⚖️ ATTRIBUTION —** _Imported numbers, no experiment run here. The one durable lesson — subtract the shared-parameter architecture's own kinematic baseline before reading fitted (φ,s) as structure — is a standard "compute the null/baseline first" caution._ Prior art: baseline/null-model subtraction, general statistical practice; log-scale AR(1) is a stochastic-volatility model (Taylor 1986). Status: SPECULATIVE (the trust-channel↔vacuum correspondence is an analogy); the baseline lesson is sound methodology.
+
 > **AI-generated, not peer-reviewed.** Imported result: no experiment
 > was run in this repository for this note. It records numbers
 > measured on the sibling side (quantum-mechanics 0101/0102, lattice

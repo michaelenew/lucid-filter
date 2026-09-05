@@ -1,5 +1,7 @@
 # 0044 — the derived reach is always-safe: it activates only where a structural witness exists
 
+> **⚖️ ATTRIBUTION —** _Confirms the derived eligibility degrades gracefully: with no witnessing partner (a single sensor per joint) it is identically the floor to the digit, so the reach only activates where the known (F,H,Q0) structure gives a per-step witness — an "always-safe" property verified on sensor-configuration ablations._ Prior art: structural detectability of a disturbance from a sensor set / observability (standard). Status: RECOMBINATION.
+
 Tested whether the derived eligibility degrades gracefully when the pot+accel structure (one integrated
 + one direct-readout sensor per joint) is absent. It does, exactly.
 

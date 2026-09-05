@@ -2,6 +2,8 @@
 
 Numbered notes and probes, chronological.  Negative results are results.
 
+> **⚖️ ATTRIBUTION —** _Index; each probe's result is stated and attributed inline in its own note and in [`../SUMMARY.md`](../SUMMARY.md). In brief: the workstream re-derives the classical non-identifiability of process vs measurement noise from one step (Mehra 1970) and carries the split as a Multiple-Model Adaptive Estimation bank of anchored filters reading the innovation sequence (Magill 1965; IMM Blom & Bar-Shalom 1988), with the variogram/structure-function identity (Matheron) behind it. Predominantly REPRODUCTION/RECOMBINATION plus original NEGATIVE-RESULT numbers. Status: see notes per result._
+
 | | what it settles |
 |---|---|
 | [`0001`](0001_lockstep.md) · [`.py`](0001_lockstep.py) | the scalar lockstep is the scale-Fisher's **exact null direction**; the null manifold is the level set of the total; the structural test that finds a confounded pair (and finds none on the 5-DOF arm) |

@@ -5,6 +5,8 @@ in [`0007`](0007_relocation_confirmed_but_ML_undershoots.md).
 
 ## The test
 
+> **⚖️ ATTRIBUTION —** _`fit()` under misspecification returns not the truth's parameters but the KL-nearest member of the model family — i.e. it is a quasi-MLE whose probability limit is the KL-projection, for which White's sandwich is the right asymptotics._ Textbook quasi-maximum-likelihood under misspecification (White 1982; Akaike; PEM, Ljung 1987/1999). The headline "25–30% shortfall" was later retracted as an arithmetic slip (`0015`); the correct reading is that the projection nearly coincides with the moment point. Status: REPRODUCTION.
+
 `0007` found `fit()` relocating in the predicted direction under a heavy-tailed
 shape but landing 25–30% short of the moment-matched $(s_M,\varphi_M)$, and
 listed three candidate causes. The cheapest to rule out is quadrature

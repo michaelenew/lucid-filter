@@ -12,6 +12,8 @@ verifies against realised observations, so no proxy truth is needed, and the
 horizon axis is the decision class. The applied workstream is one consumer: its $h$ is the
 trade horizon.
 
+> **⚖️ ATTRIBUTION —** _Scoring the trusted $\tau$-distribution by the loss of the decisions it feeds (prequential log score of $h$-step cross-forecasts, swept over horizon) is decision-theoretic / task-based evaluation with a proper scoring rule; the "knee" (forecastable horizon = lead time, since $h<\tau$ reads observed past and $h>\tau$ is extrapolation) is a direct consequence. Prior art: decision-theoretic forecast evaluation and proper scoring rules (Dawid; Gneiting & Raftery 2007); the memory-scale roll-off is the workstream's own $1/(1-|z|)$. The priced-band result is a measured NEGATIVE-of-a-prediction. Status: RECOMBINATION (measurement)._
+
 ## 1. The knee law: the lead time is the forecastable horizon
 
 Forecasting $y^{(2)}_{t+h}$ needs $x(t+h-\tau)$: for $h<\tau$ that is the

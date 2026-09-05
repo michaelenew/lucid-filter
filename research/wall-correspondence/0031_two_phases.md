@@ -4,6 +4,8 @@
 > conflation this correspondence had been carrying. Code:
 > `0031_two_phases.py`.
 
+> **⚖️ ATTRIBUTION —** _Reproduces basic quantum mechanics: a global/factorisation phase (re-phasing each Kraus operator) is unobservable — leaves |·|² and the whole record bitwise identical — while a relative phase between interfering components is physical and moves the record. Standard gauge-vs-relative-phase distinction, measured on a toy generator._ Prior art: unobservability of global phase; gauge freedom of Kraus/operator-sum representations (Kraus 1983). Status: REPRODUCTION (of standard QM) + SPECULATIVE (the "source ledger is compositional" framing).
+
 "The phase" has meant two different objects:
 
 - **(i) the factorisation phase** — a static weight W has 2ⁿ

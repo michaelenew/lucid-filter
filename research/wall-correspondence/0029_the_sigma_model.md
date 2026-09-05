@@ -5,6 +5,8 @@
 > learning rule gives four results — the third of which *collapses
 > an obstruction into another*. Code: `0029_the_sigma_model.py`.
 
+> **⚖️ ATTRIBUTION —** _Reproduces standard information geometry: the affine-invariant / Fisher–Rao metric on symmetric positive-definite matrices (‖log P^{−1/2}QP^{−1/2}‖, invariant under congruence), making the field a map into GL(3)/O(3) whose gradient flow is a harmonic map — a (nonlinear) sigma model. That the trace sector reproduces the earlier scalar theory and the record tier has no wave sector (first-order flow diffuses) are consistency checks. "G·g² is a pure number under isotropy" is a stated prediction contingent on an assumption._ Prior art: Fisher–Rao / affine-invariant metric on SPD matrices (Rao 1945; Amari); harmonic maps / nonlinear sigma models. Status: SPECULATIVE (correspondence) + REPRODUCTION (the geometry).
+
 - **The record is a matrix log-ratio, and its geometry is
   Fisher–Rao.** ‖log(P^{−1/2}QP^{−1/2})‖ is invariant under common
   congruence P → GPGᵀ (drift 8e−15 over random invertible G) — the

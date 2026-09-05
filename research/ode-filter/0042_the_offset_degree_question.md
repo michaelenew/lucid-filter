@@ -21,6 +21,8 @@ accepts any `0 ≤ d ≤ p` — so `unit_roots=3`, a **quadratic** offset, is
 expressible today. The docstrings narrate `d = 1, 2`; the code does not stop
 there.
 
+> **⚖️ ATTRIBUTION —** _A degree-$k$ polynomial offset path is a root of multiplicity $k{+}1$ at $z=1$ (confluent modes / Jordan block), and the stochastic completion — a $d$-fold-integrated random walk pinned at $z=1$ — is the discrete analogue of the integrated-Wiener / smoothing-spline prior._ Prior art: confluent roots and Jordan forms (textbook linear algebra); integrated-Wiener-process / polynomial-spline smoothing priors (Wahba 1978; Kohn & Ansley 1987); $d$-times-integrated random walk / local polynomial trend models (Harvey). The exposure ladder $\sim Q h^{2d-1}$ is a direct variance computation. Status: REPRODUCTION.
+
 ## 1. The factorization is the connecting theory
 
 The worry presupposes the offset path and the dynamics are different kinds of

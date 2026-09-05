@@ -5,6 +5,8 @@ should do; one changes how everything before it was measured.
 
 ## 1. Reversion is evidence, and `whiteness` is the wrong instrument
 
+> **⚖️ ATTRIBUTION —** _Replacing a cumulative residual statistic with a posterior over $\alpha$-candidates that includes a FLAT member — so "the dynamics stopped governing" is a model with a likelihood that reverts on its own — is multiple-model / GLR model validation, with the persistence kernel as the model-indicator transition._ Prior art: multiple-model estimation & GLR model validation (Willsky 1976; Blom & Bar-Shalom 1988 IMM); this is the paper's own parent-filter architecture applied one level up. Status: REPRODUCTION.
+
 I framed `whiteness`'s failure to return to zero as needing a forgetting
 factor, and then congratulated the design for refusing one. That was wrong in
 both halves.
@@ -40,6 +42,8 @@ needs no grid, and it correctly fired on both $\alpha$ jumps and on none of the
 five other events in `0033`. It is a smoke alarm, not a controller.
 
 ## 2. Forecasts are distributions; MSE cannot see them
+
+> **⚖️ ATTRIBUTION —** _Scoring forecasts by the logarithmic (predictive-density) score and decomposing it into a calibration term $E[e^2/S]$ and a sharpness term is standard proper-scoring-rule practice; MSE ignores the variance denominator by construction._ Prior art: logarithmic score / calibration-sharpness (Dawid 1984; Gneiting, Balabdaoui & Raftery 2007). Status: REPRODUCTION.
 
 `0033` scored forecasts by MSE. That was wrong by this workstream's own stated
 standard, and wrong for a reason already written down in the parent's `fit_`
@@ -104,6 +108,8 @@ channel of `0033` showing up in the second moment as well as the first.
 battery in particular.
 
 ## 3. The learning is not lagging — but something else is
+
+> **⚖️ ATTRIBUTION —** _Bounding detection latency by the expected log-likelihood-ratio (KL) accrual between hypotheses — ramp-vs-constant giving $n(n^2-1)/(24r^2)$ nats — and comparing it to the filter's posterior convergence is standard detection-theory / quickest-detection accounting._ Prior art: KL/Chernoff detectability bounds; sequential detection (Wald SPRT 1947; quickest-change Lorden 1971). The specific latencies are measurements. Status: REPRODUCTION (measurement).
 
 [`0035`](0035_how_fast_can_it_know.py) computes what a bound actually is, three
 ways.

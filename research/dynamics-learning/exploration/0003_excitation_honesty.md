@@ -7,6 +7,8 @@ covariance machinery.  Part B: a 2-D diagonal rig where axis 2 is undriven and n
 noiseless until t₃ — both axes fault at t* < t₃, so the axis-2 fault is invisible
 until excitation arrives.  300 seeds.
 
+> **⚖️ ATTRIBUTION —** _Recovery rides the derived Kalman-variance (Riccati) curve once a detected changepoint resets the parameter covariance to the class cap; the "restart re-prices ignorance on every axis, excited or not" behaviour is the covariance-reset idea applied per-event. The recovery/calibration numbers vs the derived curve are the measured content._ Prior art: joint state-parameter estimation with covariance reset (augmented EKF; resetting/forgetting RLS, Ljung & Söderström 1983); persistent-excitation identifiability (standard sysID). Status: RECOMBINATION.
+
 ## 1. The walk alone is miscalibrated in both directions; detection fixes the end that matters
 
 RMS departure error and calibration (cal = measured err² / mean reported P_d):
@@ -58,6 +60,8 @@ Axis-2 numbers (faulted at t*, unexcitable until t₃):
   happened.  Judged against the class, it is calibrated; judged after a detection
   elsewhere in the vehicle, it is too narrow — which is precisely the information the
   restart injects.
+> **⚖️ ATTRIBUTION —** _Measured failure mode: latching a parameter as "unidentifiable" during a quiet stretch (zeroing its gain) permanently loses it — 20× state regression and 6× overconfident reports when excitation returns. This is the well-known "estimator windup / covariance blow-down under lost excitation" hazard, quantified here on a dynamics rig. "Floor + cap, never freeze" is the standard remedy (keep the gain live / covariance bounded below)._ Prior art: RLS covariance windup and directional forgetting (standard adaptive-control result). Status: NEGATIVE-RESULT.
+
 - **The latched freeze reproduces the 0052 bug for dynamics.**  Pruning the
   "unidentifiable" axis during the quiet stretch (a gate on running Fisher, latched —
   the tempting embedded 'efficiency' move) locks the door: when excitation arrives the

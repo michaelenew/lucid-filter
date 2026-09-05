@@ -7,6 +7,8 @@ instead the most useful result so far, because the leak turns out to have
 exactly one dimension, and closing it makes the class definition and the
 filter's own model coincide.
 
+> **⚖️ ATTRIBUTION —** _The honest class: heavy-tailed noise is a Gaussian scale mixture, so the shape adversary relocates *within* the log-scale-AR(1) family; the Gaussian, as the minimum-kurtosis scale mixture, is the least-favourable member._ Gaussian-scale-mixture representation of heavy tails and $\kappa\ge3$ with equality iff degenerate (Andrews–Mallows 1974; West 1987; Jensen) are standard; the class is the stochastic-volatility family (Taylor 1986). The "kurtosis is the sufficient statistic" headline is superseded — the correct statistic is $\operatorname{Var}(\log u)$ (`0015`/`0022`). Status: RECOMBINATION (a known family, characterized cleanly for this filter).
+
 ---
 
 ## 1. What was at risk

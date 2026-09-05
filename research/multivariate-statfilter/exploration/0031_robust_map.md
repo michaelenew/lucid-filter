@@ -1,5 +1,7 @@
 # 0031 — the robust measurement update, derived (no 4-sigma, no step)
 
+> **⚖️ ATTRIBUTION —** _Derives the robust down-weighting by marginalising the Gaussian measurement update over the (uncertain, breathing) log-scale posterior, giving a heavy-tailed predictive and a smooth signed MAP condition (★) — the standard "robust filtering = heavy-tailed/scale-mixture observation" route, with the inflation factor (1−c/S) = the sensor's own share of the innovation variance._ Prior art: heavy-tailed / Student-t robust Kalman filtering — Masreliez 1975, Agamennoni et al. 2012, Roth et al. 2013; scale-mixture-of-normals robustness — West 1984. Status: REPRODUCTION.
+
 The 0030 hot-regime fix used an **instantaneous robust gate**: on a clearly-white outlier,
 inflate a sensor's `R` by `1 + max(nis - 16, 0)`. Two things are foreign to the rest of the
 filter — the `16` (4σ) was *measured* "pretty good", not derived, and the `max()`/`if wg>0.85`

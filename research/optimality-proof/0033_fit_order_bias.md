@@ -1,5 +1,7 @@
 # 0033 — The fit's argmax carries a scoring bias from low GH order; the estimate barely notices
 
+> **⚖️ ATTRIBUTION —** _Measured: low Gauss–Hermite order biases the fitted persistence $\varphi_M$ (score bias propagates to the argmax) while leaving tracking θ-MSE essentially unchanged — parameters move, estimate does not._ A quadrature/numerical-precision effect on an ML estimate; no new theory, and the "flat along a ridge" signature is the same near-unidentifiability Proposition 1 predicts. The order-dependent $\varphi_M$ bias numbers are the original, practically-useful content. Status: NEGATIVE-RESULT.
+
 Script: [`0030_does_fit_order_bias_params.py`](0030_does_fit_order_bias_params.py).
 Companion to [`0029`](0029_quadrature_convergence_is_exponential.md): if the
 score at order 5 is a biased approximation of the true score, the argmax the

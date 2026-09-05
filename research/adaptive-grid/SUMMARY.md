@@ -18,20 +18,30 @@ overlapping the old. No theoretically relevant free parameters: the grid
 resolution and the window are compute budgets; the move is driven by the
 likelihood.
 
+> **⚖️ ATTRIBUTION —** _The whole construction — a bank/grid of noise-scale (log-variance) hypotheses per axis, each a Kalman update, weighted by predictive likelihood, with the grid centre sliding to follow the evidence — is Multiple-Model Adaptive Estimation made adaptive-grid._ Prior art: Multiple-Model Adaptive Estimation (Magill 1965); IMM (Blom & Bar-Shalom 1988); "moving-bank" / adaptive-grid MMAE (Maybeck and co-workers, 1980s–90s; specific papers not verified); variable-structure IMM (Li & Bar-Shalom 1996); the log-scale AR(1) noise model is a stochastic-volatility model (Taylor 1986). Status: REPRODUCTION (the architecture); the plain-language framing and the measured numbers are where any originality sits.
+
 ## What is established
 
 The programme now rests on seven measured results
 ([`0006`](0006_what_the_probes_settle.md) reads them in full; all run the shipped
 recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
 
-1. **A direction signal exists off the grid.** The **grid-shift score**
+1. **A direction signal exists off the grid.**
+
+   > **⚖️ ATTRIBUTION —** _The "grid-shift score" is the score function (gradient of the marginal log-likelihood) of a Gaussian scale-family mixture; its slope-≈1 far-field log-linearity is elementary scale-family algebra (score ∝ e^{lam*−lam_top})._ Prior art: Fisher score / score-based estimation (standard); the moving grid of scale hypotheses is MMAE / moving-bank MMAE (Magill 1965; Maybeck). Status: RECOMBINATION.
+
+   The **grid-shift score**
    `Σ_i π_i·½(Qg_i/S_i)(e²/S_i−1)` — the derivative of the marginal loglik under
    a rigid node slide — does not saturate where the posterior mean does; far
    off-grid its log is linear in the offset (slope ≈ 1), recovering the distance.
    This is the move's gradient ([`0001`](0001_what_lights_up.py),
    [`0002`](0002_the_direction_that_survives_the_edge.md)).
 
-2. **A node is a shelf with a cliff, and that sets the resolution.** A node's
+2. **A node is a shelf with a cliff, and that sets the resolution.**
+
+   > **⚖️ ATTRIBUTION —** _Shelf-with-cliff = the asymmetry of the KL divergence between zero-mean Gaussians (over-estimating variance is cheap, under-estimating is confidently wrong); the "keep max node gap below the cliff reach" rule is a grid/quadrature-resolution criterion (a compute budget, not a free parameter)._ Prior art: KL of scale-family Gaussians (textbook); grid/quadrature resolution (standard); the two-point resolution framing is later (finding 11) an analogy to the optical Sparrow criterion (Sparrow 1916). Measured onset (max gap ≈ 0.7–0.8 nats, order-independent) is a NEGATIVE-RESULT. Status: RECOMBINATION.
+
+   A node's
    effectiveness is flat for every truth quieter than it and cliffs for louder
    truths (cliff reach δ ≈ 0.8 nats). The dead zone is the region past the lower
    node's cliff but on the upper node's shelf, so it opens when the node gap
@@ -39,20 +49,32 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    The no-dead-zone rule: `maxgap(order)·s < δ ≈ 0.8` (use ≤ 0.6 for margin) —
    a minimum quadrature order for a required spread ([`0003`](0003_the_bells_and_the_resolution_criterion.py)).
 
-3. **The dead zone is in the likelihood.** The exact marginal-likelihood
+3. **The dead zone is in the likelihood.**
+
+   > **⚖️ ATTRIBUTION —** _Exact marginal gradient and cheap local score dip together on a coarse grid, so the limit is in the coarse likelihood and only resolution cures it; the "chirped, outward-growing comb" is spatial aliasing of an under-sampled log-scale (Nyquist), not a temporal ODE._ Prior art: quadrature/grid resolution of a mixture; sampling/aliasing (both standard). Status: RECOMBINATION.
+
+   The exact marginal-likelihood
    gradient and the cheap local score agree (corr ≥ 0.99) and dip together on a
    coarse grid — resolution is the only cure, not a better estimator. The
    between-node ringing is a chirped, outward-growing comb (spatial aliasing;
    this is the "negatively-damped ODE" look, explained) ([`0003`](0003_the_bells_and_the_resolution_criterion.py),
    [`0004`](0004_exact_gradient_measurement_and_plane.py)).
 
-4. **The channels separate while each stays covered.** Measurement mirrors
+4. **The channels separate while each stays covered.**
+
+   > **⚖️ ATTRIBUTION —** _Per-axis scores on a tensor-product grid, with an off-grid channel leaking into the others through the shared innovation, is standard coupled multiple-model behaviour._ Prior art: tensor-product quadrature; coupled-innovation multiple-model filtering (Bar-Shalom). Status: RECOMBINATION.
+
+   Measurement mirrors
    process; the per-axis score reads its own offset (variance ratio 28.9×) — the
    plane is a tensor product and moves are coordinate-wise. A channel driven
    *off-grid* leaks into the others through the shared innovation (0.002 → 0.611),
    so the move must keep every channel covered ([`0004`](0004_exact_gradient_measurement_and_plane.py)).
 
-5. **The move works.** [`moving_grid.py`](moving_grid.py): a **fine**
+5. **The move works.**
+
+   > **⚖️ ATTRIBUTION —** _A fine moving window beating a fixed wide grid on both loglik and tracking is the moving-bank-MMAE result restated with measured numbers._ Prior art: moving-bank / adaptive-grid MMAE (Maybeck, 1980s); variable-structure IMM (Li & Bar-Shalom 1996). The loglik/track gaps to the oracle are a NEGATIVE/measured-result on a synthetic ramp rig. Status: REPRODUCTION.
+
+   [`moving_grid.py`](moving_grid.py): a **fine**
    (dead-zone-free) grid whose centre is a servo, clamped per step for overlap —
    coverage from motion, safety from a gap that never opens. Against a truth
    ramping 0→+5 nats it tracks to +5 and **beats a fixed wide grid on both
@@ -66,7 +88,11 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    | oracle | 0 | 0.019 |
 
 6. **It converges online from a random start** ([`0007`](0007_online_convergence.py),
-   [`0008`](0008_online_convergence.md)). Profiling forced the servo's form. The
+   [`0008`](0008_online_convergence.md)).
+
+   > **⚖️ ATTRIBUTION —** _Integrating a score with a decaying step is stochastic approximation; the natural-gradient variant is Fisher scoring; the posterior-mean + raw-score composite is an engineering combination that covers each signal's blind side._ Prior art: Robbins–Monro 1951; Amari natural gradient 1998; recursive/online ML. Convergence-count and coarse-grid-stall numbers are NEGATIVE-RESULTs. Status: RECOMBINATION.
+
+   Profiling forced the servo's form. The
    centre step is the recentring signal `Σπ_i lam_i + w·score` — the posterior
    mean (drives from below and inside coverage, unbiased fixed point) plus the
    raw score (drives from above, where the flat shelf stalls the posterior mean)
@@ -83,7 +109,11 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
 
 7. **The ranging is a likelihood-gradient flow — the optimality hook**
    ([`0010`](0010_ranging_is_a_likelihood_gradient_flow.py),
-   [`0011`](0011_toward_defensibly_optimal_ranging.md)). The settling *is* a real
+   [`0011`](0011_toward_defensibly_optimal_ranging.md)).
+
+   > **⚖️ ATTRIBUTION —** _The window ranges by gradient ascent on the marginal log-likelihood (recursive/online ML tracking of the log-scale); linearized near the optimum it is a steady-state scalar Kalman / α-β tracker whose minimum-variance gain is the Benedict–Bordner point β_αβ = α²/(2−α), critically damped at the standard second-order condition._ Prior art: Robbins–Monro 1951; Fisher scoring; Benedict–Bordner 1962 (α-β trackers); steady-state Kalman (Kalman 1960). Status: REPRODUCTION.
+
+   The settling *is* a real
    dynamical system: the phase-space force that moves the window coincides with
    the **exact marginal-likelihood gradient** `dℓ/dμ` (corr 0.83, shared local
    Fisher information `I ≈ 0.068/step`). So the window ranges by **gradient
@@ -112,7 +142,9 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    measurement is the remaining step.
 
    **The calibration is not fit — it is read off the grid**
-   ([`0013`](0013_self_calibrating_tracker.py)). `a, b, R` are properties of the
+   ([`0013`](0013_self_calibrating_tracker.py)).
+
+   > **⚖️ ATTRIBUTION —** _Recomputing the gains from the live per-step Fisher information (R=1/I via Cramér–Rao, natural-gradient step g/I, Kalman gain down-weighting low-information steps) is an adaptive / self-tuning Fisher-scoring tracker; the "need a bound q_mu or a level-jump and a glitch are indistinguishable" argument is the standard requirement of a process-noise/prior on a random-walk parameter for a well-posed causal filter._ Prior art: Cramér–Rao (standard); Fisher scoring / natural gradient (Amari 1998); self-tuning regulators (Åström & Wittenmark); adaptive Kalman filtering (Mehra 1970/72). The q_mu-sweep and settling-horizon numbers (findings via 0014–0018) are NEGATIVE/measured-results. Status: RECOMBINATION. `a, b, R` are properties of the
    current grid geometry, so they need no offline fit and cannot go stale: the
    per-step Fisher information `I_t = Σ_i π_i·½(Qg_i/S_i)²` supplies the slope,
    `R_t = 1/I_t` (Cramér–Rao), and `b = 0` (score-based, no reversion term). The
@@ -180,6 +212,8 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    config-invariant curve** ([`0019`](0019_blowup_vs_coverage.py),
    [`0020`](0020_dimensionless_tradeoff.py), [`0021`](0021_optimal_gridding.py)).
 
+   > **⚖️ ATTRIBUTION —** _(0021) Uniform spacing at the resolution limit vs Gauss–Hermite is a grid-design/quadrature choice. (0020) The settling↔floor tradeoff collapsing onto the single dimensionless r = q_mu·I is the classic α-β "tracking index" design curve, with the steady gain the standard steady-state scalar-Kalman relation._ Prior art: Kalata 1984 (the tracking index for α-β/α-β-γ trackers); Gauss–Hermite quadrature (standard). Status: REPRODUCTION.
+
    **Grid the window uniformly at the dead-zone threshold, not Gauss–Hermite**
    ([`0021`](0021_optimal_gridding.py)). For a *moving* window GH commits both
    sins at once: it over-clusters the centre (spacing → 0, wasted compute) and
@@ -223,7 +257,11 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    the frontier point, read `r`, set `q_mu = r/I` from the grid-readable `I`.
 
 9. **Unbounded reach: the blow-up is an overshoot, cured by bounded, bracketed
-   hunting** ([`0022`](0022_unbounded_reach.py)). Traced step by step, the
+   hunting** ([`0022`](0022_unbounded_reach.py)).
+
+   > **⚖️ ATTRIBUTION —** _An unbounded natural-gradient step overshoots on a large jump, cured by step-clamping (a trust-region/overlap bound) plus a rail-triggered geometric bracketing/expansion search; "fixed window, unbounded reachable set" is the moving-bank-MMAE idea._ Prior art: step-size clipping / trust-region (standard); geometric bracketing / expansion search (the note itself calls it Nelder–Mead, 1965); moving-bank MMAE (Maybeck). Capture-time-vs-distance numbers are NEGATIVE/measured-results. Status: RECOMBINATION.
+
+   Traced step by step, the
    big-jump "blow-up" (finding 8) is not a lack of reach — it is an **overshoot**.
    `kalman_auto`'s natural-gradient step `dμ = K·grad/I` with `grad/I ~ (e²−S)/Qg`
    is **unbounded in the innovation**, so the first step after a large up-jump
@@ -252,7 +290,11 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
    out to find it rather than gridding the span between.
 
 10. **The dense overlapping walk-out, tuned to critical damping — and where τ
-    lands** ([`0023`](0023_critically_damped_walkout.py)). Tie the stride to the
+    lands** ([`0023`](0023_critically_damped_walkout.py)).
+
+    > **⚖️ ATTRIBUTION —** _Tie the stride to one node per step (overlap by construction) and set the loop bandwidth by critical damping of the second-order walk — classic second-order tracking-loop design at ζ=1, with the scalar-Kalman 45° knee at K=¼ standard algebra._ Prior art: Benedict–Bordner 1962; α-β-γ / PLL critical-damping design; steady-state Kalman. Status: REPRODUCTION.
+
+    Tie the stride to the
     grid: with **`mu_cap = gap`** the window shifts at most **one node per step**,
     so consecutive windows overlap on all but one node — the walk stays dense and
     overlapping *by construction*. That pins the slew and leaves only the bandwidth
@@ -274,6 +316,8 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
 
 11. **Theory of the gap — the last constant, in three parts**
     ([`0024`](0024_gap_theory.py)).
+
+    > **⚖️ ATTRIBUTION —** _(i) D(x)=½(eˣ−1−x) is the KL between zero-mean Gaussians of variance ratio eˣ; D''(0)=½ constant ⇒ log-variance is the Fisher-flat coordinate — standard information geometry (the Jeffreys prior for a scale is uniform in log). (ii) The gap as a two-point resolution limit is the optical Sparrow criterion imported by analogy. (iii) The thinnest lattice covering being the hexagonal A₂ lattice is a classic result._ Prior art: KL/Fisher of the Gaussian scale family (textbook); Sparrow 1916 (optics); Conway & Sloane, lattice coverings. Status: REPRODUCTION for (i) and (iii); the Sparrow transfer to this likelihood-representation problem is SPECULATIVE (analogy, conceded unproven in the closing Open).
 
     **(i) The light-up zone is the scale-family KL, in log-variance.** The per-step
     cost of representing a truth by a node is the KL between two zero-mean
@@ -326,6 +370,8 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
 
 12. **Shipped as `statfilter.WalkingFilter`, with the headline result**
     ([`0025`](0025_result_walking_vs_fit.py), figure `0024-walking-vs-fit.png`).
+
+    > **⚖️ ATTRIBUTION —** _Online adaptation surviving past the edge of its training regime where a frozen one-time fit structurally cannot is the standard adaptive- vs fixed-filter argument._ Prior art: adaptive Kalman filtering (Mehra 1970/72); MMAE. The headline level-RMSE numbers (3.6 frozen vs 1.0 walking vs 0.96 oracle) are a NEGATIVE/measured-result on a regime-shift rig. Status: RECOMBINATION.
     The whole programme is packaged as a filter that takes only the class pair
     `(phi, s)` (plus base `Q, s2`) and derives/learns the rest online: window
     position (the walk), step gain (`I` off the grid), drift variance
@@ -345,7 +391,9 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
 
 13. **Grid the nuisance `(φ, s)`: a ridge, not a peak — but the ridge is flat in
     what matters** ([`0026`](0026_grid_the_nuisance.py), figure
-    `0025-grid-the-nuisance.png`). Applying the programme's own move to the last
+    `0025-grid-the-nuisance.png`).
+
+    > **⚖️ ATTRIBUTION —** _A bank over (φ,s) mixed by likelihood is MMAE / Bayesian model averaging; the (φ,s) trade-off ridge (high persistence + small swing ≈ low persistence + large swing give nearly the same log-innovation autocovariance) is standard weak identifiability in AR / stochastic-volatility models._ Prior art: Magill 1965 MMAE; Bayesian model averaging (Hoeting et al. 1999); SV/AR identifiability (standard). Status: RECOMBINATION. Applying the programme's own move to the last
     commitment — a bank of models over `(φ, s)`, gridded and compared — gives two
     landscapes.
     - **Resolvability ("where the dip appears").** At a fixed kernel, gridding the
@@ -374,7 +422,9 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
 
 14. **The ridge, spoken plainly: (φ, s) are identified but sloppy — the block is
     the class, not a number** ([`0027`](0027_ridge_theory.py), figure
-    `0026-ridge-theory.png`). Finding 13's "irreducible in count, free in effect"
+    `0026-ridge-theory.png`).
+
+    > **⚖️ ATTRIBUTION —** _"Sloppy but not degenerate" — full-rank Fisher with a ~15× eigenvalue spread, one stiff and one sloppy combination, the ridge width falling as 1/√n — is Transtrum–Machta–Sethna sloppy-model analysis applied to (φ,s)._ Prior art: Transtrum, Machta & Sethna, sloppy models (2010–2015; the note names Transtrum); Fisher-information geometry (standard). Status: REPRODUCTION. Finding 13's "irreducible in count, free in effect"
     was a resting place; the Fisher geometry settles it.
     - **Full rank.** The Fisher information of `(φ, s)` at the truth has *both*
       eigenvalues positive (≈ 92 and 1429) — no flat direction, so `(φ, s)` **are
@@ -402,7 +452,9 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
     point as n grows on its own.
 
 15. **Shipped as `statfilter.WalkingBank`: the ridge-average made a filter**
-    ([`0028`](0028_result_bank.py), figure `0027-walking-bank.png`). Finding 14's
+    ([`0028`](0028_result_bank.py), figure `0027-walking-bank.png`).
+
+    > **⚖️ ATTRIBUTION —** _A bank of filters over a (φ,s) grid combined by online Bayesian model averaging (weight ∝ forget-power × predictive likelihood) is MMAE / IMM with adaptive weights._ Prior art: Magill 1965 MMAE; Blom & Bar-Shalom IMM 1988; Bayesian model averaging (Hoeting et al. 1999); exponential forgetting on model weights (standard). Status: REPRODUCTION. Finding 14's
     construction is now a class: a bank of `WalkingFilter`s over a `(φ, s)` grid,
     combined by online Bayesian model averaging (weight `w_i ∝ w_i^forget·p_i(x)`).
     The caller supplies only `Q, s2` and the class (a broad grid box) — **no
@@ -417,6 +469,8 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
 
 16. **The last knob is `forget`, and it lives in the least consequential channel**
     ([`0029`](0029_forget_the_last_knob.py), figure `0028-forget-the-last-knob.png`).
+
+    > **⚖️ ATTRIBUTION —** _A forgetting factor lower-bounding model-weight collapse so the bank stays re-selectable is a standard fix in MMAE/adaptive estimation; the argument that it sits in the slowest, flat-ridge channel is the paper's own framing._ Prior art: MMAE weight lower-bounding (Bar-Shalom); exponential forgetting RLS (Ljung & Söderström 1983). The forget-sweep numbers are NEGATIVE/measured-results. Status: RECOMBINATION.
     The bank's model averaging has one residual free parameter: the weight
     persistence `forget`. Under pure Bayes (`forget = 1`) the weights concentrate
     onto the ridge and then **freeze** — a large sustained shift in the process
@@ -451,7 +505,9 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
 
 17. **The stiff wall's last bite: set the gain from the regime's steady
     observability, not the local curvature** ([`0030`](0030_stiff_wall_gain.py),
-    figure `0029-stiff-wall-gain.png`). The tracker descends the asymmetric well
+    figure `0029-stiff-wall-gain.png`).
+
+    > **⚖️ ATTRIBUTION —** _Building the loop gain from the instantaneous (local) curvature over-reacts on a stiffening well; the EMA-of-I fix and its explicit retraction (three un-derived constants, EMA strictly worse than a constant q_mu, superseded by finding 18) are engineering iteration and a documented wrong turn._ Prior art: adaptive gain scheduling (standard). Status: NEGATIVE-RESULT. The tracker descends the asymmetric well
     `D(x)=½(eˣ−1−x)` (finding 11) — exponential wall on the loud side, flat
     plateau on the quiet side — so the per-step Fisher `I` (the observability the
     gain is built from) swings ~**20×** across the reachable range. Finding 10's
@@ -475,6 +531,8 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
 
 18. **The walk loop is parameter-free: critical damping pins the gain**
     ([`0031`](0031_derived_walk_loop.py), figure `0030-derived-walk-loop.png`).
+
+    > **⚖️ ATTRIBUTION —** _The μ-integrator plus the grid relaxing at ~φ is a second-order loop; its double-root (critical-damping) gain K*=(1−φ)/4 is a standard second-order-loop / α-β critical-damping derivation, and Pmu₀=s² is the AR(1) stationary variance._ Prior art: Benedict–Bordner 1962; second-order tracking-loop / PLL design; steady-state Kalman (Kalman 1960). The residual regime-dependent damping over the 84× observability swing is a measured NEGATIVE-RESULT. Status: REPRODUCTION.
     The window-centre `μ` integrates the grid-shift score, but the grid state
     relaxes only at ~`φ` per step, so the walk is a **second-order loop**. Writing
     the error `e=λ−μ` and the grid's lagged offset `y`:
@@ -517,7 +575,9 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
 19. **The linearizing coordinate is derived and exact — and a finite grid cannot
     realise it** ([`0032`](0032_linearize_the_wall.py) map,
     [`0033`](0033_the_linearizing_coordinate.py) theory, figures
-    `0031-linearize-the-wall`, `0032-linearizing-coordinate`). To remove the
+    `0031-linearize-the-wall`, `0032-linearizing-coordinate`).
+
+    > **⚖️ ATTRIBUTION —** _e = log(I/I₀) = −log(1−g/I) is the exact score/Fisher inversion for the Gaussian scale family (score ½(eᵉ−1), Fisher ½eᵉ — elementary identities); the load-bearing finding is the measured one, that a finite grid corrupts (g,I) beyond its span so no transform of grid quantities realises the coordinate._ Prior art: scale-family score/Fisher algebra (textbook). Status: NEGATIVE-RESULT (the identities themselves are REPRODUCTION). To remove the
     stiffening well's amplitude-dependent damping (0010 panel c) with a *derived*
     (not fitted) force-linearization: for the scale family the score is
     `g(e)=½(eᵉ−1)` and the Fisher `I(e)=½eᵉ`, so the offset is recovered exactly by
@@ -550,7 +610,9 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
 
 20. **How much the stiffening nonlinearity actually costs — a stress battery with
     an oracle upper bound** ([`0034`](0034_stress_battery.py), figure
-    `0033-stress-battery`). The oracle is the shipped filter in every respect
+    `0033-stress-battery`).
+
+    > **⚖️ ATTRIBUTION —** _Measuring the cost of the stiffening nonlinearity against an oracle fed the true offset, across a synthetic stress battery, with a self-corrected verdict (stepping linearly beats the saturating Newton response; the apparent quiet-regime win was a gain-collapse confound)._ Prior art: none specific — this is a measurement/diagnostic, not a claim of a new method. Status: NEGATIVE-RESULT. The oracle is the shipped filter in every respect
     (grid, level filter, drift variance, cap) *except* the walk step is fed the
     **true** offset `lam_true − mu` — a perfect force-linearization on uncorrupted
     inputs, so `shipped − oracle` is exactly the cost of the nonlinearity with
@@ -601,6 +663,8 @@ recursion via [`gridlab.py`](gridlab.py), verified to 1e-7).
 
 21. **Dead zones removed from the static-family members: GH → uniform grid**
     ([`0035`](0035_uniform_grid_deadzones.py), figure `0034-uniform-grid-deadzones`).
+
+    > **⚖️ ATTRIBUTION —** _Replacing Gauss–Hermite quadrature nodes with uniform spacing at the resolution limit (representation/coverage over integration accuracy) is a grid-design choice; the measured cost — slightly worse marginal integral, fit() unaffected — is the result._ Prior art: Gauss–Hermite quadrature vs uniform grids (standard). Status: RECOMBINATION (the give-back numbers are a NEGATIVE-RESULT).
     `AdaptiveFilter` (statfilter) and `OdeFilter` (odefilter) shared one
     Gauss-Hermite log-scale grid (`lam = s·z`); `offset.py` has no such grid (its
     `tau` axis is already uniform). GH optimises quadrature accuracy of a smooth

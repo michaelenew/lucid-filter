@@ -8,6 +8,8 @@ before the run.
 
 ## 1. The propagator
 
+> **⚖️ ATTRIBUTION —** _Exact elapsed-time transition and forcing via the augmented matrix exponential, computed by scaling-and-squaring / matrix logarithm rather than eigendecomposition (which fails on the defective constant-velocity block). All textbook continuous-discrete / numerical-linear-algebra results, verified to machine precision here._ Prior art: Van Loan 1978 (integrals of the matrix exponential); Moler & Van Loan (matrix-exponential computation); continuous-discrete Kalman — Jazwinski 1970. Status: REPRODUCTION.
+
 A supplied `F` is the `a = 1` sampling of a fixed generator `A = log F`; over an elapsed
 `a` nominal steps the transition is `exp(aA)`, read off one exponential of
 `a·[[A, I], [0, 0]]` together with the forcing integral `Phi(a) = ∫₀^a exp(Aτ)dτ`.
@@ -60,6 +62,8 @@ hazard kernel and the AR(1) kernel short-circuit at `a = 1` rather than recomput
 through `expm1(log1p(·))`.)
 
 ## 4. The one deliberate break: the all-missing row is not a special case
+
+> **⚖️ ATTRIBUTION —** _The "no-information" limit — an unobserved axis gets predict-only ($P\leftarrow P+q$, the $K\to0$ limit of the update) — is just the Kalman predict step with no measurement, applied uniformly so a partly-observed instant is not a discontinuity in the sensor count. Standard; the measured cost/benefit numbers are the original content._ Prior art: Kalman prediction under missing measurements — standard (Jazwinski 1970). Status: REPRODUCTION.
 
 The walk is a scalar Kalman filter on each axis's window centre:
 

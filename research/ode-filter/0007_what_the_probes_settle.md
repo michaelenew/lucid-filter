@@ -8,6 +8,8 @@ first test only by being untestable there.
 
 ## 1. Errors-in-variables does not attenuate the dynamics — it deletes the oscillation
 
+> **⚖️ ATTRIBUTION —** _Regressing a noisy series on its own noisy lags is the classical errors-in-variables (EIV) problem, and its attenuation/bias is textbook; the "IV on lags $\ge p+1$ annihilates the measurement noise" identity is the standard instrumental-variables cure for EIV in AR estimation._ Prior art: Van Huffel & Vandewalle (TLS) 1991; instrumental-variables estimation of ARX/errors-in-variables models (Söderström & Stoica); Yule–Walker with lagged instruments. The specific finding that the complex root-pair is *deleted* (not merely attenuated) is a sharpened NEGATIVE-RESULT on this rig. Status: REPRODUCTION (with a measured NEGATIVE-RESULT).
+
 Regressing the observed series on its own observed lags is what a pseudo-inverse
 of a noisy regressor block computes, and it is the classical errors-in-variables
 setup. The textbook consequence is attenuation. What actually happens is worse
@@ -50,6 +52,8 @@ integrated.
 
 ## 2. Superconsistency protects the offset and nothing else
 
+> **⚖️ ATTRIBUTION —** _That an integrated (unit-root) regressor has $O(n)$ second moment so its coefficient is super-consistent and immune to the $O(1)$ EIV attenuation is standard unit-root asymptotics._ Prior art: Stock 1987; Phillips (unit-root/cointegration asymptotics), standard result in econometrics; specific source not verified. Status: REPRODUCTION.
+
 Why does OLS keep the unit root ($0.996$–$0.999$ against a truth of $1$) while
 destroying the oscillator? Because an integrated regressor has second moment
 $O(n)$ while the measurement noise contributes $O(1)$, so the attenuation ratio
@@ -88,6 +92,8 @@ spuriously explosive).
 
 ## 3. IV is the anchor, not the estimator
 
+> **⚖️ ATTRIBUTION —** _That instrumental variables is consistent but statistically inefficient relative to Gaussian ML, so IV serves as a closed-form consistent initializer for the likelihood search, is standard estimation practice._ Prior art: instrumental-variables vs maximum-likelihood efficiency (Söderström & Stoica, *System Identification*); IV as a consistent start echoes the moment/variogram start of the parent workstream. Status: REPRODUCTION.
+
 With $(Q,\sigma^2)$ held at truth so only the dynamics are in question
 ([`0003`](0003_where_the_eiv_damage_lands.py) part B), exact Gaussian ML on the
 state-space form against IV(6), RMSE of $\hat\alpha$ over 20 seeds, $n=2000$:
@@ -109,6 +115,8 @@ that keeps a six-or-more-dimensional likelihood search out of the wrong basin.
 It is not the answer.
 
 ## 4. Dynamics uncertainty is exactly a process-noise term
+
+> **⚖️ ATTRIBUTION —** _Folding parameter/model uncertainty into an effective process-noise (state) covariance is the standard "model error as process noise" device; the extra covariance arising from a grid of models collapsing to one Gaussian is exactly the GPB1/moment-matching collapse variance._ Prior art: process-noise modeling of model error (Jazwinski 1970; "Q-tuning"); GPB1 single-Gaussian collapse (Ackerson & Fu 1970); multiple-model estimation (Magill 1965). The $Q_{\text{eff}}=Q+\hat z^\top\Sigma\hat z+\mathrm{tr}(\Sigma P)$ form is a direct second-moment computation. Status: REPRODUCTION.
 
 Verified to 1.27 Monte Carlo standard errors at $N=4\times10^6$
 ([`0004`](0004_dynamics_uncertainty_is_process_noise.py) part A). With state
@@ -152,6 +160,8 @@ how fast $\alpha$ is allowed to move.** That is exactly where the parent's
 trust/belief split lives, and it is now measured rather than assumed.
 
 ## 5. $\alpha$ is a forecasting parameter, and this changes how it can be validated
+
+> **⚖️ ATTRIBUTION —** _That the steady-state Kalman gain (Riccati solution) is nearly insensitive to the dynamics coefficients so filtering error barely sees $\alpha$ while multi-step forecast error does is a consequence of standard Kalman/Riccati and ARMA forecasting theory._ Prior art: steady-state Kalman filter / Riccati sensitivity (Anderson & Moore, *Optimal Filtering*); the $h\sim1/(1-|z|)$ forecast-memory scale is standard AR forecasting. The framing is an exposition of known behavior. Status: RECOMBINATION.
 
 [`0005`](0005_fisher_vs_coefficient_drift.py) compared drift models on
 $\theta$-MSE and found essentially nothing — allowing $\alpha$ to drift bought
@@ -198,6 +208,8 @@ compared on tracking error. Every reported comparison in this workstream must
 be a forecast comparison at a stated horizon.
 
 ## 6. The one proposal still standing: Čencov drift
+
+> **⚖️ ATTRIBUTION —** _"The Fisher information metric is the unique reparameterization-invariant Riemannian metric on a statistical model" is Čencov's (Chentsov's) theorem; letting a parameter diffuse isotropically in that metric is the natural-gradient / information-geometry idea._ Prior art: Chentsov (Čencov) 1972; Amari 1998 (natural gradient); Rao 1945 (Fisher–Rao metric). Applying it as a *drift law* for time-varying AR coefficients is a plausible RECOMBINATION; the note itself later withdraws its optimality claim. Status: RECOMBINATION.
 
 The parent forced its drift law with scale equivariance — the class cannot know
 whether $x$ is in metres or feet, so the constraint on how the scales move must

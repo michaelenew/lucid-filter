@@ -1,5 +1,7 @@
 # 0014 — pairwise two-hot arms for the diagnostic de-mix (right idea, wrong weighting)
 
+> **⚖️ ATTRIBUTION —** _Negative result: adding pairwise (2-D) "two-hot" arms to the caltrop for the diagnostic de-mix makes the leak worse, because the arms carry the stationary prior that shrinks the far offset — the naive prior-weighted average is the wrong estimator._ Prior art: coordinate/pairwise (Bethe) factorization (standard). Status: NEGATIVE-RESULT.
+
 0013's axial caltrop tracks state at linear cost but leaks on the *scale attribution*
 (the process↔measurement de-mixing lives in the corners the axial cross skips). Two
 proposals tested: (a) two-hot arms — the `r_p·r_m` process×measurement 2-D pairs (only

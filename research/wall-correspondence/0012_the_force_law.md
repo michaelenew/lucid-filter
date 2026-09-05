@@ -2,6 +2,8 @@
 
 > **AI-generated, not peer-reviewed.** Code: `0012_the_force_law.py`.
 
+> **⚖️ ATTRIBUTION —** _"Attraction is a code gradient" restates that minimizing a quadratic field code coupled to two sources gives a −1/r interaction potential (again the Laplacian Green function) whose gradient is attractive inverse-square; sign fixed by non-negativity of information. Standard potential theory, narrated as gravity._ Prior art: Green function / potential energy of the Laplacian, textbook. Status: SPECULATIVE (the force-law correspondence is analogy; the 1/r math is REPRODUCTION).
+
 No dynamics rule is posited. For two sources coupled to the trust
 field, the minimized field code is C(r) = const − s₁s₂G(r); on the
 3-lattice the fit gives C(r) = a − b/r^α with **α = 1.04** and b > 0:

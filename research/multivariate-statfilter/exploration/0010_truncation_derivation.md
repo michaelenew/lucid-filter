@@ -1,5 +1,7 @@
 # 0010 — the spectral-truncation threshold, derived (no free parameter)
 
+> **⚖️ ATTRIBUTION —** _Derives the freeze/truncation threshold as the point where the walk's steady spread (their finding-18 Var=(1−φ)/4I) exceeds its window — a self-contained internal derivation tying a known identifiability cut to the class (φ,s)._ Prior art: identifiability/observability of noise variances — Mehra 1972 (which modes are estimable); the specific threshold formula is internal. Status: RECOMBINATION.
+
 `WalkingVectorFilter` freezes axes the data cannot resolve (otherwise their
 unbounded walk integrates noise into a drift, 0006/0009). The freeze threshold was
 a hand-picked `_TRUNC = 0.10·max(I_char)`; this derives it.

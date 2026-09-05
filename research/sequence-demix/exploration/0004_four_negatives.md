@@ -1,5 +1,7 @@
 # 0004 — four things that should have helped the split and did not
 
+> **⚖️ ATTRIBUTION —** _Four measured negative results (memoryless windows, pairing axes into one star axis, deriving the ladder's memory from the class, and the variogram as a second stream). These are original findings on this rig. One sub-result worth flagging: the $L^\*=\sqrt{3d/(\omega^2\,\mathrm{tr}\,I_1)}$ optimal-window derivation and its landing "on the Lorden frontier" invoke standard quickest-detection theory (Lorden 1971). Status: NEGATIVE-RESULT._
+
 All four were run on the hero rig with `LucidFilter()` told nothing, against the build of
 [`0002`](0002_ratio_ladder.md) (steady state **1.031x**, regime C **1.101x**, jump rise 7,
 calibration 1.44 / 0.78).  Each is filed because the reasoning behind it was sound and the

@@ -5,6 +5,8 @@
 > structural discoveries forced along the way. Code:
 > `0019_the_derived_coupling.py`.
 
+> **⚖️ ATTRIBUTION —** _Two genuine facts, dressed as gravity: (a) the response of a local averaging/learning operator (the graph Laplacian) to a point source is its Green function — 1/r in 3D — standard potential theory; (b) dimension selection is the Pólya recurrence/transience of random walks (3D transient, 1D/2D recurrent). "No FDT" restates that response ≠ fluctuation spectrum absent a fluctuation-dissipation relation (Callen–Welton 1951). All standard; the gravity narrative is analogy._ Prior art: Laplacian Green functions; Pólya 1921 (recurrence); Callen–Welton 1951. Status: SPECULATIVE (correspondence); underlying math REPRODUCTION.
+
 **The chain**: freeze lemma (spatial records carry log-ratios) +
 masslessness (no restoring force to an absolute level) + locality ⇒
 the online bank's learning operator **is** the graph Laplacian ⇒ the

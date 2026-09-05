@@ -1,5 +1,7 @@
 # 0004 — the practical walker vs the exact grid (per-sensor deduction)
 
+> **⚖️ ATTRIBUTION —** _Finds that a single-sample natural-gradient (Fisher⁻¹·score) step on the noise scales is rank-deficient and diverges, so curvature must be accumulated over time; the exact grid is used as ground truth._ Prior art: natural gradient / Fisher-metric descent — Amari 1998; recursive / stochastic approximation — Robbins–Monro 1951. Status: NEGATIVE-RESULT.
+
 Cleanest per-component case: n=1 (scalar state), m=2 sensors both reading it
 (`H=[[1],[1]]`), so `psi = (xi, eta_1, eta_2)`, D=3. Truth: sensor 1 goes hot
 (`eta_1 = 1.6`) mid-stream; process and sensor 2 stay clean. Can we say "sensor 1

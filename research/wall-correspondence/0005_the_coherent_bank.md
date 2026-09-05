@@ -1,5 +1,7 @@
 # 0005 — The coherent bank: amplitude mixing loses on classical data, and that is the theorem
 
+> **⚖️ ATTRIBUTION —** _Genuine measured negative: an amplitude/interference mixing bank loses to IMM on classical switching data (+0.011 to +0.017 nats/step, 30σ+), because interference perturbs the weight recursion away from Bayes. This is the repo's useful kind of content — a specific failure margin on a specific rig._ Prior art: IMM/MMAE optimality for classical model mixing (Blom & Bar-Shalom 1988; Magill 1965). Status: NEGATIVE-RESULT (measurement); the "two-ledger theorem" physics gloss is SPECULATIVE.
+
 > **AI-generated, not peer-reviewed.** F4 of the sibling program's
 > adoption plan (their 0079) — flagged there as the highest-upside
 > experiment. Run here under house rules: every parameter of every

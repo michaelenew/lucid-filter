@@ -9,6 +9,8 @@ consumes the $y^{(2)}$ stream with a processing lag and applies the same
 bridge row at the shifted fractional position. Log-likelihoods are
 accumulated per *sample*, so nodes are compared on a common observation set.
 
+> **⚖️ ATTRIBUTION —** _Handling a lead ($\tau<0$) as a deferred update (processing at the step where the bracketing states first exist) turns lead/lag estimation into fixed-lag smoothing; the "uniform deferral" repair enforces that prequential comparison across members requires a common information set at scoring time — a standard fairness condition for likelihood/scoring comparison. Prior art: fixed-lag smoothing (Rauch–Tung–Striebel 1965; standard); prequential same-information-set comparison (Dawid). The specific bias and its repair are measured on this rig. Status: RECOMBINATION (with a measured NEGATIVE-RESULT)._
+
 ## The bias found on the way, and its repair
 
 The naive ledger — each node deferring by its own

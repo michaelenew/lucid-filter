@@ -1,5 +1,7 @@
 # 0050 — the confound and the reach both dissolve under the NO-EMA grid allocation (core.py's method)
 
+> **⚖️ ATTRIBUTION —** _Carries the noise scales as latent log-AR(1) states on a quadrature grid with one GPB1 state and a scale posterior over nodes, breaking the confound with no lag statistic (a process node predicts continued large innovations; φ_P≠φ_M penalises a persistent "it was the sensor") — the classical grid/point-mass Bayesian noise filter, no EMA._ Prior art: grid / point-mass filtering — Bucy & Senne 1971, Kitagawa 1987; multiple-model / GPB1 — Ackerson & Fu 1970, Magill 1965; stochastic-volatility AR(1) scale — Taylor 1986. Status: RECOMBINATION.
+
 _BETA (the C0/C1 innovation EMA) was introduced to the multivariate filter on this branch and is the
 wrong foundation. The scalar core (statfilter.core.AdaptiveFilter) already solved process-vs-measurement
 with NO EMA, and porting its mechanism to a vector state resolves BOTH the confound and the reach with

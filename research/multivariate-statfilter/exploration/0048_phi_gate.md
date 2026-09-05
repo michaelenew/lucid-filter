@@ -1,5 +1,7 @@
 # 0048 — the phi-gate does not save the Laplace reach; the selectivity constant survives
 
+> **⚖️ ATTRIBUTION —** _Negative result: smoothing the confound gate at the class persistence (bfast=1−φ) does not save the Laplace reach; the SENSOR/BOTH regression is flat in the gate rate because the failing partner corrupts the shared state and spikes the good sensor's own e², which the instantaneous Laplace MAP reaches on._ Prior art: Laplace/L1 robustness (standard); innovation gating (standard). Status: NEGATIVE-RESULT.
+
 Tested whether smoothing the confound gate at the class persistence phi (bfast = 1-phi = 0.1, derived)
 fixes the Laplace-b=1 reach's SENSOR/BOTH regression (0047).
 

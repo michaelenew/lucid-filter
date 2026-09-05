@@ -4,6 +4,8 @@
 > correction is worth more than the original claim. Code:
 > `0024_the_monogamy_ledger.py`.
 
+> **⚖️ ATTRIBUTION —** _An honest correction plus a reproduction: classical mutual information is genuinely not monogamous (three identical streams share freely), so 0020's Gaussian "budget" was only positive-definiteness of a correlation matrix, not a sharing law; true monogamy (CKW) is verified numerically on 400 random 3-qubit pure states (W saturates, GHZ extremal). The CKW verification is REPRODUCTION of a known theorem._ Prior art: Coffman–Kundu–Wootters monogamy 2000; W/GHZ states. Status: REPRODUCTION (CKW check) + NEGATIVE-RESULT (the classical non-monogamy correction); "two-ledger" framing SPECULATIVE.
+
 0020 measured e^{−2I(1;2)} + e^{−2I(1;3)} ≥ 1 at the Gaussian
 boundary and called it "the filter-side CKW". **That name was
 wrong.**

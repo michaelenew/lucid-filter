@@ -1,5 +1,7 @@
 # 0002 — The homomorphism: this family and the sibling are one object, minus four parts
 
+> **⚖️ ATTRIBUTION —** _The math is standard: a Kalman predict step on Fourier modes is a Gaussian/heat semigroup (drift in phase, decay in modulus), and "blocking = predict/update cycle, running coupling from curvature" is the renormalization group._ Prior art: Gaussian/heat semigroups; renormalization group (Kadanoff; Wilson 1971). Status: SPECULATIVE — the claim that an adaptive filter and a lattice field theory are "one object" is an analogy, not an established isomorphism; the ingredient pieces are REPRODUCTION.
+
 > **AI-generated, not peer-reviewed** — correspondence record; the
 > sibling's side is `quantum-mechanics` foundations/0098, with a
 > verification module. This repository's cited results are its own.

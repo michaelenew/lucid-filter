@@ -3,6 +3,8 @@
 > **AI-generated, not peer-reviewed.** Code:
 > `0038_the_acceptance_criterion.py`.
 
+> **⚖️ ATTRIBUTION —** _Not a physics correspondence at all — a genuinely useful statistical-methodology result: an acceptance criterion chosen after seeing the data is fitting on the test set; a mean-based test runs a 51% false-positive rate where a per-item consistency test runs 0.5% (a factor ~99), with an accompanying power table. This is pre-registration / multiple-testing / model-selection-on-test-set discipline, measured on the repo's own practice._ Prior art: pre-registration; over-fitting model selection; false-positive/power tradeoffs, standard statistics. Status: NEGATIVE-RESULT / RECOMBINATION (sound, useful; no physics analogy involved).
+
 Twice running, the sibling's stated criterion was the weak link
 rather than the physics. Their 0121 asked whether four fitted
 exponents supported a power law with `|mean − 2| < 0.8`, and it

@@ -9,6 +9,8 @@ From the theory workstream (`random-walk-filter/theory/02`, and the derivation i
 
     V(k) := E[(y_t - y_{t-k})^2] = k Q + 2 sigma^2
 
+> **⚖️ ATTRIBUTION —** _The identity $V(k)=kQ+2\sigma^2$ — a random walk's variance grows linearly with lag while measurement noise is a lag-independent "nugget" — is the classical variogram / structure function, and separating a diffusive slope from a white-noise intercept this way is textbook (also the Allan-variance idea). The finding that reading it directly is worse than reading it through a bank of anchored filters (which are its sufficient form and robust to level jumps) is a measured negative result._ Prior art: variogram / structure function and the nugget effect — Matheron 1963 (geostatistics); Allan variance — Allan 1966; noise identification via innovation/lag statistics — Mehra 1970. Status: REPRODUCTION (identity); NEGATIVE-RESULT (direct-read comparison).
+
 **A process variance accumulates over a lag; a measurement variance does not.**  Slope `Q`,
 intercept `2 sigma^2`.  This is the different signal SUMMARY §6 asks for: one step sees only
 `Q + sigma^2` — Proposition 1, exactly — but a *tail* of prior points sees the slope and the

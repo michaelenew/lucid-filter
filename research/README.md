@@ -5,6 +5,24 @@ the failures, and the figures. The product depends on none of it; this is here
 so that someone picking the filters up can find out *why* each choice was made,
 and which ones are still open.
 
+> **⚖️ ATTRIBUTION (literature-review pass, 2026-09-05) —** _Every result-bearing
+> `.md` file below carries inline `⚖️ ATTRIBUTION` notes mapping each result to its
+> published prior art and tagging its status (REPRODUCTION / RECOMBINATION /
+> SPECULATIVE / NEGATIVE-RESULT). Summary of the pass: no result in this repository is
+> a new theorem or method — the filter is an adaptive multiple-model Kalman filter
+> (MMAE/IMM; Magill 1965, Blom & Bar-Shalom 1988) with a stochastic-volatility noise
+> model (Taylor 1986), online noise identification (Mehra 1970), quickest-detection
+> fault handling (Page 1954, Lorden 1971, Shiryaev; BOCPD Adams–MacKay 2007),
+> separate-bias estimation (Friedland 1969), continuous-discrete/async streaming
+> (Jazwinski 1970, Van Loan 1978), and ARFIMA long-memory (Granger–Joyeux 1980,
+> Hosking 1981); the minimax/optimality theorems re-derive standard results (Kalman as
+> minimax; Gaussian least-favourable, Stam 1959; max-entropy = minimax redundancy,
+> Gallager/Davisson/Csiszár, Burg, Jaynes). The genuinely original content is (a) the
+> engineering synthesis into one parameter-free online filter and (b) the measured
+> failure modes and oracle-gap numbers on synthetic rigs. `wall-correspondence/` is a
+> speculative filter↔physics analogy with no checkable novel result._ Zero results were
+> tagged PLAUSIBLY-NOVEL.
+
 ## How to read it
 
 Each workstream is a `SUMMARY.md` and a set of numbered probes. The rules that

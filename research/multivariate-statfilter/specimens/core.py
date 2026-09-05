@@ -54,6 +54,15 @@ Basic use:
         step = f.update(value)
         print(step.mean, step.measurement_regime)
 """
+# ⚖️ ATTRIBUTION — A stochastic-volatility (log-AR(1) noise scale) local-level model
+# estimated by an exact grid / point-mass forward filter with a per-step GPB1 (single-
+# Gaussian) collapse. Every ingredient is published; the value is the assembly + framing.
+# Prior art: local-level / structural time-series models — Harvey 1989; stochastic
+# volatility (log-scale AR(1)) — Taylor 1986, Harvey/Ruiz/Shephard 1994; grid / point-mass
+# Bayesian filtering — Bucy & Senne 1971, Kitagawa 1987; GPB1 collapse — Ackerson & Fu 1970;
+# ML identification of KF noise — Mehra 1970/1972. The two "conservation laws" are algebraic
+# decompositions (an innovation-variance split and a log-scale carried-over/new split), not
+# new theorems. Status: RECOMBINATION.
 from __future__ import annotations
 
 import math

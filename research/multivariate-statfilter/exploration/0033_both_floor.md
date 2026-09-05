@@ -1,5 +1,7 @@
 # 0033 — the BOTH gap is irreducible Q-observability, which the oracle discounts
 
+> **⚖️ ATTRIBUTION —** _Oracle decomposition (freeze Q or R at truth) shows the BOTH-regime gap is entirely the Q side: a jerk masked by a 20× accelerometer is nearly unobservable from the innovations, so the adaptive already sits at the online-achievable floor (= oracle-R) and the residual is an unobservable-Q cost the full oracle discounts._ Prior art: observability/identifiability of the process-noise covariance — Mehra 1972; innovation-based estimation limits (standard). Status: NEGATIVE-RESULT.
+
 Wiring the derived transition (0032) into the filter regressed BOTH, not improved it — a sign the
 diagnosis was incomplete. This probe asks what the BOTH gap actually *is*, in the clean 2-sensor
 rig (pot on position + accel on acceleration, a burst with **both** process jerk ×20 **and**
