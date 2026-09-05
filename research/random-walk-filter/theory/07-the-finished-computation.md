@@ -40,6 +40,8 @@ strongest one in the project: **detection is not merely unnecessary, it is
 strictly more expensive than not detecting**, and the excess grows without bound
 as the series does.
 
+> **⚖️ ATTRIBUTION —** _Exact computation: scanning t₀ pays a null penalty rising like log n (the max of n candidate LLRs under H₀), while a single variance component over all t pays only the boundary-LRT constant 1.353 nats (½χ²₀+½χ²₁ at the 95th percentile), independent of n._ Prior art: scan-statistic / GLR changepoint penalty ~log n (Willsky & Jones 1976; Siegmund 1985); boundary-parameter LRT null (Chernoff 1954; Self & Liang 1987). The exact 95th-percentile numbers on this rig are the measured content. Status: REPRODUCTION.
+
 ## B. The model
 
 Every mode is a property of the noise, not an event bolted onto it:
@@ -58,6 +60,8 @@ maximising the exact marginal likelihood.** The $-s_c^2/2$ centring keeps
 $E[e^{\lambda}]=1$ so $Q$ still means what it says; that is a normalisation, not
 a parameter.
 
+> **⚖️ ATTRIBUTION —** _The model: a local-level (random-walk + noise) Kalman filter whose process and measurement variances are each a log-AR(1) latent state — a two-channel discrete stochastic-volatility model — with the four "modes" being the two channels × the two ends (φ→0 impulsive, φ→1 persistent) of each channel's autocorrelation, and s_c→0 recovering the plain Gaussian filter._ Prior art: Kalman filter (Kalman 1960); local-level model (Harvey 1989); log-variance AR(1) = stochastic volatility (Taylor 1986; Harvey, Ruiz & Shephard 1994); the E[e^λ]=1 centring is standard SV normalisation. Status: RECOMBINATION.
+
 ### Inference
 
 Exact HMM forward recursion over a Gauss–Hermite quadrature grid on
@@ -66,6 +70,8 @@ nodes and reweighted by the stationary law. Grid nodes and weights follow from
 the quadrature order alone; nothing is placed by hand. The level posterior is
 collapsed to a single Gaussian per step (GPB1) — the one approximation, and a
 numerical scheme rather than a knob.
+
+> **⚖️ ATTRIBUTION —** _Inference: exact HMM forward recursion over a Gauss–Hermite quadrature grid on the two log-scale states, with the level posterior collapsed to one Gaussian per step (GPB1)._ Prior art: grid/numerical filtering for nonlinear-Gaussian and stochastic-volatility state-space models (Kitagawa 1987 non-Gaussian filtering; Fridman & Harris 1998 SV via numerical integration); single-Gaussian collapse is GPB1 (Ackerson & Fu 1970; Bar-Shalom & Li). Status: REPRODUCTION.
 
 Fitting is staged: a 1-D scan over $Q$ with $\sigma^2$ pinned by the variogram
 identity $\gamma_0=Q+2\sigma^2$ (so every candidate is admissible and the range
@@ -91,6 +97,8 @@ $$E[\lambda^c_t\mid D]=\underbrace{\varphi_c\,E[\lambda^c_{t-1}\mid D]}_{\text{c
 Four signed mode coordinates (PA, PR, MA, MR), exhaustive by construction,
 defined at every step, positive for an increase and negative for a decrease.
 No threshold selects among them and none is ever "triggered".
+
+> **⚖️ ATTRIBUTION —** _Two exact "conservation laws": the innovation partitions three ways (prior error / real level move / noise) with coefficients summing to 1 — the Kalman gain decomposition made observation-dependent — and the posterior log-scale decomposes into a carried-over (regime) plus new-at-t (anomaly) part._ Prior art: the innovation/gain partition is the standard Kalman update algebra; the carried-over vs new-at-t split is the AR(1) predictive-vs-innovation decomposition. Both are re-expressions of standard identities. Status: RECOMBINATION.
 
 ## C. Results
 
@@ -122,6 +130,8 @@ statement about this baseline, not a claim of beating the optimal filter. The
 three stationary-diffusion probes, where the constant gain *is* optimal, are the
 honest test, and there the ratios are 1.017 / 1.006 / 1.005: essentially free.
 
+> **⚖️ ATTRIBUTION —** _Measured 9-probe battery: the fully-learned filter's MSE ratio vs a per-series hindsight-tuned constant-gain Kalman (geo mean 0.728 single-seed / 0.678 over 4 seeds, worst 1.017), near-free on stationary diffusions._ Prior art: adaptive filters outperforming a fixed gain off-stationarity is the expected result (Mehra 1970); the honest constant-gain baseline caveat and the specific per-probe numbers are the original content. Status: RECOMBINATION (with the oracle-gap numbers the useful part).
+
 ### Replication across seeds (fig23, THEORY-009)
 
 Four independent draws per probe, with the stage-0.5 persistence scan in place:
@@ -151,6 +161,8 @@ seed is more than 3.4% worse than the hindsight-tuned constant-gain Kalman.
 Drift-rate regime also went 0.987 → 0.811. **The instability was the optimiser,
 not the model** — the same diagnosis THEORY-010 reached from the profile.
 
+> **⚖️ ATTRIBUTION —** _Measured: a coarse stage-0.5 5×5 persistence scan before the 6-D search fixed the instability (worst case 1.300 → 1.034), diagnosing it as an optimiser (multimodal-likelihood / local-optimum) problem, not a model problem._ Prior art: multimodal SV/state-space likelihoods and multi-start / coarse-grid initialisation are well known (SV estimation literature; Nelder–Mead sensitivity to starts). A measured engineering finding. Status: NEGATIVE-RESULT.
+
 The three stationary diffusions sit at 1.005 / 1.001 / 1.003, so adaptivity costs
 essentially nothing where it is not needed. That is the honest test, since a
 constant gain genuinely is optimal there.
@@ -177,6 +189,8 @@ non-answer.) Where $s_M>0$ it is right 10 times out of 12, and the pattern in th
 failures is informative: it is 4/4 on heteroscedastic and 4/4 on heavy-tail —
 both of which perturb the scale at **every** point — and 2/4 on outlier
 contamination, which perturbs it at **1% of points**.
+
+> **⚖️ ATTRIBUTION —** _Measured identifiability of the mode coordinates: s_M (is there measurement-scale structure) is reliable on every seed; φ_M (its persistence) is a nuisance parameter defined only where s_M>0, right 10/12 where estimable and failing on sparse (~12-event) impulsive data._ Prior art: parameters identified only under the alternative (Davies 1977); nuisance-parameter identifiability is standard. The seed-by-seed numbers are the measured content. Status: NEGATIVE-RESULT.
 
 So the corrected information story, replacing the bounded-budget argument above:
 **a persistence is an autocorrelation, and estimating it needs enough events to
@@ -211,6 +225,8 @@ outliers over 1,200 points, i.e. a stationary *impulsive process*, whose
 persistence is estimated from the whole series and therefore accrues information
 linearly — exactly as a regime change does. There was never a reason to expect a
 flat likelihood.
+
+> **⚖️ ATTRIBUTION —** _Self-correction: profiling φ_M directly (re-optimising the other five parameters at each node) shows the impulsive probe carries tens of nats of curvature peaking at low φ_M — the information was present; the 6-D Nelder–Mead search simply failed to find it. The earlier "bounded budget ⇒ flat likelihood" reasoning was wrong because it confused one event with a stationary impulsive process._ Prior art: profile likelihood (Murphy & Van der Vaart 2000); optimiser failure on multimodal likelihoods (standard). The measured profiles are the original content. Status: NEGATIVE-RESULT.
 
 This leaves the framework in a stronger position than the failure suggested: **the
 anomaly/regime axis is learnable from data in both directions**, and the defect
@@ -255,6 +271,8 @@ the point estimate is wildly unstable across probes (6.70, then 0.00, then 0.00)
 and tracking MSE is untouched wherever it lands. That is the signature of weak
 identification — a large estimate carrying marginal evidence — not of a real
 effect.
+
+> **⚖️ ATTRIBUTION —** _Measured: on homoscedastic data the process-scale volatility s_P profiles to a flat ridge worth only ~1.96 nats total (~0.0017 nats/point) that grows-then-converges with quadrature order — weak identification, with the unstable large estimate an artifact of maximum likelihood never penalising flexibility._ Prior art: unpenalised ML over a flexibility/variance-component parameter on a flat likelihood, and boundary-of-parameter-space effects, are standard (Self & Liang 1987; the general weak-identification literature). The measured profile is the original content. Status: NEGATIVE-RESULT.
 
 So: **read $s_M,\varphi_M$ as estimates and $s_P,\varphi_P$ as not
 identified.**

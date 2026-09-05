@@ -1,5 +1,7 @@
 # Current state
 
+> **⚖️ ATTRIBUTION —** _The whole workstream is an adaptive multiple-model Kalman filter over an AR($p$)-in-noise state space (locally-linear ODE as Gaussian filtering = probabilistic numerics), with a stochastic-volatility (log-scale AR(1)) noise model, IMM/MMAE-style bank mixing, a constant/linear offset carried as unit root(s), and a two-series time-delay (offset) channel. Every ingredient is published; the specific assembly, the plain-language framing, and the measured numbers are where any originality sits._ Prior art: Kalman 1960; probabilistic ODE filters (Schober–Särkkä–Hennig 2019; Tronarp et al. 2019; Kersting–Hennig); MMAE/IMM (Magill 1965; Blom & Bar-Shalom 1988); unit-root/bias augmentation (Friedland 1969); time-delay estimation (Knapp & Carter 1976). Status: RECOMBINATION.
+
 Extending the parent filter from unbiased random walks to processes whose
 evolution is locally a **second-order linear ODE in one variable with a constant
 offset**. Same rule as the parent: no theoretically relevant free parameters.
@@ -135,6 +137,8 @@ gap; it cannot be exercised while $\hat s_P$ is pinned at zero.
 
 ## The speedup
 
+> **⚖️ ATTRIBUTION —** _Engineering speedups: concentrating $\sigma^2$ out in closed form on the homoscedastic ($s{=}0$) face (a homogeneity/profile-likelihood argument), splitting the search by conditioning, and replacing Nelder–Mead with L-BFGS-B plus a batched finite-difference gradient. All standard optimization/estimation technique._ Prior art: concentrated (profile) likelihood (standard); L-BFGS-B (Byrd, Lu, Nocedal & Zhu 1995). The "explosive-$\alpha$ was wrong not just slow" is a measured code correctness finding. Status: REPRODUCTION.
+
 `fit()` is **5.5× faster** and **not worse on any case measured** — 5 series
 types × 2 seeds, $n=400$, $p=3$, both parameter vectors scored with the *old*
 implementation's likelihood so the new evaluator cannot flatter itself.
@@ -191,6 +195,8 @@ The **online filter is untouched by all of this**: `update`, `predict`,
 53k online observables agree bit for bit.
 
 ## The dynamics channel: `alpha` is tracked, not held
+
+> **⚖️ ATTRIBUTION —** _Gridding a dynamics-blend scalar $g$ (with $g{=}0$ the FLAT/local-level member) as an AR(1) channel mixed by marginal likelihood is multiple-model adaptive estimation with an explicit model-validation member — "the dynamics stopped governing" carried as a hypothesis with a likelihood._ Prior art: MMAE/IMM (Magill 1965; Blom & Bar-Shalom 1988); GLR model validation (Willsky & Jones 1976). The reversion/too-damped numbers are measurements. Status: RECOMBINATION.
 
 Acting on `0036` §1. The filter now grids a scalar $g$ on
 

@@ -3,6 +3,8 @@
 From [`0050`](0050_the_persistence_axis.py); raw numbers in
 `figures/ode050.json`. Discharges `0047` §4 item 2.
 
+> **⚖️ ATTRIBUTION —** _A $(\tau,\dot\tau)$ "kinetic" member that advects posterior mass along $\tau$ (first-order upwind transport) is a near-constant-velocity tracking model for a time-valued nuisance, Bayes-mixed against FLAT/DIFFUSE members; that it fixes calibration (coverage $0.61\to0.93$) not point RMS, and that static Bayes-over-members has no forgetting (one jump permanently discredits FLAT), are measured. Prior art: constant-velocity/kinematic tracking (Singer 1970; Bar-Shalom); fixed-share / switching priors to restore forgetting over experts (Herbster & Warmuth 1998). Status: RECOMBINATION._
+
 ## What was built
 
 The $\tau$ kernel's missing persistent end, as a **kinetic grid**: nodes

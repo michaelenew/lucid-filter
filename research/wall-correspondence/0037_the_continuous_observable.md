@@ -12,6 +12,8 @@ coupling that correlator is O(g⁴). Their named way in was "an
 operator whose connected correlator is not O(g⁴)". **That is an
 observation kernel**, and choosing it is a filter question.
 
+> **⚖️ ATTRIBUTION —** _The continuous filter is the Kalman–Bucy limit (the discrete Bayes recursion converges to the algebraic-Riccati steady state), a REPRODUCTION. The genuinely useful part is a measured methodological caution: a smearing/observation kernel manufactures signal — even a radial Gaussian injects a 33σ anisotropy on a field isotropic by construction — so "an observable is a choice of kernel" and a kinematic baseline must be subtracted at matched width. That caution is real and well-demonstrated._ Prior art: Kalman–Bucy filter (Kalman–Bucy 1961); smearing/blocking operators in lattice field theory. Status: REPRODUCTION (Kalman–Bucy) + NEGATIVE-RESULT (kernel-induced artifacts, measured).
+
 ## 1. The fully continuous filter
 
 Continuous state, continuous time, continuous observation. The

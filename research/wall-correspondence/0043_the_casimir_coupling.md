@@ -10,6 +10,8 @@ the simulation on a single SU(2) — worth 4×10²¹ more.
 
 That volatility is not noise. It is pointing at a single scalar.
 
+> **⚖️ ATTRIBUTION —** _"Casimir" here is the Casimir OPERATOR of a Lie algebra (eigenvalue j(j+1)), not the Casimir 1948 vacuum-force effect — the borrowed name is loose. The genuine facts are standard representation theory / harmonic analysis: κ=(8/3)⟨j(j+1)⟩ is a dimension-weighted mean Casimir eigenvalue, and the heat kernel on SU(2) decays a character as exp(−τj(j+1)), so the "coupling" is a mean forgetting rate. Spin(4)=SU(2)×SU(2) fusion raising κ is rep-theory bookkeeping._ Prior art: Casimir operator / eigenvalue j(j+1); heat kernel on compact groups; Peter–Weyl. Status: REPRODUCTION (rep theory) + SPECULATIVE (the "record precision = coupling" correspondence).
+
 ## 1. The coupling is a mean Casimir, exactly
 
 For any counting amplitude A = Σ c_n χ_n,

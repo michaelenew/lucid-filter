@@ -1,5 +1,7 @@
 # 0054 — sensors the arm could actually carry: no constant `H` exists, and freezing the linearisation costs 15–195×
 
+> **⚖️ ATTRIBUTION —** _A physical-sensor rig showing no constant measurement matrix exists (accelerometers double as inclinometers), so H must be relinearised each step (EKF), with the Jacobian by complex-step differentiation; freezing the linearisation costs 15–195× the oracle — a measured ablation — plus a relative-degree finding that the score cannot price the disturbance-to-sensor lag._ Prior art: extended Kalman filter relinearisation (standard); complex-step Jacobian — Squire & Trapp 1998, Martins et al. 2003. Status: NEGATIVE-RESULT.
+
 `0052`'s rig gave every joint an "accelerometer" reading that joint's own angular acceleration
 through a constant, diagonal `H`, on a chain of four coplanar pitch joints. Neither half is
 real: no sensor reads a joint coordinate, and nobody builds that arm. This probe replaced the

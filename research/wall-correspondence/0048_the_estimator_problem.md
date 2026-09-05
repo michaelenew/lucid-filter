@@ -11,6 +11,8 @@ question comes back here in the form the filter can actually answer:
 
 **what is the estimator doing with the samples it already has?**
 
+> **⚖️ ATTRIBUTION —** _Not physics — a textbook estimation fix, explicitly named in the code as "multihit / link integration": Rao–Blackwellisation, replacing a sampled factor by its conditional mean (Var(E[X|Z])=Var(X)−E[Var(X|Z)]), gives up to 120× variance reduction at fixed samples. The correct ratio-of-product-variances law (vs a naive (1+v)^j) and the finding that the gain persists for stiff links are genuinely useful, correctly-derived engineering._ Prior art: Rao–Blackwell theorem (Rao 1945; Blackwell 1947); multihit / link integration in lattice MC (Parisi–Petronzio–Rapuano 1983). Status: REPRODUCTION (Rao–Blackwell), a sound and useful application.
+
 ## s1 — The error grows with the operator, the signal does not
 
 Take a correlation between two products of `k` noisy positive

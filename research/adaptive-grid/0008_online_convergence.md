@@ -8,6 +8,8 @@ fine enough to have no dead zone, does the move converge to the truth quickly?
 It does — but only after profiling replaced the naive integrator. The failures
 were informative, so they are recorded.
 
+> **⚖️ ATTRIBUTION —** _The servo is stochastic approximation: integrate a marginal-loglik score with a decaying (Robbins–Monro) step; the natural-gradient variant is Fisher scoring; the posterior-mean + raw-score composite is an engineering combination where each signal covers the other's blind side._ Prior art: Robbins–Monro 1951; Amari natural gradient 1998; recursive/online ML. The convergence-count numbers and the coarse-grid dead-zone stall are NEGATIVE-RESULTs. Status: RECOMBINATION.
+
 ## The design arc (each fix exposed by profiling)
 
 1. **Raw score integrator — fast from above, stalls from below.** The score is

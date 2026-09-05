@@ -145,6 +145,8 @@ The workstream's main negative result, and the reason the shipped channel is `pr
 It is what confines the sensor entry to the read-out two sections below; the estimate itself was
 never in doubt.
 
+> **⚖️ ATTRIBUTION —** _That a single sensor's bias among $m$ redundant sensors is only $1/m$ correctable (the rest is gauge — you know the sensors disagree, not which is right) is a direct consequence of the observability/gauge structure and the average-zero convention. Standard identifiability, measured cleanly here._ Prior art: observability of sensor bias / redundancy for bias calibration — standard estimation theory; gauge/quotient of unidentifiable parameters — standard; specific source not verified. Status: NEGATIVE-RESULT.
+
 **Redundancy, not estimation, is what moves a sensor bias**
 ([`0004`](exploration/0004_redundancy_and_the_gauge.py)). The residual state error under a
 bias $b$ on one of $m$ sensors is the **gauge component**, and it is $b/m$ to three figures:
@@ -163,6 +165,8 @@ scale walk names the biased sensor on its own ($\eta = -0.03,-0.05,-0.07,-0.02,\
 at $m=5$) and down-weighting it is a real partial repair. The claim in this workstream's own
 opening that "the scale channel can only defend; a mean channel repairs" is **withdrawn**:
 defending is nearly as good as repairing, because repairing is gauge-limited.
+
+> **⚖️ ATTRIBUTION —** _The report-vs-apply distinction: the sensor-bias estimate is accurate but both applying it (adopts the arbitrary gauge convention) and merely estimating it (leaks into the process channel) lose to leaving it alone, so it ships as a discarded-output observer. This is a well-reasoned engineering/negative result about acting on a gauge-limited estimate; no single canonical source, and the underlying reason is the observability limit above._ Prior art: n/a as a named theorem; rests on observability-of-bias (standard). Status: NEGATIVE-RESULT.
 
 **Both ways of using the estimate lose to doing nothing**
 ([`0006`](exploration/0006_report_or_apply.py)):
@@ -198,6 +202,8 @@ position sensor alone, the identifiable direction is velocity-side, and $\hat d$
 0.064 against truths of 0.02 and 0.06, with position RMSE 0.692 → 0.384 at the smaller rate.
 The gain shrinks as the drift grows past the class ladder's ceiling, the same falling-off the
 $r = 1.00$ row of `0005` shows.
+
+> **⚖️ ATTRIBUTION —** _The core observability-of-bias result stated concretely: a process mean is estimable only on the $z=1$ generalized eigenspace (the integrating/unit-root modes), because on the stable spectrum a constant input's steady-state reading $H(I-F)^{-1}d$ is indistinguishable from a constant sensor bias. This is exactly when a bias is observable in a linear system — standard, here re-derived and turned into an activation rule ("the offset is a root at z=1")._ Prior art: observability of bias states / integrating-disturbance models — standard control/estimation theory (internal model principle; Friedland 1969); specific source not verified. Status: REPRODUCTION.
 
 **And the channel must decline where a drift cannot be told from a sensor bias.** On the stable
 spectrum $d$ drives the state to the constant $(I-F)^{-1}d$, whose *reading* is exactly a
@@ -372,6 +378,8 @@ log-odds against a matched null, exactly as `ode-filter` 0046 defines trust, wit
 being the same quantity with the offset known rather than estimated — so its slope **is** the
 per-step KL, and it is the fastest any detector could accrue evidence on this data.
 
+> **⚖️ ATTRIBUTION —** _Prequential log-odds against a matched null is a sequential likelihood-ratio (Wald) test; that the oracle's accrual slope equals the per-step KL divergence, and is the fastest achievable, is the standard quickest-detection / Stein's-lemma frontier. The achieved-vs-frontier ratios on this rig are the original measured content._ Prior art: SPRT — Wald 1945; KL as the optimal detection rate / quickest detection frontier — Lorden 1971, Stein's lemma; innovation-based fault detection — Willsky & Jones 1976. Status: NEGATIVE-RESULT.
+
 | | oracle, nats/step | achieved | ratio | tail | steps to 99:1, oracle → achieved |
 |---|---|---|---|---|---|
 | drift 0.05 | 0.0337 | 0.0280 | 0.83 | **0.91** | 81 → 168 |
@@ -420,6 +428,8 @@ the offset move is helping, not costing.
 the demo arm; `0007` showed it finds a drift on a two-state rig where there is only one place
 one could be. Neither asked the question a caller with a real machine has: with fifteen states
 and five physical disturbance channels, is a bias on one of them put on that one?
+
+> **⚖️ ATTRIBUTION —** _On a many-mode rig the identifiable-offset basis recovered from $(F,H)$ coincides with the true disturbance-input columns, and a bias is attributed to the right physical channel — a direct consequence of the observability structure (the estimable subspace is the disturbance-reachable, output-observable one). Measured attribution on a specific arm rig; the geometry is standard._ Prior art: observability/reachability of disturbance inputs — standard control theory; separate-bias estimation — Friedland 1969. Status: NEGATIVE-RESULT.
 
 **Structurally, the channel rediscovers the rig's own geometry.** The identifiable basis has
 $k=5$ and spans exactly the columns of `GJ`, the map from the five per-joint jerk disturbances
@@ -497,6 +507,8 @@ The adversarial row — the truth being the very sensor bias the dropped compone
 with — comes out **opposite to the stable-rig geometry**: resolving the tension protects the
 strongly-observed angle, and the gauge displacement lands on the weakly-coupled top derivative.
 
+> **⚖️ ATTRIBUTION —** _The shipped rule (offset basis = free-response quotient restricted to the $z=1$ generalized eigenspace) is the observability-of-bias criterion made exact for Jordan towers: a constant is estimable exactly where its signature grows polynomially (integrating modes), and nowhere else. Standard result reached by a debugging path; the partial-feedback failure that motivated it is a measured engineering finding._ Prior art: bias/disturbance observability, integrating (unit-root) disturbance models — standard control theory; internal model principle — Francis & Wonham 1976; specific source not verified. Status: REPRODUCTION.
+
 **The rule that ships: the offset basis is the free-response quotient restricted to the z = 1
 generalized eigenspace of $F$** — the modes where a constant's signature grows polynomially, so
 no constant sensor offset can imitate it in the long run. It supersedes `0007`'s sensor-column
@@ -511,6 +523,8 @@ as an activation rule.
 refactor — the state's error contains $V(b-\bar b)$ exactly, and omitting its covariance was
 pure overconfidence wherever the offset is live (`0014`'s calibration 2.43; now 1.16 on the
 chain, 1.80 on the arm's short window).
+
+> **⚖️ ATTRIBUTION —** _Adding the bias-covariance contribution $V P_b V'$ back into the reported state covariance is exactly the two-stage filter's coupling term (the augmented covariance includes the bias uncertainty propagated through the sensitivity $V$); omitting it is overconfidence. Standard two-stage bias-filter bookkeeping._ Prior art: coupled state/bias covariance in the two-stage filter — Friedland 1969; standard result. Status: REPRODUCTION.
 
 **What remains, decomposed by an exact reference — and it shrinks with the window.** The
 settled ratio depends on how much of the convergence transient the window carries: 1.5× over

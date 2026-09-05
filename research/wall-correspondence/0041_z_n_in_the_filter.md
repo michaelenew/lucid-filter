@@ -14,6 +14,8 @@ records are **finite** (the founding constraint), the phase ledger
 is **additive** (0034), and composition must not destroy what the
 record resolved.
 
+> **⚖️ ATTRIBUTION —** _Elementary results dressed in physics nouns: a finite subset of the circle closed under addition is a finite subgroup, i.e. Z_N (trivial group theory); "N = exp(channel capacity)" is an identification of level with distinguishable-phase count; the admissible ladder 5,13,17,25,… is the number-theory condition x²≡−1 (mod N) solvable. Section 4 is self-corrected to a Z_N-tier toy that their own 0136 shows does not constrain the continuum. Nothing here predicts a specific N._ Prior art: finite subgroups of U(1); channel capacity; solvability of x²≡−1 mod N (elementary number theory). Status: RECOMBINATION (standard math) + SPECULATIVE (the level↔Z_N physics correspondence).
+
 ## 1. Additivity + finite resolution forces a cyclic group
 
 Compose two resolvable phases. The filter can only represent the

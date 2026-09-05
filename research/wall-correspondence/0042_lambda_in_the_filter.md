@@ -8,6 +8,8 @@ program's **only** observational route, and its mechanism — total
 curvature ≡ boundary holonomy **mod N** — is a statement about a
 finite ring that their 0136 showed to be a toy.
 
+> **⚖️ ATTRIBUTION —** _Standard topology: a global level shift carries zero Fisher information (gauge), but the winding number of a phase around a closed loop is an integer set by π₁ of the state space — quantisation needs compactness (a circle-valued field), not discreteness. Λ·V∈(2π/q)ℤ is the familiar topological/Dirac-type quantisation with q the gauge-group centre. Mapping to the cosmological constant, and the load-bearing "is the universe closed" premise, is analogy._ Prior art: winding number / π₁; Dirac charge quantisation 1931; topological sectors. Status: SPECULATIVE (the Λ correspondence); the winding math is REPRODUCTION.
+
 ## 1. The global level is gauge
 
 Demonstrated rather than asserted: shift the latent globally by 0.5,

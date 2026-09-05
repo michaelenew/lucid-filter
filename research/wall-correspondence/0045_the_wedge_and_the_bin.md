@@ -7,6 +7,8 @@ Their 0139 is criticality item 1: the amplitude's multiplicities come
 from binning a frame-pair quantity at a scale s₀ nobody fixed, and
 across s₀ the hierarchy swings **10¹²**.
 
+> **⚖️ ATTRIBUTION —** _Two standard facts: (a) at a fixed number of levels the entropy-maximising quantiser is equiprobable, forcing flat multiplicities uniquely (removes the claimed 10¹² freedom in s₀); (b) √det J = |a∧b| is the wedge/information-volume of a record pair (elementary linear algebra). The closed form κ=N(N+3)/3 follows from flat multiplicities. Sound, but standard._ Prior art: maximum-entropy quantisation (Lloyd–Max; Shannon); exterior/wedge product = area = √det Gram. Status: RECOMBINATION (standard math resolving a parameter) + SPECULATIVE (the geometric-gravity framing).
+
 ## 1. The incompatibility, and the object that closes it
 
 The filter had no representation of *"a record about a pair, whose

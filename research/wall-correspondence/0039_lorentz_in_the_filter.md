@@ -3,6 +3,8 @@
 > **AI-generated, not peer-reviewed.** Code:
 > `0039_lorentz_in_the_filter.py`.
 
+> **⚖️ ATTRIBUTION —** _A legitimate methodological reframing rather than a loose analogy: test rotational (Lorentz) symmetry by whether a symmetry-breaking term in the effective action (the dimension-six Symanzik operator Σk_μ⁴) pays its own description-length via a likelihood-ratio / Whittle score — no probe-dependent observable. The k⁴ decay-of-breaking exponent is derived then measured (≈4). This is standard model-comparison and lattice Symanzik improvement, competently combined._ Prior art: Whittle likelihood 1953; Symanzik improvement (Symanzik 1983); lattice restoration of rotational symmetry; likelihood-ratio model comparison. Status: RECOMBINATION (a sound test built from standard parts); the "Lorentz in the filter" naming is analogy but the method is real.
+
 The sibling has failed three times (their 0129, 0130, 0133) to
 decide whether their lattice's rotational symmetry is restored at
 long distance, and the failures share a shape: they measured the

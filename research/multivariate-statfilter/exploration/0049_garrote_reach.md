@@ -1,5 +1,7 @@
 # 0049 — the reach is PARAMETER-FREE: garrote at the beta noise floor + smoothed target
 
+> **⚖️ ATTRIBUTION —** _Assembles a parameter-free reach: accelerate the base scale walk toward the smoothed C0-residual (MLE) scale, with selectivity from the non-negative garrote at the estimator's existing 2√β EMA noise floor and the derived (H,Q0,ρ) gate — reuses only quantities already in the model, matching the best hand-tuned q._ Prior art: non-negative garrote — Breiman 1995; EWMA/forgetting-factor estimation — Ljung & Söderström 1983; MLE scale target (standard). Status: RECOMBINATION.
+
 The theoretical program (0046-0048) localised the last constant to reach SELECTIVITY: how sharply to
 suppress mild/spurious surprises. 0048 showed the winning realisation drives off the SMOOTHED C0
 residual (robust) with a super-linear soft-threshold. Both pieces are available with NO NEW CONSTANT.

@@ -1,5 +1,7 @@
 # 0051 — the recorded open, built: per-channel scales on VectorFilter's grid, clustered, NO beta
 
+> **⚖️ ATTRIBUTION —** _Extends the grid to per-channel scales, factored into per-cluster (per-joint) sub-grids for a block-diagonal H, with per-channel span set by the derived structural confoundability — near-oracle on the confound regimes with no EMA; the one hard case (a genuine failure on the process-collinear accel) is the recorded irreducible confound._ Prior art: block-diagonal / decoupled Kalman factorization (standard); grid/GPB1 multiple-model (as 0050). Status: RECOMBINATION (with a NEGATIVE-RESULT on the collinear SENSOR case).
+
 Extends VectorFilter's grid (the no-EMA machinery) with the per-component ("which sensor is hot")
 scales it flags as open (vector.py:33). The per-channel joint grid is exponential, but the confound is
 LOCAL: for a block-diagonal H (robotics) it factorises into independent per-cluster sub-filters -- here

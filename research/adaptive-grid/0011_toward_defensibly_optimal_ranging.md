@@ -6,6 +6,8 @@ The question: the settling in 0009 overshoots like a damped second-order system
 
 ## Is the ODE real? Yes — a gradient flow in a likelihood well
 
+> **⚖️ ATTRIBUTION —** _The ranging force equals the marginal-loglik score (gradient flow in a likelihood well); linearized near the optimum it is a steady-state scalar Kalman / α-β tracker with the Benedict–Bordner minimum-variance gain (α=1−β, β_αβ=α²/(2−α)), critically damped at the standard second-order condition. The stiffening (anharmonic) well and amplitude-dependent damping are standard nonlinear-oscillator language._ Prior art: Robbins–Monro 1951; Fisher scoring; Benedict–Bordner 1962 (α-β trackers); steady-state Kalman (Kalman 1960). Status: REPRODUCTION.
+
 The first, tempting test failed and was informative: holding `mu` frozen at a
 small offset gives ~zero signal (the in-frame AR(1) reverts to the frame centre,
 so a static offset produces no restoring force). That "k ≈ 0" is a red herring.
