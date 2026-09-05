@@ -129,6 +129,14 @@ Open items / known warts (see ``research/multivariate-statfilter/SUMMARY.md``):
 * **Adaptation lag.**  A burst is caught over ``~1/beta`` steps (the EMA memory); very brief
   bursts are under-corrected.  ``beta`` is the labeled responsiveness/smoothness budget.
 """
+# ⚖️ ATTRIBUTION — The production adaptive Kalman filter: general (relinearised) F/B, per-
+# component noise scales walked online, the Q-vs-R confound broken by innovation whiteness
+# (the docstring itself cites Mehra 1970), a robust measurement update via a heavy-tailed /
+# scale-marginalised MAP, and a structural (spatial) reach. Every ingredient is published;
+# the assembly + measured numbers are where any originality lives. Prior art: Kalman 1960;
+# innovation-correlation adaptive KF — Mehra 1970/1972; robust / Student-t filtering —
+# Masreliez 1975, Agamennoni et al. 2012; failure detection from filter innovations —
+# Willsky & Jones 1976; non-negative garrote — Breiman 1995. Status: RECOMBINATION.
 from __future__ import annotations
 
 import math

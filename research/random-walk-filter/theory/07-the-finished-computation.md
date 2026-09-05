@@ -300,7 +300,11 @@ carries the history recursively, and $\varphi_c$ — a learned number — *is* t
 forgetting rate. The $\omega$ of 02 and the $\varphi$ of 06 turn out to be the
 same object, and here it is estimated rather than assumed.
 
+> **⚖️ ATTRIBUTION —** _The tail/window length disappears because the log-scale AR(1) state carries history recursively and the learned φ_c is the forgetting rate — i.e. the recursive filter replaces the finite buffer, the standard equivalence between an exponentially-weighted recursion and a window._ Prior art: exponential forgetting = effective window is textbook recursive estimation (Ljung & Söderström 1983). Status: REPRODUCTION.
+
 ## E. Still open
+
+> **⚖️ ATTRIBUTION —** _Honest catalogue of remaining defects: φ_M on sparse impulsive data, s_P unidentified (ML the wrong estimator — marginalise not maximise), GPB1 weakest exactly at the jump the filter handles best, and filtered-not-smoothed coordinates._ Prior art: marginalising over rather than maximising a weakly-identified parameter is the standard Bayesian remedy; retrospective smoothing (RTS smoother, Rauch–Tung–Striebel 1965) is standard. These are measured/known limitations, not new claims. Status: NEGATIVE-RESULT.
 
 - **$\varphi_M$ on sparse impulsive data.** 2/4 on outlier contamination. The
   persistence of a scale process that fires at 1% of points is estimated from ~12

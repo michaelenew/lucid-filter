@@ -249,6 +249,8 @@ next axis.
 
 ## The process channel was never dead
 
+> **⚖️ ATTRIBUTION —** _A diagnosis of a stochastic-volatility process-noise channel fitting to its zero boundary: GPB1 collapse vs IMM per-node covariances, a variance MLE landing on an attainable boundary (Fisher information vanishing there), and marginalizing the nuisance rather than plugging in. All standard._ Prior art: GPB1/IMM (Ackerson & Fu 1970; Blom & Bar-Shalom 1988); boundary MLE for variance components (Self & Liang 1987); stochastic volatility (Taylor 1986). The decision-theoretic 35× asymmetry scoreboard is the original content. Status: NEGATIVE-RESULT.
+
 [`0039`](0039_two_zeros.md), from
 [`0038`](0038_why_the_process_channel_is_dead.py). This went looking
 for the fix the list below called item 0a and found that every load-bearing
@@ -310,6 +312,8 @@ must beat 0.0025 nats/pt of premium against 0.0872 of exposure, and leave
 
 ## A climbing bias is a pinned root
 
+> **⚖️ ATTRIBUTION —** _A constant offset is one root at $z=1$, a climbing bias a double root; `unit_roots=d` imposes $d$ unit roots (fitting only the quotient) — integrator/bias state augmentation. That a free ML fit places the root at $1\pm O(1/n)$ and that differencing injects an MA(1) are standard._ Prior art: Friedland 1969 (bias/integrator augmentation); unit-root / integrated (ARIMA) modeling (Box–Jenkins); near-unit-root bias (Dickey–Fuller 1979). Status: REPRODUCTION.
+
 [`0041`](0041_a_climbing_bias_is_a_pinned_root.md), from
 [`0040`](0040_can_it_find_a_climbing_bias.py). Acting on
 the applied workstream's linear-offset probe, which measured
@@ -359,6 +363,8 @@ slope over in-class noise is inexpressible at any $d$, which is the $u=e_1$
 commitment (`0030`) with a concrete casualty.
 
 ## The offset extension: two series, one clock
+
+> **⚖️ ATTRIBUTION —** _Two series reading one latent at a time offset $\tau$, tracked as a posterior over a $\tau$-grid: the delay row is a fractional matrix power / matrix-exponential (with a Grünwald–Letnikov binomial reading and a Brownian-bridge variance for fractional reads); tracking is MMAE with a matched null; trust is a directed-information (transfer-entropy) rate; the anchor is generalized-cross-correlation time-delay estimation. All standard._ Prior art: matrix exponential (Van Loan 1978); fractional differencing (Grünwald–Letnikov; Hosking 1981); time-delay estimation (Knapp & Carter 1976); directed information / transfer entropy (Massey 1990; Schreiber 2000); MMAE (Magill 1965). Status: RECOMBINATION.
 
 [`0042`](0042_the_offset_frame.md) (frame),
 [`0043`](0043_the_delay_row.py)/[`0044`](0044_tracking_the_offset.py)

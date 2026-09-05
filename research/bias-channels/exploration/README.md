@@ -2,6 +2,8 @@
 
 Numbered probes behind [`../SUMMARY.md`](../SUMMARY.md). Later numbers are more recent.
 
+> **⚖️ ATTRIBUTION —** _This is an index; each probe's result is stated and attributed inline in [`../SUMMARY.md`](../SUMMARY.md). In brief: the whole workstream is online bias/offset estimation fed back into a Kalman filter — the two-stage separate-bias filter (Friedland 1969), the observability-of-bias / gauge structure (which biases are estimable), MMAE-style banking of the prior width (Magill 1965), and sequential-likelihood detection-rate benchmarking (Wald 1945; Lorden 1971). Predominantly REPRODUCTION of separate-bias estimation plus original NEGATIVE-RESULT numbers on specific rigs. Status: see SUMMARY per result._
+
 | | what it settles |
 |---|---|
 | [`0001`](0001_what_the_empty_cells_cost.py) | what the two empty first-moment cells cost the shipped filter |
