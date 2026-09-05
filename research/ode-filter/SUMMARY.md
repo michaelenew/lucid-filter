@@ -935,6 +935,8 @@ which is the one thing a metric is for.
 
 ## The loss
 
+> **⚖️ ATTRIBUTION —** _Standardizing on the prequential one-step predictive log-likelihood $-\log p=\tfrac12(e^2/S+\log S)$ — a proper scoring rule that weighs bias against calibration in the model's own ratio and introduces no free parameters — is the prequential / MDL framework._ Prior art: prequential principle (Dawid 1984); MDL (Rissanen 1978); logarithmic proper score (Good 1952; Gneiting & Raftery 2007). Status: REPRODUCTION.
+
 Fitting $\alpha$ removes the **biased** portion of the process variance; $Q$ is
 the **unbiased** residue. The persistence dial splits the dynamics deviation the
 same way — persistent is predictable and moves the mean, impulsive is

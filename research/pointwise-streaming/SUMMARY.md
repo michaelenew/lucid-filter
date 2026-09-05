@@ -91,6 +91,8 @@ general case.** Everything else follows from taking that seriously.
    revert `m` times for one instant delivered as `m` points, which is the same category of
    error as item 4 and was caught by the same rule: **if it is a rate, it takes the gap's
    power; if it is a property of the reading, it does not.**
+> **⚖️ ATTRIBUTION —** _That a single-sensor event cannot separate process-noise from measurement-noise scale (both enter the scalar innovation variance additively, so only their sum is identifiable) is a special case of the classical identifiability result for adaptive Kalman filtering; a joint row breaks the tie because a process mode reaches several innovations while a sensor reaches one. The "packetisation" framing is a fresh route to a known theorem._ Prior art: identifiability of process vs measurement noise covariances — Mehra 1970, 1972. Status: REPRODUCTION.
+
 8. **A partial event may move a direction it can see, and may not move one it cannot**
    (0005). With one sensor reporting, `S` is a **scalar**: a process mode that sensor sees
    and the sensor's own noise enter it additively, so their scale scores are exactly
@@ -234,3 +236,5 @@ checking.
 - **Out-of-order arrival.** Timestamps must be non-decreasing; a late packet is rejected
   rather than re-processed. The Bayes-correct treatment is a fixed-lag smoother over a
   reorder buffer, which is a different object from this filter.
+
+  > **⚖️ ATTRIBUTION —** _Correctly deferred: handling a late-arriving measurement is the out-of-sequence-measurement (OOSM) problem, whose standard solutions are exactly the retrodiction / fixed-lag smoother approaches named here._ Prior art: out-of-sequence measurement processing — Bar-Shalom 2002 (and Bar-Shalom, Chen & Mallick); fixed-lag smoothing — standard. Status: REPRODUCTION (of the framing; not implemented).
