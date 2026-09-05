@@ -1,5 +1,7 @@
 # 0002 — partial rows against dropping the row: the cost lands on the state the discarded sensor reads
 
+> **⚖️ ATTRIBUTION —** _Measured comparison of correcting on partial rows vs discarding incomplete rows in a multi-rate suite; the finding that partial converts a schedule problem into an identifiability one (keeps every reading, pays in the process/sensor split) is a clean articulation on a specific rig. That partial/sequential processing is the right treatment is standard multi-rate Kalman practice; the numbers are original._ Prior art: asynchronous/multi-rate Kalman filtering — Jazwinski 1970, Bar-Shalom et al. 2001; process-vs-measurement noise identifiability — Mehra 1970. Status: NEGATIVE-RESULT.
+
 `0002_partial_is_the_operating_condition.py`. Before this workstream the filter handled
 exactly one kind of absence: an all-`NaN` row (propagate, do not correct). A row where
 *some* sensors read had no path through the engine, so the only way to feed a multi-rate

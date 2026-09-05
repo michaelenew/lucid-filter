@@ -1,5 +1,7 @@
 # 0004 — the clock: what indexing time by arrival count costs, and what the linear-`Q` map leaves behind
 
+> **⚖️ ATTRIBUTION —** _Measured cost of ignoring timestamps (counting arrivals) vs supplying them under irregular sampling, and the error of the linear $Q\cdot a$ process-noise approximation against the exact Van Loan integral. The correct handling (timestamped continuous-discrete update) puts the filter on the clairvoyant oracle — the expected result; the numbers and the $\|A\|a$ error table are the original content._ Prior art: continuous-discrete Kalman under irregular sampling — Jazwinski 1970; exact process-noise via Van Loan 1978. Status: NEGATIVE-RESULT.
+
 `0004_the_clock.py`. A filter that counts arrivals instead of measuring time is making a
 claim about the world — that the gap before every reading is the same — and a stream of
 `(sensor, timestamp, value)` points is exactly the case where it is false. Two errors
