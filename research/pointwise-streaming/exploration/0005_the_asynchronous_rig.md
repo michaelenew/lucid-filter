@@ -1,5 +1,7 @@
 # 0005 — the acceptance rig: three sensors, three rates, no common schedule
 
+> **⚖️ ATTRIBUTION —** _An end-to-end asynchronous multi-rate fusion benchmark (three unsynchronised sensors, one failing mid-run) driven through the point API, scored against a clairvoyant oracle. This is a demonstration/acceptance test of standard asynchronous Kalman fusion plus this filter's noise adaptation; the measured numbers (near-oracle vs 21× for the grid-and-drop route) are the original content, and the rig is what exposed the $Q(a)$ bug and the single-sensor identifiability limit._ Prior art: asynchronous/multi-rate Kalman fusion — Bar-Shalom, Li & Kirubarajan 2001; continuous-discrete KF — Jazwinski 1970. Status: NEGATIVE-RESULT.
+
 `0005_the_asynchronous_rig.py`. The workstream's definition of done. Nothing about this
 rig is synchronous and nothing about it is uniform: a **100 Hz rate gyro**, a **5 Hz
 absolute fix**, and a **12 Hz second absolute with ±35% jitter**, none of them
