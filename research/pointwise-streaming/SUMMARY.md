@@ -29,10 +29,14 @@ sensor was carrying (**6.8×** on velocity there, against 1.2× on position).
 The commitment: **an event is a set of readings sharing an instant, and one reading is the
 general case.** Everything else follows from taking that seriously.
 
+> **⚖️ ATTRIBUTION —** _The whole design — a (sensor, timestamp, value) stream, per-event sub-selection of the observation model, and time carried as elapsed gaps — is the standard continuous-discrete / asynchronous multi-rate Kalman filter with sequential (one-measurement-at-a-time) updates. The engineering assembly onto this adaptive filter is the contribution; every ingredient is textbook._ Prior art: continuous-discrete Kalman filter — Jazwinski 1970; sequential scalar measurement update / multi-rate & asynchronous fusion — standard (Bar-Shalom, Li & Kirubarajan 2001). Status: RECOMBINATION.
+
 1. **Sub-select, never impute** (0002). The sensors that reported are selected out of `H`
    and `r`; the correction, the predictive density and the scale evidence are all over
    that subset. Cost falls with the subset — `G(2n²m_o + 2n m_o² + m_o³)`, so a
    single-sensor event has no `m³` term at all.
+
+> **⚖️ ATTRIBUTION —** _Correcting only on the sensors that reported (sub-selecting rows of $H$ and $R$) rather than imputing missing entries is the standard way asynchronous/partial measurements are handled in Kalman filtering — process each measurement as it arrives, over its own $H$._ Prior art: sequential / asynchronous measurement update — Jazwinski 1970, Bar-Shalom et al. 2001; standard. Status: REPRODUCTION.
 2. **Structural activation stays keyed to the full `H`** (0002). Observability is a
    property of the sensor suite, not of this event. What varies per event is *evidence*,
    not *identifiability* — the 0024 activation rule is unchanged.
@@ -44,6 +48,8 @@ general case.** Everything else follows from taking that seriously.
    not. Free when the scale did not move across the gap, and **1.5%/5.0% better (3–4σ)**
    when it moved during a blackout. ~~Recorded cost, not a win: 1.9%/5.9% *worse* at 8σ~~ —
    that was measured before the split ladder and the split ladder retired it (0001 §4).
+> **⚖️ ATTRIBUTION —** _Carrying time as an elapsed-gap rate and raising each per-step quantity to the gap's power — $F(a)=\exp(a\log F)$, $Q\to Q\cdot a$ (later corrected, item 6), geometric decay of forgetting/persistence factors — is exactly continuous-discrete discretisation via the matrix exponential. Standard._ Prior art: continuous-discrete Kalman / matrix-exponential (Van Loan) discretisation — Jazwinski 1970, Van Loan 1978. Status: REPRODUCTION.
+
 4. **Time enters as a rate, everywhere** (0001, 0004). `timestep` fixes the unit;
    everything supplied about the model and every class timescale is per nominal step, and
    an event `a = dt/timestep` steps later takes each of them to that power:
@@ -51,6 +57,8 @@ general case.** Everything else follows from taking that seriously.
    `forget → forget^a`, `rho → 1−(1−rho)^a`, `q_mu → q_mu·a`. The departure channel's
    drift `q_g = sigma²rho` rides `Q`'s scaling and needs no separate rule. **`R` is not
    scaled** — a measurement variance belongs to the reading, not to the gap before it.
+> **⚖️ ATTRIBUTION —** _Using the matrix logarithm / inverse scaling-and-squaring instead of an eigendecomposition, because the constant-velocity block is defective (one eigenvector for two states), is textbook numerical linear algebra — eigendecomposition of a defective matrix is a known failure mode._ Prior art: matrix exponential/logarithm pitfalls, scaling-and-squaring — Moler & Van Loan, "Nineteen Dubious Ways to Compute the Exponential of a Matrix" (1978/2003); Denman–Beavers iteration for the square root. Status: REPRODUCTION.
+
 5. **`F(a)` is exact, and it is a matrix logarithm rather than an eigendecomposition**
    (0001 §1). A supplied `F` is the `a = 1` sampling of a fixed generator; `exp(a log F)`
    by inverse scaling-and-squaring is exact to the last bit on the constant-velocity block
@@ -58,6 +66,8 @@ general case.** Everything else follows from taking that seriously.
    `W diag(µ^a) W⁻¹` gets wrong by 5e-2 with no warning. Dynamics with no real generator
    are refused with an error naming the fix, not approximated. The factorisation is lazy,
    so a uniformly-sampled filter never computes a logarithm.
+> **⚖️ ATTRIBUTION —** _Recovering the exact discrete process-noise covariance over an arbitrary gap by inverting the Van Loan map (the continuous spectral density integrated against the transition) is the standard continuous-discrete process-noise discretisation; the finding that linear scaling $Q\cdot a$ is a bug for $F\neq I$ (a double integrator accumulates position variance as $t^3$) is a measured negative result, correct and known._ Prior art: Van Loan 1978 (computing integrals involving the matrix exponential); continuous-discrete process-noise covariance — Jazwinski 1970. Status: REPRODUCTION (method); NEGATIVE-RESULT (the linear-scaling failure numbers).
+
 6. **`Q(a)` is exact, recovered from the generator the propagator already holds** (0004,
    0005). ~~`Q(a) = Q·a` is the one deliberate approximation, and it is a division of
    labour: an error in `F` is absorbed by nothing, while correcting the process-noise

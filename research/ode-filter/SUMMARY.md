@@ -542,6 +542,8 @@ curve at its own horizon.
 
 ## Three corrections — read these before anything else
 
+> **⚖️ ATTRIBUTION —** _(1) A FLAT regime is a member of the family, so validate with a posterior over models (MMAE/GLR) not a cumulative whiteness statistic; (2) score forecasts by the logarithmic (proper) score decomposed into calibration and sharpness, not MSE; (3) detection latency is bounded by KL/LLR accrual, and the filter's state estimation is at that bound. All standard._ Prior art: MMAE/GLR (Willsky 1976; Blom & Bar-Shalom 1988); proper scoring rules (Dawid 1984; Gneiting et al. 2007); KL detectability / quickest detection (Lorden 1971). Status: REPRODUCTION.
+
 [`0036`](0036_three_corrections.md), from three objections that all
 stood up.
 
@@ -598,6 +600,8 @@ amplitude (SD 2.34 vs velocity's 6.74, the 2–3× factor) is cancelled by its
 signature being integrated more times before reaching the observation.
 
 ## Where it loses — read this before quoting the battery
+
+> **⚖️ ATTRIBUTION —** _A measured failure-mode table on one scripted rig: a static-$\alpha$ commitment costs after a coefficient jump, and a dead process-scale channel mis-attributes a process regime to measurement noise. Known phenomena (model-misspecification cost); the numbers are the original content._ Prior art: consequences of misspecification / non-adaptive filtering, no single canonical source. Status: NEGATIVE-RESULT.
 
 [`0033`](0033_where_the_candidate_loses.md) runs both filters over
 one series carrying three impulsive kicks, a measurement-noise regime, a
@@ -662,6 +666,8 @@ is ever formed, because this is the same state in a different basis.
 
 ## The model, and why it is the parent's
 
+> **⚖️ ATTRIBUTION —** _A uniformly sampled solution of the offset ODE is annihilated by $(z-1)(z-z_1)(z-z_2)$, so the model is AR($p$) observed in noise with the offset as a unit root; working in the lag basis (equivalent to the derivative basis by a fixed integer matrix) and counting 5 identifiable numbers is standard state-space realization theory._ Prior art: unit-root/integrator for the offset (Friedland 1969); AR-in-noise / ARMA identifiability (standard time series); companion-form realization (Kalman). Status: REPRODUCTION.
+
 The solution space of $\ddot x + p\dot x + qx = r$ is
 $\mathrm{span}\{1, e^{\lambda_1 t}, e^{\lambda_2 t}\}$, so a uniformly sampled
 solution is annihilated by $(z-1)(z-z_1)(z-z_2)$:
@@ -685,6 +691,8 @@ a full $N^2\times N^2$ covariance, as the previous construction did, is
 over-parameterised by an order of magnitude.
 
 ## What is settled
+
+> **⚖️ ATTRIBUTION —** _The nine "settled" facts each map to a standard result (detail annotated in the numbered files): (1) EIV deletes the oscillation — Van Huffel & Vandewalle 1991, IV cure standard; (2) lags $\ge p+1$ annihilate measurement noise — instrumental-variables identity, standard; (3) IV consistent-but-inefficient anchor vs ML — Söderström & Stoica; (4) dynamics uncertainty = process noise — model-error-as-Q (Jazwinski 1970) with GPB1 collapse variance (Ackerson & Fu 1970); (5) $\alpha$ a forecasting not filtering parameter — Riccati insensitivity (Anderson & Moore); (6) parent architecture (grid-collapse-marginalize) transfers — MMAE/IMM (Magill 1965; Blom & Bar-Shalom 1988); (7) differencing costs $(1-\rho_1)$ — elementary variance algebra; (8) "is the offset constant?" via LR/unit-root test — Wilks 1938 / Dickey–Fuller 1979; (9) dynamics-channel persistence = random-coefficient/regime split — Nicholls & Quinn 1982. The specific measured numbers are the local content. Status: REPRODUCTION (each fact); the numbers are NEGATIVE-RESULT/measurement._
 
 Detail and numbers in [`exploration/0007`](0007_what_the_probes_settle.md).
 
@@ -769,6 +777,8 @@ calibration — each nearly invisible in the other two.
 
 ## The mode structure: the square becomes a prism
 
+> **⚖️ ATTRIBUTION —** _Poles ($\alpha$) vs zeros ($u$, the injection direction), the modal (per-root) decomposition of disturbance channels, and ordering directions by the lag-1 autocorrelation of their innovation signature are transfer-function / modal analysis plus GLR-style disturbance attribution._ Prior art: pole–zero and modal decomposition (linear-systems textbooks); failure attribution via innovations (Willsky & Jones 1976). POSITION≈MEASURE reappears as the repo's own optimality-proof Proposition 1. Status: REPRODUCTION.
+
 The parent's square was (process / measurement) × (impulse / regime), and its
 process-anomaly corner never sat right — "the level jumped" and "a large
 process-noise draw" are the *same event* at $p=1$. Writing the disturbance with
@@ -844,6 +854,8 @@ separability recompute — is
 
 ## The drift-law proposal, and its refutation
 
+> **⚖️ ATTRIBUTION —** _The proposal uses Čencov's (Chentsov's) theorem — the Fisher metric is the unique reparameterization-invariant metric — to fix a drift covariance $\propto Q\Gamma^{-1}$; the refutation is a minimax (least-favorable) argument over the unknown drift direction. Both are standard._ Prior art: Chentsov (Čencov) 1972; Amari 1998 (natural gradient); minimax/least-favorable decision theory (Wald 1950). Status: NEGATIVE-RESULT.
+
 The parent forced its drift law with scale equivariance. $\alpha$ has no scale,
 so the proposal was to replace it with Čencov: a drift law must not depend on
 how the parameter is written down, the unique reparameterisation-invariant
@@ -880,6 +892,8 @@ invariance principle closes, and the shape has to be learned** — by the same
 marginal likelihood as everything else.
 
 ## Is the shape estimable? Yes — both coordinates, and not obviously worth it
+
+> **⚖️ ATTRIBUTION —** _Profiling the marginal likelihood over the anisotropy and orientation of the drift covariance (variance-component estimability), and the structural fact that the AR(2) information metric's condition number is $(1+\rho_1)/(1-\rho_1)$, are standard Fisher-information / REML analysis. "Estimable is not worth estimating" is the recurring caution that a variance-side gain is invisible to MSE._ Prior art: Fisher information for AR/Whittle likelihood (Whittle 1953); REML variance components. Status: RECOMBINATION (measurement).
 
 Profiling the drift covariance $\Sigma(\nu,\tau,\psi)=\nu^2R(\psi)\mathrm{diag}(\tau,1/\tau)R(\psi)^\top$
 (determinant fixed, so scale and shape are separate coordinates) against a
