@@ -5,7 +5,9 @@
 **Built and shipped in the engine: the split is carried by the bank, where a per-step score
 cannot carry it.**  `LucidFilter()` told nothing now runs the hero rig at **1.035x** the
 oracle-tuned Kalman's steady-state RMSE — past the 1.10x gate, and past what the RETIRED FITTED
-filter managed (1.056x) with six numbers handed to it by `fit()`.  **Three of the four hero
+filter managed (1.056x) with six numbers handed to it by `fit()`.
+
+> **⚖️ ATTRIBUTION —** _The central move — process vs measurement noise cannot be split per step (a known non-identifiability), so carry it as a bank of anchored hypotheses mixed by predictive likelihood over the innovation sequence — is Multiple-Model Adaptive Estimation reading the innovations, which is the standard cure. The concrete ingredients (rank-1 scale-Fisher, MA(1) rung spacing, caltrop enumeration) are original engineering; the frame is textbook._ Prior art: identifiability of process/measurement noise & innovation-correlation adaptive filtering — Mehra 1970, 1972; MMAE — Magill 1965; IMM — Blom & Bar-Shalom 1988. Status: RECOMBINATION.  **Three of the four hero
 sub-gates pass**; one is open, localised to fifty steps, with its cause measured rather than
 guessed.
 
@@ -42,7 +44,9 @@ cannot represent a x225 or x400 regime change was leaving that on the table.
    `H v_k` lies along one sensor axis, `dS_xi` and `dS_eta` are proportional *as matrices*: the
    2x2 scale-Fisher block is exactly rank 1, its null direction is `(R, −Q)` at every operating
    point, and integrating that field gives `dQ = −dR` — the null manifold is the **level set of
-   the total**.  Measured on the hero rig: the two walks agree to 3.7e-15 and the learned ratio
+   the total**.
+
+> **⚖️ ATTRIBUTION —** _A clean coordinate derivation of a known fact: from a single step's likelihood only the sum $Q+R$ (the innovation variance) is identifiable, so the scale-Fisher is rank-deficient along $(R,-Q)$. This is Mehra's process/measurement-noise non-identifiability written as an exact rank-1 Fisher block. Standard result, sharply re-derived._ Prior art: non-identifiability of $Q$ vs $R$ from one step — Mehra 1970; Fisher-information/observability geometry — standard. Status: REPRODUCTION.  Measured on the hero rig: the two walks agree to 3.7e-15 and the learned ratio
    is the supplied base to five decimals, in a regime where the truth moved by nine.
 2. **The rungs are placed by their consequence** ([`0002`](exploration/0002_ratio_ladder.md)).  A
    split acts only through the gain `K`; the per-step divergence between two gains is `0.5 dt²`
@@ -54,6 +58,8 @@ cannot represent a x225 or x400 regime change was leaving that on the table.
    mean — a rung with too much process chases sensor noise and pays for it in its own predictive
    likelihood (0053 §1, with no EMA and no whiteness statistic); its weight is a bank weight on
    the `forget` timescale (lesson b); it is an absolute hypothesis that never moves (lesson a);
+
+> **⚖️ ATTRIBUTION —** _A bank of complete Kalman filters, each anchored at a fixed noise hypothesis and weighted by its own accumulated predictive likelihood, is exactly Multiple-Model Adaptive Estimation / a static multiple-model bank; the mismatched-filter's innovations failing its own predicted statistics is the matched-filter / innovation-whiteness detection idea. Standard._ Prior art: MMAE bank weighted by predictive likelihood — Magill 1965; innovation-whiteness / matched-filter consistency — Kailath 1968, Mehra 1970; static multiple-model estimation — Bar-Shalom. Status: REPRODUCTION.
    and because the collapse is ordinary BMA over anchored members, no member can wander off its
    hypothesis and pull the estimate (lesson c).
 4. **The walk's null step is a transient, not a verdict.**  A per-axis Newton step against a
@@ -323,7 +329,9 @@ named next measurement.
 ## The opening statement (unchanged, for the record)
 
 **The problem.** Within one step, "the state moved more than expected" and "the sensor read worse
-than expected" are indistinguishable — optimality-proof Proposition 1, and it is exact.  The
+than expected" are indistinguishable — optimality-proof Proposition 1, and it is exact.
+
+> **⚖️ ATTRIBUTION —** _"Proposition 1" (one step cannot separate process from measurement noise) is the classical non-identifiability of $Q$ and $R$ from a single innovation. It is a re-derivation, not a new theorem; the whole workstream is the standard response to it (use the sequence / multiple models)._ Prior art: identifiability of noise covariances in the Kalman filter — Mehra 1970. Status: REPRODUCTION.  The
 public `LucidFilter` therefore learns per-component noise *totals* superbly when structure
 disambiguates (many sensors, each lighting its own channel — the 5-DOF arm), and cannot learn
 the process/measurement **ratio** where structure is absent:
@@ -343,6 +351,8 @@ What breaks the tie is the innovation **sequence** (Mehra 1970; 0025/0027): elev
 noise makes any under-gained filter *lag* — autocorrelated innovations, correlated with the
 state — while sensor noise inflates variance and stays white.  The evidence exists; the open is
 carrying it inside the filter under the house rules.
+
+> **⚖️ ATTRIBUTION —** _Correctly attributed in-text: separating $Q$ from $R$ requires the innovation autocorrelation sequence (a mismatched filter produces coloured/lagged innovations), which is precisely Mehra's innovation-correlation method for adaptive Kalman filtering. Standard._ Prior art: innovation-correlation noise identification — Mehra 1970, 1972; innovation whiteness tests — Kailath 1968. Status: REPRODUCTION.
 
 ## The two acceptance benchmarks (the definition of done)
 

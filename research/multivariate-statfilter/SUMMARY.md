@@ -5,6 +5,8 @@ to an **n-vector state**, an **m-vector observation**, and a **supplied
 measurement matrix `H` (m×n)**. Shipped as `statfilter.VectorFilter`
 ([`lucid/statfilter/vector.py`](../../lucid/statfilter/vector.py)).
 
+> **⚖️ ATTRIBUTION —** _The whole workstream is a vector adaptive Kalman filter assembled from published parts._ Base recursion: Kalman 1960. Learning the noise covariances online from the innovations: Mehra 1970/1972 (see `exploration/0028_mehra`). Bank of models weighted by predictive likelihood: MMAE (Magill 1965) / IMM (Blom & Bar-Shalom 1988), single-Gaussian collapse = GPB1 (Ackerson & Fu 1970). Log-scale noise = a stochastic-volatility model (Taylor 1986; Harvey–Ruiz–Shephard 1994). Robust/heavy-tailed updates: Masreliez 1975, Huber 1964, Breiman 1995 (garrote). The per-result notes are on the numbered `exploration/*.md` files. Status: RECOMBINATION (with the measured failure modes / oracle-gaps as NEGATIVE-RESULT — the genuinely original content). The "trace-decomposition conservation law" is a trivial algebraic identity (Σ shares = tr(S⁻¹S)/m = 1), a framing, not a result.
+
 `statfilter` is the minimal setting where the noise-deduction machinery is
 meaningful, so it is the right place to nail the multivariate generalisation down
 before carrying it into `odefilter`.

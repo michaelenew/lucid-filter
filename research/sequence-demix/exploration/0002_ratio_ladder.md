@@ -1,5 +1,7 @@
 # 0002 — bank the split, walk the total: 1.84x → 1.03x told nothing (and what is still open)
 
+> **⚖️ ATTRIBUTION —** _The build is an MMAE bank: fixed-hypothesis Kalman filters over the noise split, mixed by Bayesian model averaging on a long-memory (`forget`) timescale, with a walk on the per-step-identifiable total. Standard multiple-model adaptive estimation; the rung placement (MA(1) Whittle arclength $t=\arccos(1-K)$, bounded on $[0,\pi/2]$, spaced by the Sparrow resolution) is the original engineering detail, and matching/beating a fit()-tuned filter with no fit is a NEGATIVE-RESULT-style demonstration on this rig._ Prior art: MMAE — Magill 1965; static multiple-model bank — Bar-Shalom; MA(1) spectral (Whittle) distance — Whittle 1953. Status: RECOMBINATION.
+
 Script: `0002_ratio_ladder.py` (the candidate), `0002b_box_sweep.py`, `0002c_trace.py`
 (diagnosis).  Rig: README-004, `LucidFilter()` constructed with defaults, told nothing.
 
