@@ -1,5 +1,7 @@
 # 0006 — n>1 process eigenmodes + mixing H: two real obstacles
 
+> **⚖️ ATTRIBUTION —** _Two findings: a weak process eigenmode's noise scale is unidentifiable (so spectral truncation is necessary, not just efficient), and an unbounded random-walk scale drifts where a stationary AR(1) does not; plus a bug correction. Identifiability limits on noise covariances are classical._ Prior art: identifiability of KF process/measurement covariances — Mehra 1970/1972; stochastic-volatility log-AR(1) scale — Taylor 1986. Status: REPRODUCTION.
+
 > **Correction (see 0007).** The catastrophic divergence reported below (μ→−50) was
 > largely a bug: `steady_fisher` returned the *score* instead of *info*, giving a
 > negative `I_char` and a negative `q_mu`. With that fixed, the unbounded walker does

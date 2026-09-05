@@ -32,6 +32,8 @@ negotiable.  (A) The house rule: a hazard LADDER mixed by running predictive lik
 exactly as the `(phi, s)` box — no special time, no soft-count circularity.  Built and
 measured here.
 
+> **⚖️ ATTRIBUTION —** _Turning the fixed changepoint hazard into a ladder of hazards mixed by running predictive likelihood — so the hazard/regime is inferred rather than tuned — is Bayesian Online Changepoint Detection with a hazard hyper-prior (marginalize the run-length/hazard). The "monotonicity test = knob vs budget", the rejection of the time-anchored Gamma-Poisson update (breaks time-translation invariance), and the derived rung spacing are the repo's framing; the regime-readout-vs-true-rate numbers are the measured content._ Prior art: BOCPD with hazard estimation (Adams & MacKay 2007; Fearnhead & Liu 2007); Shiryaev hazard mixing. Status: REPRODUCTION with NEGATIVE-RESULT (the monotonicity/pinned-sweep table).
+
 ## The hazard box (shipped as `_HAZARDS`; CORRECTED — see the retraction below)
 
 - **Top = 1/2 per step**: the fault class's own persistence boundary.  The class says a fault
@@ -187,6 +189,8 @@ where the decade grid read 4.4e-3 (12% low with 2.3-nat quantisation), and late 
 caught at the same improved rate (57.5 vs the static pin's 85.0).
 
 ## Addendum: the 0003 restart under the box (found by the suite; fixed rung-locally)
+
+> **⚖️ ATTRIBUTION —** _Measured control-loop pathology: a global covariance-restart edge-triggered on the report's ½-crossing self-oscillates (43 restarts) because the threshold feeds back into the inference; the fix is to make the restart rung-local so no report gates another model. A specific engineering negative result plus its fix — the general hazard (thresholded detector output driving estimator reset creates a limit cycle) is a known feedback-instability pattern._ Prior art: none specific; standard estimator-feedback/limit-cycle reasoning. Status: NEGATIVE-RESULT.
 
 The full suite caught it: on the `dynamics=None` rig (`test_dynamics_none_beats_the_random_
 walk_it_starts_from`, truth a = 0.3 against the F = I prior), the box's fault marginal sat

@@ -4,6 +4,8 @@ Scripts: `0018_kurtosis_vs_var_log_u.py`, `0021_complete_row_and_expit_overflow.
 Settles the inconsistency flagged in [`0015`](0015_theorem_B_and_the_max_entropy_principle.md) §2(b)
 between Theorem B and `0004`'s kurtosis-sufficiency claim.
 
+> **⚖️ ATTRIBUTION —** _Measured: at fixed kurtosis, the fitted log-scale magnitude tracks $\operatorname{Var}(\log u)$ over a 36× range, refuting "kurtosis is the sufficient statistic"; the residual overshoot scales with the induced marginal's bimodality._ Confirms the elementary scale-mixture moment identity of Theorem B (West 1987 SV algebra) as against a proxy; the mechanism (ML inflates $s_M$ when the induced log-scale marginal is non-Gaussian) is standard quasi-MLE/misspecification behaviour. Also documents a genuine crash bug in the parent `_expit` (a real, useful engineering finding). Status: NEGATIVE-RESULT (a measured correction; underlying math REPRODUCTION).
+
 ## The design
 
 A two-point mixing law $u\in\{a,b\}$ with weights $p,1-p$ has three parameters

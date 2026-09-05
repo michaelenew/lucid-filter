@@ -1,5 +1,7 @@
 # 0045 — the q-free magnitude: net-positive, but full saturation leaves a small BOTH regression
 
+> **⚖️ ATTRIBUTION —** _Negative result: the fully-saturated q-free reach (gain→1) is net-positive on the reach regimes but leaves a small BOTH regression, because the instantaneous-discount χ² noise times an aggressive full jump occasionally sheds a good sensor._ Prior art: adaptive gain / step-size in stochastic approximation (standard). Status: NEGATIVE-RESULT.
+
 The q-free reach makes the gain explicit: `rate = K* + elig*discount*(1-K*)` (in [K*, 1]), the
 saturated limit of 0042's q-sweep with no tuned q and no BFAST (instantaneous e^2 discount).
 

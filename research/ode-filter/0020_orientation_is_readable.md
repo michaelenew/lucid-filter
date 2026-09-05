@@ -14,6 +14,8 @@ worked.**
 
 ## 1. The test I designed cannot exist, and the reason is structural
 
+> **⚖️ ATTRIBUTION —** _That the information metric on AR(2) coefficients has condition number $(1+\rho_1)/(1-\rho_1)$ — its anisotropy is the process's lag-1 autocorrelation — is a direct computation of the Fisher information for a Gaussian AR process._ Prior art: Fisher information / Whittle likelihood for AR processes (Whittle 1953; standard). "A process must be smooth for its dynamics to be learnable" is a consequence, framed as a NEGATIVE-RESULT for the isotropic-metric experiment. Status: REPRODUCTION.
+
 For $p=2$ the information metric is
 $\tilde\Gamma = \begin{psmallmatrix}\gamma_0&\gamma_1\\\gamma_1&\gamma_0\end{psmallmatrix}$,
 with eigenvalues $\gamma_0\pm\gamma_1$ along $(1,\pm1)/\sqrt2$ and condition
@@ -88,6 +90,8 @@ truths placed on or near the nodes would be worth more than the arithmetic. That
 is the first thing to redo.
 
 ## 3. The alignment law I proposed is refuted
+
+> **⚖️ ATTRIBUTION —** _Using the Fisher metric as the right way to *measure* how far parameters have moved — the information (Fisher–Rao / Mahalanobis-type) distance $\Delta\alpha^\top\tilde\Gamma\Delta\alpha$ — is the standard information-geometry notion of statistical distance._ Prior art: Fisher–Rao distance (Rao 1945); Mahalanobis distance. The proposed "alignment law" is refuted here (a NEGATIVE-RESULT), leaving only this standard role. Status: NEGATIVE-RESULT.
 
 `0018`'s numbers suggested that drift is worth modelling in proportion to its
 alignment with the metric's high-information axis ($\psi=0.785$ here). `0019`

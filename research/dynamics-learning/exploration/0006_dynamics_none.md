@@ -11,6 +11,8 @@ hedge (F=I, B=0) + augmented KF walker on (x, vecF, B) + 4 time-anchored spawn s
 pruned run-length/BOCPD realization of the jump class, anchors in TIME where 0004/0005
 had anchors in parameter space).  30 seeds, two class hazards.
 
+> **⚖️ ATTRIBUTION —** _Learning the full transition matrix F (and B) online from an identity prior, with time-anchored spawn hypotheses realizing the jump class as a pruned run-length (BOCPD) posterior. This is joint state-parameter estimation of an unknown linear system plus online changepoint detection; the "anchorless re-learning is not slow under full-state observation" and the frequency-doubling re-learn times are the measured findings._ Prior art: recursive identification of unknown linear dynamics / dual estimation (Ljung); Bayesian Online Changepoint Detection run-length pruning (Adams & MacKay 2007; Fearnhead & Liu 2007). Status: RECOMBINATION with NEGATIVE-RESULT (the "spawns are dormant" measurement).
+
 ## Measured
 
 RMSE / supplied-dynamics-oracle (per-seed ± se), ρ = 1/50000:

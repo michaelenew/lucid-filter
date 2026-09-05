@@ -36,6 +36,8 @@ extension is what that row is as a function of $\tau$.**
 
 ## 2. Delay is the flow, and a derivative coupling is its tangent
 
+> **⚖️ ATTRIBUTION —** _A fractional/continuous time-delay observation row is a fractional matrix power $F^{-\tau}=V\,\mathrm{diag}(z_i^{-\tau})\,V^{-1}$ of the transition (a matrix exponential $e^{-\tau G}$), and in the lag basis it is the Grünwald–Letnikov binomial series $(1-\Delta)^\tau$; delay being the exponential of the derivative operator is the classical shift/generator relation._ Prior art: matrix-exponential discretization $F=e^{A\,dt}$ (Van Loan 1978); Grünwald–Letnikov fractional differencing (fractional calculus; Granger–Joyeux/Hosking for fractional differencing of series); Lie-group generator of the shift/delay semigroup. Status: REPRODUCTION.
+
 For the noiseless dynamics $\dot z = Gz$ (continuous form; $G$ the generator
 whose eigenvalues are the $\lambda_i$, sampled roots $z_i=e^{\lambda_i}$):
 
@@ -107,6 +109,8 @@ absolutely — a Chinese-remainder flavour. **(to measure: RW-only profile has a
 single unaliased peak; oscillator+RW resolves the comb, 0043c/0044)**
 
 ## 4. The bridge: reading between the samples
+
+> **⚖️ ATTRIBUTION —** _Reading the latent at a fractional (between-sample) time via Gaussian conditioning on the bracketing states — mean linear in the endpoints, plus a state-independent "bridge" variance $R_b(\tau)$ that vanishes at integer $\tau$ — is the Brownian-bridge / Gaussian-process interpolation construction, and the $s(1-s)$ (and higher $s^{2m-1}$) endpoint behavior is the standard bridge variance._ Prior art: Brownian bridge / Gauss–Markov interpolation (textbook); continuous–discrete state-space smoothing (Jazwinski 1970). Status: REPRODUCTION.
 
 With process noise, $x(t-\tau)$ for fractional $\tau$ is not a deterministic
 functional of the sampled states — noise entered during the fractional
@@ -184,6 +188,8 @@ has two. The delayed-derivative family $(c,\mu,\tau)$ has three.
   satisfy.
 
 ## 6. The trusted distribution, and the multivariate extension of trust
+
+> **⚖️ ATTRIBUTION —** _Gridding the unknown lag $\tau$, running a conditional Kalman recursion per node, and mixing by marginal likelihood with a "null" (uncoupled) member is multiple-model adaptive estimation applied to a delay nuisance; reading $\Lambda=\sum\mathrm{LLR}$ against the null as evidence of coupling is a directed-information / transfer-entropy measurement; latency $\approx(\log\frac1\varepsilon+\Lambda)/\mathrm{KL}$ is the SPRT/confirmation-ledger arithmetic._ Prior art: MMAE/IMM (Magill 1965; Blom & Bar-Shalom 1988); directed information / transfer entropy (Massey 1990; Schreiber 2000); Wald SPRT 1947. Time-delay estimation itself is classical (Knapp & Carter 1976). Status: RECOMBINATION.
 
 The parent's architecture, applied without new inventions: **grid the nuisance,
 run the conditional recursion per node, let marginal likelihood arbitrate.**

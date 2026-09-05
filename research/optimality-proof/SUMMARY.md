@@ -12,6 +12,8 @@ optimal, and to locate precisely where the proof fails.
 processes turned out to be the hard part, and defining it correctly is the main
 result so far.**
 
+> **⚖️ ATTRIBUTION —** _Area-level: this workstream re-derives standard minimax / information-theory results (Kalman-as-minimax, max-entropy=minimax-redundancy, Gaussian-scale-mixture noise) and applies them to a stochastic-volatility state-space filter._ The "class of processes" claimed as the main result is a two-moment-constrained Gaussian scale-mixture / log-scale-AR(1) family — i.e. a stochastic-volatility model (Taylor 1986; Harvey–Ruiz–Shephard 1994) written with an information-theoretic constraint; it is a repackaging of known scale-mixture / SV characterizations, not a new class. The genuinely original content is the measured oracle-gap and failure-mode numbers on specific synthetic rigs (the NEGATIVE-RESULT notes below). Status: RECOMBINATION overall.
+
 ## The question, made precise
 
 Four things have to be named before "optimal" means anything: a class of
@@ -42,7 +44,9 @@ noise variances can move unpredictably, then at any step the "level jumped" and
 ratio against a filter that knows the variance path is unbounded for *every*
 causal estimator. The class must constrain how fast the scales move, and — by
 scale equivariance, since the class cannot depend on whether $x$ is in metres or
-feet — the constraint must live on the log scale. Two numbers per channel:
+feet — the constraint must live on the log scale.
+
+> **⚖️ ATTRIBUTION —** _Proposition 1 is a competitive-analysis / identifiability impossibility: if the noise scales move freely, process and observation noise are unidentifiable in one step and no causal estimator has bounded competitive ratio._ This is the standard non-identifiability of Q vs R in adaptive Kalman filtering (Mehra 1970/1972) cast as an online competitive-ratio impossibility; the equivariance-to-log-scale argument invokes Hunt–Stein / Haar-measure minimax equivariance (standard). Correct and cleanly argued, but a re-expression of known adaptive-filtering identifiability limits. Status: REPRODUCTION. Two numbers per channel:
 magnitude $s_c$ and persistence $\varphi_c$. **The filter's scale parameters are
 the definition of the class, not parameters within it.**
 
@@ -68,6 +72,8 @@ scale mixture, so the class is strictly smaller than "all shapes with
 $\kappa\ge3$." (An earlier version of this line stated the equivalence; it is
 one-way.)
 
+> **⚖️ ATTRIBUTION —** _The "class" (the claimed main result): a log-scale-AR(1) Gaussian-scale-mixture noise family constrained by two log-scale autocovariances._ This is a stochastic-volatility model — Gaussian scale mixtures with a log-variance AR(1) state (Taylor 1986; Harvey–Ruiz–Shephard 1994; scale-mixture-of-normals representation, Andrews–Mallows 1974, West 1987). Assessed honestly: the individual facts (scale mixtures have $\kappa\ge3$; the converse fails) are standard, and the "class" is a moment-constrained SV family rather than a new object. Whatever is new is the framing (defining the class *as* the filter's own parameters), not the mathematics. Status: RECOMBINATION (packaging of known scale-mixture / SV characterizations).
+
 **Theorem B** (`exploration/0015` §2) makes the shape adversary exact and
 elementary. An i.i.d. mixture $\varepsilon=\sqrt u\,z$, $\mathbb Eu=1$, shifts
 the log-scale by $\log u$, so it adds $\operatorname{Var}(\log u)$ to $\gamma_0$
@@ -75,6 +81,8 @@ and **leaves $\gamma_1$ untouched**:
 
 $$\tilde s^2=s^2+\operatorname{Var}(\log u),\qquad \tilde\varphi=\varphi s^2/\tilde s^2,
 \qquad \tilde s^2\tilde\varphi=\gamma_1\ \text{invariant.}$$
+
+> **⚖️ ATTRIBUTION —** _Theorem B is an elementary bookkeeping identity: multiplying a lognormal-type scale process by an i.i.d. positive factor adds $\operatorname{Var}(\log u)$ to the log-scale variance and leaves the lag-1 autocovariance fixed._ This is the standard additivity of variances/autocovariances for an independent i.i.d. component applied to the log-variance of a scale mixture (SV/scale-mixture algebra; cf. West 1987). True and useful internally, but a one-line moment computation, not a novel theorem. Status: RECOMBINATION.
 
 The shape adversary moves along a level set of $\gamma_1$, with the Gaussian at
 the minimal-$\gamma_0$ endpoint. This is "shape and scale are the same
@@ -99,6 +107,8 @@ error. Three lines: the KF is linear so its risk is identical for every shape at
 fixed variances (an equalizer); at the Gaussian it is the exact conditional
 mean; weak duality closes the gap.
 
+> **⚖️ ATTRIBUTION —** _Theorem A (and A′ under code length): Kalman filter minimax over noise shapes at fixed variance, Gaussian least favourable._ Textbook — Kalman 1960; Gaussian least-favourable / min-Fisher at fixed variance (Stam 1959; robust estimation Huber 1964); equalizer + weak-duality saddle is standard minimax (Wald). See [`proofs/01`](proofs/01-shape-minimaxity.md) and [`proofs/03`](proofs/03-logloss-shape-minimaxity.md). Status: REPRODUCTION.
+
 This replaces the central-limit-theorem defence of conditional Gaussianity with
 something stronger — no limit is taken, no approximation is made, and it holds
 finite-sample for increment laws that look nothing like Gaussian.
@@ -113,6 +123,8 @@ because $-\log p^\ast$ is affine in precisely the statistics the class fixes.
 Equalizer + Bayes-at-one-member + weak duality, the same three lines as
 Theorem A. That is the filter's log-scale model exactly, including the
 $\nu=s^2(1-\varphi^2)$ identity in `core.py`.
+
+> **⚖️ ATTRIBUTION —** _Theorem C: the max-entropy Gaussian AR(1) is least favourable / minimax under code length over a two-autocovariance class._ Redundancy–capacity / max-entropy-is-minimax-redundancy (Gallager 1976; Davisson 1973; Csiszár; Topsøe 1979) plus Burg's max-entropy spectral theorem (Burg 1967/1975) that AR($p$) maximizes entropy given autocovariances. The authors themselves flag it as "standard". See [`proofs/02`](proofs/02-logloss-least-favourable.md). Status: REPRODUCTION.
 
 **Two gaps, and they are all that remains of layer 2.**
 
@@ -154,7 +166,9 @@ What survives is narrower and still true. The relocated log-scale is an
 ARMA(1,1) while the filter's family is AR(1), so ML genuinely is a quasi-MLE
 projecting onto a family that does not contain the truth, and White's sandwich
 theory is the right asymptotic tool. The projection simply costs nothing
-measurable. Its signature is visible in `exploration/0022`: fitted $s_M$
+measurable.
+
+> **⚖️ ATTRIBUTION —** _Layer 3: `fit()` under model misspecification is a quasi-MLE whose probability limit is the KL-projection onto the model family._ This is exactly quasi-maximum-likelihood under misspecification with the sandwich covariance (White 1982), and the estimator-as-KL-projection is standard (Akaike; Ljung's PEM, *System Identification* 1987/1999). Status: REPRODUCTION (the finding that the projection costs $<0.3\%$ MSE here is the NEGATIVE/measured part; see `0012`). Its signature is visible in `exploration/0022`: fitted $s_M$
 overshoots Theorem B exactly on the rows whose induced log-scale marginal is
 bimodal, and fits cleanest on the lognormal row where it is Gaussian.
 
@@ -232,6 +246,8 @@ deformations of the filter, with it at the boundary of both:
 For $\alpha<2$ the variance is infinite, so squared error is the wrong loss and
 layer 1 would need redoing under $\mathbb E\lvert\cdot\rvert^r$, $r<\alpha$.
 
+> **⚖️ ATTRIBUTION —** _The cousin family: the amplitude-conservation / linear-conditional-expectation identity holds across the symmetric $\alpha$-stable family with dispersion $c^\alpha$ playing the role of variance._ The linear-regression property of jointly $\alpha$-stable vectors and the additivity of $c^\alpha$ are standard (Samorodnitsky & Taqqu, *Stable Non-Gaussian Random Processes* 1994, ch. 4); $\alpha$-stable Lévy motion is Lévy's classical family. A known property verified numerically here, as the authors note. Status: REPRODUCTION.
+
 ## The gap ledger
 
 | gap | status |
@@ -287,6 +303,8 @@ $s{=}0.55$ persistent, and $0.006\%$ at $s{=}0.2$. Order 5, 9 and 31 all sit
 within a percent of each other in the strong regime while all sitting ~17%
 above the PF reference — no quadrature order closes the collapse gap.
 
+> **⚖️ ATTRIBUTION —** _Measured cost of the single-Gaussian-per-step collapse (GPB1) against an exact Rao–Blackwellized particle filter._ Both methods are standard: single-Gaussian collapse is GPB1 (Ackerson & Fu 1970; Bar-Shalom), and the marginalized/Rao–Blackwellized particle filter is Doucet–de Freitas–Gordon 2001 (Gordon–Salmond–Smith 1993; Rao–Blackwell). The specific numbers — ~20% θ-MSE unclosed at $s{=}1.2$, nonlinear growth in $s$ — are the original, useful content. Status: NEGATIVE-RESULT (methods REPRODUCTION; the rig-specific numbers are the contribution).
+
 **Score bias translates to parameter bias, not to estimate bias**
 (`exploration/0033`). Fitting the strong regime at orders 5, 9, 13 shifts
 $\varphi_M$ from 0.845 to 0.890 to 0.906 (truth 0.930; t-statistics $-14.3, -6.8,
@@ -323,6 +341,8 @@ particle filter, not more quadrature.
 5. **The I-MMSE weld** (Guo–Shamai–Verdú): mutual information is the integral of
    MMSE over SNR. The only route that would RELATE the two losses rather than
    choosing between them.
+
+   > **⚖️ ATTRIBUTION —** _Proposed use of the I-MMSE relation to connect the squared-error and log-loss criteria._ The identity $\frac{d}{d\,\mathrm{snr}}I=\tfrac12\mathrm{MMSE}$ is Guo–Shamai–Verdú 2005, correctly named. Here it is only a suggested (untried) route, not a result. Status: REPRODUCTION (of the cited identity); the weld itself is unattempted.
 6. **The $\alpha$-stable family** under $L^r$ loss.
 
 ## Notes for the parent workstream

@@ -1,5 +1,7 @@
 # 0003 — the scale-Fisher geometry (composition check)
 
+> **⚖️ ATTRIBUTION —** _Measures the observed Fisher information of the Kalman-filter log-likelihood over the noise log-scale parameters and reads off its block structure, conditioning ("sloppiness"), and participation ratio._ Prior art: Fisher information matrix / observed information (standard); sloppy-model / parameter-sensitivity spectra — Brown & Sethna 2003, Transtrum et al. 2011; identifiability of KF noise variances — Mehra 1972. Status: REPRODUCTION.
+
 Measures the observed Fisher information over the log-scale vector
 `psi = (xi_1..xi_n [process eigenmodes] , eta_1..eta_m [sensor axes])`, at the
 truth, for the per-component multivariate design (diagonal R, Q per-eigenmode,

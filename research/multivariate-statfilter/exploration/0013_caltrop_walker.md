@@ -1,5 +1,7 @@
 # 0013 — the caltrop: a LINEAR-cost walker that reaches (the user's bet, validated)
 
+> **⚖️ ATTRIBUTION —** _The "caltrop" is coordinate ascent: evaluate the likelihood only along the axes from the current origin and walk each axis until centred — linear cost, locating the peak instead of representing the joint density; delivers state tracking matching the grid at ~×3 over non-adaptive._ Prior art: coordinate ascent/descent (standard optimization); the per-axis score walk is their own finding-18 loop. Status: RECOMBINATION.
+
 The escape from the exponential wall (0011/0012). Evaluate the likelihood only along
 the AXES from the current origin `mu` — the origin plus `2K` points per axis, others
 held at `mu` — and WALK `mu` (finding-18 loop per axis) until every axis's profile is

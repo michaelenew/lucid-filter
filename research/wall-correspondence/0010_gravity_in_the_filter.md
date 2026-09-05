@@ -6,6 +6,8 @@
 > loop). Code: `0010_gravity_in_the_filter.py`; the field theory is
 > 0011.
 
+> **⚖️ ATTRIBUTION —** _Defines "gravity" inside the filter by analogy (mass = absorption e^{−2I}, trust wells = Shapiro delay/lensing, equivalence principle = q·Var(posterior) response). The one genuine estimation fact is that linear response equals q·posterior-variance (a score/Fisher relation); the rest is metaphor mapping GR concepts onto filter internals._ Prior art: general relativity concepts (equivalence principle; Shapiro delay, Shapiro 1964; gravitational lensing); linear response = posterior variance is standard estimation. Status: SPECULATIVE (the gravity correspondence is an unestablished analogy).
+
 **The definition.** Gravity is what accumulated information does to
 the propagation of influence. Trust (precision) is the mass; the
 precision channel is the metric. Three local laws, each measured:

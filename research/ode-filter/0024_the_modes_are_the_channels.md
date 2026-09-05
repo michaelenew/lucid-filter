@@ -48,6 +48,8 @@ exist. `0022`'s "ladder" is real for its bottom two rungs and wrong above them.
 
 ## 3. Why: the derivative basis is not the modal basis
 
+> **⚖️ ATTRIBUTION —** _Decomposing the disturbance directions over the eigenvectors (modes) of the transition — one channel per root of the characteristic polynomial, a complex pair carrying amplitude and phase — is standard modal / eigen-decomposition of a linear system, and $(F-I)$ being diagonal in the modal basis is elementary._ Prior art: modal decomposition of linear time-invariant systems (textbook); AR characteristic-root analysis. Status: REPRODUCTION.
+
 $F$ has eigenvalues $\{1,\ \rho e^{\pm i\theta}\}$ — distinct, not a Jordan
 block — so $(F-I)$ is *diagonal* in the modal basis and mixes everything else.
 Decomposing each derivative-basis corner over the roots, weighted by the

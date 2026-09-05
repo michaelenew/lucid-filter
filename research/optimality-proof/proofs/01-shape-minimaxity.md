@@ -44,6 +44,8 @@ Riccati mean-square error.
 So over this class the Kalman filter is exactly minimax, the Gaussian process is
 exactly least favourable, and the minimax risk is exactly the Riccati value.
 
+> **⚖️ ATTRIBUTION —** _A clean re-derivation of a textbook fact: at a fixed variance path the Kalman filter is the minimax linear estimator and the Gaussian is the least-favourable noise shape._ The Kalman filter is Kalman 1960 / Kalman–Bucy 1961; "Gaussian is least favourable at fixed variance" is classical — the Gaussian maximizes MMSE and minimizes Fisher information for a fixed variance (Stam 1959; standard in robust estimation, cf. Huber 1964/1981), and the equalizer-plus-weak-duality saddle is the standard minimax argument (Wald). The finite-sample "no CLT needed" framing is nice exposition, not new mathematics. Status: REPRODUCTION.
+
 ## Proof
 
 Two inequalities and a standard fact.

@@ -1,5 +1,7 @@
 # 0039 — the adaptive-gain walk: reach via a heavy-tail on the log-scale, kept confound-safe by C1
 
+> **⚖️ ATTRIBUTION —** _An adaptive-gain reach via a Student-t heavy-tail E-step (q_eff = q(1+δ²/ν)) gated by the derived process share; works on a single sensor but trades net-negative multivariate because the whiteness EMA lags a process onset by ~1/β. The q-study classifies q as a convergent floor (=q_μ) plus an un-derivable minimax reach surcharge._ Prior art: Student-t / variational-Bayes heavy-tailed filtering — Agamennoni et al. 2012; stochastic-approximation gain — Robbins–Monro 1951. Status: NEGATIVE-RESULT.
+
 The no-shed walk under-reaches a burst because its gain is the fixed steady `K* = (1-phi)/4`. Rather
 than a sigma-point posterior (0038, which discarded the C1 confound machinery and blew up on
 process), keep the existing C1-based walk and only make its GAIN adaptive: a heavy tail on the

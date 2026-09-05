@@ -25,6 +25,8 @@ freedom, and "$x$ jumped" splits into $N$ distinct events — one per derivative
 
 ## 2. The direction axis saturates the model rather than inflating it
 
+> **⚖️ ATTRIBUTION —** _Identifying the AR coefficients as the transfer function's poles and the disturbance-injection direction $u$ as its zeros, with $u$ costing $p-1$ numbers to complete the $2p+1$ identifiable ARMA($p,p$) content, is standard linear-systems / transfer-function theory._ Prior art: pole–zero / state-space realization theory (Kalman); ARMA spectral factorization. Status: REPRODUCTION.
+
 [`0001`](0001_the_frame.md) §3 counted $p+2=5$ identifiable numbers in our model
 against $2p+1=7$ for a scalar-observed linear system, and called the gap "a
 modelling commitment". The gap is $p-1$, and
@@ -84,6 +86,8 @@ along it is a correlation. **ACCEL and FORCING share the statistic to three
 figures**, which is the first sign that they are not distinct corners.
 
 ## 4. The confusion ledger, measured
+
+> **⚖️ ATTRIBUTION —** _Scoring how many post-event samples are needed to attribute a disturbance to one direction vs another, via the KL/likelihood-ratio between their innovation signatures, is failure-detection-and-isolation via filter innovations (GLR / multiple-model)._ Prior art: Willsky & Jones 1976 (GLR failure detection); Willsky 1976 survey; the POSITION≈MEASURE degeneracy is the repo's own optimality-proof Proposition 1 (jump-vs-glitch). Status: REPRODUCTION.
 
 Exact linear algebra on the model's own covariance — no simulation, no fitting
 ([`0021`](0021_injection_directions.py), fig15). Unit root plus a damped

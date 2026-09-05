@@ -1,5 +1,7 @@
 # 0005 — The hole is a ridge: GPB1 measures the mean process variance and cannot split it
 
+> **⚖️ ATTRIBUTION —** _Core result: GPB1's single-covariance collapse flattens the likelihood along the "mean variance vs level/spread split" ridge, while per-node covariances (IMM) restore curvature with its argmin at the true $s_P$. Both filters are textbook; the specific measured demonstration that the collapse erases the accumulated-history discrimination that identifies the split is a clean, useful re-derivation of a known cost, not a new method._ Prior art: GPB1 — Ackerson & Fu 1970; IMM — Blom & Bar-Shalom 1988; the underlying identifiability of a variance-level vs variance-of-variance split is a stochastic-volatility question (Taylor 1986). Status: REPRODUCTION.
+
 Probes: [`0002`](0002_per_node_covariances.py) ·
 [`0003`](0003_the_search_half.py) · [`0004`](0004_the_ridge.py) ·
 numbers: `figures/gap0002.json`, `gap0003.json`, `gap0004.json`
@@ -76,7 +78,9 @@ On `0038` §B's exact data (same seed), forced channel at three settings:
 
 IMM closes more of the gap at *every* setting, and is nearly flat across them
 — under GPB1 you must guess $s_P$ well to get your 80%; under IMM a wrong
-guess barely costs. Calibration at 0.8: 1.012 against GPB1's 1.036. Premium /
+guess barely costs.
+
+> **⚖️ ATTRIBUTION —** _Measured oracle-gap-closed figures (IMM 86–89% vs GPB1 53–80%) on a specific ×8 synthetic regime — original numbers on an original rig, but the qualitative fact that IMM outperforms GPB1 and is more robust to the assumed spread is the expected, published behaviour of these two filters._ Prior art: IMM vs GPB comparisons — Blom & Bar-Shalom 1988; Bar-Shalom, Li & Kirubarajan (Estimation with Applications to Tracking and Navigation, 2001). Status: NEGATIVE-RESULT. Calibration at 0.8: 1.012 against GPB1's 1.036. Premium /
 exposure ledger (`0002` D): GPB1 −0.0015 / +0.0823, IMM **+0.0056 / +0.0921**
 — the IMM premium is real (a live grid carries mixture spread on data that
 has none) and 16× under its exposure.

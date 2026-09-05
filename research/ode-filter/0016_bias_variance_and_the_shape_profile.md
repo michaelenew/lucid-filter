@@ -9,6 +9,8 @@ that came from the user and is sharper than what was there, and
 
 ## 1. Fitting the dynamics is bias removal; the process noise is the residue
 
+> **⚖️ ATTRIBUTION —** _Decomposing the predictive log density $-\log p=\tfrac12(e^2/S+\log S)+$const into a calibration term and a sharpness/error term, and accumulating it prequentially (each point scored before it is seen), is the standard proper-scoring-rule / prequential-MDL framework._ Prior art: prequential principle (Dawid 1984); MDL / stochastic complexity (Rissanen 1978, 1984); logarithmic score decomposition (Dawid; Gneiting & Raftery 2007). That squared error cannot see a variance-side parameter is a basic property of the score. Status: REPRODUCTION.
+
 The reframing, in one line: **fitting $\alpha$ accounts for the *biased* portion
 of the process variance, and $Q$ is the *unbiased* portion.**
 
@@ -65,6 +67,8 @@ the scoring rule for this workstream does not resolve that seam and should not
 be cited as if it did.
 
 ## 2. The drift shape is estimable — its magnitude, not its orientation
+
+> **⚖️ ATTRIBUTION —** _Profiling the marginal likelihood over an anisotropy/orientation parameterization of a drift covariance to ask whether the shape carries readable evidence is standard variance-component / hyperparameter estimability analysis._ Prior art: marginal-likelihood (REML-style) estimation of variance components; Fisher-metric information geometry as above. The specific millinats-per-point readings are measurements on this rig. Status: RECOMBINATION (measurement).
 
 Parameterise the drift covariance so scale and shape are separate coordinates,
 

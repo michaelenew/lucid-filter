@@ -1,5 +1,7 @@
 # 0032 — the in-between model: the confound is a smooth allocation, not a gate
 
+> **⚖️ ATTRIBUTION —** _Reads a channel's process fraction as a smooth linear law f_proc = c/S + ρ₁ (nominal state share plus lag-1 innovation autocorrelation), unifying the robust magnitude and confound targeting into one quantity c/S — an innovation-based covariance-attribution rule; the exact unit slope in ρ₁ is left un-derived._ Prior art: innovation-correlation covariance attribution — Mehra 1970; Bar-Shalom innovation whiteness. Status: RECOMBINATION.
+
 The 0031 robust update derived the robust *magnitude* but left the *targeting* — the whiteness
 gate deciding sensor-vs-process — a hard call whose smoothing leaks (BOTH ~1.7×). The user's frame:
 "sensor failing" ↔ "noisy-but-useful under process" is a **gradient**; the two arms the filter

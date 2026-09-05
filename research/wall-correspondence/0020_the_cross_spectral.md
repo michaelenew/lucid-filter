@@ -3,6 +3,8 @@
 > **AI-generated, not peer-reviewed.** The last unstarted front.
 > Code: `0020_the_cross_spectral.py`.
 
+> **⚖️ ATTRIBUTION —** _Two standard facts: (a) a parameter can be carried entirely in the cross-spectrum/cross-correlation while every marginal is white — ordinary multivariate spectral estimation; (b) the "monogamy" inequality e^{−2I(1;2)}+e^{−2I(1;3)}≥1 is just positive-definiteness of a 3×3 correlation matrix (corrected in 0024, which notes classical info is NOT monogamous). Elementary linear algebra._ Prior art: cross-spectral analysis; positive-definiteness of correlation matrices. Status: RECOMBINATION (measurement); "entanglement/CKW monogamy" correspondence SPECULATIVE (and self-corrected in 0024).
+
 - **The marginal-invisible parameter, tracked**: two streams with
   exactly white marginals whatever θ (verified: all marginal
   statistics carry |corr| < 0.15 with θ), θ carried only in the

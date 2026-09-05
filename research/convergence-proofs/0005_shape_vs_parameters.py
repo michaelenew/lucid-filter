@@ -1,3 +1,11 @@
+# ⚖️ ATTRIBUTION — Decomposing predictive log-loss into a shape floor (the process
+# entropy rate) plus a vanishing parameter regret ~ (d_eff/2) ln T is the standard
+# Bayesian/MDL universal-coding picture (Rissanen 1978, 1983; Clarke & Barron 1990);
+# d_eff < 2 is a Fisher-information (sloppy-ridge) observation. The measured sub-nat
+# regret (1.6e-4 nats/step, < 1 nat over 4000 steps) and the walking-mode NEGATIVE
+# regret (-7.8 nats: a mixture beating the true-param member under misspecification,
+# cf. universal prediction, Merhav & Feder 1998) are the measured content.
+# Status: REPRODUCTION with NEGATIVE-RESULT.
 """Shape vs parameters: the theoretical best achievable with NO free parameters.
 
 AI-GENERATED, NOT PEER-REVIEWED -- produced by an AI system, not independently

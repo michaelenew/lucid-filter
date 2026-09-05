@@ -5,6 +5,8 @@ Tests the prediction made in [`0005`](0005_leak1_result_and_the_honest_class.md)
 
 ## The prediction
 
+> **⚖️ ATTRIBUTION —** _Measurement: a heavy-tailed (scale-mixture) shape moves the fitted log-scale parameters to a predictable relocated point, but ML lands short of the moment-matched value because it projects, not moment-matches._ The underlying facts are standard — scale-mixture reparameterization (West 1987) and ML-as-KL-projection under misspecification / quasi-MLE (White 1982). The specific relocation numbers on the $t_5$ rig are the original content; the "25–30% shortfall" headline was later found to be an arithmetic error (`0015`). Status: NEGATIVE-RESULT (measured relocation; method REPRODUCTION).
+
 If a $\kappa>3$ shape is just a Gaussian scale mixture, it relocates the process
 to a different $(s,\varphi)$ *inside* $\mathcal C$ rather than attacking it from
 outside, and `fit()` should follow it to a computable place:

@@ -1,5 +1,7 @@
 # 0040 — first KDE probe: the scalar rig is the wrong rig; the obstacle is multivariate
 
+> **⚖️ ATTRIBUTION —** _Negative/inconclusive: learning the log-scale marginal (KDE) instead of committing to a fixed s helps only marginally on a scalar rig, because a single-sensor rig lacks the redundancy and the process/measurement confound where s actually matters — wrong rig._ Prior art: nonparametric density (KDE) estimation — Rosenblatt 1956, Parzen 1962; stochastic-volatility scale learning — Taylor 1986. Status: NEGATIVE-RESULT.
+
 Tested "learn the log-scale marginal (gamma0) instead of committing to a fixed s" on a scalar
 local-level rig with one bursting sensor. Two honest negatives, both informative.
 

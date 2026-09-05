@@ -12,6 +12,8 @@ So the "rapid exponential approach to 100% trust" is not an analogy or a design
 choice — **residual doubt decays by a factor of $e$ per nat**, and that is all
 that "nats" means operationally. 2.2 nats = 90%, 4.6 = 99%, 6.9 = 99.9%.
 
+> **⚖️ ATTRIBUTION —** _Evidence adds in log-odds and trust = σ(Λ), so residual doubt decays by a factor e per nat — the Bayesian log-odds/logistic update._ Prior art: Bayes' rule in log-odds form; Good's weight of evidence (I.J. Good 1950, measured in bans/nats). Status: REPRODUCTION.
+
 ### The noisy-OR form is a different rule, and it isn't the calibrated one
 
 The proposed combination
@@ -23,6 +25,8 @@ rates and from different places (fig12, right). The distinction matters because
 the noisy-OR has no way to express *disconfirming* evidence — every term can only
 push toward 1 — whereas a log-odds sum moves both ways, which is exactly what is
 needed when the second measurement says "actually that was an outlier".
+
+> **⚖️ ATTRIBUTION —** _Distinguishing noisy-OR combination (1-∏(1-pᵢ), correct for "at least one cause fired") from log-odds addition (correct for many observations bearing on one hypothesis); only the latter can express disconfirming evidence._ Prior art: noisy-OR is standard in Bayesian networks (Pearl 1988); log-odds pooling of evidence is Bayes. Status: REPRODUCTION.
 
 ## 2. Nats → influence: a square root, not a proportion (fig13, right)
 
@@ -58,6 +62,8 @@ $$\Lambda^{\text{robust}}_h(m) \;=\; \min_{h'\in\mathcal H\setminus\{h\}} \mathr
 
 the row-minimum of the pairwise LLR matrix, $H_0$ included. This is the e-value /
 GRO reading: evidence that survives the most favourable competing explanation.
+
+> **⚖️ ATTRIBUTION —** _Defining trustworthy evidence for mode h as the row-minimum KL over all rival hypotheses (H₀ included) — evidence that survives the most favourable competing explanation._ Prior art: the least-favourable-alternative / minimax-LLR construction, and the e-value / growth-rate-optimal (GRO) framing the text itself cites (Grünwald, de Heide & Koolen 2019/2024; Shafer 2021 testing-by-betting). Status: REPRODUCTION.
 It has the properties we want — it is in nats, it converts to trust by
 $\sigma(\cdot)$, it is zero when the mode is unidentifiable (so it is
 automatically zero at $m=1$, where both planes are singular), and it needs no
@@ -97,7 +103,11 @@ posterior mean carried by post-jump data:
 $$\alpha_m = \pi_m + (1-\pi_m)\big(1-(1-K)^m\big),\qquad \pi_m=\sigma(\Lambda_m)$$
 
 For a 4-SD jump at $q$=0.05: $\alpha$ = 0.61 at $m$=1, **0.99 at $m$=2**, versus
-the plain Kalman filter needing $m$=11 to reach 0.90. The oracle's stated target
+the plain Kalman filter needing $m$=11 to reach 0.90.
+
+> **⚖️ ATTRIBUTION —** _Bayesian-model-averaged influence allocation over {shift, no-shift}, giving the post-jump share αₘ = πₘ+(1-πₘ)(1-(1-K)^m) reaching 0.99 by m=2, vs m=11 for the plain filter._ Prior art: Bayesian model averaging / mixture-of-filters (multiple-model estimation, Magill 1965; GPB, Ackerson & Fu 1970). Numbers are measured. Status: RECOMBINATION.
+
+The oracle's stated target
 — "immediately incorporate ~99% of trust as a direct location update, leaving the
 noise parameters untouched" — is achieved at $m=2$ and is *not* achievable at
 $m=1$, because at $m=1$ the location plane is singular and the shift cannot be
@@ -130,6 +140,8 @@ logarithmically in the event size.** That is a bounded, cheap, and — important
 alone. This is the first quantity in the project that plays the role $c$, $a_j$
 and the 6.0 kept trying to play, and unlike them it has a closed form.
 
+> **⚖️ ATTRIBUTION —** _The Occam penalty for marginalising the unknown event size δ∼N(0,τ²): a closed-form expected log Bayes factor via Sherman–Morrison, costing 1.2–2.1 nats and growing only logarithmically in event size._ Prior art: Occam-factor / Bayesian-model-complexity penalty (MacKay 1992; the BIC/Laplace log-n term, Schwarz 1978); Sherman–Morrison is standard linear algebra. Status: REPRODUCTION.
+
 **Fluctuation.** $\Lambda$ is a random variable. For a Gaussian mean-shift LLR,
 $\mathrm{Var}(\Lambda)=2E[\Lambda]$, so at the 4.6-nat threshold the standard
 deviation is 3.0 (shaded bands in fig11). A single-shot threshold crossing is
@@ -138,3 +150,5 @@ therefore not reliable — realised evidence at a true 4.6 nats runs anywhere fr
 boundary, not test a single value against a threshold**, which is the sequential-
 testing (SPRT / e-process) form rather than the point-test form. That is the
 concrete next construction.
+
+> **⚖️ ATTRIBUTION —** _Λ is random with Var(Λ)=2E[Λ] for a Gaussian mean-shift LLR, so a single-shot threshold is unreliable and one must compare accumulated evidence to a boundary — the sequential-test form._ Prior art: the LLR variance = 2·mean relation and boundary-crossing tests are Wald's SPRT (Wald 1945; Wald & Wolfowitz 1948) and modern e-processes (Ramdas et al.). Status: REPRODUCTION.

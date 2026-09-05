@@ -1,5 +1,7 @@
 # 0029 — Quadrature error decays exponentially in the order; the default is underpowered when the log-scale variance is large
 
+> **⚖️ ATTRIBUTION —** _Measured: the Gauss–Hermite quadrature error of the filter decays geometrically ($O(\rho^{-2n})$) in the order, so the default order 5 is fine below $s\approx0.55$ and loses ~6% θ-MSE at $s{=}1.2$._ The exponential convergence of Gauss–Hermite quadrature on analytic integrands is a classical numerical-analysis result (Gauss–Hermite; standard error bounds); the contribution is the regime-specific numbers on this filter. Status: NEGATIVE-RESULT (measured rate; method REPRODUCTION).
+
 Script: [`0028_order_scan.py`](0028_order_scan.py). First measurement in the
 rate-of-approach thread. Fixes parameters at truth (so the only moving piece
 is the Gauss-Hermite order), generates 16 seeds × $n=800$ from the filter's

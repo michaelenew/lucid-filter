@@ -9,6 +9,8 @@ plus STAGGER (burst at 1200, fault at 1800).  150 seeds each.  The pairwise KL
 machinery from 0001 generalizes: member gains come from their own assumed q, truth
 covariances from the joint recursion, so every delay below has a derived rate next to it.
 
+> **⚖️ ATTRIBUTION —** _A joint {dynamics}×{noise-scale} multiple-model bank separates a process-noise burst from a dynamics fault through per-member predictive likelihoods alone; the "burst-then-fault" masking case (fault must win a slower KL duel against an elevated-noise member) is the measured finding. Multiple-model estimation and innovation-based fault/noise discrimination are standard; the masking numbers are the repo's._ Prior art: multiple-model adaptive estimation / IMM (Magill 1965; Blom & Bar-Shalom 1988); innovation-based fault detection (Willsky 1976); adaptive noise-covariance identification (Mehra 1970). Status: RECOMBINATION with NEGATIVE-RESULT (the mask).
+
 ## 1. The split works, with no whiteness statistic anywhere
 
 Settled marginal posteriors (window [t*+400, T)):

@@ -14,6 +14,8 @@ had already committed to.
 
 ## 1. Differencing costs a factor $(1-\rho_1)$ in SNR, and that is why levels win
 
+> **⚖️ ATTRIBUTION —** _$\mathrm{Var}(\Delta x)=2\gamma_0(1-\rho_1)$ is an elementary variance identity, and the resulting SNR cost of differencing a smooth series is standard time-series knowledge._ Prior art: elementary stationary-process variance algebra; over-differencing / MA(1)-injection is textbook (Box–Jenkins). Status: REPRODUCTION.
+
 [`0007`](0007_what_the_probes_settle.md) §2 explained IV's degradation under a
 unit root as weak instruments — lagged levels of an integrated series being
 dominated by the common trend — and proposed imposing the unit root and
@@ -53,6 +55,8 @@ this is where it first bites.**
 
 ## 2. "Is the offset constant?" is answerable, by the machinery already present
 
+> **⚖️ ATTRIBUTION —** _Comparing "root pinned at $z=1$" against "root free" by a likelihood ratio, with the $2\cdot$LLR $\sim\chi^2_1$ under the null, is a standard likelihood-ratio / unit-root test._ Prior art: likelihood-ratio testing (Wilks 1938); unit-root testing (Dickey–Fuller 1979) — note the non-standard null distribution at an exact unit root is a known subtlety the note treats informally. Status: REPRODUCTION.
+
 Exact Gaussian ML with the offset root free (3 parameters) against pinned at
 $z=1$ (2 parameters, via $\alpha_1 = 1+\beta_1$, $\alpha_2=\beta_2-\beta_1$,
 $\alpha_3=-\beta_2$), $n=2000$, $\kappa=0.5$, 20 seeds
@@ -75,6 +79,8 @@ likelihood can test, with no new machinery and no threshold — read the LLR, do
 not compare it to a critical value.
 
 ## 3. The anisotropy is load-bearing, and it flips sign
+
+> **⚖️ ATTRIBUTION —** _A measured comparison of drift-covariance shapes (isotropic vs Fisher-shaped) for a time-varying-parameter Kalman filter on a specific synthetic rig; the underlying tools (marginal-likelihood selection of a drift/hyperprior scale, forecast-MSE scoring) are standard._ Prior art: time-varying-parameter / random-coefficient state-space models (Harvey; Ljung & Söderström forgetting factors). The specific numbers and sign-flip are a NEGATIVE-RESULT on this rig. Status: NEGATIVE-RESULT.
 
 [`0008`](0008_anisotropy_at_p2.py) is the test [`0007`](0007_what_the_probes_settle.md)
 §6 said was needed: $p=2$, a damped oscillator, the smallest case in which the

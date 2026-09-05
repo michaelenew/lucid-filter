@@ -3,6 +3,8 @@
 > **AI-generated, not peer-reviewed.** 0025's residue, closed. Code:
 > `0028_why_the_schedule.py`.
 
+> **⚖️ ATTRIBUTION —** _The content is that a Lorentz-invariant vacuum sampled along a worldline gives a stationary (Toeplitz) covariance exactly when the sample points lie on a symmetry orbit, and the boost orbit is the exponential schedule — so Unruh temperature is "the price of stationarity." This recasts the Bisognano–Wichmann/Unruh setup via stationarity; Letaw's classification of stationary worldlines is cited correctly._ Prior art: stationary worldlines (Letaw 1981); Unruh 1976; stationary Gaussian processes / Toeplitz covariance. Status: SPECULATIVE (correspondence); references genuine.
+
 The answer is the most filter-native requirement there is: **a
 recursive filter needs a stationary record.** One model, one
 transfer, one innovation law reused at every step presumes the

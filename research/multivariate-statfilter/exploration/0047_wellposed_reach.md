@@ -1,5 +1,7 @@
 # 0047 — well-posedness PINS THE REACH TAIL (Student-t ruled out), but not the selectivity
 
+> **⚖️ ATTRIBUTION —** _A well-posedness (finite-moment E[e^μ]<∞) argument pins the reach tail to at most Laplace rate 1, excluding the Student-t/q~1/ν family; empirically a heavier tail is monotonically worse, but the Laplace's hard dead-zone is less selective than the quadratic soft-threshold — the tail is derived, the selectivity is not._ Prior art: heavy-tail integrability / moment conditions (standard); Laplace prior ⇒ L1 soft-threshold — Tibshirani 1996, Donoho & Johnstone 1994. Status: RECOMBINATION.
+
 Ran down the 0046 theoretical lead: derive the reach magnitude from well-posedness, no tuned q.
 
 ## The derivation

@@ -1,5 +1,7 @@
 # 0035 — deriving the empirical parameters (the "no tuned params" pass)
 
+> **⚖️ ATTRIBUTION —** _An audit replacing "magic" constants with derived ones: the 2σ χ²₁ outlier point 1+2√2, and the process-walk gain as a Newton whitening rate K*/b_k built from the closed-loop Lyapunov error covariance and the Mehra lag-1 innovation autocovariance C₁=HAMHᵀ−HFKR._ Prior art: Mehra 1970 lag-1 innovation autocovariance; Lyapunov steady-state covariance (standard); χ² innovation gating (standard). Status: RECOMBINATION.
+
 An audit of the filter's constants, each classified derived / labeled-budget / measured, and the
 measured ones fixed where a derivation exists. Profiled at 40 seeds, paired (`0034_profile.py`).
 

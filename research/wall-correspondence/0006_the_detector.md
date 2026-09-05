@@ -1,5 +1,7 @@
 # 0006 — The detector: the phase's operational value, measured
 
+> **⚖️ ATTRIBUTION —** _Measured: on a genuinely non-classical generator (weak measurement of a 2-state unitary), the correctly-specified amplitude filter beats a decohered HMM that discards phase (+0.06 to +0.087 nats/bit). This is the expected fact that a well-specified model beats one that throws away information the generator actually carries; the "Born-structure detector" framing is a reasonable operational spin, not new physics._ Prior art: model misspecification / likelihood-ratio; quantum weak measurement. Status: RECOMBINATION/NEGATIVE-RESULT (measurement); correspondence claim SPECULATIVE.
+
 > **AI-generated, not peer-reviewed.** The other half of 0005: it
 > proved amplitude mixing cannot pay on classical streams; here is
 > the stream where it must pay, and the measurement of how much.

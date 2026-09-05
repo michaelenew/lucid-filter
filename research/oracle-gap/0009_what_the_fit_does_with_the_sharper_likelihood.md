@@ -5,6 +5,8 @@ Probes: [`0006`](0006_the_fit_on_the_imm_likelihood.py) ·
 [`0008`](0008_the_kick_control.py) ·
 numbers: `figures/gap0006.json`, `gap0007.json`, `gap0008.json`
 
+> **⚖️ ATTRIBUTION —** _This note carries three distinct results, annotated at each below: the ablation-style gap decomposition, the fit-toward-truth demonstration under the IMM likelihood, and the boundary ill-posedness argument. All rest on standard estimation theory._
+
 ## The gap, fully decomposed (`0007`)
 
 On `0038` B's exact data, every owner of the static-to-oracle span
@@ -25,6 +27,8 @@ steps the regime node carries so much accumulated prejudice it never
 recovers. The kernel's forgetting is essential, not overhead. Resolution is
 not the gap: order 9 is mildly *worse* than order 5 here.
 
+> **⚖️ ATTRIBUTION —** _Decomposing the oracle gap into collapse / channel-model / detection-lag owners via independent switching, and the side-finding that a no-mixing bank ($T=I$) closes 0% because it cannot forget an old regime — the numbers are original, the mechanisms are known (mixing/forgetting is essential to IMM; a bank without transition mixing is a static MMAE that cannot recover). Prior art: IMM mixing step — Blom & Bar-Shalom 1988; forgetting factors in adaptive estimation — Ljung & Söderström 1983. Status: NEGATIVE-RESULT._
+
 ## The fit comes most of the way home (`0006` B)
 
 The staged fit, identical in every pass except the likelihood it sees, on
@@ -41,6 +45,8 @@ everything else loose, $\varphi_P$ anywhere from 0 to 0.74. The IMM fit
 moves **every coordinate toward the truth on every seed**. It does not land
 exactly: $\hat s_P$ still overshoots (~1.1 vs 0.8) with $\hat Q$ low. The
 ridge is tilted, not abolished, at $n = 900$.
+
+> **⚖️ ATTRIBUTION —** _Empirical demonstration that maximum-likelihood estimation of the noise parameters improves when the likelihood is evaluated through the sharper (per-node) filter — an instance of noise-covariance identification via the innovation likelihood. The observation is standard ML/PEM behaviour on a specific rig._ Prior art: noise-covariance identification / adaptive Kalman filtering — Mehra 1970, 1972; Prediction Error Method — Ljung 1987/1999. Status: REPRODUCTION.
 
 ## And the boundary stays ill-posed (`0006` C, `0008`)
 
@@ -68,7 +74,9 @@ just has no stable zero to stand on.
 
 **The reading**: near $s_P = 0$ the Fisher information in $s_P$ vanishes —
 a spread parameter's likelihood is flat to second order at zero spread — so
-a *point estimate* there is ill-posed under any likelihood. GPB1's total
+a *point estimate* there is ill-posed under any likelihood.
+
+> **⚖️ ATTRIBUTION —** _The parameter-on-the-boundary result: Fisher information in a spread parameter vanishes at zero spread, so ML point estimation there is ill-posed regardless of the filter. This is the well-known non-standard-asymptotics / variance-component-at-zero problem; the recommended fix (marginalise rather than plug in) is standard Bayesian nuisance handling._ Prior art: boundary MLE / testing a variance component at zero — Chernoff 1954; Self & Liang 1987; standard result, specific source not verified. Status: REPRODUCTION. GPB1's total
 flatness collapses $\hat s_P$ to 0 or lets it slide to 2; IMM's restored
 curvature stops the slide at large $s$ but still scatters small-positive
 estimates over [0.3, 0.9] where the truth is 0. Neither is a defect of the

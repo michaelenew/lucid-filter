@@ -1,5 +1,7 @@
 # 0003 — Regime hazard vs AR(1): the sector tier, priced
 
+> **⚖️ ATTRIBUTION —** _A real prequential experiment: a 2-state Markov-switching (regime) noise model vs an AR(1) matched to the same second-order structure, scored in nats. The finding (right closure wins each way; +0.003 nats/pt penalty; structure beats resolution) is a small measured result on a synthetic rig._ Prior art: Markov regime-switching models (Hamilton 1989); GPB/IMM mixing (Bar-Shalom). Status: RECOMBINATION for the experiment/NEGATIVE-RESULT for the measured penalties; the "superselection sector" correspondence is SPECULATIVE.
+
 > **AI-generated, not peer-reviewed.** Every number computed by
 > [`0003_regime_hazard.py`](0003_regime_hazard.py) (fixed seeds; grids
 > are compute budgets with convergence shown; filters run at known

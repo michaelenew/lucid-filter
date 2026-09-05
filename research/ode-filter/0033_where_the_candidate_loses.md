@@ -14,6 +14,8 @@ the whole run it is **1.35× worse** on tracking and exactly level (0.999) on
 forecasting. The battery in `0026` said 1.5–3.7× better; this says level. Both
 are true, and the difference between them is the whole point.
 
+> **⚖️ ATTRIBUTION —** _A measured failure-mode analysis on one scripted rig: a fitted model degrades out-of-sample when its assumptions expire (a stale static-$\alpha$ commitment, a process-scale channel that fits dead on smooth data). The phenomena (model misspecification cost, mis-attribution of process to measurement noise) are known; the specific numbers are the original content._ Prior art: known consequences of model misspecification / non-adaptive filtering; no single canonical source. Status: NEGATIVE-RESULT.
+
 ## The scoreboard
 
 odefilter ÷ parent, lower is better:

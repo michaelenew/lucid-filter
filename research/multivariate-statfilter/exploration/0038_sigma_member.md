@@ -1,5 +1,7 @@
 # 0038 — the within-member scale posterior: reach works, but per-step likelihood reintroduces the confound
 
+> **⚖️ ATTRIBUTION —** _Negative result: a within-member sigma-point windowed-GPB1 scale posterior recovers burst reach but blows up on every process regime, because its per-step KF likelihood cannot separate Q from R (their Prop 1) without the innovation-sequence (whiteness/Mehra) machinery the production filter keeps._ Prior art: sigma-point/unscented — Julier & Uhlmann 1997; GPB1 — Ackerson & Fu 1970; Q-vs-R per-step inseparability — Mehra 1972. Status: NEGATIVE-RESULT.
+
 Debugging the sigma-point windowed-GPB1 scale posterior (the parent's cure for the single-point
 walk's under-reach, 0008) on the 5-DOF rig.
 

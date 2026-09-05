@@ -1,5 +1,7 @@
 # 0007 — The coupled bank: the vertex as a shared trust node, its propagator measured
 
+> **⚖️ ATTRIBUTION —** _A real measurement of cross-stream response through a shared log-scale posterior in a Rao-Blackwellized grid filter: the mean channel is silent, the variance channel carries long memory as φ→1. This is a hierarchical-Bayes shared-latent coupling; "confidence transfers, not state" is a clean way to state that a shared precision hyperparameter propagates second-order but not first-order information._ Prior art: hierarchical/shared-latent state-space models; Rao–Blackwellized particle filtering (Doucet et al. 2001). Status: RECOMBINATION (measurement); the "vertex propagator / massless mode" correspondence is SPECULATIVE.
+
 > **AI-generated, not peer-reviewed.** F1 of the sibling's adoption
 > plan — the boundary-vertex/propagator doppelganger — now on the
 > proven network tier (their 0104: a shared node *is* Bayes-sharing

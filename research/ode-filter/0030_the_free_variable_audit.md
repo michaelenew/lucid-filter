@@ -94,6 +94,8 @@ the default found a worse optimum**, which is the signature of a hidden knob.
 | **IV $m=p$** | — | 409.0 | 7.59 | **diverged** |
 | IV $m=4p$ | 0.9277 | 0.990 | 8.329 | +0.09 |
 
+> **⚖️ ATTRIBUTION —** _An engineering audit of a specific implementation's constants (which scan/init/guard values move the fitted answer). The finding that an over-identified IV needs $m>p$ (just-identified IV diverges) is the standard identifiability requirement for instrumental variables._ Prior art: instrumental-variables identification order condition (standard econometrics/system-ID). These are NEGATIVE-RESULTs specific to this codebase. Status: NEGATIVE-RESULT.
+
 **1. The $Q$ scan is inert, and should be deleted.** Widen the window by six
 decades, narrow it to one and a half, resolve it at 5 or 31 points, or remove
 it entirely: the fitted oscillator moves by $\le 0.003$ and the likelihood by
@@ -128,6 +130,8 @@ first filtered mean by under 0.08 SD and is gone within 30 steps. **The `·p`
 inflation is a transient, not a parameter.**
 
 ### B. Is $p$ learnable? Prequential log-loss
+
+> **⚖️ ATTRIBUTION —** _Selecting the AR order by prequential predictive log-loss (fit on the first half, score the log density of the second, no explicit complexity penalty) is standard prequential/MDL order selection, of which AIC/BIC are the penalized-likelihood cousins._ Prior art: prequential model selection (Dawid 1984); MDL (Rissanen 1978, 1986); AIC (Akaike 1974), BIC (Schwarz 1978). Status: REPRODUCTION.
 
 Fit on the first half, score the log predictive density of the second, three
 seeds, $n=700$, nats/point, higher is better. **No complexity penalty** — AIC's

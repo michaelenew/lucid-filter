@@ -10,6 +10,8 @@ This note fixes the coordinates before any filtering happens, because three of
 the previous construction's difficulties turn out to be coordinate choices
 rather than facts about the problem.
 
+> **⚖️ ATTRIBUTION —** _Treating a locally-linear ODE observed in noise as a Gaussian (Kalman) filtering problem is the central object of probabilistic numerics / probabilistic ODE solvers._ Prior art: Schober, Särkkä & Hennig 2019; Tronarp et al. 2019; Kersting, Sullivan & Hennig; the underlying AR($p$)-in-noise state-space form and continuous–discrete Kalman filter are textbook (Kalman 1960; Jazwinski 1970). Status: REPRODUCTION.
+
 ---
 
 ## 1. The lag basis, and why no finite difference is ever formed
@@ -39,6 +41,8 @@ $z_t = (x_t, x_{t-1}, \dots, x_{t-p+1})$ and the dynamics are a scalar
 recurrence.
 
 ## 2. The order, and the offset as a unit root
+
+> **⚖️ ATTRIBUTION —** _Representing a constant (or drifting) offset/bias as a root at $z=1$ is state augmentation with a unit-root/integrator, the standard treatment of bias in recursive filtering._ Prior art: Friedland 1969 ("Treatment of bias in recursive filtering"); unit-root/integrated-process modeling in time series (Box–Jenkins; Harvey structural time series). The "$p=1$ unit root = local-level random walk" reduction is the standard local-level model. Status: REPRODUCTION.
 
 The solution space of $\ddot x + p\dot x + q x = r$ is
 $\operatorname{span}\{1, e^{\lambda_1 t}, e^{\lambda_2 t}\}$ — three dimensional,
@@ -76,6 +80,8 @@ parent workstream built for $(Q,\sigma^2)$ carries over unchanged, because the
 observation equation is identical.
 
 ## 3. What is actually identifiable
+
+> **⚖️ ATTRIBUTION —** _The count "AR($p$) + white measurement noise has the spectral density of an ARMA($p,p$), giving $2p+1$ identifiable numbers, and a scalar-observed $(A,C)$ is fixed only up to similarity / companion form" is standard linear-system realization and time-series identifiability theory._ Prior art: Kalman realization theory (observable pairs similar to companion form); spectral factorization of AR-plus-noise as ARMA — standard time-series result, specific source not verified. Status: REPRODUCTION.
 
 Worth counting, because the previous construction estimated a full $N\times N$
 matrix $A$ with a full $N^2\times N^2$ covariance.

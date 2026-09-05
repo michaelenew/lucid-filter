@@ -1,3 +1,9 @@
+# ⚖️ ATTRIBUTION — Two closed-form results for the scale-tracking loop. Theorem 1
+# (double-root critical damping, geometric rate (1+phi)/2) is the classical
+# alpha-beta(-gamma) critically-damped tracking-filter design (Benedict & Bordner
+# 1962; standard linear-systems root analysis). Theorem 2 (walk-state variance
+# (1-phi)/(4I)) is the steady-state Kalman/Riccati fixed point for a random-walk-
+# plus-noise (local-level) model (Kalman 1960; standard). Status: REPRODUCTION.
 """Walking filter: asymptotic convergence and the steady-state error floor.
 
 AI-GENERATED, NOT PEER-REVIEWED -- produced by an AI system, not independently

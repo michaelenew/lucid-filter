@@ -5,6 +5,8 @@
 > a pinned (massless) log-scale field; time is the stream index.
 > Code: `0011_the_trust_field.py`.
 
+> **⚖️ ATTRIBUTION —** _The result "1/r in 3D, log in 2D, linear in 1D" is textbook potential theory: these are the Green functions of the (lattice) Laplacian in each dimension. The Sherman–Morrison saturating-mass identity is standard linear algebra. Dressing this as "Newton's law / the bank's dimension selects the potential / gravitational waves are source-tier" is analogy._ Prior art: Green functions of the Laplacian (potential theory, textbook); Sherman–Morrison. Status: SPECULATIVE (correspondence); the Green-function math is REPRODUCTION.
+
 Three measured statements:
 
 1. **Newton's 1/r is the field's Green function — and only in three

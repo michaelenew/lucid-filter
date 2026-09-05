@@ -34,6 +34,8 @@ Verified at machine precision for $q$ = 0.005 / 0.05 / 0.5:
 | 0.05 | 0.2000 | 0.64004 | 0.64000 | 0.80000 | 0.80002 |
 | 0.5 | 0.5000 | 0.25000 | 0.25000 | 0.50000 | 0.50000 |
 
+> **⚖️ ATTRIBUTION —** _Three distinct decay laws for a past observation's relevance to the current level: marginal 1/(σ²+kQ) (hyperbolic), incremental Fisher (1-K)^{2k} (geometric, via the Riccati derivative and random-walk time-reversibility), and BLUE influence weight K(1-K)^k (geometric, half-rate)._ Prior art: exponentially-weighted Kalman/steady-state weights and Riccati convergence rate (1-K)² are standard (Anderson & Moore 1979); reversibility of the random walk is textbook. Status: REPRODUCTION.
+
 ### The redundancy is the gap, and the conversion law is a square root
 
 The marginal law is hyperbolic and its sum diverges; the joint information is
@@ -53,6 +55,8 @@ nats share is $0.64^{10}=0.012$ but the correct influence share is
 $0.8^{10}=0.107$, a factor of nine. (fig13, right panel, collapses all three $q$
 onto the identity line.)
 
+> **⚖️ ATTRIBUTION —** _The gap between the divergent marginal information and the finite joint information is redundancy from correlation with newer points; the nats→influence conversion is a square root (aₖ ∝ √(Δnatsₖ))._ Prior art: information redundancy under correlation is standard information theory; the √ relation is an algebraic consequence of the two known geometric rates (1-K)^k and (1-K)^{2k} — a re-expression, not a new law. Status: RECOMBINATION.
+
 ## B. The two channels cannot share a window (fig05)
 
 | | law | horizon |
@@ -70,6 +74,8 @@ zero for decades of samples.
 be indexed by *channel*, not by lag. The level channel wants a horizon of $1/K$.
 The parameter channel wants everything.
 
+> **⚖️ ATTRIBUTION —** _The level channel forgets geometrically (horizon ~1/K) while the parameter channel's information accrues forever (1/n, divergent sum), so no single truncation length serves both._ Prior art: restates the two decay laws above (steady-state Kalman forgetting vs Fisher-information accumulation); standard. Status: REPRODUCTION.
+
 ## C. So what makes a finite tail optimal? Only hyper-drift. (fig06)
 
 Under a stationary $(Q,\sigma^2)$ the answer is: **nothing**. $L^*=\infty$. Every
@@ -86,6 +92,8 @@ $$\mathcal L(L)=\underbrace{\frac{d}{2L}}_{\text{estimation}} \;+\; \underbrace{
 Minimising:
 
 $$\boxed{\ L^* = \sqrt{\frac{3d}{\omega^2\,\mathrm{tr}\,I_1}}\ \propto\ \frac1\omega\ }$$
+
+> **⚖️ ATTRIBUTION —** _A finite window is optimal only when the parameters themselves drift: minimising estimation variance (d/2L) plus staleness (drift ω² over the window) gives L* = √(3d/(ω²·tr I₁)) ∝ 1/ω._ Prior art: the bias-variance / forgetting-factor window optimisation under a random-walk parameter is classic recursive estimation (Ljung & Söderström 1983; Benveniste, Métivier & Priouret 1990); the closed form and the mapping "tail length ↔ regime volatility ω" is a clean re-derivation. Status: RECOMBINATION.
 
 Numerically confirmed against a grid search over $L\in[3,10^5]$ across four
 decades of $\omega$. With $\mathrm{tr}\,I_1 \approx 0.48/0.45/0.35$ for

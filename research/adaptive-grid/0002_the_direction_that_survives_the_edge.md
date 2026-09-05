@@ -10,6 +10,8 @@ filter and agrees to 1e-7.
 The question is the one a moving grid has to answer: **which way is the truth,
 and can I tell even when it is off the grid entirely?**
 
+> **⚖️ ATTRIBUTION —** _The grid-shift score is the score function (gradient of the marginal log-likelihood) of a Gaussian scale-family mixture; its slope-≈1 far-field log-linearity is elementary scale-family algebra (score grows like e^{lam*−lam_top}, so its log recovers the distance)._ Prior art: Fisher score / score-based estimation (standard); the moving grid of scale hypotheses is MMAE (Magill 1965) / moving-bank MMAE (Maybeck). Status: RECOMBINATION.
+
 ## Two reads of the same posterior
 
 - **posterior mean** `Ehat[lam] = mean_t Σ_i π_i lam_i` — the obvious estimate.
@@ -48,6 +50,8 @@ well outside the grid region, the score points at them and scales with how far
 away they are.** The saturating posterior mean does not.
 
 ## Result 2 — between nodes, the signal has dead zones at wide spread
+
+> **⚖️ ATTRIBUTION —** _Between-node "dead zones" and the overlap requirement are a grid/quadrature-resolution limit of a mixture: sparse nodes cannot resolve intermediate scales, and the (Qg/S) weighting inverts the score in the gap._ Prior art: quadrature/grid resolution (standard); resolvability later analogized to the optical Sparrow criterion (Sparrow 1916, an analogy). The measured onset (safe gap ≲ 0.6 nats) is a NEGATIVE-RESULT. Status: RECOMBINATION.
 
 ![between nodes](figures/0002-between-nodes.png)
 

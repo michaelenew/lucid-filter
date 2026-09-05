@@ -25,11 +25,16 @@ precision:
   `ρ = (1+φ)/2`. So the deterministic tracking error decays as `(a + b·t)·ρᵗ`:
   geometric rate `ρ = (1+φ)/2 < 1`, the double root being the critical-damping
   boundary (fastest decay, no oscillation). Settling time `~ 2/(1−φ)`.
+
+> **⚖️ ATTRIBUTION —** _A second-order tracking loop tuned to a double root (critical damping) is textbook: the characteristic-polynomial / critically-damped-gain analysis is exactly the classical alpha-beta(-gamma) tracking-filter design._ Prior art: critically-damped second-order / alpha-beta tracking filters (Benedict & Bordner 1962); standard linear-systems root analysis. Status: REPRODUCTION.
+
 - **Theorem 2 (walk-state estimation floor).** With drift variance
   `q_mu = K*²/(I(1−K*))` and observation variance `R = 1/I`, the μ-Kalman's
   steady Riccati fixed point has gain exactly `K*` and posterior variance
   **`Var(μ − λ*) = (1−φ)/(4I)`** — shrinking with persistence and observability,
   independent of `s`.
+
+> **⚖️ ATTRIBUTION —** _The steady-state variance of a random-walk-plus-noise (local-level) Kalman filter is a standard Riccati/DARE fixed point; matching the drift variance to land on the critically-damped gain is an algebra exercise on that fixed point._ Prior art: steady-state Kalman filter / scalar Riccati for the local-level model (Kalman 1960; standard). Status: REPRODUCTION.
 
 Caveat carried honestly: Theorem 2 bounds the **coarse walk centre** `μ`, not the
 reported estimate `μ + E_π[λ]`. The full estimate additionally resolves the fast
@@ -58,6 +63,8 @@ produced was the tell.)
   **consistency with a finite, characterised efficiency loss**, not asymptotic
   efficiency.
 
+> **⚖️ ATTRIBUTION —** _The minimum tracking MSE for an AR(1) state observed in noise is the scalar AR(1)-Kalman steady-state (DARE) — a Cramér-Rao-type floor that is standard; "natural gradient = Fisher scoring" for the update direction is Amari's result. The realised-efficiency ratios (4.9×, 2.7×, …) of the robust fixed-gain filter against that floor are the measured, quantitative content._ Prior art: steady-state Kalman / scalar DARE (standard); natural-gradient = Fisher scoring (Amari 1998); Cramér-Rao bound. Status: REPRODUCTION with NEGATIVE-RESULT (the measured efficiency gap).
+
 ### statfilter (AdaptiveFilter) ([`0003`](0003_stat_bounds.py))
 
 Three results, all verified (probe runs in 0.2 s):
@@ -77,10 +84,15 @@ Three results, all verified (probe runs in 0.2 s):
   0.99). This is a discretization artifact of the resolution-limited uniform grid
   (the same coarseness that opens the 0002 efficiency gap), most visible exactly
   where the regime is most persistent.
+
+> **⚖️ ATTRIBUTION —** _Geometric ergodicity of a finite-state Markov chain via Perron-Frobenius (a positive stochastic matrix has a simple top eigenvalue and forgets its init at the second-eigenvalue-modulus rate) is textbook, and the AR(1)/OU continuum mixing rate = φ is the Mehler-kernel eigenvalue. The s-cancellation and the high-φ mixing-inflation grid artifact are the repo's specific measured observations._ Prior art: Perron-Frobenius / geometric ergodicity of finite Markov chains (standard); Ornstein-Uhlenbeck / Mehler spectrum (standard). Status: REPRODUCTION with NEGATIVE-RESULT (the high-φ inflation).
+
 - **Theorem 2 (level steady-state variance, exact).** Eliminating `P⁺` from the
   local-level Riccati gives `P⁻² = Qg·P⁻ + Qg·R`, so `P⁻ = (Qg + √(Qg² + 4Qg R))/2`,
   `K = P⁻/(P⁻+R)`, `P⁺ = (1−K)P⁻ = K·R` (the `(1−K)P⁻ = KR` identity is exact). The
   reported `var → P⁺ = K·s2` to 8 digits, and this `K` is exactly `Params.gain`.
+
+> **⚖️ ATTRIBUTION —** _The exact steady-state variance of the local-level (random-walk-plus-noise) Kalman filter from its scalar Riccati equation is a standard closed form._ Prior art: steady-state Kalman filter / local-level Riccati (Kalman 1960; standard). Status: REPRODUCTION.
 - **Theorem 3 (Cramér–Rao floor).** On the linear-Gaussian local level the Kalman
   posterior is exact and its variance is the Bayesian CRB, attained with equality;
   at `s_P=s_M=0` `AdaptiveFilter` reduces to it (`|filter−Kalman| = 5.6e-17`). So on
@@ -89,6 +101,8 @@ Three results, all verified (probe runs in 0.2 s):
   joint-grid posterior is a genuine spread mixture (93% of the collapse variance is
   the between-mode spread there vs 0.2% in steady state), so the floor is
   approximate at that step.
+
+> **⚖️ ATTRIBUTION —** _On a linear-Gaussian model the Kalman posterior variance attains the Bayesian Cramér-Rao bound with equality — a standard fact — so the reported variance is the CR floor on the homoscedastic face; the GPB1-collapse caveat at a jump is the honest approximation note._ Prior art: Bayesian Cramér-Rao bound = Kalman variance for linear-Gaussian (standard; Van Trees); GPB1 collapse (Ackerson & Fu 1970). Status: REPRODUCTION.
 
 ### odefilter (OdeFilter) ([`0004`](0004_ode_bounds.py))
 
@@ -103,6 +117,8 @@ The p-state extension; verified numerically (probe ~4 s, fixed/frozen params).
   `|λ₂|` and the empirical posterior rate are in hand, not a clean closed-form
   posterior bound. Same high-φ numerical caveat as stat (kernel underflows,
   `|λ₂|→1` at φ=.98,s=.8).
+
+> **⚖️ ATTRIBUTION —** _Same Perron-Frobenius geometric-ergodicity argument as the stat filter, now on three grid channels; conditional (observation-driven) filter stability is the Le Gland-Mevel result cited in-text. The Birkhoff-coefficient-is-vacuous observation and empirical posterior rates are the repo's._ Prior art: Perron-Frobenius ergodicity (standard); nonlinear-filter stability (Le Gland & Mevel 2000). Status: REPRODUCTION.
 - **Theorem 2 (state steady-state covariance = stabilising DARE).** The
   companion-form Kalman error covariance solves the DARE; observability +
   controllability give a unique stabilising PSD solution for **every** `alpha`.
@@ -117,13 +133,19 @@ The p-state extension; verified numerically (probe ~4 s, fixed/frozen params).
   `s=0` recursion's redundant nodes amplify roundoff by `|root|²/step` and `alpha_at`
   clips into the disc, so the finite-error result is a property of the *ideal*
   filter (via the Riccati iteration), not the shipped code.
+
+> **⚖️ ATTRIBUTION —** _Existence and uniqueness of a stabilising PSD DARE solution under detectability/stabilisability (observability + controllability) is the standard steady-state Kalman-stability theorem; the "explosive signal still has finite filter error, the real instability boundary is the signal's own Lyapunov variance" is a correct restatement of a known distinction, not a new result._ Prior art: DARE existence/uniqueness and Kalman-filter stability (Anderson & Moore, *Optimal Filtering* 1979; standard); Lyapunov equation for stationary variance. Status: REPRODUCTION.
 - **Theorem 3 (reduction to parent at p=1, α=1).** The DARE collapses to the stat
   local-level Riccati `P⁻=(Qg+√(Qg²+4Qg s2))/2`, matching the formula, `Params.gain`,
   and the filter `P⁺` to ~1e-16 — the covariance-level face of the suite's 1e-8
   parent-agreement check.
+
+> **⚖️ ATTRIBUTION —** _A consistency/reduction check: the p-state DARE collapses to the parent local-level Riccati at p=1, α=1. Verification that two of the repo's own filters agree — not a literature result._ Prior art: n/a (internal consistency check); the underlying DARE-to-scalar-Riccati reduction is standard algebra. Status: RECOMBINATION.
 - **Theorem 4 (dynamics channel).** The `alpha` channel is the same `_chain` kernel
   one level up; its `g`-posterior forgets its init at `|λ₂(T_A)|` (0.464 at
   φ_A=.5,s_A=.15). Brief, by the Theorem-1 argument.
+
+> **⚖️ ATTRIBUTION —** _The dynamics (α) grid channel forgets its init at the same Perron-Frobenius SLEM rate as the noise channels — a direct reuse of Theorem 1, not a new argument._ Prior art: Perron-Frobenius ergodicity (standard). Status: REPRODUCTION.
 
 ### Shape vs parameters — what "no free parameters" actually costs ([`0005`](0005_shape_vs_parameters.py))
 
@@ -132,6 +154,8 @@ The capstone of the no-free-parameter thesis: separate the **shape's** contribut
 φ, s). Log-loss is the currency; both arms use the *exact* dense-grid class filter so
 the difference is the pure parameter cost (a Bayes factor), not any filter
 suboptimality.
+
+> **⚖️ ATTRIBUTION —** _Decomposing predictive log-loss into a shape floor (the process entropy rate) plus a vanishing parameter regret scaling like (d/2)ln T is the standard Bayesian/MDL universal-coding picture; the sloppy-ridge d_eff < 2 is a Fisher-information observation. The specific per-step regret numbers (1.6e-4 nats/step, total < 1 nat over 4000 steps) are the measured content._ Prior art: MDL / stochastic complexity and Bayesian mixture regret (Rissanen 1978, 1983; Clarke & Barron 1990); Gaussian-process entropy rate (standard); parameter sloppiness / Fisher information (standard). Status: REPRODUCTION with NEGATIVE-RESULT (the measured sub-nat regret).
 
 - **The shape sets the whole floor.** The params-known predictive log-loss is
   **1.91 nats/step** — an `O(T)` cost fixed by the class (the AR(1) log-scale entropy
@@ -151,6 +175,8 @@ suboptimality.
   filter by selecting a better-*predicting* member, i.e. parameter freedom
   compensates the walking filter's own suboptimality (finding 18). A real
   walking-mode fact, distinct from the clean shape-vs-params decomposition.
+
+> **⚖️ ATTRIBUTION —** _Measured walking-mode result: the shipped bank posts a negative regret (−7.8 nats) against the true-(φ,s) walking filter because model-averaging selects a better-predicting member that compensates the filter's own suboptimality — a specific quantitative observation about this filter, consistent with the standard fact that a Bayesian mixture can beat any single fixed model out-of-model._ Prior art: none specific; the general "mixture beats best fixed expert under misspecification" is standard (universal prediction, Merhav & Feder 1998). Status: NEGATIVE-RESULT.
 
 **Reading:** the shape assumption does essentially all the work; the parameters add a
 vanishing, sub-nat regret, and the sloppy ridge shrinks even that. "No free

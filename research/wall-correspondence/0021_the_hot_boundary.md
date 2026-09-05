@@ -3,6 +3,8 @@
 > **AI-generated, not peer-reviewed.** The horizon front, unblocked
 > at the wedge tier. Code: `0021_the_hot_boundary.py`.
 
+> **⚖️ ATTRIBUTION —** _This reproduces a known theorem of QFT: the vacuum of a free field restricted to a Rindler wedge (half-line) is thermal with respect to boost, at inverse temperature β=2π — the Bisognano–Wichmann / Unruh result. The filter version (reduce a massless Gaussian chain to half its sites, get boost-thermal covariances at β=2π) is that theorem in Gaussian-state language; mapping it to "a filter holding half the web sees heat" is analogy._ Prior art: Bisognano–Wichmann 1975/76; Unruh 1976; KMS condition. Status: SPECULATIVE (correspondence); the physics statement is REPRODUCTION.
+
 Through the time tier (Euclidean = smoother), the sibling's wedge
 theorem (their 0083) reads in filter terms: **the joint posterior of
 a massless Gaussian bank, marginalized to an observer holding half

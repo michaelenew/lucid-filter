@@ -8,6 +8,8 @@ This closes the question opened in `0001` §6 and sharpened in
 log-loss, the filter is used for squared error, and those are different criteria.
 **Empirically they are the same criterion to within the noise.**
 
+> **⚖️ ATTRIBUTION —** _Measured result: the log-loss (ML) parameter choice is within $+0.23\%$ MSE of the squared-error optimum, and the KL-projection beats the true parameters under misspecification._ No new theory — it is a paired empirical comparison of two estimation criteria (ML vs MSE-optimal) on the specific SV rig, plus a measured GPB1 signature ($+0.65\%$ even when well-specified). The rig-specific numbers are the contribution. Status: NEGATIVE-RESULT (a measured "the seam does not bite here" finding).
+
 ## The contrasts
 
 $Q$ and $\sigma^2$ held at truth, $(s_M,\varphi_M)$ varied, 30 seeds, $n=1200$.

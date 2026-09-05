@@ -26,6 +26,8 @@ final numbers and the two withdrawals.
 $$(1-B)^{\nu}x_t=w_t,\qquad y_t=x_t+v_t,\qquad
 x_t=\sum_{k\ge1}c_k(\nu)x_{t-k}+w_t,\quad c_k=(-1)^{k+1}\binom{\nu}{k}.$$
 
+> **⚖️ ATTRIBUTION —** _Making the integer AR/integration order continuous via the fractional-differencing operator $(1-B)^\nu$ (Grünwald–Letnikov binomial expansion) with additive observation noise is the ARFIMA long-memory model in state-space form. The core object is textbook long-memory time series._ Prior art: fractional differencing / ARFIMA — Granger & Joyeux 1980, Hosking 1981; fractional Brownian motion / fractional Gaussian noise — Mandelbrot & Van Ness 1968, Hurst 1951. Status: REPRODUCTION.
+
 Degree is a real number. The integer faces are exact members of the existing
 ladder: $\nu=1$ is the parent random-walk filter, $\nu=2$ is the double unit
 root — i.e. **the linear offset / directional bias planned for the parent is
@@ -48,7 +50,9 @@ continuous mixture of AR(1) decays:
 $$h_k=\int_0^1 r^k\,d\mu_\nu(r),\qquad
 d\mu_\nu(r)=\frac{\sin\pi\nu}{\pi}\,r^{\nu-1}(1-r)^{-\nu}\,dr$$
 
-(machine-precision verified). This answers
+(machine-precision verified).
+
+> **⚖️ ATTRIBUTION —** _Writing the fractional-integration impulse response as a continuous mixture (Stieltjes/spectral representation) of AR(1)/OU decays is a known way to represent long-memory processes as superpositions of short-memory ones; the identity itself is the Euler Beta integral $B(k+\nu,1-\nu)$ with the reflection formula. Standard analysis, re-derived cleanly._ Prior art: superposition-of-Ornstein–Uhlenbeck / AR(1) representations of long memory (e.g. Barndorff-Nielsen & Shephard 2001 supOU; general spectral representation of fractional processes); Euler Beta integral — textbook. Status: REPRODUCTION. This answers
 [`ode-filter/0024`](../ode-filter/0024_the_modes_are_the_channels.md)'s
 question about the channels under a branch point: the roots become a
 **density over decay rates**, "how many channels" becomes "what exponent",
@@ -71,7 +75,9 @@ $$\gamma_f(s)=\sigma^2\,\frac{\Gamma(1-2f)\,\Gamma(s+f)}
 {\Gamma(f)\,\Gamma(1-f)\,\Gamma(s+1-f)},$$
 
 **the classical ARFIMA autocovariance with the integer lag continued to real
-$s$** — the Stieltjes and analytic continuations coincide. It is positive
+$s$** — the Stieltjes and analytic continuations coincide.
+
+> **⚖️ ATTRIBUTION —** _As the text itself says, this is the classical ARFIMA autocovariance (the Gamma-ratio formula for fractionally-integrated noise); the only extension is continuing the integer lag $k$ to a real argument $s$, which the analytic form permits directly. The interpolation-for-fractional-delay use is an engineering application._ Prior art: ARFIMA autocovariance in exactly this $\Gamma$-ratio form — Hosking 1981; long-memory autocovariance $\sim s^{2d-1}$ — Granger & Joyeux 1980. Status: REPRODUCTION. It is positive
 definite on mixed real grids, and one Schur complement of it supplies both
 the fractional read row (exact pick-out at integers, $10^{-15}$) and the
 in-model bridge variance the parent's "class gap" absorbs into $s_{2}^2$.
@@ -93,6 +99,8 @@ $\kappa=0.5$ ([`0005`](0005_the_q_ridge.py)):
 | $\hat\nu$ (2 seeds) | 0.46/0.56 | 0.79/0.87 | **1.03/1.04** | 1.33/1.36 | 1.79/1.85 |
 | profile SE | 0.05 | 0.03 | 0.02 | 0.03 | 0.03 |
 
+> **⚖️ ATTRIBUTION —** _Maximum-likelihood recovery of the fractional-differencing/memory parameter with a curvature-based standard error is exactly time-series estimation of the long-memory parameter $d$; the measured numbers on this synthetic rig are original, the estimability (from "both sides") is established._ Prior art: ML/Whittle estimation of the ARFIMA differencing parameter — Fox & Taqqu 1986, Sowell 1992, Hosking 1981; Whittle likelihood — Whittle 1953. Status: NEGATIVE-RESULT.
+
 Prequential (fit 800, score 800 frozen, mean of 3 seeds), FRAC (one
 coordinate) against the best free-$\alpha$ AR($p\le4$):
 
@@ -104,10 +112,14 @@ Free where the parent's model is true, increasingly ahead as the order moves
 off the integers — and the integer model's rounding is not graceful (a free
 AR(1) on $\nu=1.7$ data is 2–4 nats/pt overconfident out of sample).
 
+> **⚖️ ATTRIBUTION —** _That one long-memory parameter out-predicts several free short-memory AR coefficients on long-memory data, out of sample, is the standard parsimony argument for ARFIMA over pure AR — a known result reproduced with specific prequential numbers on this rig._ Prior art: ARFIMA vs AR forecasting / parsimony of fractional models — Granger & Joyeux 1980; long-memory forecasting literature, specific source not verified. Status: NEGATIVE-RESULT.
+
 **Against a true-parameter oracle** ($\nu,Q,\sigma^2$ known, $K=200$ kernel;
 [`0010`](0010_the_oracle_gap_in_two_currencies.py)), the fitted
 fractional face filter sits **0.001–0.014 nats/pt from the oracle — 0.07% to
-0.70% of the oracle's nll, under 1% at every truth**. As a fraction of the
+0.70% of the oracle's nll, under 1% at every truth**.
+
+> **⚖️ ATTRIBUTION —** _Distance-to-a-clairvoyant-oracle scoring in two denominators (span-closed vs fraction of oracle nll); the methodology is standard oracle-benchmarking, the specific gap numbers are the original content. Caveat noted in-text: an AR(1)+noise fit is already near-oracle for one-step prediction of long memory, so the small fractions are of near-nil spans._ Prior art: clairvoyant/oracle bounds in adaptive filtering — standard (Bar-Shalom); specific source not verified. Status: NEGATIVE-RESULT. As a fraction of the
 fitted-AR(1)-to-oracle span it closes 42%/60%/95%/99.6% at
 $\nu=0.7/1.0/1.3/1.7$ — the small fractions are of near-nil spans (an
 AR(1)+noise fit is close to oracle-grade for *one-step* prediction of pure
@@ -128,7 +140,9 @@ below and remains unmeasured.
 The truncation budget $K$ is honest (likelihood monotone in $K$) and its
 product is **bias reduction, not likelihood**: $\hat\nu$ bias
 $\approx K^{-0.9}$ at $f=0.7$ while the likelihood moves 9 millinats/pt
-across $K=5\to80$. The bias depends only on the fractional part $f$ — the
+across $K=5\to80$.
+
+> **⚖️ ATTRIBUTION —** _Truncating the infinite fractional-differencing (GL) filter at $K$ lags biases the memory-parameter estimate with a power-law rate governed by the fractional part — a known consequence of truncating long-memory operators; the measured $K^{-0.9}$ / $K^{-f}$ tail rates on this rig are the original observation._ Prior art: truncation error of fractional-difference filters, tail $|c_k|\sim k^{-\nu-1}/|\Gamma(-\nu)|$ — Hosking 1981; standard long-memory result, specific source not verified. Status: NEGATIVE-RESULT. The bias depends only on the fractional part $f$ — the
 exact integer factor contributes none. The open cost: tail weight
 $\sim K^{-f}$ is large just above integers (0.83 at $f=0.05$, $K=25$),
 which is the measured argument for a quadrature realisation of the channel
@@ -144,6 +158,8 @@ bias; performance/stability rework). The design rule, held throughout:
 > $\nu\mapsto\alpha$, a 1-D outer profile, a truncation budget. It owns no
 > recursion, grid, collapse, or fit pass, so parent changes inherit by
 > delegation.
+
+> **⚖️ ATTRIBUTION —** _A software-architecture / engineering design rule (reparameterise through an existing interface rather than fork the recursion), not a mathematical result. No scientific prior art applies; it is sound engineering practice._ Prior art: n/a (design decision). Status: RECOMBINATION.
 
 Every probe exercises this literally: the likelihood evaluated is
 `odefilter.core`'s, uncopied. Composition with oscillatory modes is

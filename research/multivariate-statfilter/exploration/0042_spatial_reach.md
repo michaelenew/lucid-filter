@@ -1,5 +1,7 @@
 # 0042 — the SPATIAL discriminant cracks the reach: net-positive, and q saturates (no tuning)
 
+> **⚖️ ATTRIBUTION —** _A spatially-gated reach: a same-joint partner's fast innovation-variance excess is a per-step process indicator (from the known F,H), so reaching only structurally-decoupled sensors is net-positive and q saturates — structural/directional fault detection via the innovation vector._ Prior art: failure detection from filter innovations / GLR — Willsky & Jones 1976, Willsky 1976; directional residual structure (standard). Status: RECOMBINATION.
+
 0039 concluded the reach trades net-negative on the multivariate rig (the process onset-lag misfire
 outweighs the sensor gain) and 0041 proved the TEMPORAL confound-confirmation delay is on the optimal
 Lorden frontier -- unbeatable by a better single-channel estimator. But Prop 1 is scalar. The

@@ -1,5 +1,7 @@
 # 0043 — the spatial reach, fully DERIVED and parameter-free (eligibility + coupling + instantaneous)
 
+> **⚖️ ATTRIBUTION —** _Derives the reach eligibility, coupling and discount purely from (H,Q0,ρ) with no pot/acc hardcoding, and eliminates the fast-EMA rate by using the instantaneous e² (the spatial signal is a per-step variance jump, unlike the temporal Lorden-bounded correlation)._ Prior art: structural fault detection from known dynamics — Willsky & Jones 1976; innovation-covariance decomposition (standard KF algebra). Status: RECOMBINATION.
+
 0042 proved a spatially-gated reach is net-positive and q saturates, but hardcoded the pot/acc pairing
 and used a fast-EMA rate BFAST. This probe derives everything from what the filter already holds and
 removes BFAST.

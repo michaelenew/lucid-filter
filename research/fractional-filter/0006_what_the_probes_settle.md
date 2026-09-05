@@ -38,6 +38,8 @@ shrinks in $K$ on schedule.
 
 ## 2. Two structural lessons, both bought with a failure
 
+> **⚖️ ATTRIBUTION —** _Two measured engineering/negative results: (1) naive $K$-lag truncation of the GL kernel is slightly explosive for $\nu>1$ and biases the fit toward integer orders, fixed by factoring out the exact integer difference (split kernel); (2) the $(\nu,q)$ likelihood has two nuisance ridges so the ratio must be grid-scanned, not warm-started. Both are numerical-optimisation findings specific to this implementation; the underlying facts (truncated long-memory operators lose stationarity; multimodal nuisance surfaces need global scans) are known._ Prior art: fractional-difference truncation — Hosking 1981; general non-convex likelihood / nuisance-scan practice — standard. Status: NEGATIVE-RESULT._
+
 **The integer part must be exact** (0004). The raw $K$-lag truncation of
 the GL kernel has spectral radius $1+c/K$ for $\nu>1$ — slightly explosive —
 so the likelihood pays $\sim n(r{-}1)$ spurious nats and the profile is

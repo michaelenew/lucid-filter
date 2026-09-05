@@ -4,6 +4,8 @@
 > per-observer Unruh statement as design-blocked. It isn't. Code:
 > `0025_the_accelerated_node.py`.
 
+> **⚖️ ATTRIBUTION —** _Reproduces the Unruh effect: reading the inertial vacuum along a uniformly-accelerated (Rindler) worldline — proper time exponentially related to lab time via t=sinh(aτ)/a — gives a thermal (KMS) record at T=a/2π, with spectral density ×coth(ω/2T). Standard result recast as "an accelerated filter reads on a stretched schedule." The methods note (check PSD before comparing hand-built kernels, an algebraic UV regulator broke positive-definiteness) is a genuinely useful estimation caution._ Prior art: Unruh 1976; KMS/thermal Green functions. Status: SPECULATIVE (correspondence); physics is REPRODUCTION; PSD caution is sound.
+
 **The map was hiding in the definition.** A Rindler observer's
 proper time is *exponentially* related to the record's clock
 (t = sinh(aτ)/a). So:

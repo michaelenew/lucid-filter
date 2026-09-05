@@ -11,6 +11,8 @@ discrete transition **matrix** with a continuous transition
 **integral transform**, keep the inputs discrete, and ask what has
 to be true for the refinement to converge.
 
+> **⚖️ ATTRIBUTION —** _Standard limits, honestly checked: discretising an Ornstein–Uhlenbeck record recovers the OU/Fokker–Planck generator (σ²/2)∂²−θx∂; the "real generator but not a rate matrix" gap (only 31.8% of embeddable operators have a valid rate matrix) is the classical embeddability-of-Markov-chains distinction. The genuinely useful reframing is operational renormalizability: a continuum limit exists iff the prequential code length per physical time converges to a NONTRIVIAL limit (triviality, not blow-up, is the failure) — a sensible restatement of lattice triviality._ Prior art: Ornstein–Uhlenbeck / Fokker–Planck; Markov embedding (Kingman 1962); lattice triviality / renormalizability. Status: REPRODUCTION (OU/FP + embedding) + RECOMBINATION (the code-length criterion).
+
 **Half of this was already done and not labelled as continuity.**
 0030 proved a record's dynamics embeds in continuous time iff its
 transfer operator is positive — T = exp(−H). That *is* the time

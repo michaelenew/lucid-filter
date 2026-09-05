@@ -1,5 +1,7 @@
 # Route 1 — the de-mix, solved in the Fisher eigenbasis (probes 0018–0023)
 
+> **⚖️ ATTRIBUTION —** _Solves the de-mix by working in the eigenbasis of the scale Fisher (which diagonalises all the coupling) and running assumed-density filtering there: a per-eigendirection likelihood profile (peak+spread) feeds a smooth matrix Kalman update, giving reach + hedge at polynomial cost. Standard parts (Fisher-eigenbasis whitening, ADF, block Kalman, Mehra innovation correlation) assembled; the dimension-stable false-alarm floor is a measured property. Covers probes 0015 (block-Kalman = full-Fisher point walk), 0018–0023._ Prior art: Fisher eigenbasis / whitening (standard); assumed-density filtering — Maybeck 1982, Opper 1998; block Kalman; innovation-correlation adaptive KF — Mehra 1970. Status: RECOMBINATION.
+
 The de-mix gate ("this doesn't go to prod until it's demixed") is **cleared**. The fixed
 2-D coupling hedge (0016/0017) failed because a mixing `H` couples the sensors *to each
 other*, not just process-to-measurement — the coupling is pervasive. The full scale Fisher

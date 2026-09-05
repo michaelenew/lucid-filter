@@ -1,5 +1,7 @@
 # 0034 — GPB1 collapse, not the quadrature, is the dominant approximation error
 
+> **⚖️ ATTRIBUTION —** _Measured: the single-Gaussian-per-step collapse (GPB1), not the quadrature, is the dominant approximation error — ~20% θ-MSE unclosed at $s{=}1.2$ against an exact particle filter, growing faster than $s^2$, and closable only by GPB2 or a particle filter._ Both methods are textbook: GPB1 single-Gaussian collapse (Ackerson & Fu 1970; Bar-Shalom) and the Rao–Blackwellized particle filter (Doucet–de Freitas–Gordon 2001). The rig-specific decomposition of the oracle gap into quadrature vs collapse terms is the original content and is the most genuinely useful result in the area. Status: NEGATIVE-RESULT.
+
 Script: [`0031_gpb1_vs_particle.py`](0031_gpb1_vs_particle.py), reference
 implementation in [`pf_reference.py`](pf_reference.py). Reference filter is
 a marginalized (Rao–Blackwellized) particle filter that propagates

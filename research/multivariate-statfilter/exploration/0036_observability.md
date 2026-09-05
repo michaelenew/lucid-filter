@@ -1,5 +1,7 @@
 # 0036 — the observability/decoupling shed: retiring the shed's empiricism where it's derivable
 
+> **⚖️ ATTRIBUTION —** _Derives the fast-shed weight as a channel's process-decoupling (1 − its lag-1 innovation autocorrelation under a process burst, from the closed-loop Lyapunov + Mehra C₁), retiring two tuned constants for decoupled absolute references while process-coupled channels stay empirically gated (recorded as irreducible)._ Prior art: Mehra 1970 innovation autocovariance; Lyapunov closed-loop covariance (standard); observability weighting (standard). Status: RECOMBINATION.
+
 The fast shed had two measured constants: `_SHED` (raise-rate boost) and `_WHITE_MIN` (whiteness
 floor). They exist because the shed must fire fast on a failing sensor but not misfire on a process
 burst, and the whiteness gate that tells them apart has an EMA that **lags a burst onset**. This

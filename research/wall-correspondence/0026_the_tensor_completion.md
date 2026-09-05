@@ -6,6 +6,8 @@
 > structure it turns out to require. Code:
 > `0026_the_tensor_completion.py`.
 
+> **⚖️ ATTRIBUTION —** _Restates the geometric fact that comparing tensors (here posterior-precision matrices) at different points requires a connection / parallel transport, whose closed-loop holonomy has a curvature — i.e. a gauge theory with link variables and plaquettes. This is the language of lattice gauge theory / information-geometry connections; asserting "the tensor completion of filter gravity IS their gauge theory" is analogy, and the transport's own dynamics is left open._ Prior art: parallel transport / gauge connections; lattice gauge theory (Wilson 1974); dual connections in information geometry (Amari). Status: SPECULATIVE (correspondence).
+
 - **The tensor equivalence principle** (exact, 0 error): a
   multi-dimensional node's response to a small incident influence
   is the **matrix** q·Cov(posterior) — 0010's scalar law with all

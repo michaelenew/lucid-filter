@@ -3,6 +3,8 @@
 > **AI-generated, not peer-reviewed.** The last unrun row of the
 > original adoption plan. Code: `0016_the_causal_ceiling.py`.
 
+> **⚖️ ATTRIBUTION —** _A real filter-vs-smoother comparison: a fixed-interval (RTS-type) smoother's state gain over the causal filter is captured at lag 1, while transition-timing is the genuinely two-sided structure ("past pins states, future pins boundaries"). Standard smoothing theory, cleanly measured._ Prior art: fixed-interval smoothing (Rauch–Tung–Striebel 1965); filter vs smoother information gain. Status: RECOMBINATION (measurement); the "Euclidean→Lorentzian / causal ceiling" correspondence is SPECULATIVE.
+
 Minimal bank (exact 2-state HMM, dwell ~25), filter vs smoother vs
 fixed-lag: state-occupancy gap +0.058, **fully captured at lag 1**
 — the smoother's per-time state gain is a one-step-of-future

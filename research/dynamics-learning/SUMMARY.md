@@ -16,6 +16,8 @@ a crate picked up OFF CENTRE, named from the residual in 28 ms, and put down aga
 (`../figures/drone3d-lucid.gif`, the main README's lead animation).  See the opens at the
 bottom for what is left.
 
+> **⚖️ ATTRIBUTION —** _The whole workstream is the classical "detect a dynamics fault, then re-identify the plant online" problem: fault detection from filter innovations plus joint state-parameter (dual) estimation for recovery._ Prior art: failure detection via filter innovations and multiple-model banks (Willsky & Jones 1976; Willsky 1976 survey); adaptive system identification / joint state-parameter (dual) estimation (augmented-state EKF; Ljung, *System Identification* recursive PEM); detecting a payload/inertia change is adaptive sysID on a rigid body. Status: RECOMBINATION.
+
 ## The settled design (each element pinned by a numbered probe)
 
 The class commitment: a dynamics fault is a **jump process** — rare, large, persistent — with
@@ -32,6 +34,8 @@ reads it), valid at the nominal ``forget = 1`` and reading nothing from ``forget
 `(rho_j, cap)`, and the posterior-mean hazard is REPORTED — the filter reads the regime off the
 data instead of being told it.  Zero tuning constants.
 
+> **⚖️ ATTRIBUTION —** _A hazard-mixed bank of filters detecting a changepoint at the quickest-detection frontier is textbook change/fault detection; the "Lorden frontier" is named from the source._ Prior art: Shiryaev's Bayesian quickest-detection rule and the CUSUM optimal delay frontier (Page 1954; Lorden 1971; Pollak 1985; Shiryaev); multiple-model / innovation-based fault detection (Willsky & Jones 1976). The exact per-step KL-rate delay bookkeeping on linear rigs is standard sequential-analysis (Wald) accounting. Status: REPRODUCTION.
+
 1. **Detect by hazard-mixed bank of anchored full filters** (0001).  The hazard-mixed bank is
    Shiryaev's rule; its delay frontier is `D(rho) = log(1/rho) / KL-rate` with the KL rate
    between member filters' predictive densities computable exactly (linear rigs: a joint
@@ -42,9 +46,13 @@ data instead of being told it.  Zero tuning constants.
    is **dominated at every drift setting** for detection: the class shape, not the estimator,
    is what matters.  "Detection" is a reporting convention (a marginal crossing ½); the filter
    itself only ever mixes.
+> **⚖️ ATTRIBUTION —** _Keeping the nominal model permanently in the bank so a false alarm reverts cheaply is an engineering property of multiple-model estimation, not a new theorem; the specific "hedge as detection-speed subsidy" framing and calm-cost numbers are the repo's._ Prior art: multiple-model adaptive estimation keeps all models live (Magill 1965; IMM, Blom & Bar-Shalom 1988). Status: RECOMBINATION.
+
 2. **The nominal member never leaves the bank** (0001).  A false detection then costs ~nothing
    (calm ratio 1.0004 scalar, 1.0003 drone), which is what makes the aggressive end of the
    false-alarm/delay frontier affordable — the hedge is a detection-speed subsidy.
+> **⚖️ ATTRIBUTION —** _Splitting a process-noise (Q) change from a dynamics (F) change with a joint bank of models mixed by predictive likelihood — rather than a bolted-on whiteness test — is exactly multiple-model adaptive estimation applied to the Q-vs-F confound; the burst-then-fault masking case and its KL numbers are the measured contribution._ Prior art: multiple-model / IMM adaptive estimation (Magill 1965; Blom & Bar-Shalom 1988); innovation-based fault vs noise discrimination (Willsky 1976; Mehra adaptive-KF for the noise axis). Status: RECOMBINATION.
+
 3. **The noise machinery lives in the same bank, from day one** (0002).  A joint
    {dynamics} × {noise-scale} grid of anchored members splits the Q↔F confound through
    per-member MEANS alone (the 0053 §1 mechanism; no whiteness statistic) at derived pairwise
@@ -55,6 +63,8 @@ data instead of being told it.  Zero tuning constants.
    still settles at oracle-grade state cost.  **The detection frontier of a full bank is the
    anchor's llr edge over its BEST wrong member** — usually the high-Q nominal — not over the
    plain nominal (0004; measured 28.9 ± 1.7 steps on a D* = 29.6 frontier).
+> **⚖️ ATTRIBUTION —** _Re-identifying the changed parameters online with a Kalman filter on the departure (a random-walk parameter model) is standard joint state-parameter / dual estimation; resetting the parameter covariance on a detected changepoint is the well-known "covariance reset / bump" used in adaptive control and RLS. The freeze-vs-cap calibration numbers and the information-rate recovery curve are the measured content._ Prior art: augmented-state EKF joint estimation; forgetting-factor/covariance-resetting RLS (Ljung & Söderström 1983); changepoint-triggered covariance reset. Status: RECOMBINATION.
+
 4. **Refine by a jump-class departure walker, variance-restarted on detection** (0003).  The
    walker (KF on the departure with `q_theta = cap·rho`, capped, floored — never frozen) is
    miscalibrated ~10× right after a jump on its own; restarting its covariance to the class cap
@@ -65,17 +75,23 @@ data instead of being told it.  Zero tuning constants.
    information rate when excitation arrives.  The latched freeze (pruning an "unidentifiable"
    parameter during a quiet stretch) reproduces the 0052 bug for dynamics: 20× state regression
    when excitation returns, 6× overconfident reports.  Floor + cap, never freeze — reconfirmed.
+> **⚖️ ATTRIBUTION —** _The observation that an instantaneous innovation-regression fails under partial (position-only) observation and that the state-parameter cross-covariance carries the multi-step sensitivity is the standard reason recursive parameter estimation under relative-degree > 0 needs the augmented (joint) filter rather than a decoupled regressor._ Prior art: augmented-state EKF / dual estimation identifiability under partial observation (Ljung recursive PEM; standard nonlinear observability). Status: REPRODUCTION.
+
 5. **Under partial observation the walker must be the augmented filter** (0004).  With
    position-only sensing a parameter's effect reaches the measurements only through
    integration; an instantaneous innovation-regression has a zero regressor, and the
    cross-covariance P_x,theta carries the multi-step sensitivity.  (0001's scalar
    "cross-covariance worth nothing" was a relative-degree-0 artifact.)
+> **⚖️ ATTRIBUTION —** _"Closed-loop identification is biased unless the input is in the estimator's information set" is a textbook result of closed-loop system identification; "use the physics' linearizing coordinates (1/m, 1/I)" is standard reparameterization. Rediscovered here by measurement, with the +50% bias number as the repo's own datum._ Prior art: closed-loop system identification bias (Ljung, *System Identification*; Gustavsson, Ljung & Söderström 1977); linear-in-parameters reparameterization. Status: REPRODUCTION.
+
 6. **Two deployment constraints found by measurement** (0004): the control input must be
    **measurable from the filter's information set** (an autopilot flying on the true state
    correlates u with unseen process noise and biased Î by +50% — classic closed-loop bias;
    flying on measurements removes it exactly), and the walker should use the **linearizing
    parameter coordinates** the physics offers (Newton is linear in 1/m, 1/I; wheel radii are
    already effectiveness gains).
+> **⚖️ ATTRIBUTION —** _Replacing a fixed changepoint hazard with a grid/ladder of hazards mixed by predictive likelihood (so the run-length/hazard is inferred, not set) is Bayesian Online Changepoint Detection with a hazard hyper-prior; the monotonicity ("knob vs budget") test and the measured regime-readout numbers are the repo's framing._ Prior art: Bayesian Online Changepoint Detection (Adams & MacKay 2007); online changepoint with hazard estimation (Fearnhead & Liu 2007); Shiryaev hazard mixing. Status: REPRODUCTION.
+
 7. **The hazard is a ladder the evidence weights, never a number the caller tunes** (0009).
    A pinned hazard fails the monotonicity test (calm cost and delay move monotonically in
    opposite directions in `rho` — a trade-off, hence a knob), and it has the user telling the
@@ -96,6 +112,8 @@ data instead of being told it.  Zero tuning constants.
    Two retired revisions are recorded in 0009: the bottom derived from the weight memory (made the one
    engineering parameter load-bearing; failed at the nominal ``forget = 1``) and decade
    spacing (underived, and past the axis's own dead-zone threshold).
+> **⚖️ ATTRIBUTION —** _When there is no named fault mode, mixing over jump *times* as pruned run-length hypotheses is precisely Bayesian Online Changepoint Detection (run-length posterior with particle/pruning); when faults are nameable, the parameter-space bank is multiple-model estimation. The choice between the two framings is the assembly._ Prior art: BOCPD run-length posterior with pruning (Adams & MacKay 2007; Fearnhead & Liu 2007); multiple-model estimation (Magill 1965). Status: RECOMBINATION.
+
 8. **Anchors in parameter space when faults are nameable; anchors in TIME when not** (0006).
    `dynamics=None` proper has no F0 and no fault classes, hence no detection edge; the jump
    class's Bayes posterior is then a mixture over jump times, realized as pruned run-length
@@ -105,6 +123,8 @@ data instead of being told it.  Zero tuning constants.
    where they should bind (partial observation + low hazard + a latency consumer) are an open.
 
 ## Acceptance results (the SUMMARY's definition of done, measured)
+
+> **⚖️ ATTRIBUTION —** _These are the genuinely original content: specific detection-latency-vs-derived-frontier numbers, recovery/oracle-gap ratios, and parameter-recovery errors on specific synthetic rigs (planar/3D quadrotor, differential drive). The underlying phenomena — quickest detection at the KL frontier, oracle gaps from carrying parameter covariance — are known, but these measured quantities on these rigs are not in any prior source._ Prior art: quickest-detection frontier (Lorden 1971); the numbers themselves are new measurements. Status: NEGATIVE-RESULT.
 
 - **0004 drone** (planar quadrotor, mocap-only sensing, payload m ×1.30 / I ×1.15 mid-flight,
   20 seeds): detection 28.9 ± 1.7 steps on a derived D* = 29.6; recovery 1.13 ± 0.01 at
@@ -166,6 +186,8 @@ refit oracle where the frozen nominal pays 5.06×.  0008 puts the whole vehicle 
 API — `B(x)` a callable, six physical departure directions as callables, and gravity carried by
 a constant input channel — and reads the payload's mass and its off-centre lever arm straight
 off `r.control`.
+
+> **⚖️ ATTRIBUTION —** _A measured engineering-failure datum: unit-Frobenius scaling of departure directions silently mis-scales the class size for B (whose entries carry input units), giving a confident fault with the wrong recovered parameter. A specific, useful negative result about this implementation, not a claim about the literature._ Prior art: none needed (implementation-specific units bug); the general lesson (parameter scaling / conditioning in recursive identification) is standard. Status: NEGATIVE-RESULT.
 
 0007 also records the one real defect the wiring exposed: scaling departure directions to unit
 Frobenius norm assumes O(1) entries, which holds for `F` and fails for `B` — the class size is

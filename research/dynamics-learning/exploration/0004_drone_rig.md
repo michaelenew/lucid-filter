@@ -11,6 +11,8 @@ cap, and the 0003 variance-restart on the detection edge.  All dynamics, Jacobia
 and parameter sensitivities enter as callables of (state, u, θ).  20 seeds × 4
 scenarios; error bars are per-seed ± se.
 
+> **⚖️ ATTRIBUTION —** _Planar-quadrotor acceptance rig: a mid-flight payload change detected on the (masking-corrected) KL frontier and (1/m, 1/I) re-identified with an augmented EKF from mocap-only sensing. The mechanism is multiple-model detection + dual estimation; the detection-latency/frontier and parameter-recovery numbers are the measured content._ Prior art: multiple-model fault detection (Willsky & Jones 1976); augmented-state EKF joint estimation (Ljung). Status: RECOMBINATION with NEGATIVE-RESULT tables.
+
 ## Acceptance scorecard
 
 | criterion | target | measured | |
@@ -41,6 +43,8 @@ costs a ~3.7× detection factor here, and that cost is information-theoretic, no
 implementational.
 
 ## Two findings that came out of failures (first iterations measured, then fixed)
+
+> **⚖️ ATTRIBUTION —** _Rediscovery-by-measurement of two textbook facts: closed-loop identification is biased when the control uses state the estimator cannot see (input correlated with unmeasured process noise), fixed by feeding the controller measurements; and reparameterizing to the physics' linear-in-parameters coordinates (1/m, 1/I) removes linearization error. The +50% bias figure is the repo's datum._ Prior art: closed-loop system identification bias (Ljung; Gustavsson, Ljung & Söderström 1977). Status: REPRODUCTION.
 
 1. **Closed-loop truth-feedback biases identification.**  With the autopilot flying on
    the *true* state, Î settled 50% high (0.035 vs 0.023): the torque command

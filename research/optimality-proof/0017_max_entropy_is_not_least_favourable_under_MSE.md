@@ -8,6 +8,8 @@ across the full admissible $\rho_2\in(2\rho_1^2-1,\,1)$, filter held at the
 AR(1) model — the Bayes rule for the max-entropy member, which sits at
 $\rho_2=\rho_1^2$.
 
+> **⚖️ ATTRIBUTION —** _Measured negative result: under squared error the max-entropy (Gaussian AR(1)) member is NOT least favourable — MSE is monotone in $\gamma_2$, in opposite directions in two regimes, so no equalizer/saddle exists at layer 2 under MSE._ This correctly delimits where the standard max-entropy=minimax-redundancy result (which is a log-loss statement, Gallager/Davisson/Topsøe) fails to transfer to squared error; the diagnosis (equalizer exists only when the loss is affine in the constrained statistics) is textbook minimax reasoning. The 4.6%/1% spread numbers are the original content. Status: NEGATIVE-RESULT.
+
 **Moderate**, $s=0.8$, $\varphi=0.5$, max-entropy $\rho_2=0.25$:
 
 | $\rho_2$ | MSE | vs max-ent | se | oracle | ratio |

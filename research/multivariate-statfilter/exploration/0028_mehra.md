@@ -1,5 +1,7 @@
 # 0028 — the Mehra solve, and the online-achievable bound
 
+> **⚖️ ATTRIBUTION —** _Directly implements the classical Mehra innovation-correlation adaptive Kalman filter and the Myers–Tapley covariance-matching estimators, and measures that they do not beat the tuned heuristic here (unstable increment-Q, mis-attributing ungated-R); the valuable output is the "oracle-lagged" online-achievable bound (windowing lag is only ~1.05× the full oracle)._ Prior art: Mehra 1970/1972 innovation-correlation adaptive KF; Myers & Tapley 1976 adaptive covariance estimation. Status: REPRODUCTION (with a NEGATIVE-RESULT: the textbook solve loses to the heuristic on this rig).
+
 Goal: rein the adaptive-vs-oracle gap back in with a principled moment solve, replacing the
 gated-drive heuristic stack. Result: **the classical Mehra/Myers–Tapley solve does not beat the
 well-tuned heuristic here** — it diverges or underperforms — and the heuristic already sits close

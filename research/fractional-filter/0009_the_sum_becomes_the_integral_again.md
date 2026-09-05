@@ -23,6 +23,8 @@ failure pattern is the instructive part (0008-A):
 | $\nu=1.3$, $K=25$ | "ok" — on artifact roots | **fails** (unit root) |
 | $\nu=2.3$, $K=25$ | **fails** (repeated root) | **fails** (unit root) |
 
+> **⚖️ ATTRIBUTION —** _Measured negative result: the root/modal machinery breaks on truncated fractional kernels because a truncated power series' zeros are truncation artifacts (a Jentzsch ring) that move with the budget, so a root-indexed formula cannot represent a branch-point process. The Jentzsch/Szegő phenomenon (zeros of partial sums cluster on the circle of convergence) is a classical result in complex analysis._ Prior art: Jentzsch's theorem / zeros of partial sums — Jentzsch 1917, Szegő; standard result in complex analysis, specific source not verified. Status: NEGATIVE-RESULT.
+
 Two readings. First, **whether the operation is even defined depends on the
 compute budget**: the truncated kernel's roots are a Jentzsch ring of
 truncation artifacts that move with $K$, and at $K=10$ one lands on the
@@ -49,7 +51,9 @@ $$\boxed{\ \gamma_f(s)=\sigma^2\,
 \frac{\Gamma(1-2f)\,\Gamma(s+f)}{\Gamma(f)\,\Gamma(1-f)\,\Gamma(s+1-f)}\ }$$
 
 — **the classical ARFIMA autocovariance with the integer lag $k$ continued
-to real $s$.** The Stieltjes (channel-density) continuation and the analytic
+to real $s$.**
+
+> **⚖️ ATTRIBUTION —** _The boxed formula is (as stated) the classical ARFIMA autocovariance of fractionally-integrated noise; the contribution is continuing the lag to a real argument $s$ (for a fractional time-offset read) and confirming positive-definiteness on mixed real grids, plus the Schur-complement delay/bridge that follows by ordinary Gaussian conditioning. The kernel is textbook; the real-argument continuation and its use for offset anchoring are a modest, plausibly-original engineering extension._ Prior art: ARFIMA autocovariance $\Gamma$-ratio — Hosking 1981; Gaussian conditioning / Schur complement — textbook. Status: REPRODUCTION (formula); RECOMBINATION (real-$s$ continuation + Schur-complement anchor). The Stieltjes (channel-density) continuation and the analytic
 (Gamma) continuation coincide exactly; this is the fractional analogue of
 the parent's $\gamma(s)=\mathrm{Re}\sum_i b_i z_i^s$ with $\sum_i\to\int
 d\mu_f$, and it is the direct answer to "the analogous lag/lead covariance".

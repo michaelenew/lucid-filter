@@ -5,6 +5,8 @@ From [`0043`](0043_the_delay_row.py) (delay row, bridge, aliasing, ridge) and
 `figures/ode043.json`, `figures/ode044.json`; the frame and claims list is
 [`0042`](0042_the_offset_frame.md) §7.
 
+> **⚖️ ATTRIBUTION —** _These are measurements confirming the constructions of `0042` (fractional-delay observation row, bridge variance, aliasing comb, derivative/lag ridge, online mixture tracking). The phase-ambiguity ("aliased comb") of a narrowband delay and its resolution by bandwidth/SNR is the classical time-delay-estimation ambiguity; a derivative being a quarter-period phase lead is elementary. Prior art: time-delay estimation and phase ambiguity (Knapp & Carter 1976); MMAE tracking (above). Status: RECOMBINATION (measurement)._
+
 ## 1. The delay row is exact, and the bridge is priced correctly
 
 $e_x^\top e^{-\tau G}$ reproduces $x(t-\tau)$ on the noiseless solution space to

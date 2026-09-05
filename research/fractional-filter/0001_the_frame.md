@@ -11,7 +11,9 @@ likelihood as everything else.
 
 $$(1-B)^{\nu}x_t = w_t,\qquad y_t = x_t+v_t,$$
 
-with $B$ the backshift. Expanding the Grünwald–Letnikov binomial series,
+with $B$ the backshift.
+
+> **⚖️ ATTRIBUTION —** _The whole frame: replacing integer AR/integration order with the continuous fractional-differencing operator $(1-B)^\nu$, plus additive noise, is the ARFIMA long-memory model. Standard._ Prior art: ARFIMA / fractional differencing — Granger & Joyeux 1980, Hosking 1981; fBm/fGn — Mandelbrot & Van Ness 1968, Hurst 1951. Status: REPRODUCTION. Expanding the Grünwald–Letnikov binomial series,
 
 $$x_t=\sum_{k\ge1}c_k(\nu)\,x_{t-k}+w_t,\qquad
 c_k(\nu)=(-1)^{k+1}\binom{\nu}{k},\qquad
@@ -57,6 +59,8 @@ All verified numerically (ratios to 1 within $10^{-3}$ by $k=500$; sums to
    $\sum_{k>K}|c_k|\sim K^{-\nu}/(\nu\,|\Gamma(-\nu)|)$ — a power law in the
    budget, not an exponential.
 
+> **⚖️ ATTRIBUTION —** _These three facts (coefficients sum to one, positivity/convexity for $0<\nu<1$, and the $k^{-\nu-1}$ tail law) are standard textbook properties of the fractional-differencing binomial coefficients. Not new._ Prior art: fractional-difference coefficient properties — Hosking 1981; binomial-series asymptotics — textbook. Status: REPRODUCTION.
+
 ## 2. The transform integral, made exact
 
 The README asked for the model "written as a transform integral rather than a
@@ -70,6 +74,8 @@ d\mu_\nu(r)=\frac{\sin\pi\nu}{\pi}\,r^{\nu-1}(1-r)^{-\nu}\,dr,$$
 verified to machine precision for $\nu\in\{0.3,0.6,0.9\}$, $k$ up to 500
 (it is the Euler integral $B(k+\nu,1-\nu)$ with the reflection formula
 $\Gamma(\nu)\Gamma(1-\nu)=\pi/\sin\pi\nu$).
+
+> **⚖️ ATTRIBUTION —** _The transform-integral / continuous-mixture-of-AR(1)-channels representation of the fractional-integration response — "channels become a density over decay rates, integer order is the degenerate point-mass case." The identity is the Euler Beta integral; the superposition view of long memory is standard._ Prior art: superposition-of-OU/AR(1) representations of long memory (e.g. supOU, Barndorff-Nielsen & Shephard 2001); Euler Beta integral & reflection formula — textbook. Status: REPRODUCTION.
 
 **This is the answer to [`0024`](../ode-filter/0024_the_modes_are_the_channels.md)'s
 question about what happens to the channels.** There, each root of the

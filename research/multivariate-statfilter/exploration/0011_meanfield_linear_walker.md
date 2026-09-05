@@ -1,5 +1,7 @@
 # 0011 — the scaling attack: linear mean-field is cheap but not faithful
 
+> **⚖️ ATTRIBUTION —** _A mean-field (factored, one window per axis) posterior is linear-cost but double-counts the ambiguous process/measurement variance, so it cannot recover the coupling the exact grid does — a clean negative result; also restates the known "state tracking is nearly blind to the noise parameters (forecasting is not)" law._ Prior art: mean-field / variational factorization (standard); noise-adaptation matters little for the filtered state — adaptive-KF folklore, e.g. Mehra 1972 / Bar-Shalom. Status: NEGATIVE-RESULT.
+
 The shipped `WalkingVectorFilter` runs the state KF over the tensor-product scale grid
 — `nodes^(#active axes)`, exponential, the robotics-practicality blocker. Goal: linear
 in the active axes (settle for quadratic). 0003 measured the scale-Fisher as nearly

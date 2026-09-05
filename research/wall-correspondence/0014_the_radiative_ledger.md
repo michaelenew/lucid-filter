@@ -3,6 +3,8 @@
 > **AI-generated, not peer-reviewed.** The wave-hunt front, run
 > in-model. Code: `0014_the_radiative_ledger.py`.
 
+> **⚖️ ATTRIBUTION —** _The whole content is that a real generator gives the diffusion (heat) equation — screening, t^0.5 front — while an imaginary generator gives a wave/Schrödinger equation — ballistic t^1 front, r^−1 radiating shell. That difference between the heat and wave equations is textbook PDE. Labelling one "record tier" and the other "source tier / gravitational waves" is analogy._ Prior art: heat equation vs wave/Schrödinger equation, textbook. Status: SPECULATIVE (the "which ledger radiates" correspondence).
+
 Two fields, same coupling, differing by one symbol — the generator
 is real (record tier: relaxation) or imaginary (source tier: phase
 composition per the sibling's two-ledger theorem). Both evolved

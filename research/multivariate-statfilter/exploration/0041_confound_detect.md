@@ -1,5 +1,7 @@
 # 0041 — the temporal confound bound is fundamental (Lorden frontier); the escape is spatial
 
+> **⚖️ ATTRIBUTION —** _Shows the ~1/β confound-confirmation delay is information-limited, not an estimator artifact: the EMA whiteness test sits on the optimal quickest-detection (Lorden) frontier, matching CUSUM; the escape is the multivariate spatial/structural discriminant the scalar bound cannot see._ Prior art: CUSUM — Page 1954; optimal quickest-detection frontier — Lorden 1971, Pollak 1985; innovation whiteness — Mehra 1970. Status: REPRODUCTION.
+
 Re-examined whether the ~1/beta confound-confirmation delay (the wall every reach mechanism trips,
 0038-0040) is a fixed-EMA artifact or a real limit.
 

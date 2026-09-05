@@ -5,6 +5,8 @@
 > fringe is built rather than found, and building it has paid
 > before. Code: `0030_time_needs_a_generator.py`.
 
+> **⚖️ ATTRIBUTION —** _A genuine, checkable math statement: a transfer operator has a real generator (T=exp(−H)) iff it has no negative eigenvalue — the embeddability of a discrete step in a continuous-time flow, i.e. existence of a real matrix logarithm. This is the classical Markov-chain embedding problem, and its identification with Osterwalder–Schrader reflection positivity is a known correspondence in constructive QFT._ Prior art: matrix-logarithm / Markov embedding problem (Elfving 1937; Kingman 1962); reflection positivity (Osterwalder–Schrader 1973). Status: REPRODUCTION (the embedding math) + SPECULATIVE (the "counting buys time" gloss).
+
 - **RP is the embedding problem.** A record's one-step transfer
   operator T is positive semi-definite iff T = exp(−H) for a real
   generator H — iff the discrete dynamics *embeds* in a

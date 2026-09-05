@@ -9,6 +9,8 @@ parameters to pick* and disagree *in sign* on *which class member is worst*. The
 filter's success survives because every individual gap is small; the proof does
 not survive, because no single minimax statement covers both losses.
 
+> **⚖️ ATTRIBUTION —** _Two findings: (a) the max-entropy equalizer does not survive marginalization from $\lambda$ to $x$ (measured, negative); (b) the two-moment class is not well-posed under log-loss because a finite-variance polynomial-tailed $\lambda$ gives $\mathbb E[e^\lambda]=\infty$, so the noise variance has infinite mean while all constraints hold._ (b) is the standard observation that log-normal/scale-mixture moments $\mathbb E[e^\lambda]$ require exponential-moment (not just variance) control — elementary but a real and honest caveat that the stated class silently assumed. The measured "class is too big for an equalizer under either loss" is the useful, largely original content. Status: NEGATIVE-RESULT.
+
 ## 1. In parameter space, the seam is benign — and PEM is uniformly better
 
 Eleven regimes spanning weak/strong scale variation, impulsive/persistent

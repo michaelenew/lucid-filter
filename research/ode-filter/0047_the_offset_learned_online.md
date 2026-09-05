@@ -8,6 +8,8 @@ next construction.
 
 ## 1. What was made online, and by which standing technique
 
+> **⚖️ ATTRIBUTION —** _Making the kernel hyper-parameters a grid of complete mixture filters, Bayes-mixed online with a $\log N$ (here $\log 12$) regret bound against the best member in hindsight, is Bayesian model averaging / universal prediction over experts; discretizing the diffusion kernel by the matrix exponential of its generator is the standard faithful discretization._ Prior art: Bayesian mixture / universal prediction regret (Vovk aggregating algorithm; Cesa-Bianchi & Lugosi; Merhav & Feder 1998); matrix-exponential (uniformization) of a diffusion/Markov generator (Van Loan 1978). Status: REPRODUCTION.
+
 | was fixed in `0044` | now | technique |
 |---|---|---|
 | $s_\tau=0.02$, $\varepsilon=10^{-3}$ | 12-member hyper-grid, Bayes-mixed online | grid the nuisance, prequential likelihood arbitrates |
@@ -40,6 +42,8 @@ been free-riding on the FLAT members' likelihood.
 
 ## 2. Trust is a directed-information measurement
 
+> **⚖️ ATTRIBUTION —** _A matched (self-prediction) null makes $\Lambda_T=\sum[\log p(y_2\mid\text{both})-\log p(y_2\mid y_2\text{'s own past})]$ a prequential estimate of the directed information rate from series 1 to series 2 — i.e. transfer entropy / Granger-causal information flow — with the calibrated-Gaussian rate equal to $\tfrac12 E\log(S_\perp/S_\parallel)$._ Prior art: directed information (Massey 1990; Marko 1973); transfer entropy (Schreiber 2000); Granger causality (Granger 1969). Status: REPRODUCTION.
+
 With the matched null,
 
 $$\Lambda_T=\sum_t\Big[\log p(y^{(2)}_t\mid \text{both histories})-\log
@@ -65,6 +69,8 @@ demands:
   either way; now the *rate* is also a meaningful KL.
 
 ## 3. The finding: prequentially optimal, yet undercovering — the missing persistence axis
+
+> **⚖️ ATTRIBUTION —** _That a prequentially near-optimal predictor can still miscalibrate a nuisance's posterior (a loss cannot regularize a coordinate it barely sees), and that a directed ramp needs a $(\tau,\dot\tau)$ velocity/persistence state rather than impulse+diffusion, is a measured NEGATIVE-RESULT; the fix is a standard near-constant-velocity/AR-drift augmentation._ Prior art: constant-velocity tracking models (Singer 1970; Bar-Shalom); calibration vs sharpness (Gneiting et al. 2007). Status: NEGATIVE-RESULT.
 
 Coverage of the $\tau$ posterior's central-90% band, by segment: **1.00**
 (pre-jump), **0.95** (20 points at the jump), **1.00** (post-jump), **0.61**

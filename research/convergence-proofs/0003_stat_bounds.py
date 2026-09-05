@@ -1,3 +1,11 @@
+# ⚖️ ATTRIBUTION — Three standard results. Theorem 1 (scale-posterior contraction):
+# geometric ergodicity of a finite-state Markov chain via Perron-Frobenius (forgetting
+# at the SLEM |lambda_2|), with the AR(1)/OU continuum rate = phi being the Mehler-kernel
+# eigenvalue; the high-phi mixing inflation is a measured grid-discretization artifact
+# (NEGATIVE-RESULT). Theorem 2 (level steady-state variance): the local-level Kalman
+# Riccati closed form (Kalman 1960). Theorem 3 (Cramer-Rao floor): the Kalman posterior
+# attains the Bayesian CRB on a linear-Gaussian model (standard; GPB1-collapse caveat,
+# Ackerson & Fu 1970). Status: REPRODUCTION.
 """AdaptiveFilter: scale-posterior contraction and the level error floor.
 
 AI-GENERATED, NOT PEER-REVIEWED -- produced by an AI system, not independently

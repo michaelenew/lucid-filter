@@ -25,6 +25,8 @@ Write both cells in one model:
 
 $$\theta_t = F\theta_{t-1} + d + w_t,\qquad y_t = H\theta_t + c + v_t$$
 
+> **⚖️ ATTRIBUTION —** _Estimating a constant process offset $d$ and/or observation bias $c$ jointly with the state is the classical bias-estimation problem; the identifiability quotient (which $(d,c)$ pairs are indistinguishable — the "gauge") is the observability-of-bias question, and the answer here (bias observable only off the null directions / on the unit-root modes) is standard estimation theory re-derived. That the quotient matches the Fisher-curvature null to principal angle 1.000 is a clean cross-check, not a new fact._ Prior art: separate-bias estimation — Friedland 1969; observability of bias in linear systems — standard control theory, specific source not verified. Status: REPRODUCTION.
+
 They are not two channels, because they are not separately identifiable. With a diffuse prior
 on $\theta_0$, a candidate $(d,c)$ is indistinguishable from $(0,0)$ exactly when some free
 response of the homogeneous system reproduces its mean trajectory. For an observable $(F,H)$:
@@ -47,6 +49,8 @@ sensors has $k=2$, the drift and the **relative** bias, the common mode still ga
 ## What the empty cells cost
 
 [`0001`](exploration/0001_what_the_empty_cells_cost.py), on the shipped filter told nothing.
+
+> **⚖️ ATTRIBUTION —** _Measured cost of an unmodelled drift/bias on this rig (adaptive-Q inflation partly compensating, a blind Kalman filter's lag bias $-r(1-K)/K$). The lag-bias formula for an unmodelled constant is textbook Kalman analysis; the specific RMSE numbers are the original content._ Prior art: bias/lag error of a Kalman filter under unmodelled inputs — standard (Jazwinski 1970; Friedland 1969); specific source not verified. Status: NEGATIVE-RESULT.
 
 **The drift cell.** A drift has no place to live, so the scale walk raises $Q$ to buy the lag
 down and pays for it in variance:
@@ -83,6 +87,8 @@ recursion is replicated across every bank member and every star node:
 | 5-DOF arm, $n{=}10\to15$ | **2.09×** |
 | 5-DOF arm, $n{=}10\to20$ | 2.86× |
 
+> **⚖️ ATTRIBUTION —** _This is Friedland's two-stage (separate-bias) Kalman filter verbatim: propagate a bias-sensitivity matrix, run a small recursive least-squares of the innovation on it, and it is algebraically exact against the state-augmented filter — which is Friedland's original theorem. The engineering value is that it is $O(1)$ in the bank size here, not the method._ Prior art: two-stage bias-separated Kalman filter, exactness vs augmentation — Friedland 1969 ("Treatment of bias in recursive filtering"). Status: REPRODUCTION.
+
 The two-stage form (Friedland 1969) leaves the inner recursion untouched: carry the
 sensitivity $V \leftarrow (FV+D) - KU$ with $U = H(FV+D)+C$, and run a $k$-dimensional
 recursive least squares of the innovation on $U$. **It is exact against the augmented filter**
@@ -104,6 +110,8 @@ are recorded because both are wrong.
 | $Q_0/100$ | 0.365 | +1.4% | 0.671 | 0.145 | 11% |
 | $Q_0/T$ (the resolution floor) | 0.362 | +0.5% | 0.699 | 0.041 | 3% |
 | channel off | 0.360 | — | 0.711 | — | — |
+
+> **⚖️ ATTRIBUTION —** _The prior width on the offset is treated as a nuisance and handled by a bank of geometrically-spaced hypotheses mixed by predictive likelihood — this is Multiple-Model Adaptive Estimation applied to the prior variance. The two endpoints being derived (resolution floor $V/T$; one noise-SD per step) is sensible engineering; the mixing machinery is standard._ Prior art: MMAE — Magill 1965; IMM-style likelihood mixing — Blom & Bar-Shalom 1988. Status: RECOMBINATION._
 
 The narrow end is a **detectability limit used as a prior width** — it places the prior at the
 edge of what can be seen rather than over what is plausible, and the channel disappears. The

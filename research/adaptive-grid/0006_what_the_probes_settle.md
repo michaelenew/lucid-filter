@@ -30,6 +30,8 @@ found anywhere else. The neighbours are **related, not the same**:
 
 ## 1. A node is a shelf with a cliff, and that fixes the resolution
 
+> **⚖️ ATTRIBUTION —** _Shelf-with-cliff is the asymmetry of the KL between zero-mean Gaussians (over-estimating variance is cheap, under-estimating is confidently wrong); the "max node gap below the cliff reach" rule is a grid-resolution criterion (a compute budget)._ Prior art: KL of scale-family Gaussians (textbook); quadrature/grid resolution (standard). Measured onset numbers are a NEGATIVE-RESULT. Status: RECOMBINATION.
+
 The "effectiveness bell" is not a bell. Run one node's fixed-variance filter as
 the truth varies ([`0003`](0003_the_bells_and_the_resolution_criterion.py),
 `figures/0003-the-bells.png`): its per-step loglik is a **flat shelf** for every
@@ -60,6 +62,8 @@ of the grid — which is the argument for moving the grid to keep it there.
 
 ## 2. The ringing is aliasing, and reads as a negatively-damped oscillator
 
+> **⚖️ ATTRIBUTION —** _The between-node "comb" that reads as a negatively-damped oscillator is spatial aliasing of an under-sampled log-scale (Nyquist), not a temporal ODE._ Prior art: sampling/aliasing (standard). Status: RECOMBINATION.
+
 Swept finely across many nodes (`figures/0004` panel b), the score's
 between-node dips form a **comb — one dip per inter-node interval**. Its local
 period tracks the local node gap (1.02→1.08 nats as the gap goes 0.96→1.17: a
@@ -71,6 +75,8 @@ intuition was right; the cause is resolution.
 
 ## 3. The dead zone is in the likelihood, so resolution is the only cure
 
+> **⚖️ ATTRIBUTION —** _Exact marginal gradient and cheap score dip together, so the limit is in the coarse likelihood and only resolution cures it — a quadrature-resolution statement._ Prior art: grid/quadrature resolution of a mixture (standard). Status: RECOMBINATION.
+
 The cheap local score and the **exact** marginal-likelihood gradient under a
 rigid shift agree closely (corr 0.997 at s=0.4, 0.993 at s=1.6) and **dip
 together** on a coarse grid (both ≈ −0.3 at s=1.6;
@@ -81,6 +87,8 @@ slightly *more* sensitive (a marginal dip at s=0.4's outer edge, where the local
 score is still flat), so the safe spacing is the conservative one.
 
 ## 4. The channels separate while each stays covered
+
+> **⚖️ ATTRIBUTION —** _Tensor-product per-axis scores with an off-grid channel leaking into the others through the shared innovation is standard coupled multiple-model behaviour._ Prior art: tensor-product quadrature; coupled-innovation multiple-model filtering (Bar-Shalom). The leakage number is a measured result. Status: RECOMBINATION.
 
 The measurement channel mirrors the process channel exactly — same
 saturating mean, same non-saturating score (far-field slope 1.18 vs 1.13), same
@@ -94,6 +102,8 @@ pushed to lamM\*=4). The move must keep *every* channel covered; this is the
 binding constraint for the multivariate extension.
 
 ## 5. The move: coverage from motion, safety from a gap that never opens
+
+> **⚖️ ATTRIBUTION —** _A fine moving window beating a fixed wide grid on both loglik and tracking is the moving-bank-MMAE result restated with measured numbers._ Prior art: moving-bank / adaptive-grid MMAE (Maybeck, 1980s); variable-structure IMM (Li & Bar-Shalom 1996). The table numbers are NEGATIVE/measured-results. Status: REPRODUCTION.
 
 [`moving_grid.py`](moving_grid.py) keeps a **fine** grid (s=0.30, order 5:
 max gap 0.45 nats, no dead zone, coverage only ±0.86) and **slides its centre

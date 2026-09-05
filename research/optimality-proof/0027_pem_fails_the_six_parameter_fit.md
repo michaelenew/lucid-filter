@@ -3,6 +3,8 @@
 Script: `0026_pem_vs_ml_end_to_end.py`. **Reverses the practical recommendation
 in [`0024`](0024_the_seam_is_structural_but_not_costly.md) §1.**
 
+> **⚖️ ATTRIBUTION —** _Measured negative result: prediction-error minimization (PEM) fails the full six-parameter fit — the squared innovation depends on parameters only through the predicted mean, so any direction moving predictive variance without moving the gain is unidentified, and PEM inflates $\sigma^2$ and $s_M$ badly._ This is exactly the known blind spot of one-step PEM for variance/scale parameters (Ljung, *System Identification*; the gain-invariance argument is standard Kalman algebra), here demonstrated concretely on the SV rig. The specific failure numbers (σ² wrong by up to 9×) are the original content. Status: NEGATIVE-RESULT.
+
 ## Result
 
 Real `fit()` both ways, 8 seeds, $n=1200$, true $\sigma^2=1.0$ and $Q=0.05$ in

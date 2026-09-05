@@ -1,5 +1,7 @@
 # 0027 — measuring the simultaneous process↔measurement confound
 
+> **⚖️ ATTRIBUTION —** _Measures the process↔measurement confound as a scale-Fisher correlation |C|→1 (an accelerometer reading the jerk-driven acceleration is perfectly collinear with the process mode) and separates them by keying a per-sensor whiteness gate to each channel's own lag-1 innovation autocorrelation. The collinearity itself is an identifiability limit._ Prior art: innovation whiteness / lag-1 correlation for filter consistency — Mehra 1970, Kailath 1968; Q-vs-R identifiability collinearity (standard). Status: RECOMBINATION.
+
 The critical regime, measured. The user's instinct — "the process and measurement modes are
 likely correlated" — is confirmed at the strongest possible level, and the measurement pointed
 to a concrete fix.

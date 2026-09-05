@@ -2,6 +2,8 @@
 
 Probe: [`0038`](0038_online_passes_after_the_screen.py).
 
+> **⚖️ ATTRIBUTION —** _The streaming pass is the recursive prediction-error method (RPEM), a stochastic-Newton update with a running Fisher/Hessian estimate; the finding that it does not help here (conditioning, not start quality, is the bottleneck) is a measured NEGATIVE-RESULT specific to this filter._ Prior art: recursive prediction-error method (Ljung & Söderström 1983); stochastic approximation (Robbins–Monro 1951). Status: NEGATIVE-RESULT.
+
 ## The proposal
 
 The fit is four cheap passes and one expensive one. Passes 0–3 cost a handful

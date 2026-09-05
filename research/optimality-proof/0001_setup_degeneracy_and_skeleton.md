@@ -71,6 +71,8 @@ given* — has no non-trivial optimal procedure. Not "hard to analyse": empty.
 > $\{Q_t,R_t\}$. Then for every causal $\delta$,
 > $$\sup_{p\in\mathcal C_\infty}\ \frac{\mathbb E_p(\theta_t-\delta_t)^2}{\mathbb E_p(\theta_t-\delta^{\mathrm{orc}}_t)^2}\ =\ \infty .$$
 
+> **⚖️ ATTRIBUTION —** _Proposition 1: with freely-moving scales, "level jumped" and "sensor glitched" are one-step indistinguishable, so no causal estimator has bounded competitive ratio against a scale-aware oracle._ This is the classical Q-vs-R non-identifiability of adaptive Kalman filtering (Mehra 1970/1972) recast as a competitive-analysis impossibility. Correct; a re-derivation of a known identifiability limit. Status: REPRODUCTION.
+
 *Proof.* Work at a single step $t_0$; let the state be known exactly up to
 $t_0-1$, so the prior variance entering $t_0$ is $P>0$. Consider two members of
 $\mathcal C_\infty$, both with all other variances equal:
@@ -166,6 +168,8 @@ which member of $\mathcal C(s,\varphi)$ should the filter be built for?
 > stationary processes with prescribed autocovariances $\gamma_0,\dots,\gamma_p$,
 > the one of maximum entropy rate is the Gaussian AR($p$) process fitted to
 > them.
+
+> **⚖️ ATTRIBUTION —** _Layer 2 rests on Burg's maximum-entropy spectral theorem: the max-entropy process with given autocovariances is Gaussian AR($p$), matching the filter's log-scale model at $p=1$._ Burg 1967/1975 (Cover & Thomas ch. 12, cited); general max-entropy principle Jaynes 1957. This section's over-claim (that max-entropy on $\lambda$ transfers to a minimax property on the observable) is corrected in `0005` §6 / `0017`. Status: REPRODUCTION.
 
 At $p=1$ that is $\lambda_t=\varphi\lambda_{t-1}+\sqrt\nu z_t$ with
 $\nu=s^2(1-\varphi^2)$ — **the filter's log-scale model, exactly, including the
@@ -330,7 +334,9 @@ a stable law with $\alpha=1.2$ converges slowly.)
 So **the three-way conservation law holds for the whole symmetric $\alpha$-stable
 family, with the dispersion $c^\alpha$ in the role of the variance.** Both
 ingredients survive: $c^\alpha$ adds across independent sources exactly as
-variance does, and the allocation weights are its shares. The Gaussian filter is
+variance does, and the allocation weights are its shares.
+
+> **⚖️ ATTRIBUTION —** _The linear conditional-expectation ("amplitude conservation") identity extends from Gaussian to the symmetric $\alpha$-stable family, with dispersion $c^\alpha$ replacing variance._ Standard property of jointly $\alpha$-stable vectors (Samorodnitsky & Taqqu 1994 ch. 4), verified numerically here; the authors flag the attribution as unchecked but it is correct. Status: REPRODUCTION. The Gaussian filter is
 the $\alpha=2$ member of a one-parameter family, and the natural class for
 $\alpha<2$ is $\alpha$-stable Lévy motion observed in $\alpha$-stable noise —
 a real and well-studied process class, not a contrivance.
@@ -379,7 +385,9 @@ attribution.)*
 $a_k\propto\sqrt{\Delta^{\text{nats}}_k}$. For a linear estimator with weights
 $a_k$ and independent observations, the Fisher information contributed by the
 $k$-th is proportional to $a_k^2$ by direct computation, so the relation is an
-identity of the linear-Gaussian setting rather than a discovery about it. It is
+identity of the linear-Gaussian setting rather than a discovery about it.
+
+> **⚖️ ATTRIBUTION —** _"Influence is the square root of information" is, as the author correctly re-derives here, just the identity that Fisher information from a linear-Gaussian observation is quadratic in its weight._ Standard linear-Gaussian / Fisher-information algebra; not a new relation. Status: REPRODUCTION. It is
 still operationally right and the practical content — *gate influence on
 $\sqrt{\text{nats}}$, not nats* — is correct and non-obvious. But it should be
 stated as an identity, and `theory/05` is right that its extension past the

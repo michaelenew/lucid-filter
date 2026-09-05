@@ -1,5 +1,7 @@
 # 0034 — high-seed profiling: the derived confound gate lands (garrote), BOTH is a floor artefact
 
+> **⚖️ ATTRIBUTION —** _High-seed paired (common-random-number) profiling shows the earlier 4-seed "regressions" were noise, and ships the non-negative garrote as the unbiased continuous denoiser of the noisy ρ₁ EMA; BOTH's motion stays inside the irreducible-Q envelope._ Prior art: non-negative garrote — Breiman 1995; common-random-number / paired variance reduction (standard Monte Carlo). Status: REPRODUCTION (garrote), with a NEGATIVE-RESULT reading of BOTH.
+
 The 0032 integration variants moved regimes by a few percent at 4 seeds — too few to tell signal
 from run-to-run noise. This profiles each variant at **40 seeds, paired** (same seeds across
 variants; the oracle depends only on (regime, seed), so the paired difference cancels the scenario

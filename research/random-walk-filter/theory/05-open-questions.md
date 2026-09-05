@@ -1,5 +1,7 @@
 # 05 — What this does not settle
 
+> **⚖️ ATTRIBUTION —** _This file is an honest self-audit of the framework's assumptions and unresolved gaps (Gaussianity, known event time, oracle noise, single-event framing, undetermined ω, unverified √-nats generalisation, no fast rate for the scale plane)._ Prior art: these are limitations of the standard machinery being used, not new claims; the value is the candour and the specific numbers. Status: NEGATIVE-RESULT (a catalogue of measured/argued limitations).
+
 ## Assumptions that are doing real work
 
 **Everything is Gaussian and the event time is known.** Both the orthogonality of
@@ -17,6 +19,8 @@ of roughly $\log(\text{window length})$ nats — about 3–5 nats for a window o
 than the Occam cost for the event size. It would push most of the "**2**" entries
 in the confirmation ledger to 3–4 and could erase the 3-SD row entirely. This is
 the single most important gap and it should be closed before anything is built.
+
+> **⚖️ ATTRIBUTION —** _The t₀-scan (changepoint-location) multiple-comparisons cost is ~log(window) nats, comparable to the whole detection threshold — flagged here, computed exactly in 07._ Prior art: the ~log n penalty for scanning an unknown changepoint location is classic (GLR / scan statistics, Willsky & Jones 1976; Siegmund 1985). Status: REPRODUCTION.
 
 **Pre-event $(Q,\sigma^2)$ are known exactly.** Oracle framing, as requested. In
 practice they carry the uncertainty computed in [01](01-information-accounting.md),

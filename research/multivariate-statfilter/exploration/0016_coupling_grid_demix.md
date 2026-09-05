@@ -1,5 +1,7 @@
 # 0016 — de-mix status: the obstacle is understood, a clean sub-exponential fix isn't achieved yet
 
+> **⚖️ ATTRIBUTION —** _Consolidates the de-mix effort to one insight: a point/Gaussian (block-Kalman) estimate commits and leaks on ambiguous data, whereas the grid hedges with posterior spread — the missing ingredient is the spread, not more curvature; the proposed 2-D coupling-grid hybrid is prototyped but buggy._ Prior art: block/coupling Kalman update (standard); commit-vs-hedge is the point-estimate-vs-full-posterior distinction (standard Bayesian filtering). Status: NEGATIVE-RESULT.
+
 Consolidates the de-mix effort (0011–0016). The caltrop (0013) gives linear-cost,
 grid-matching **state tracking**; the open gate is the process↔measurement **scale
 attribution** de-mix, which must hit grid-parity before prod.
