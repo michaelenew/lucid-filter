@@ -5,8 +5,23 @@
 
 ## Verdict
 
-**The proposed axiom swap is refuted. The workstream stays open for one measured
-recommendation and one half-built diagnostic.**
+**The axiom as first written is refuted; the axiom as intended was never tested,
+because it was aimed at the wrong process.** [`0009`](exploration/0009_the_axiom_relocated.md)
+relocates it and measures the number it runs on.
+
+The constraint belongs on **how fast the state moves relative to the sensor** —
+what the process/sensor demix actually reads — not on how fast the noise level
+moves, which is where [`0001`](exploration/0001_the_axiom.md) put it. In its
+correct form: *anything white at our sampling rate **is** measurement noise*, by
+definition rather than by approximation, since "white at `Delta`" is exactly "no
+slope in the variogram at `Delta`". The step-change objection that killed the
+first version does not touch this one — a step in `Q` or `R` is a regime event,
+while this axiom concerns the structure of the innovation sequence at fixed
+`(Q, R)`.
+
+The measurements below all concern the **noise-scale** channel and are unaffected
+by the relocation. They stand, including the one recommendation with product
+consequence.
 
 The thread asked whether the filter's founding assumption — that the log-scales
 are a **stationary** AR(1) family — could be replaced by *resolvability*: the data
@@ -27,7 +42,9 @@ workstream's uncertainty read-out; nothing below it should be cited without it.
 | **C2** — the identification ridge is the mean-reversion direction | **FALSE** | the flat direction holds `gamma_0 = s^2` (0.067–0.238) and the stiff one moves it (1.394–1.412 of a maximum 1.4142); the shipped `(phi, s)` chart is the diagonalising one to within 3.2°–9.7° ([`0002`](exploration/0002_the_ridge.md)) |
 | **C5** — members above `sqrt(2)` are inert and can be pruned | **FALSE** | the exact 13-member prune costs +10.0% on the sensor-degradation window and +5.7% on calibration; patched-module pin against the shipped filter is exact, 0.000e+00 ([`0005`](exploration/0005_the_seam.md)) |
 | **C3** — dropping stationarity helps where the world wanders | **FALSE** | on a `kappa = 0` truth the correctly-specified wandering class scores 1.118 ± 0.142 and 0.896 ± 0.114 against the stationary class — parity — while losing 15–24% on stationary truths ([`0003`](exploration/0003_what_stationarity_costs.md)) |
-| **R2** (no regime structure below `Delta`) is compatible with this filter's purpose | **FALSE** | a regime change is a step, hence sub-`Delta` at every sampling rate; R2 forbids exactly the events the repository's headline results are about ([`0005`](exploration/0005_the_seam.md)) |
+| **R2 as first written** (no regime structure below `Delta`) is compatible with this filter's purpose | **FALSE** | a regime change is a step, hence sub-`Delta` at every sampling rate; that R2 forbids exactly the events the repository's headline results are about ([`0005`](exploration/0005_the_seam.md)). **Withdrawn and replaced** — it constrained the wrong process ([`0009`](exploration/0009_the_axiom_relocated.md)) |
+| the split channel carries Fisher information **1 per step** in `t = arccos(1-K)`, on the compact interval `[0, pi/2]` | **established** | measured 0.99–1.15 over a 400× range in `q`, along the ladder's own direction ([`0009`](exploration/0009_the_axiom_relocated.md)); confirms `sequence-demix` 0002's `AUDIT[derived+proxy]` claim |
+| the relocated axiom (whiteness at `Delta` **defines** measurement noise) | **untested** | stated and motivated in [`0009`](exploration/0009_the_axiom_relocated.md); the derivation tying the log-scale class timescale to the split channel's resolution is a sketch, not a result |
 | **C6** — resolvability is checkable by decimation | **supported** | inferred log-scale paths at `Delta` and `2Delta` disagree monotonically with the log-scale's speed, 0.22 → 7.84 nats over a 35× sweep ([`0008`](exploration/0008_the_indicator.md)) |
 | the per-step **step ratio** is a usable confidence read-out | **half-established, one-sided** | rank correlation 1.000 with decimation disagreement below the seam; **saturates and decreases above it**, so a low reading is not a clean bill of health ([`0008`](exploration/0008_the_indicator.md)) |
 | `_PHIS` does not reach near enough to 1 | **measured on one rig** | shipped-like reach costs 2.9× and 3.5× on wandering log-scales, rail-pinned on every seed, and costs nothing on a stationary one ([`0007`](exploration/0007_phi_reach.md)) |
@@ -86,6 +103,14 @@ phi^2)` is the badly-conditioned *derived* combination, not the primitive one. T
 reframing was built on the wrong one of the two.
 
 ## Next, if this is picked up
+
+0. **[`0009`](exploration/0009_the_axiom_relocated.md)'s programme** — write the
+   relocated axiom properly, then tie the log-scale class's timescale to the split
+   channel's resolution. The split channel is pinned with no free parameters
+   *because its coordinate is compact and its metric is flat*; the noise-scale
+   channel carries the repository's unjustified constants *because `lambda` is
+   unbounded*. Transferring the first channel's structure to the second is the
+   only route here that would justify the workstream.
 
 1. **Run [`0007`](exploration/0007_phi_reach.md)'s recommendation through the
    shipped filter** — the hero gate, the arm rig, the drone rig, with
