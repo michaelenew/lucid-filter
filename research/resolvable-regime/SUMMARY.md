@@ -3,124 +3,111 @@
 > **AI-generated, not peer-reviewed** — produced by an AI system, not
 > independently verified. Treat as provisional.
 
-**Status: opened, nothing measured.** This workstream proposes replacing the
-filter's one founding assumption and states the consequences as falsifiable
-predictions. No prediction has been tested yet. Read
-[`exploration/0001`](exploration/0001_the_axiom.md) for the argument.
+## Verdict
 
-## The swap
+**The proposed axiom swap is refuted. The workstream stays open for one measured
+recommendation and one half-built diagnostic.**
 
-**Today the filter assumes** the per-component log-scales are a **stationary**
-AR(1) family, `(phi, s)`; because those two numbers *are* the class rather than
-parameters within it, the filter averages a bank over a broad `(phi, s)` box, and
-`forget < 1` is declared outside that theory as "the engineering escape for the
-stationarity assumption ITSELF being violated".
+The thread asked whether the filter's founding assumption — that the log-scales
+are a **stationary** AR(1) family — could be replaced by *resolvability*: the data
+we receive is meaningful, so we would not get a different answer at a different
+sampling rate. Five probes were run. **Four of the five predictions the reframing
+made are false**, and the one that survives points at a much smaller change than
+the axiom.
 
-**This workstream proposes instead** one assumption in two parts — *the data we
-receive is meaningful*:
+## The confidence ledger
 
-> **(R1) Refinement covariance.** One continuous-time latent object; the model at
-> sampling spacing `Δ` is its exact `Δ`-marginal, and inference commutes with
-> decimation.
->
-> **(R2) Resolution closure.** No latent *regime* structure below `Δ`. Variation
-> faster than the record can see is not regime — it is shape at fixed scale.
+Every claim this workstream has made, with what it now rests on. This table is the
+workstream's uncertainty read-out; nothing below it should be cited without it.
 
-**AR(1) is not dropped by this; it is derived.** By Doob's theorem the only
-continuous-path, time-homogeneous Gaussian Markov process is
-`d lambda = -kappa (lambda - mu) dt + sigma dW`, whose `Δ`-sampling is AR(1) with
-`phi = e^{-kappa Δ}`. What is dropped is `kappa > 0` with the stationary initial
-marginal. The newly admitted member is `kappa = 0` — a Brownian log-scale, where
-`s^2 = sigma^2 / (2 kappa)` diverges while `sigma^2` stays finite. That is why
-the working coordinates become `(kappa, sigma^2)`: **the old ones blow up exactly
-at the boundary the box most needs to reach.**
+| claim | status | evidence |
+|---|---|---|
+| `I(lambda) = 1/2` per observation, blur width `sqrt(2)` nats | **established** | elementary; numerically 0.49935 on 2e6 samples ([`0001_box_ends.py`](exploration/0001_box_ends.py)) |
+| AR(1) is forced by time-homogeneity + continuous paths (Doob), not assumed | **established** | standard theorem; not re-derived here |
+| **C2** — the identification ridge is the mean-reversion direction | **FALSE** | the flat direction holds `gamma_0 = s^2` (0.067–0.238) and the stiff one moves it (1.394–1.412 of a maximum 1.4142); the shipped `(phi, s)` chart is the diagonalising one to within 3.2°–9.7° ([`0002`](exploration/0002_the_ridge.md)) |
+| **C5** — members above `sqrt(2)` are inert and can be pruned | **FALSE** | the exact 13-member prune costs +10.0% on the sensor-degradation window and +5.7% on calibration; patched-module pin against the shipped filter is exact, 0.000e+00 ([`0005`](exploration/0005_the_seam.md)) |
+| **C3** — dropping stationarity helps where the world wanders | **FALSE** | on a `kappa = 0` truth the correctly-specified wandering class scores 1.118 ± 0.142 and 0.896 ± 0.114 against the stationary class — parity — while losing 15–24% on stationary truths ([`0003`](exploration/0003_what_stationarity_costs.md)) |
+| **R2** (no regime structure below `Delta`) is compatible with this filter's purpose | **FALSE** | a regime change is a step, hence sub-`Delta` at every sampling rate; R2 forbids exactly the events the repository's headline results are about ([`0005`](exploration/0005_the_seam.md)) |
+| **C6** — resolvability is checkable by decimation | **supported** | inferred log-scale paths at `Delta` and `2Delta` disagree monotonically with the log-scale's speed, 0.22 → 7.84 nats over a 35× sweep ([`0008`](exploration/0008_the_indicator.md)) |
+| the per-step **step ratio** is a usable confidence read-out | **half-established, one-sided** | rank correlation 1.000 with decimation disagreement below the seam; **saturates and decreases above it**, so a low reading is not a clean bill of health ([`0008`](exploration/0008_the_indicator.md)) |
+| `_PHIS` does not reach near enough to 1 | **measured on one rig** | shipped-like reach costs 2.9× and 3.5× on wandering log-scales, rail-pinned on every seed, and costs nothing on a stationary one ([`0007`](exploration/0007_phi_reach.md)) |
+| `sqrt(2)` is a **seam** (drift below, jump above), not a ceiling | **interpretation of a measurement** | consistent with [`0005`](exploration/0005_the_seam.md)'s +10.0%; the mechanism is not separately measured |
+| **C1** — `Q(a) = Q·a` breaks refinement covariance | **untested here** | algebraic; the misfit is already measured elsewhere (45% of `Q` at `‖A‖a ≈ 1.2`, `pointwise-streaming`) |
 
-(`kappa` here is the OU mean-reversion rate, not `optimality-proof`'s kurtosis.)
+## Why the swap fails, in one paragraph
 
-## The predictions, with their tests
+The axiom's second half — *no regime structure below the sampling interval* —
+sounds like a statement about sampling fast enough. It is not. **A regime change
+is a step**, and a step is sub-interval structure at every sampling rate; you
+cannot sample your way to resolving a discontinuity. So R2 forbids the sensor
+failing ×200, the crate picked up mid-flight, the tire blowing out — the
+repository's headline results. [`0005`](exploration/0005_the_seam.md) measures the
+consequence directly: the two class members the axiom would delete are worth 10%
+of the sensor-degradation window. And the axiom's first half buys nothing either,
+because [`0003`](exploration/0003_what_stationarity_costs.md) shows a broad
+stationary class with `phi` near 1 already contains wandering behaviour to within
+what a finite record can distinguish — while [`0007`](exploration/0007_phi_reach.md)
+shows a nearly-non-stationary *stationary* member actually **beats** the
+correctly-specified non-stationary one (0.266 against 0.351), because it is
+anchored and the wandering class is not.
 
-| # | prediction | confidence | test |
-|---|---|---|---|
-| C1 | R1 forces all five clock rules at once; `Q(a) = Q·a` **violates** it, so the continuous-spectral-density fix is a prerequisite, not a refinement | high | algebra; the misfit is already measured (45% of `Q` at `‖A‖a ≈ 1.2`) |
-| C2 | the sloppy identification ridge (adaptive-grid 13–16) **is** the `kappa` axis; the stiff direction is `sigma^2`, so the `phi` box averages a direction the data cannot see and the bank drops 15 → ~5 | medium | Fisher/profile-likelihood eigenvectors in both coordinate systems, scalar rig |
-| C3 | Theorem C re-runs on a one-moment increment class; `0017`'s `gamma_2` result and `0023`'s AR(2) result lose their premises rather than being bounded | medium | write the proof; re-run both probes under a `sigma^2`-only class |
-| C4 | Theorem B's shape adversary is an i.i.d. (sub-`Δ`) log-scale component, so R2 **reassigns** it to layer 1 where Theorem A is exact — R2 is the cut between the layers, placed at the sampling rate | medium | re-run `optimality-proof/0013`, `0022` against the new class |
-| C5 | the box ends are derived from one number — `I(lambda) = 1/2` per event, blur `sqrt(2)/f` — giving ceiling `sigma sqrt(Δ) <= sqrt(2)/f`, floor `N sigma^2 Δ >= 2/f^2`, `log(N)/gap` rungs. Closes **AUD-2** | medium-high | see below; then prune and re-run the acceptance gates |
-| C6 | R2 is falsifiable from the record alone, by decimation, using `wall-correspondence/0036`'s code-length-per-physical-time criterion | high | implement the self-check; it should **fail** on the rate-gyro rig of `multivariate-statfilter/0054` |
-| C7 | `forget` loses its stated job (there is no stationarity left to escape) and either disappears or becomes the derived record length `N` in C5's floor | open | blocked on C2/C5 |
+## What the thread produced anyway
 
-## The one number already computed
+Three things, in descending order of confidence.
 
-[`exploration/0001_box_ends.py`](exploration/0001_box_ends.py), stdlib only.
+1. **The box's orientation and shape are now derived, not measured.**
+   [`0002`](exploration/0002_the_ridge.md): the observed information's
+   eigenvectors align with the `(phi, s)` axes to within 3.2°–9.7°, with `s` stiff
+   and `phi` flat. So the product grid is the diagonalising chart, and spending
+   more nodes on `s` (5) than on `phi` (3) is the right way round. AUD-2 graded
+   this `measured`; it is now a computation. **The ends are still not derived.**
 
-The Fisher information a single Gaussian observation carries about its own
-log-variance is exactly `1/2` (confirmed numerically, 0.49935 on 2e6 samples), so
-the one-event blur width on a log-scale is `sqrt(2)` nats. Measured in that unit:
+2. **A requirement on the box's top end.**
+   [`0005`](exploration/0005_the_seam.md): the `s` ladder must reach *above*
+   `sqrt(2)` in per-step increment SD, because that is what separates drift
+   hypotheses from jump hypotheses, and having no above-seam member costs +10.0%
+   RMSE and +5.7% calibration on a rig with a ×3 sensor change. A requirement, not
+   a derivation of 3.20.
 
-- derived admissible band at `N = 1000`, `f = 1`: per-step increment SD in
-  **[0.0447, 1.4142]**, `log(1000)/1.5 = 4.61` rungs, ladder ratio
-  `e^{1.5} = 4.48` in `sigma^2`;
-- shipped `_SS`: **5 rungs, geometric, ratio 4.0** in `s^2` (log-ratio 1.386).
+3. **A recommendation, and it is the only thing here with product consequence.**
+   [`0007`](exploration/0007_phi_reach.md): add a rung near 1 to `_PHIS` —
+   `(0.70, 0.85, 0.95, 0.995)`. Worth 2.9–5.6× on a slowly-wandering noise
+   environment, free on a reverting one, costs one bank cell on the flat axis.
+   **Measured on the scalar grid filter only. Not yet run through the shipped
+   filter or any acceptance gate.**
 
-**The derivation retrodicts the shipped convention** rather than overturning it —
-the best available outcome, since the numbers stay and the `AUDIT[measured]`
-grade does not. The one disagreement is a live prediction: the per-step increment
-SD across the shipped 15-member box runs 0.062 → 2.285, so **2 of 15 members sit
-above the `sqrt(2)` ceiling** (`s = 3.20` at `phi = 0.70` and `0.85`). Pruning
-them should cost nothing measurable.
+## What was wrong with the reasoning, so it is not repeated
 
-## Why this thread targets the repo's actual weak point
+C2 confused *what one step sees* with *what the record sees*. The per-step
+likelihood does see the log-scale's increment — that governs the **walk**. But the
+bank is doing class identification over a whole record, and over a record the
+stationary variance is pinned far harder than any increment; `nu = gamma_0(1 -
+phi^2)` is the badly-conditioned *derived* combination, not the primitive one. The
+reframing was built on the wrong one of the two.
 
-From the filter's own derivation audit (`lucid/filter/AUDIT.md`), whose bar is
-*"derived from theory, then defended with simulation, no free parameters"*:
-22 of 43 anchors are `derived`, 5 `proxy`, 2 `measured`, the rest budgets and
-conventions. **The shortfall is not scattered — it is the stationarity
-assumption's shadow.**
+## Next, if this is picked up
 
-- `_PHIS` / `_SS` carry the worst grade in the ledger (`measured`; *"ridge
-  flatness does not clear the bar"*, AUD-2). They exist only because stationarity
-  makes the class two-dimensional and bounded.
-- `forget` is the single declared `AUDIT[escape]`, and its declared purpose is
-  stationarity being violated.
-- `_SPAN_S = 3.0` is "±3σ of the class prior", which presupposes the class prior
-  *has* a σ — i.e. presupposes stationarity.
-
-What the swap does **not** fix: `_GAP_FACTOR`'s sharp information-theoretic
-criterion (AUD-1 survives — Sparrow stays a proxy), `_RIDGE`, the Gauss–Hermite
-order, `_SERIES_REACH`, `_LADDER_MEM`. Those are numerics and budgets, not class.
-`_SPAN_S` gets *worse* before better: at `kappa = 0` the prior is flat and the
-span must be re-derived from the resolution.
-
-## What it costs
-
-- R2 is **stronger than stationarity in one direction**: the old box hedged
-  against fast scale variation with its `phi = 0.70` members; R2 forbids sub-`Δ`
-  regime structure outright. Wrong, the new filter is *confidently* wrong where
-  the old was vaguely right. C6 is the mitigation, not a refutation.
-- The minimax repair in C3 risks circularity — shrinking a class to rescue a
-  theorem is the move `optimality-proof` already rejected once as
-  "nearly tautological". The defence is that R2 forces the shrink from an
-  independent axiom about sampling, and is itself checkable. That defence is the
-  most likely place this thread fails.
-- `kappa = 0` has no restoring force, so `lambda`'s posterior widens without
-  bound in a quiet stretch, and `E[e^lambda] < ∞` (the constraint `0024` found
-  silently assumed) is not automatic. Candidate resolution, unverified: the
-  caller-supplied `process=` / `measurement=` bases stop being rough starting
-  guesses and become the normalisation that makes the problem well posed.
-
-## Next, in order
-
-1. **C2's coordinate check** — cheapest decisive step. If the ridge is the
-   `kappa` axis, the `phi` box is removable and everything downstream simplifies.
-2. **C5's pruning test** — drop the 2 over-ceiling members, re-run the scalar
-   hero gate and the arm rig. First real number this thread can produce.
-3. **C6's decimation diagnostic** — and it should *fail* on the rate-gyro rig,
-   which is what would give the README's standing "attribution degrades with
-   relative degree" open a diagnosis instead of a symptom.
-4. **C3's proof** — only once 1 and 2 say the reframing survives contact.
-5. **C1's `Q(a)`** — independently wanted; the axiom makes it mandatory.
+1. **Run [`0007`](exploration/0007_phi_reach.md)'s recommendation through the
+   shipped filter** — the hero gate, the arm rig, the drone rig, with
+   `phis=(0.70, 0.85, 0.95, 0.995)`. This is the only item with a product payoff
+   and it is cheap.
+2. **Close the indicator's blind spot** — the step ratio saturates exactly where
+   it matters. A second statistic that rises where this one gives up (innovation
+   whiteness in the window is the obvious untested candidate) would make it
+   two-sided and shippable.
+3. **Sweep the seam** — [`0005`](exploration/0005_the_seam.md) measured one jump
+   size (×3 = 2.20 nats). If `sqrt(2)` is really the seam, the cost of pruning
+   above-seam members should grow with jump size and vanish below it.
+4. **Do not write C3's minimax proof.** Its class is the wandering one, and
+   [`0003`](exploration/0003_what_stationarity_costs.md) says that class is not
+   better on any truth tested.
 
 ## Layout
 
-- `exploration/` — numbered, later is more recent. `0001` is the whole argument.
-- `output/` — empty; nothing here stands on its own yet.
+- `exploration/` — numbered, later is more recent.
+  [`0001`](exploration/0001_the_axiom.md) is the original argument and is now
+  largely superseded; read it for the reasoning, and this file for what survived.
+  [`0002`](exploration/0002_the_ridge.md), [`0003`](exploration/0003_what_stationarity_costs.md),
+  [`0005`](exploration/0005_the_seam.md), [`0007`](exploration/0007_phi_reach.md),
+  [`0008`](exploration/0008_the_indicator.md) carry the measurements.
+- `output/` — empty. Nothing here stands on its own yet.

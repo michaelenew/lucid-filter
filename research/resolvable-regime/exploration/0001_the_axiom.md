@@ -1,8 +1,15 @@
 # 0001 — Resolvability as the founding axiom, in place of stationarity
 
-> **AI-generated, not peer-reviewed.** Nothing in this file is measured yet.
-> Every numbered consequence below is a prediction with a stated confidence and
-> a named test. Read it as a work plan, not as a result.
+> **AI-generated, not peer-reviewed.**
+>
+> ⚠️ **SUPERSEDED — the axiom proposed here is refuted.** C2 is false
+> ([`0002`](0002_the_ridge.md)), C5 is false ([`0005`](0005_the_seam.md)), C3's
+> premise is false ([`0003`](0003_what_stationarity_costs.md)), and R2 itself is
+> incompatible with the filter's purpose because a regime change is a step, hence
+> sub-interval at every sampling rate. See [`../SUMMARY.md`](../SUMMARY.md) for
+> what survived. This file is kept as the record of the reasoning, including the
+> mistake: it confused what one STEP sees (the increment) with what the RECORD
+> sees (the stationary variance), and built on the wrong one.
 
 ## 1. The swap
 
