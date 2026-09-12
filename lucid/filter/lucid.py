@@ -100,10 +100,22 @@ import numpy as np
 __all__ = ["LucidFilter", "LucidStep", "LucidResult"]
 
 _LOG2PI = math.log(2.0 * math.pi)
+# AUDIT[budget] numerical guard: log-determinant penalty for a numerically singular
+# innovation covariance -- large enough that exp(loglik) underflows to a zero weight,
+# finite so an all-singular softmax window stays NaN-free.  No effect on any non-singular
+# node, so every run that was finite before is unchanged bit for bit.
+_LOGDET_SINGULAR = 1.0e6
 # AUDIT[proxy] grid spacing at the Sparrow resolution limit (adaptive-grid finding 11,
 # dead zone measured at ~0.8 nats); sharp information-theoretic criterion missing -- open AUD-1.
 _GAP_FACTOR = 1.5           # grid spacing gap = 1.5 s (Sparrow resolution limit, finding 11)
 # AUDIT[proxy] window half-span = 3-sigma support of the class prior; trade uncharacterised -- open AUD-1.
+# NOTE (resolvable-regime 0012-0016): span is a code-length PLATEAU on the scalar hero rig
+# (|t| <= 1.46 across span 1.5-12, 0014) and 6.0 is that rig's jump-window preference (0015),
+# BUT the plateau is rig-local: span 6.0 costs the asynchronous multi-rate rig 1.16x -> 3.77x
+# oracle (worse than the fixed filter) because `_SPAN_S` is not a pure reach knob -- it also
+# sets `_Pmu_cap` (grows as span^2) and `_Ifloor`, so it loosens the walk on partial events
+# where per-event identifiability is already low (0016).  3.0 is the value that holds every
+# rig, so it stays; the plateau claim is scalar-rig-only.
 _SPAN_S = 3.0               # window half-span in units of s (support budget -> node count)
 # AUDIT[budget] Fisher stabiliser; absolute units, guarded by the step-budget clip -- open AUD-8.
 _RIDGE = 1e-4               # Fisher stabiliser
@@ -114,9 +126,10 @@ _SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weigh
                                            #   Geometric, and it has to reach: `s` is the SD of a
                                            #   LOG variance, so the top of the box is the largest
                                            #   scale change the window can represent in one step
-                                           #   (`3 s` of half-span).  A box ending at 0.8 tops out
-                                           #   at a factor of 11, which is smaller than the regime
-                                           #   changes in this repository's own rigs.
+                                           #   (`_SPAN_S * s` of half-span).  A box ending at 0.8
+                                           #   tops out at a factor of e^{0.8 _SPAN_S}, which is
+                                           #   smaller than the regime changes in this
+                                           #   repository's own rigs.
 # AUDIT[budget] series-vs-exact switch radius; conservative, wrong only toward compute.
 _SERIES_REACH = 4.0         # gaps out to 4 nominal steps: how far the pre-factored Q(a)
                             # series must stay accurate before the exact route is used instead
@@ -663,7 +676,7 @@ class _MeanChannel:
             base = self.bbar if self.feedback else np.zeros(self.k)
             r = (e - np.einsum("ia,ja->ji", U, self.b - base)
                  - (self.C @ base))
-            _, ld = np.linalg.slogdet(Sb)
+            ld = _logdet_sym(Sb)
             ll = -0.5 * (ld + np.einsum("ji,jik,jk->j", r, Sbi, r))
             Kb = np.einsum("jab,ib,jik->jak", self.Pb, U, Sbi)
             self.b = self.b + np.einsum("jak,jk->ja", Kb, r)
@@ -1527,7 +1540,7 @@ class _WalkEngine:
             S = S + (add_S if mo == m else add_S[np.ix_(range(add_S.shape[0]), obs, obs)]
                      if add_S.ndim == 3 else add_S[np.ix_(obs, obs)])
         Si = _inv_sym(S, mo)
-        sgn, logdet = np.linalg.slogdet(S)
+        logdet = _logdet_sym(S)
         maha = np.einsum("i,gij,j->g", e, Si, e)
         lg = -0.5 * (mo * _LOG2PI + logdet + maha)
         if r:
@@ -1640,7 +1653,50 @@ def _inv_sym(S, mo):
     if mo == 1:
         with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
             return 1.0 / S
-    return np.linalg.inv(S)
+    try:
+        return np.linalg.inv(S)
+    except np.linalg.LinAlgError:
+        # AUDIT[budget] numerical guard, exact path untouched: reached only when LAPACK has
+        # already refused the stacked inverse.  At an extreme scale node the process variance
+        # can dwarf every sensor variance, and sensors reading one state then have innovation
+        # correlation 1 - eps: S is finite and invertible in exact arithmetic but numerically
+        # rank-deficient (measured cond 1.9e15 at a span-6 node on the 2-sensor hazard rig).
+        # Such a node's likelihood is vanishing and its weight ~0, so the pseudo-inverse is
+        # the correct limit -- the node must contribute nothing, not a crash.  Every run that
+        # inverted before takes the first return, bit for bit.
+        flat = S.reshape(-1, S.shape[-2], S.shape[-1])
+        out = np.empty_like(flat)
+        for i, Si in enumerate(flat):
+            try:
+                out[i] = np.linalg.inv(Si)
+            except np.linalg.LinAlgError:
+                out[i] = np.linalg.pinv(Si)
+        return out.reshape(S.shape)
+
+
+def _logdet_sym(S):
+    """``slogdet`` for a stack of innovation covariances, numerically singular repaired.
+
+    An SPD ``S`` can be finite yet numerically rank-deficient -- an extreme scale node
+    whose process variance dwarfs every sensor variance leaves collinear sensors with
+    innovation correlation ``1 - eps`` -- and there ``slogdet`` returns NaN (or sign 0),
+    which poisons every weight downstream.  The exact limit of such a node's likelihood
+    is 0, so the repair is ``logdet = +inf`` (loglik ``-inf``, weight exactly zero: the
+    node contributes nothing rather than everything).  Where ``slogdet`` succeeds its
+    bits pass through untouched -- the same guard discipline as ``_inv_sym``, and used by
+    every path so the stacked/looped pins stay exact on pathological series too.
+    """
+    with np.errstate(all="ignore"):
+        sgn, ld = np.linalg.slogdet(S)
+    bad = ~np.isfinite(ld) | (sgn <= 0)
+    if np.any(bad):
+        # A LARGE FINITE penalty, not +inf: the node's likelihood is driven to
+        # underflow (weight ~0) exactly as +inf would, but a downstream softmax over an
+        # axis window that is ENTIRELY singular stays finite (``x - x = 0``, not
+        # ``-inf - (-inf) = NaN``) and degrades to a uniform, uniformly-negligible axis
+        # rather than poisoning the whole posterior.
+        ld = np.where(bad, _LOGDET_SINGULAR, ld)
+    return ld
 
 
 def _bytes(a):
@@ -1818,7 +1874,7 @@ def _bank_modes(n, m, G, nw, r, has_cap):
         for F, P, Qg, rg, H, mpred, e, pi0, axwin, cap in draws:
             Ppred, PHt, S = _bank_predict_np(F, P, Qg, rg, H)
             Si = _inv_sym(S, m)
-            _, ld = np.linalg.slogdet(S)
+            ld = _logdet_sym(S)
             pi = pi0[:, :r].copy()
             out = _bank_correct_np(Ppred, PHt, Si, ld, e, mpred, H, pi,
                                    axwin, cap, m)
@@ -1834,7 +1890,7 @@ def _bank_modes(n, m, G, nw, r, has_cap):
                     np.ascontiguousarray(Qg), np.ascontiguousarray(rg),
                     np.ascontiguousarray(H), int(ap_mode), int(dot_mode))
                 Si = _inv_sym(S, m)
-                _, ld = np.linalg.slogdet(S)
+                ld = _logdet_sym(S)
                 # a fresh copy per candidate: the compiled step finishes `pi` in
                 # place, so a candidate that fails would otherwise hand the next
                 # one a mutated start
@@ -2175,7 +2231,7 @@ class _EngineBank:
                 np.ascontiguousarray(F), self._P, Qg, rg, H,
                 int(self._modes[0]), int(self._modes[2]))
             Si = _inv_sym(S, mo)
-            _, logdet = np.linalg.slogdet(S)
+            logdet = _logdet_sym(S)
             pi = np.ascontiguousarray(pi)
             w, ll, m_new, P_new, Kbar = _kernel.ext().lucid_bank_correct(
                 Ppred, PHt, Si, np.ascontiguousarray(logdet),
@@ -2210,7 +2266,7 @@ class _EngineBank:
         if add_S is not None:
             S = S + (add_S if mo == m else add_S[..., obs, :][..., :, obs])
         Si = _inv_sym(S, mo)
-        _, logdet = np.linalg.slogdet(S)
+        logdet = _logdet_sym(S)
         maha = np.einsum("bi,bgij,bj->bg", e, Si, e)
         lg = -0.5 * (mo * _LOG2PI + logdet + maha)
         if r:

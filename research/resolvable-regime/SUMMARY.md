@@ -51,6 +51,8 @@ workstream's uncertainty read-out; nothing below it should be cited without it.
 | the window conflict is **reach against resolution** | **FALSE** | freeing `span` and `gap` and diagonalising: PC2 (reach) is nearly unconflicted — more span costs steady state 0.4% across the whole plane — while PC1 (resolution, 63.7%) puts calibration directly opposite all three RMSE columns ([`0012`](exploration/0012_diagonalise.md)) |
 | the conflict is an artefact of scoring under **two losses** | **established** | on the same 12-point plane, moving to the filter's own loss (code length, Theorem A′) shrinks regime C's spread from 58.5% to 3.2% and the jump's from 42.5% to 5.6% ([`0013`](exploration/0013_the_arbiter.md)) |
 | **one point is the optimum of both, to within 0.45%, and it is the shipped geometry** | **established on one rig** | a per-block oracle switching the window geometry optimally beats the shipped fixed one by 0.00865 nats/step = **0.45%**; `gap = 1.5` is resolved against both factor-2 neighbours (`t` = 6.4, 10.5, 24 paired seeds) ([`0013`](exploration/0013_the_arbiter.md)) |
+| the span **plateau** holds across rigs (span 6 is a straight win) | **FALSE — rig-local** | span 6 wins the scalar rig (jump −16%, `t` = −12; total code length resolved, `t` = −3.9, 96 seeds) but costs the **async multi-rate rig 1.16× → 3.77×**, worse than the fixed filter, because `_SPAN_S` sets `_Pmu_cap` ∝ span² and loosens the walk on partial events ([`0016`](exploration/0016_the_full_battery.md)). `_SPAN_S` stays 3.0 |
+| the singular-innovation crash (a real bug, span-independent) | **fixed** | reachable at the shipped span 3 by a wide-`ss` give-what-you-know call on a 2-sensor fault rig; two `AUDIT[budget]` guards added, suite bit-identical (55 passed) ([`0016`](exploration/0016_the_full_battery.md)) |
 | `_SPAN_S = 3.0` is an optimum | **FALSE — it is a plateau** | total code length is indistinguishable across span **1.5–12** at the shipped gap (\|t\| ≤ 1.46). Not a proxy needing a sharp criterion; a convention whose only cost is node count ([`0014`](exploration/0014_paired_optimum.py)) |
 | **C6** — resolvability is checkable by decimation | **supported** | inferred log-scale paths at `Delta` and `2Delta` disagree monotonically with the log-scale's speed, 0.22 → 7.84 nats over a 35× sweep ([`0008`](exploration/0008_the_indicator.md)) |
 | the per-step **step ratio** is a usable confidence read-out | **half-established, one-sided** | rank correlation 1.000 with decimation disagreement below the seam; **saturates and decreases above it**, so a low reading is not a clean bill of health ([`0008`](exploration/0008_the_indicator.md)) |
@@ -109,9 +111,27 @@ stationary variance is pinned far harder than any increment; `nu = gamma_0(1 -
 phi^2)` is the badly-conditioned *derived* combination, not the primitive one. The
 reframing was built on the wrong one of the two.
 
-## Nothing was changed in the filter
+## What changed in the filter
 
-Three candidate changes were built and tested; none clears the repository's bar.
+The span-6 experiment (the user's "apply it and measure") was carried out on this
+branch and **reverted** on the merits: span 6 wins the scalar rig and the arm but
+turns the asynchronous rig into a 3.77× regression, worse than the fixed filter
+([`0016`](exploration/0016_the_full_battery.md)). `_SPAN_S` stays 3.0.
+
+Two things do stay, both genuine and independent of the reverted experiment:
+
+- **Two numerical guards** (`_inv_sym` pseudo-inverse fallback, `_logdet_sym`
+  finite-penalty for a singular innovation covariance). They fix a hard crash
+  reachable at the shipped span 3 by a wide-`ss` call on a multi-sensor fault rig.
+  `AUDIT[budget]`, bit-identical on the non-singular path (55 suite tests pass,
+  kernel pins included).
+- **Two AUDIT.md note updates.** `_GAP_FACTOR = 1.5` is now defended at the
+  measured optimum of the filter's own loss (span-independent, `0014`); `_SPAN_S`
+  carries the rig-local-plateau finding. AUD-1 stays open.
+
+## Candidate changes that did NOT clear the bar
+
+Three earlier candidates; none clears the repository's bar.
 The table in [`0010`](exploration/0010_the_derivation.md) §5 records why. The
 closest is `_PHIS` reaching to 0.995 — worth 2.9–3.5× on a wandering noise level
 in [`0007`](exploration/0007_phi_reach.md)'s *research* grid filter, and exactly
