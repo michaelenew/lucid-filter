@@ -77,20 +77,33 @@ covariance arithmetic cannot carry through the coupling.
 a hard arm-breaker, and the break is reach-driven on a complete-row rig, which no
 completeness rule can reach. Shipping it would NaN a headline acceptance rig.
 
-**A walk-mean bound was tried and does not unblock it.** The obvious fix — cap
-`|mu|` absolutely (a walk centre beyond its own window is meaningless; even a ×200
-failure is 10.6 nats) — was tested at `|mu| ≤ 40` and `≤ 20` on top of span 6 +
-per-event. The arm still diverges: at 40 the pseudo-inverse guard itself throws
-*"SVD did not converge"*, at 20 the estimate NaNs at step 50. The node covariance
-at these bounds (`e^20 ≈ 5e8`) still overflows the arm's 15-D coupled Riccati
-propagation, and a bound tight enough to be safe (`≲ 15`) would cut into the
-process-scale excursion the scalar jump win depends on. So the wall is the
-**reach representation itself** on a coupled high-dimensional rig, not a missing
-clip.
+**A walk-mean bound was tried and does not unblock it — and fails in the
+direction that identifies the true cause.** Cap `|mu|` absolutely (a walk centre
+beyond its own window is meaningless; even a ×200 failure is 10.6 nats), on top of
+span 6 + per-event:
 
-**What might still unblock it** (not attempted): a reach expressed as an absolute
-nat cap independent of `s` (so a large-`s` rig does not get a 19-nat window), or
-capping the per-node process covariance before the Riccati step. Both are real
+| `|mu|` bound | arm seed 1 | arm seed 2 | scalar jump | async whole |
+|---|---|---|---|---|
+| 40 | SVD non-convergence (pinv guard) | — | — | — |
+| 20 | NaN @ step 50 | NaN @ 37 | 1.612 | 1.15× |
+| 15 | NaN @ 53 | NaN @ 34 | 1.612 | 1.15× |
+
+**Tightening the bound makes the arm fail *earlier*, not later** (seed 2: 37 → 34).
+That is the diagnostic: if the walk-mean magnitude were the cause, a tighter bound
+would help. It does not, so the overflow is not `mu` — it is the **per-node
+process covariance** that span-6's outer nodes inject into the Riccati step
+(`FPFt + Qg`), which the arm's 15-D coupling compounds to overflow regardless of
+where `mu` sits. The wall is the **reach representation** on a coupled
+high-dimensional rig, and a tighter walk clip only removes headroom the walk was
+using to stay away from the worst nodes. Meanwhile the scalar and async numbers
+are flat across every bound — they never needed `|mu|` beyond 15, confirming the
+arm is the sole constraint.
+
+**What might still unblock it** (not attempted), now that the cause is pinned to
+the per-node process covariance rather than the walk mean: a reach expressed as an
+absolute nat cap independent of `s` (so a large-`s` rig does not get a 19-nat
+window and its outer nodes never reach `e^19·Q0`), or capping the per-node `Qg`
+before the Riccati step. The second targets the overflow directly. Both are real
 changes to a pinned filter and need validation against the stacked/looped pins and
 all four rigs.
 
