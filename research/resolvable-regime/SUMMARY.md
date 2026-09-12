@@ -48,6 +48,10 @@ workstream's uncertainty read-out; nothing below it should be cited without it.
 | the scale channel's box is the split channel's ladder one level up | **derivation closes, application FALSE** | the closed form `phi = sqrt(cos t)`, `s = sqrt(2(sec t - 1))` is exact to 1e-16 and needs no constants — and loses 22% on regime C; re-keying the window to the channel's predictive width loses on 4 of 5 columns ([`0010`](exploration/0010_the_derivation.md)) |
 | the `(phi, s)` window is a **resolution** grid | **FALSE** | scaling the window geometry by `c` has an **interior** optimum that differs by column (steady wants large `c`, settling wants small, regime C peaks at 1.4–2.0); a resolution-only argument gives `c < 1` throughout, the losing direction ([`0010`](exploration/0010_the_derivation.md) §3) |
 | **no resolution argument can derive `_PHIS`/`_SS`** | **established, negative** | follows from the row above; AUD-2 needs a two-sided argument pricing reach against resolution, and §3's sweep is the first map of it |
+| the window conflict is **reach against resolution** | **FALSE** | freeing `span` and `gap` and diagonalising: PC2 (reach) is nearly unconflicted — more span costs steady state 0.4% across the whole plane — while PC1 (resolution, 63.7%) puts calibration directly opposite all three RMSE columns ([`0012`](exploration/0012_diagonalise.md)) |
+| the conflict is an artefact of scoring under **two losses** | **established** | on the same 12-point plane, moving to the filter's own loss (code length, Theorem A′) shrinks regime C's spread from 58.5% to 3.2% and the jump's from 42.5% to 5.6% ([`0013`](exploration/0013_the_arbiter.md)) |
+| **one point is the optimum of both, to within 0.45%, and it is the shipped geometry** | **established on one rig** | a per-block oracle switching the window geometry optimally beats the shipped fixed one by 0.00865 nats/step = **0.45%**; `gap = 1.5` is resolved against both factor-2 neighbours (`t` = 6.4, 10.5, 24 paired seeds) ([`0013`](exploration/0013_the_arbiter.md)) |
+| `_SPAN_S = 3.0` is an optimum | **FALSE — it is a plateau** | total code length is indistinguishable across span **1.5–12** at the shipped gap (\|t\| ≤ 1.46). Not a proxy needing a sharp criterion; a convention whose only cost is node count ([`0014`](exploration/0014_paired_optimum.py)) |
 | **C6** — resolvability is checkable by decimation | **supported** | inferred log-scale paths at `Delta` and `2Delta` disagree monotonically with the log-scale's speed, 0.22 → 7.84 nats over a 35× sweep ([`0008`](exploration/0008_the_indicator.md)) |
 | the per-step **step ratio** is a usable confidence read-out | **half-established, one-sided** | rank correlation 1.000 with decimation disagreement below the seam; **saturates and decreases above it**, so a low reading is not a clean bill of health ([`0008`](exploration/0008_the_indicator.md)) |
 | `_PHIS` does not reach near enough to 1 | **measured on one rig** | shipped-like reach costs 2.9× and 3.5× on wandering log-scales, rail-pinned on every seed, and costs nothing on a stationary one ([`0007`](exploration/0007_phi_reach.md)) |
@@ -117,12 +121,16 @@ would settle it.
 
 ## Next, if this is picked up
 
-0. **The two-sided box argument.** [`0010`](exploration/0010_the_derivation.md) §3
-   shows the window trades reach against resolution with an interior optimum, and
-   that the resolution half alone is the losing direction. That sweep is the
-   starting point for the argument AUD-2 actually needs. Recorded but not derived:
-   on the repo's own gate, `c = 2` beats the shipped `c = 1` on regime C (1.001 vs
-   1.078) and in steady state, paying in settling time (49.2 vs 35.0).
+0. **Apply the `AUDIT.md` amendment**, if the user wants it —
+   [`0013`](exploration/0013_the_arbiter.md) proposes regrading `_SPAN_S = 3.0`
+   from `proxy` to `convention`, since it is measured flat over an 8× range and so
+   needs no sharp criterion. `_GAP_FACTOR = 1.5` stays `proxy` but is now defended
+   at the measured optimum of the filter's own loss rather than by a dead-zone
+   analogy. Product file, one rig — proposed, not applied.
+
+0b. **Confirm on a second rig.** Everything in rows 7–11 of the ledger is the
+   scalar hero series only. The arm rig has more axes, so span's node-count cost
+   is larger there and the plateau may not be flat.
 
 1. **Run [`0007`](exploration/0007_phi_reach.md)'s recommendation through the
    shipped filter, on a wandering-scale rig** — the hero gate, the arm rig, the drone rig, with
