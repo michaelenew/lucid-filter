@@ -111,6 +111,25 @@ stationary variance is pinned far harder than any increment; `nu = gamma_0(1 -
 phi^2)` is the badly-conditioned *derived* combination, not the primitive one. The
 reframing was built on the wrong one of the two.
 
+## Per-event completeness (0017): fixes the async rig, but the arm blocks span 6
+
+A further attempt to ship the scalar-rig span-6 win, at the user's request, by
+scaling the window reach with event completeness (a partial event reaches only
+`max(3, 6*mo/m)` half-spans). Findings:
+
+- **The async 3.77× was largely an artifact.** Part was a NaN from an intermediate
+  `+inf` logdet guard (before it became the finite penalty); the rest is
+  node-count, which per-event completeness fixes. Result: async **1.153x** (was
+  1.162 shipped) *and* scalar jump **1.612** (was 1.747) — both wins at once.
+- **But span 6 NaNs the arm on 2/3 seeds** (walk mean runs to ~205 nats, `P`
+  overflows). The arm's rows are complete, so per-event completeness is a no-op
+  there. Neither a walk-cap decoupling nor an absolute walk-mean bound (tested at
+  |mu| <= 40, 20) rescues it — the span-6 node covariances overflow the 15-D
+  coupled Riccati propagation. **Span 6 does not ship; `_SPAN_S` stays 3.0.**
+- The two numerical guards from 0016 stay (independent, reachable at span 3).
+
+Full record: [`0017`](exploration/0017_per_event_completeness.md).
+
 ## What changed in the filter
 
 The span-6 experiment (the user's "apply it and measure") was carried out on this
