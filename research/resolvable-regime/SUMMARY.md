@@ -44,7 +44,10 @@ workstream's uncertainty read-out; nothing below it should be cited without it.
 | **C3** — dropping stationarity helps where the world wanders | **FALSE** | on a `kappa = 0` truth the correctly-specified wandering class scores 1.118 ± 0.142 and 0.896 ± 0.114 against the stationary class — parity — while losing 15–24% on stationary truths ([`0003`](exploration/0003_what_stationarity_costs.md)) |
 | **R2 as first written** (no regime structure below `Delta`) is compatible with this filter's purpose | **FALSE** | a regime change is a step, hence sub-`Delta` at every sampling rate; that R2 forbids exactly the events the repository's headline results are about ([`0005`](exploration/0005_the_seam.md)). **Withdrawn and replaced** — it constrained the wrong process ([`0009`](exploration/0009_the_axiom_relocated.md)) |
 | the split channel carries Fisher information **1 per step** in `t = arccos(1-K)`, on the compact interval `[0, pi/2]` | **established** | measured 0.99–1.15 over a 400× range in `q`, along the ladder's own direction ([`0009`](exploration/0009_the_axiom_relocated.md)); confirms `sequence-demix` 0002's `AUDIT[derived+proxy]` claim |
-| the relocated axiom (whiteness at `Delta` **defines** measurement noise) | **untested** | stated and motivated in [`0009`](exploration/0009_the_axiom_relocated.md); the derivation tying the log-scale class timescale to the split channel's resolution is a sketch, not a result |
+| the relocated axiom (whiteness at `Delta` **defines** measurement noise) | **untested as a filter change** | stated and motivated in [`0009`](exploration/0009_the_axiom_relocated.md) |
+| the scale channel's box is the split channel's ladder one level up | **derivation closes, application FALSE** | the closed form `phi = sqrt(cos t)`, `s = sqrt(2(sec t - 1))` is exact to 1e-16 and needs no constants — and loses 22% on regime C; re-keying the window to the channel's predictive width loses on 4 of 5 columns ([`0010`](exploration/0010_the_derivation.md)) |
+| the `(phi, s)` window is a **resolution** grid | **FALSE** | scaling the window geometry by `c` has an **interior** optimum that differs by column (steady wants large `c`, settling wants small, regime C peaks at 1.4–2.0); a resolution-only argument gives `c < 1` throughout, the losing direction ([`0010`](exploration/0010_the_derivation.md) §3) |
+| **no resolution argument can derive `_PHIS`/`_SS`** | **established, negative** | follows from the row above; AUD-2 needs a two-sided argument pricing reach against resolution, and §3's sweep is the first map of it |
 | **C6** — resolvability is checkable by decimation | **supported** | inferred log-scale paths at `Delta` and `2Delta` disagree monotonically with the log-scale's speed, 0.22 → 7.84 nats over a 35× sweep ([`0008`](exploration/0008_the_indicator.md)) |
 | the per-step **step ratio** is a usable confidence read-out | **half-established, one-sided** | rank correlation 1.000 with decimation disagreement below the seam; **saturates and decreases above it**, so a low reading is not a clean bill of health ([`0008`](exploration/0008_the_indicator.md)) |
 | `_PHIS` does not reach near enough to 1 | **measured on one rig** | shipped-like reach costs 2.9× and 3.5× on wandering log-scales, rail-pinned on every seed, and costs nothing on a stationary one ([`0007`](exploration/0007_phi_reach.md)) |
@@ -102,18 +105,27 @@ stationary variance is pinned far harder than any increment; `nu = gamma_0(1 -
 phi^2)` is the badly-conditioned *derived* combination, not the primitive one. The
 reframing was built on the wrong one of the two.
 
+## Nothing was changed in the filter
+
+Three candidate changes were built and tested; none clears the repository's bar.
+The table in [`0010`](exploration/0010_the_derivation.md) §5 records why. The
+closest is `_PHIS` reaching to 0.995 — worth 2.9–3.5× on a wandering noise level
+in [`0007`](exploration/0007_phi_reach.md)'s *research* grid filter, and exactly
+neutral on the shipped filter's own hero gate, whose regime changes are steps
+rather than a wandering level. A rig that wanders, run through the shipped filter,
+would settle it.
+
 ## Next, if this is picked up
 
-0. **[`0009`](exploration/0009_the_axiom_relocated.md)'s programme** — write the
-   relocated axiom properly, then tie the log-scale class's timescale to the split
-   channel's resolution. The split channel is pinned with no free parameters
-   *because its coordinate is compact and its metric is flat*; the noise-scale
-   channel carries the repository's unjustified constants *because `lambda` is
-   unbounded*. Transferring the first channel's structure to the second is the
-   only route here that would justify the workstream.
+0. **The two-sided box argument.** [`0010`](exploration/0010_the_derivation.md) §3
+   shows the window trades reach against resolution with an interior optimum, and
+   that the resolution half alone is the losing direction. That sweep is the
+   starting point for the argument AUD-2 actually needs. Recorded but not derived:
+   on the repo's own gate, `c = 2` beats the shipped `c = 1` on regime C (1.001 vs
+   1.078) and in steady state, paying in settling time (49.2 vs 35.0).
 
 1. **Run [`0007`](exploration/0007_phi_reach.md)'s recommendation through the
-   shipped filter** — the hero gate, the arm rig, the drone rig, with
+   shipped filter, on a wandering-scale rig** — the hero gate, the arm rig, the drone rig, with
    `phis=(0.70, 0.85, 0.95, 0.995)`. This is the only item with a product payoff
    and it is cheap.
 2. **Close the indicator's blind spot** — the step ratio saturates exactly where
