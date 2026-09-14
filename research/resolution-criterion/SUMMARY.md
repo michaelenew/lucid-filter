@@ -3,66 +3,82 @@
 > **AI-generated, not peer-reviewed** — produced by an AI system, not
 > independently verified. Treat as provisional.
 
-## The goal
+## Verdict
 
-The filter's grid spacing is set by `_GAP_FACTOR = 1.5` — the **Sparrow** optical
-two-point resolution limit, imported by analogy and conceded unproven
-(adaptive-grid finding 11; AUD-1). The same proxy sets two more sites,
-`_HAZARD_GAP` and the split ladder's `_rung_odds`. **AUD-1 asks for one earned,
-information-theoretic resolution criterion to replace all three.** This workstream
-pursues it.
+**The spacing half of AUD-1 is closed by a theorem; the span half stays open.**
 
-The route, from adaptive-grid's own finding that the under-sampling artefact is
-**aliasing** (Nyquist), is: the grid samples the log-scale likelihood, so its
-resolvability is a sampling/quadrature bound on that likelihood's Fourier
-spectrum. Get the spectrum; get the bound; derive the constant.
+The filter's three resolution constants — the walk grid (`_GAP_FACTOR`), the
+hazard ladder (`_HAZARD_GAP`) and the split ladder (`_rung_odds`) — were each
+`gap = 1.5 × (local blur width)`, with `1.5` the Sparrow optical two-point
+analogy, conceded unproven. They are now one statement:
 
-## State of the art
+> **Uniform quadrature of a Gaussian.** A grid at spacing `c·b` on a Gaussian of
+> SD `b` has relative aliasing `2·exp(−2π²/c²)` (Poisson summation), the moments
+> sharing the rate. So `c = 1.5` reproduces the blur-width Gaussian to
+> `ε₀ = 3.1×10⁻⁴` — **one tolerance at all three sites**
+> ([`0002`](exploration/0002_the_aliasing_theorem.md), verified to every printed
+> digit).
 
-**One result, and it is the foundation:** the log-scale likelihood's spectrum is
-exact and closed-form ([`0001`](exploration/0001_the_likelihood_spectrum.md)).
-For `y ~ N(0, e^λ)`, the likelihood as a function of `λ` has
+That is the sharp statement the audit recorded as missing. It changes the
+**grade, not the value**: finer gridding is monotonically more accurate at node
+cost only, so `c` is a *budget* in the audit's exact sense, and the theorem is
+the derived price it buys. All three sites and their audit rows are regraded
+`proxy → derived + budget`; the change is comment-only and the suite is green
+(55 passed).
 
-> `|ĝ(ω)| = 1 / √( u · cosh(π ω) )`,  `u = y²`,  decaying as `e^{−π|ω|/2}`.
+**A measured number got its first derivation.** The walk grid, unlike the
+ladders, must let its centre *cross* the grid, which needs the between-node
+score to keep its sign. Using the exact log-scale likelihood spectrum
+`|ĝ(ω)| = 1/√(u·cosh πω)` ([`0001`](exploration/0001_the_likelihood_spectrum.md)),
+the score alias at `ε₀` gives an **absolute** bound `gap ≤ 0.89` nats. adaptive-
+grid finding 11 had *measured* the walk's dead-zone onset at ~0.7–0.8 nats with no
+derivation. 0.89 is consistent with it — not a bullseye, and the first
+derivation it has had.
 
-Derived via a Gamma-integral substitution and `|Γ(½+iy)|² = π/cosh(πy)`; verified
-by FFT to ≤ 4e-5 relative and the decay rate to `−1.5697` vs the exact `−π/2`.
+**Enforcing the absolute bound does not ship**
+([`0003`](exploration/0003_the_cap_experiment.md)). With reach preserved it wins
+the scalar jump (−4%, `t = −2.35`) and the async rig (hot 1.44 → 1.34), but
+regresses the coupled 15-DOF arm **6× on its sensor-burst regime** at 4.5× cost —
+the same wall span-6 hit, one step short of NaN. The bank already captures most
+of the bound's benefit (small-`s` members supply the fine grid, large-`s` members
+the reach).
 
-Two consequences:
+## Where it stands
 
-- **The Sparrow analogy now has a real object underneath it** — a spectrum with an
-  exact exponential edge — so the resolution question is a precise quadrature
-  question, not a metaphor.
-- **The bandwidth is universal** (independent of the data `u`), so the
-  likelihood's resolution is **absolute in nats, not `∝ s`**. The shipped
-  `gap = 1.5·s` therefore mis-scales in the large-`s` regime — the same regime
-  where the span-6 experiment overflowed the arm (resolvable-regime 0017). This is
-  a testable prediction, not yet tested.
+| site | was | now | value |
+|---|---|---|---|
+| `_GAP_FACTOR` (walk grid) | proxy (Sparrow) | **derived + budget** | 1.5, unchanged |
+| `_HAZARD_GAP` (hazard ladder) | proxy (Sparrow) | **derived + budget** | 1.5, unchanged |
+| `_rung_odds` (split ladder) | derived + proxy | **derived + budget** | 1.5, unchanged |
+| `_SPAN_S` (reach) | proxy (±3σ support) | proxy — **open** | 3.0, unchanged |
 
 ## The confidence ledger
 
 | claim | status | evidence |
 |---|---|---|
-| `|ĝ(ω)| = 1/√(u cosh πω)`, decay `e^{−π|ω|/2}` | **established** | analytic (Gamma substitution) + FFT to ≤4e-5, DC & Γ identities to 1e-8 ([`0001`](exploration/0001_the_likelihood_spectrum.py)) |
-| likelihood resolution is absolute in nats, not `∝ s` | **derived, untested on the filter** | the spectrum's shape is `u`-independent ([`0001`](exploration/0001_the_likelihood_spectrum.md)) |
-| aliasing spacing `Δ(ε) = π²/ln(√2/ε)` | **derived form, tolerance open** | Poisson summation on `ĝ` ([`0001`](exploration/0001_the_likelihood_spectrum.md)); `ε` not yet derived |
-| a single criterion sets all three Sparrow sites | **open** | not started; the hazard/split coordinates' spectra are the next objects |
+| `|ĝ(ω)| = 1/√(u cosh πω)`, decay `e^{−π|ω|/2}` | **established** | analytic + FFT ≤ 4e-5; DC and Γ identities to 1e-8 ([`0001`](exploration/0001_the_likelihood_spectrum.py)) |
+| aliasing theorem `err(c) = 2Σe^{−2π²m²/c²}`; `c=1.5 ⇔ ε₀=3.1e-4` | **established** | Poisson summation; worst-case-over-phase measurement matches every digit ([`0002`](exploration/0002_the_aliasing_theorem.py)) |
+| the three Sparrow sites are one tolerance | **established** | each is `gap = 1.5·blur` with a Gaussian-ish local posterior ([`0002`](exploration/0002_the_aliasing_theorem.md)) |
+| the walk's absolute bound `gap ≤ 0.89` nats at `ε₀` | **derived** | score alias of the exact spectrum ([`0002`](exploration/0002_the_aliasing_theorem.md)); consistent with finding 11's measured 0.7–0.8 |
+| enforcing the absolute bound improves the filter | **FALSE on the arm** | +4% scalar jump, better async, but arm SENSOR 2.70 → 16.49× at 4.5× cost ([`0003`](exploration/0003_the_cap_experiment.md)) |
+| the likelihood's resolution is absolute, not `∝ s` | **established** | `u`-independent bandwidth ([`0001`](exploration/0001_the_likelihood_spectrum.md)); confirmed by the bound binding at large `s` |
 
-## Next, in order
+## What remains open, precisely
 
-1. **Reconcile** the aliasing bound with the measured dead-zone (the KL
-   "shelf-with-cliff", finding 11): same phenomenon, and which is the tighter
-   limit.
-2. **Derive the tolerance** `ε` from an MDL/minimax-redundancy balance
-   (discretisation redundancy = per-node quadrature floor), rather than choosing
-   it — the step that actually retires the proxy.
-3. **Test absolute-vs-`∝s`** on a large-`s` rig; the first contact with the filter
-   and the one that bears on the span failure.
-4. **Unify** the three sites via the same spectrum→aliasing template on the hazard
-   and split coordinates (AUD-1's real ask).
+The **span** (reach). Twice now — span-6 ([`resolvable-regime/0016`](../resolvable-regime/exploration/0016_the_full_battery.md)–`0017`)
+and the cap here — a grid change that helps a 1-D or partial-event rig has hurt
+the coupled 15-DOF arm, and both times the mechanism is the reach/node structure
+on many coupled axes, not the spacing rule. The concrete form of the open is now
+**per-axis (or per-member) node count**: the rectangular axial array forces one
+`K` on every axis, so any fine grid or wide reach goes to all 30 of the arm's
+axes at once. Relaxing that would let the fine grid go only where the walk must
+move and let reach be set in absolute nats. That is a structural change, not a
+constant, and it is the next thing to build if this is picked up.
 
 ## Layout
 
-- `exploration/` — numbered, later is more recent. [`0001`](exploration/0001_the_likelihood_spectrum.md)
-  is the spectrum and the plan.
-- `output/` — empty until a criterion is derived and stands on its own.
+- `exploration/` — numbered, later is more recent.
+  [`0001`](exploration/0001_the_likelihood_spectrum.md) the spectrum;
+  [`0002`](exploration/0002_the_aliasing_theorem.md) the theorem and regrade;
+  [`0003`](exploration/0003_the_cap_experiment.md) the enforcement test.
+- `output/` — empty; the theorem lives in `0002` and in the filter's audit.
