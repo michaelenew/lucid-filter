@@ -101,7 +101,7 @@ gone. Two weightings of the prior over those nodes were tried, and they must be 
 | shipped | 1.747 | 0.3833 | 0.889 | 1.16 / 1.44 | calm 1.14, SENSOR 2.70 |
 | arc nodes + cell-mass weights | 1.879 (`t=+3.2`) | 0.3848 | **1.123** (`t=+7.6`) | 1.17 / 1.47 | **singular (SVD)** |
 | shipped nodes + cell-mass weights | 1.685 (`t=−2.6`) | 0.3845 | **1.267** (`t=+9.8`) | — | — |
-| **arc nodes + point weights** | 1.804 (`t=+2.4`) | 0.3832 | 0.876 (`t=−0.8`) | 1.17 / 1.47 | PENDING |
+| **arc nodes + point weights** | 1.804 (`t=+2.4`) | 0.3832 | 0.876 (`t=−0.8`) | 1.17 / 1.47 | **singular (SVD)** |
 
 Cell-mass weights (the outer nodes' cells extend to infinity) are wrong for this window
 whatever the nodes: they alone cost 42% on regime C. The shipped point-density weighting is
@@ -121,5 +121,25 @@ its process axes sit there.
 What the exact coordinate prescribes for a floor axis is a window with no far node and an
 "off" node — which is what the split ladder already gives a singly-read pair. The arm has no
 such pairs (every mode is read by two sensors), so its process axes get the nat-window
-instead of the ladder. The arm result of (b) says whether placing the nat-window's nodes by
-information distance is enough on its own.
+instead of the ladder.
+
+**And placing that window's nodes by information distance is not enough on its own: the
+arm goes singular** (`_inv_sym`'s pseudo-inverse fails to converge) with either weighting.
+The exact-coordinate window on a floor axis puts nodes at `Q_k → 0` ("off") and at `−7`
+nats; fifteen process axes with off nodes make the innovation covariance of the star's
+nodes rank-deficient on a rig whose sensors are already collinear at condition 10¹⁵
+(resolvable-regime 0016). The coordinate diagnoses the arm correctly and the naive
+transform back cannot be carried by the Q-form step — the same wall as span-6 and the cap,
+from the third direction.
+
+## 5. Decision
+
+Nothing from this probe ships. The walk grid's audit stands as 0002 left it, with one
+sharpening the coordinate analysis earns: the spacing theorem is exact *above the floor*
+(where log-scale is the Fisher-flat coordinate, closed form), and the open half of AUD-1 is
+now stated as a **floor** problem — on an axis at its floor, a window with reach in nats
+creates hypotheses the data cannot resolve and a burst can confirm; the arm has fifteen
+such axes. The rigorous shape of the fix is the one the split ladder already has for a
+singly-read pair — a complete, compact ladder on the confounded direction — extended to
+pairs the sensors read twice. That is a structural change to the star, and it is what would
+retire the e^{30} the shipped filter carries on the arm today.

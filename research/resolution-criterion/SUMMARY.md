@@ -5,6 +5,25 @@
 
 ## Verdict
 
+**Each of the three resolution sites has now been taken to its own coordinate — the one in
+which one step of evidence is worth the same everywhere — and judged there.** One site was
+already there (the split ladder), one was not and has been moved (the hazard ladder, now
+shipped), and one is exact above its floor and wrong at it (the walk grid), which is where
+the arm's e^{30} comes from and where the open now sits.
+
+| site | its coordinate | status | in the filter |
+|---|---|---|---|
+| split ladder (`_rung_odds`) | Whittle arclength `t = arccos(1 − K)`, `[0, π/2]` | **verified** exact to 2nd order; code length saturated at the shipped spacing ([`0005`](exploration/0005_the_split_ladder_verified.md)) | unchanged; AUD-5 closed |
+| hazard ladder (`_HAZARDS`) | the same `t`, via the walker's steady gain `K(ρ)`, `[0, π/3]` | **derived + moved**: shipped log-ρ ladder was 3.4× non-uniform and incomplete; uniform-`t` ladder measured equivalent ([`0004`](exploration/0004_the_hazard_ladder_in_its_coordinate.md)) | **shipped**, 16 rungs, complete to `ρ = 0`; AUD-3 closed |
+| walk grid (`_GAP_FACTOR`, `_SPAN_S`) | Fisher arclength of `log q`: `λ/√2` above the floor, compact below | **split verdict**: 0002's theorem is exact above the floor; at the floor log-scale is wrong and the arm sits there on all 15 process axes ([`0006`](exploration/0006_the_walk_coordinate.md)) | unchanged; AUD-1's open restated as a floor problem |
+
+A surprise worth recording: the hazard ladder and the split ladder are literally the same
+grid. A hazard rung is a diffusion rate, hence a steady gain, and the Whittle metric on a
+gain `K` equals the Bernoulli arcsine metric on a rate `h = K/2` (checked to five digits).
+The "event probability" and "diffusion rate" readings of the hazard have one geometry.
+
+### The earlier closure, kept
+
 **The spacing half of AUD-1 is closed by a theorem; the span half stays open.**
 
 The filter's three resolution constants — the walk grid (`_GAP_FACTOR`), the
@@ -65,7 +84,19 @@ the reach).
 
 ## What remains open, precisely
 
-The **span** (reach). Twice now — span-6 ([`resolvable-regime/0016`](../resolvable-regime/exploration/0016_the_full_battery.md)–`0017`)
+**The floor.** The exact per-step Fisher of a process-noise scale is `I_q(x) = x²(x+2)/(2(x(x+4))^{3/2})`,
+`x = q/r` (closed form from the differenced spectrum, [`0006`](exploration/0006_the_walk_coordinate.md)):
+½ at the top, so log-scale is exactly linear there and the e^19 node is a legitimate
+hypothesis of the class prior; `√x/8 → 0` at the floor, so the axis is *compact* there and a
+window with reach in nats creates far hypotheses the data cannot resolve. On the arm every
+process axis is at its floor, and the shipped filter carries `e^{30}` scale hypotheses on
+them, pulled up by the window's outer node during bursts — measured. Placing the window's
+nodes by information distance (the naive transform back) goes singular on the arm; the
+budget is not the lever (flat). The rigorous fix has the shape the split ladder already
+has for a singly-read pair — a complete, compact ladder on the confounded direction —
+extended to pairs the sensors read twice. That is structural.
+
+The **span** (reach), as before. Twice now — span-6 ([`resolvable-regime/0016`](../resolvable-regime/exploration/0016_the_full_battery.md)–`0017`)
 and the cap here — a grid change that helps a 1-D or partial-event rig has hurt
 the coupled 15-DOF arm, and both times the mechanism is the reach/node structure
 on many coupled axes, not the spacing rule. The concrete form of the open is now
@@ -80,5 +111,8 @@ constant, and it is the next thing to build if this is picked up.
 - `exploration/` — numbered, later is more recent.
   [`0001`](exploration/0001_the_likelihood_spectrum.md) the spectrum;
   [`0002`](exploration/0002_the_aliasing_theorem.md) the theorem and regrade;
-  [`0003`](exploration/0003_the_cap_experiment.md) the enforcement test.
+  [`0003`](exploration/0003_the_cap_experiment.md) the enforcement test;
+  [`0004`](exploration/0004_the_hazard_ladder_in_its_coordinate.md) the hazard ladder, derived and shipped;
+  [`0005`](exploration/0005_the_split_ladder_verified.md) the split ladder verified, AUD-5 closed;
+  [`0006`](exploration/0006_the_walk_coordinate.md) the walk's coordinate: exact above the floor, the arm at it.
 - `output/` — empty; the theorem lives in `0002` and in the filter's audit.

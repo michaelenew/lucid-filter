@@ -52,11 +52,11 @@ forever (a false detection then costs ~nothing), optional named fault `anchors` 
 detector when the failure modes can be named), and a departure walker whose variance is bounded at
 the class cap and re-priced to it when a fault is confirmed -- bounded, never frozen.  The fault
 hazard is NOT a labeled prior: it is a nuisance, and this filter has one way of handling those --
-grid it and let the evidence weight it.  The bank runs a broad hazard BOX (`_HAZARDS`: rungs 1.5 nats apart in log-hazard -- the
-walk grid's own Sparrow spacing rule at this axis's blur width, one e-fold per event at the
-class's operative single event -- down from the class's persistence boundary 1/2; uniform
-initial weights ARE the log-uniform prior; a class-breadth convention in the exact sense of
-the `(phi, s)` box, valid at ``forget = 1`` and reading nothing from ``forget``) and each rung's running predictive
+grid it and let the evidence weight it.  The bank runs a hazard LADDER (`_HAZARDS`: uniform in the
+offset walker's own Whittle arclength -- a rung is a diffusion rate, hence a gain, and the gain's
+information coordinate is the split ladder's -- from the class's persistence boundary 1/2 all the
+way down to "no fault", complete, at the split ladder's spacing; uniform initial weights ARE the
+uniform prior in that coordinate; valid at ``forget = 1`` and reading nothing from ``forget``) and each rung's running predictive
 likelihood weights it; the reported `hazard` is the posterior mean, the regime the data currently
 supports.  Each rung's gain, drift, cap and restart width derive from its own `(rho_j, class
 size)`, and its detection frontier is derived (`log(1/rho_j) / KL-rate`), not tuned.  Passing a
@@ -108,7 +108,8 @@ _LOGDET_SINGULAR = 1.0e6
 # AUDIT[derived+budget] grid spacing = c * (local blur width), c = 1.5.  DERIVED: a uniform
 # grid at spacing c*b on a Gaussian of SD b has relative aliasing 2 exp(-2 pi^2/c^2) (Poisson
 # summation; resolution-criterion 0002), so c = 1.5 reproduces the blur-width Gaussian to
-# eps0 = 3.1e-4, and that ONE tolerance is what `_HAZARD_GAP` and the split ladder run at too.
+# eps0 = 3.1e-4, and that ONE tolerance is what the split ladder runs at too (and the hazard
+# ladder, in its own derived coordinate -- `_hazard_rungs`).
 # BUDGET: finer is monotonically more accurate and costs only nodes, so the tolerance is a
 # compute choice with a now-known price, not a derivable optimum.  This replaces the Sparrow
 # optical analogy (finding 11) with the theorem it was standing in for.  The walk grid also
@@ -145,54 +146,25 @@ _SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weigh
 # AUDIT[budget] series-vs-exact switch radius; conservative, wrong only toward compute.
 _SERIES_REACH = 4.0         # gaps out to 4 nominal steps: how far the pre-factored Q(a)
                             # series must stay accurate before the exact route is used instead
-# AUDIT[derived+budget] gap = c * (one-event Fisher width), c = 1.5: the same aliasing theorem
-# as `_GAP_FACTOR` (resolution-criterion 0002) at the same tolerance eps0 = 3.1e-4 -- the blur
-# here is 1/sqrt(n) e-folds with n = 1 event (0009).  Derived bound, budgeted tolerance.
-_HAZARD_GAP = 1.5                    # rung spacing of the hazard box, in NATS of log-hazard --
-                                     #   the same Sparrow rule that spaces the walk grid
-                                     #   (`_GAP_FACTOR`), evaluated at this axis's own blur
-                                     #   width.  A rate observed through rare events is
-                                     #   informed by the events: one event carries exactly
-                                     #   ``log(rho_1/rho_2)`` nats between two rungs, so
-                                     #   log-hazard is the information coordinate and its
-                                     #   Fisher information is the EVENT COUNT -- posterior
-                                     #   width ``1/sqrt(n)`` e-folds after ``n`` events.  The
-                                     #   class is rare, so the operative count is n = 1 and
-                                     #   the blur width is one e-fold; gap = 1.5 of those.
-                                     #   (The survival channel's tax difference, ``c drho``
-                                     #   per step, is sub-nat exactly where the class lives --
-                                     #   that flat direction is the hazard's identification
-                                     #   ridge, 0009 -- and dominates only near the top of the
-                                     #   box, where finer-than-needed spacing wastes nothing.)
-                                     #   The retired base-10 spacing (2.3 nats) sat PAST the
-                                     #   ~2-blur dead-zone threshold of the house rule -- too
-                                     #   coarse by the filter's own criterion, and underived.
-# AUDIT[derived+proxy+measured] top 1/2 derived (class persistence boundary); gap proxy
-# (AUD-1); reach measured-flat only (0009) -- open AUD-3.
-_HAZARDS = tuple(0.5 * math.exp(-_HAZARD_GAP * j) for j in range(6))
-                                     # default hazard box for the fault class -- broad in the
-                                     #   exact sense of `_PHIS`/`_SS`, not a fitted value and
-                                     #   not derived from `forget` (0009, corrected: an earlier
-                                     #   revision read the bottom off the weight memory, which
-                                     #   made the one engineering parameter load-bearing and
-                                     #   failed at the nominal ``forget = 1``).  A pinned
-                                     #   hazard is a knob -- calm cost and detection delay move
-                                     #   monotonically in opposite directions in rho -- so the
-                                     #   hazard gets the `(phi, s)` treatment: grid it, let
-                                     #   evidence weight it.  State tracking is measured-flat
-                                     #   across the box and below it (0009), so only the fault
-                                     #   REPORT's crossing time reads the bottom (1/KL steps
-                                     #   deeper per nat) -- a reporting convention the consumer
-                                     #   prices, not the filter.  The TOP, 1/2, is the class's
-                                     #   own persistence boundary: above it the dynamics would
-                                     #   leave a hypothesis more often than persist,
-                                     #   contradicting "a fault persists" rather than
-                                     #   parameterising it (it is also the largest hazard whose
-                                     #   uniform-leak kernel stays stochastic for every bank
-                                     #   size).  Uniform initial weights on the geometric rungs
-                                     #   are the log-uniform reference prior; the REACH (six
-                                     #   rungs, to ~3e-4) is the box's breadth, a convention.
-                                     #   Pass `faults=(...)` to widen or shift it.
+# AUDIT[derived+budget] the hazard ladder: coordinate DERIVED, spacing the shared budget, range
+# COMPLETE (resolution-criterion 0004).  A rung is used as a DIFFUSION RATE -- the offset and
+# departure walkers drift at ``q = rho * class^2`` per step in the noise the column sits in, so at
+# the top class ``rho`` is the signal-to-noise per step.  A random walk of drift ``q`` in noise
+# ``sigma^2`` is, differenced, MA(1) with ``theta = 1 - K``, ``K`` the steady gain:
+#     P/sigma^2 = (rho + sqrt(rho^2 + 4 rho)) / 2,   K = P/(P + sigma^2),   t = arccos(1 - K),
+# and ``t`` is the Whittle arclength -- the split ladder's own coordinate (`_rung_odds`), per-step
+# Fisher 1.  The ladder is uniform in ``t`` on ``[0, t(1/2)]``: the top is the class's persistence
+# boundary (above 1/2 the dynamics would leave a hypothesis more often than persist), the bottom is
+# EXACTLY ``rho = 0``, so there is no reach convention -- the ladder ends where the coordinate ends.
+# Spacing is the split ladder's, ``c sqrt(2/mem)`` with ``mem`` the node budget `_LADDER_MEM` -- a
+# budget, never a read of ``forget`` (0009: reading the memory made the one engineering parameter
+# load-bearing and failed at ``forget = 1``).  Transform back is closed form.  The retired ladder,
+# uniform in log-hazard ("1.5 nats"), was non-uniform by 3.4x in ``t`` and stopped four blurs short
+# of "no fault"; the two are measured equivalent on the 0009 rig (delay, false alarms, tracking and
+# read-out all within one standard error) at 16 rungs against 6.  The rate is still a nuisance the
+# evidence weights, never a number the caller tunes: uniform initial weights on the rungs are the
+# uniform prior in the information coordinate, and ``faults=(...)`` still pins or widens the box.
+# (Defined below `_LADDER_MEM`, which it reads.)
 # AUDIT[budget] numerical tolerances.
 _RANK_TOL = 1e-8            # numerical rank tolerance (the order used for structural activation)
 # AUDIT[budget+convention] count is a budget; ladder floor derived (V/T), ceiling a
@@ -207,6 +179,28 @@ _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sens
                             # supports (24 rungs).  A longer `forget` still sharpens the bank's
                             # weights; it does not buy a finer ladder, and `forget = 1` would ask
                             # for an infinite one.
+
+def _hazard_rungs(mem=None):
+    """The hazard ladder: uniform in the offset walker's Whittle arclength, complete over it.
+
+    See the audit note above `_RANK_TOL`.  ``mem`` is the node budget (`_LADDER_MEM`); the rungs come
+    back descending, the top one just under the persistence boundary 1/2 -- cell-centred, exactly as
+    `_rung_odds` centres the split ladder.
+    """
+    mem = _LADDER_MEM if mem is None else mem
+    step = _GAP_FACTOR * math.sqrt(2.0 / mem)
+    P_top = (0.5 + math.sqrt(0.25 + 2.0)) / 2.0           # rho = 1/2: P/sigma^2 = 1, K = 1/2
+    top = math.acos(1.0 - P_top / (P_top + 1.0))          # = pi/3
+    J = int(math.ceil(top / step))
+    t = (np.arange(J) + 0.5) * top / J
+    K = 1.0 - np.cos(t)
+    Pm = K / (1.0 - K)
+    rho = Pm * Pm / (Pm + 1.0)
+    return tuple(float(r) for r in rho[::-1])
+
+
+_HAZARDS = _hazard_rungs()           # the default hazard box: 16 rungs, 0.42 down to 2.9e-7, complete to 0
+
 
 
 # --------------------------------------------------- the per-step-blind directions
@@ -2692,13 +2686,13 @@ class LucidFilter:
     faults : True, float, or sequence, optional
         Turn on the dynamics channel around a SUPPLIED ``F``: the dynamics may CHANGE, at some
         per-step hazard.  ``True`` (and the default under ``dynamics=None``) mixes over the
-        broad hazard BOX ``_HAZARDS`` -- rungs 1.5 nats apart in log-hazard (the derived
-        Sparrow spacing, see `_HAZARD_GAP`) down from the class's own persistence boundary
-        (1/2), each rung a complete conditional model weighted by its own running predictive
-        likelihood -- so the rate is read off the data and reported (``LucidStep.hazard``),
-        never asserted.  The box is a class-breadth convention like ``phis``/``ss`` (state
-        tracking is measured-flat across it and below it; only the fault report's crossing
-        time reads the bottom, 1/KL steps per nat) and is valid at
+        hazard LADDER ``_HAZARDS`` -- uniform in the offset walker's Whittle arclength (a rung
+        is a diffusion rate, so a gain; see `_hazard_rungs`) from the class's own persistence
+        boundary (1/2) down to "no fault", complete, each rung a complete conditional model
+        weighted by its own running predictive likelihood -- so the rate is read off the data
+        and reported (``LucidStep.hazard``), never asserted.  The ladder has no breadth
+        convention (state tracking is measured-flat across it; only the fault report's
+        crossing time reads a rung, 1/KL steps per nat) and is valid at
         ``forget = 1``.  A float pins the box to that one rung (give-what-you-know, for a
         caller who truly knows the rate; must lie in (0, 1/2]), and a sequence is an explicit
         box.  Per rung the detection delay is derived, ``log(1/rho_j) / KL-rate``; see
@@ -2828,8 +2822,8 @@ class LucidFilter:
         timestep = float(timestep)
         if not timestep > 0.0:
             raise ValueError("timestep (the duration of one nominal step) must be positive")
-        # The fault hazard: a BOX the evidence weights, never a number the caller tunes
-        # (see `_HAZARDS`).  A supplied float pins the box to one rung -- the
+        # The fault hazard: a LADDER the evidence weights, never a number the caller tunes
+        # (see `_HAZARDS`).  A supplied float pins the ladder to one rung -- the
         # give-what-you-know form, for a caller who truly knows the rate -- and a sequence is
         # an explicit box.  1/2 is the class's own persistence boundary, so nothing above
         # it is a fault hypothesis at all.

@@ -44,8 +44,7 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 | `_RIDGE = 1e-4` | budget | Fisher stabiliser. Note: absolute units (not scaled to the axis Fisher); inert against `_Ifloor` on activation-floored axes, and the per-event use is guarded by the step budget clip — but the pair (ridge, clip) is what bounds a no-information Newton step, and that interplay is asserted, not derived. | AUD-8 |
 | `_PHIS`, `_SS` | measured | Broad class box; the data down-weights unsupported corners; tracking measured flat along the identification ridge (adaptive-grid findings 13–16). `_SS` top end has a reach argument (largest one-step scale change the window represents); the ×2 ratio and `_PHIS` values are underived. Ridge flatness does not clear the bar. | AUD-2 |
 | `_SERIES_REACH = 4.0` | budget | Switch radius for the pre-factored `Q(a)` series vs the exact Van Loan route; conservative by the stated tail criterion (`nrm·reach ≤ 1`); wrong only toward compute. | — |
-| `_HAZARD_GAP = 1.5` | derived + budget | Per-event Fisher of a rare-event rate in log coordinates = event count ⇒ blur width 1/√n e-folds, n = 1 for the class (research/dynamics-learning 0009). Spacing `c = 1.5` on that blur is the **same aliasing theorem** as `_GAP_FACTOR` at the same `ε₀ = 3.1e-4` (`resolution-criterion/0002`): derived bound, budgeted tolerance. | — |
-| `_HAZARDS` | derived + proxy + measured | Top 1/2 **derived** (the class's persistence boundary); gap **proxy** (above); reach **measured** (state tracking flat across and below the box; report crossing log-priced — 0009). | AUD-3 |
+| `_HAZARDS` (`_hazard_rungs`) | derived + budget | **Coordinate derived:** a rung is a diffusion rate in the offset/departure walkers, so a steady gain `K(ρ)`, and its information coordinate is the Whittle arclength `t = arccos(1 − K)` — the split ladder's (`resolution-criterion/0004`; the metric on `K` is the arcsine metric on `h = K/2`, an identity). Uniform in `t` on `[0, π/3]`: top the persistence boundary (derived), bottom exactly `ρ = 0` (**complete, no reach convention**). Spacing the shared budget `c√(2/mem)` at `_LADDER_MEM`. The retired log-ρ ladder was 3.4× non-uniform in `t` and four blurs short of zero; measured equivalent on the 0009 rig. | — |
 | `_RANK_TOL`, `_LOG2PI` | budget | Numerical rank tolerance; constant. | — |
 | `_OFFSET_CLASSES = 5` | budget + convention | Count is a budget; ladder floor **derived** (`V/T`, equal visibility over the memory), ceiling a **convention** (one noise sd per step) — bias-channels 0005/0012. | AUD-4 |
 | `_LADDER_MEM = 1000` | budget | Caps the split-ladder rung count so `forget = 1` asks for a finite grid. Rung count believed monotone (finer quadrature of the split posterior) but unverified. | AUD-5 |
@@ -106,7 +105,7 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 | `q_g = σ²ρ_j`, cap σ² | derived | The rung's own second moment; bounded never frozen (dynamics-learning 0003). | — |
 | class units (σ = 1) | derived + measured | The only scale-free, dimensionally sound size statement; cost of violating the comparable-columns requirement measured (0008 units_control). Existing open: per-direction class size. | dl-opens |
 | walk mask on `g`'s scale axes | derived | Structural: `[H|0]` cannot see `g`; the mask makes the activation rule exact under degeneracy (multivariate-statfilter 0024). | — |
-| hazard box + per-rung walkers + `_wm` dedup | derived + proxy + measured | See `_HAZARDS`; the dedup is arithmetic-free (shared rows share likelihoods exactly). | AUD-3 |
+| hazard ladder + per-rung walkers + `_wm` dedup | derived + budget + measured | See `_HAZARDS`; the dedup is arithmetic-free (shared rows share likelihoods exactly). | AUD-3 |
 | Shiryaev kernel; exact gap power | derived | Hazard mixing is Shiryaev's rule for the jump class; the a-step kernel is the exact chain power in the shared eigenframe (0009-corrected). Uniform leak over k−1 alternatives is a max-entropy convention, unmeasured for k > 2. | AUD-9 |
 | fault readout, rung-local reprice edges | convention + derived + measured | The readouts are posterior marginals (derived); the ½ crossing is a declared reporting convention. The 0003 restart is rung-local: each rung's own marginal edge re-prices its own walker — the global-edge variant self-oscillated and the restart-free variant lost 0003's derived calibration (both measured, 0009 addendum); the pinned form is the J = 1 case bit for bit. Jump-hold open stands. | dl-opens |
 | hazard readout | derived | Posterior mean over the rung weights. | — |
@@ -128,7 +127,8 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
 - **AUD-1** (adaptive-grid — EXTENDS the existing open "the grid is *justified*, not
   proven optimal"). **Spacing: closed.** One theorem now sets all three Sparrow sites —
   a uniform grid at `c·b` on a Gaussian of SD `b` has aliasing `2e^{−2π²/c²}`, so `c = 1.5`
-  is one tolerance `ε₀ = 3.1e-4` at the walk grid, `_HAZARD_GAP` and `_rung_odds`
+  is one tolerance `ε₀ = 3.1e-4` at the walk grid and `_rung_odds`; the hazard ladder is spaced
+  in its own derived coordinate (`resolution-criterion/0004`) rather than in log-hazard
   (`research/resolution-criterion/0002`); the walk's absolute score-sign bound `0.89` nats
   gives finding 11's measured dead zone its first derivation. **What remains open is the
   span** (reach, `_SPAN_S`): the ±3σ support/tail-loss trade is still a proxy. Enforcing
@@ -141,9 +141,10 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
   `K` on every axis.
 - **AUD-2** (adaptive-grid): derive the `(φ, s)` box from the class — both ends and the
   ratio; ridge flatness defends the interior, not the box.
-- **AUD-3** (dynamics-learning): the hazard box reach — a breadth convention, tracking-flat
-  by measurement, report-priced at 1/KL per nat; a derivation would say how much standing
-  readiness the *class* (not the consumer) requires.
+- **AUD-3** (dynamics-learning): **closed** (`resolution-criterion/0004`). The hazard ladder's
+  reach was a breadth convention because it was measured in log-hazard; in the walker's own
+  arclength the range is bounded, `[0, π/3]`, and the ladder is complete over it — there is no
+  reach to justify. Report crossing time is still priced at 1/KL per nat, a consumer convention.
 - **AUD-4** (bias-channels — EXTENDS existing open 3, "drifts above twice the ladder's
   ceiling are under-served"): that open prices the ceiling from the practical side; the
   audit adds the theoretical half — the ceiling (one noise sd per step) is a convention,
@@ -168,11 +169,11 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
 
 ## Scoreboard
 
-51 ledger entries; 46 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
+50 ledger entries; 45 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
 `forget` escape are ledger-only — the escape's marker is its own parameter doc).  By primary
-grade: **35 derived** (full bar), **4 proxy** (defensible, sharp
+grade: **35 derived** (full bar), **3 proxy** (defensible, sharp
 statement open), **2 measured** (below the bar, opens logged),
 **10 budget/convention/escape** (no theoretical
-claim; consequence-freedom owed in three places, AUD-8).  11 entries carry mixed grades
+claim; consequence-freedom owed in three places, AUD-8).  10 entries carry mixed grades
 (a derived core with a proxy or measured edge — the box, the window, the offset channel).
 Every proxy and measured element references an open; no chunk is unmarked.
