@@ -1,8 +1,9 @@
 # 0003 — Enforcing the walk's absolute bound: wins 1-D and async, regresses the arm 6×
 
-> **AI-generated, not peer-reviewed.** Experiment scripts in the session
-> scratchpad (`probe_cap.py`, `probe_cap089.py`); every number below is from those
-> runs on the shipped filter via a patched module copy. **Nothing here ships.**
+> **AI-generated, not peer-reviewed.** The derived-bound variant's script is
+> [`0003_the_cap_experiment.py`](0003_the_cap_experiment.py) (CAP = 0.89, K = 11); the
+> CAP = 1.08 variants B/C ran the same script at those settings. Every number below is
+> from those runs on the shipped filter via a patched module copy. **Nothing here ships.**
 
 ## The question
 

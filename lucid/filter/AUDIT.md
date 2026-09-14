@@ -131,9 +131,14 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
   is one tolerance `ε₀ = 3.1e-4` at the walk grid, `_HAZARD_GAP` and `_rung_odds`
   (`research/resolution-criterion/0002`); the walk's absolute score-sign bound `0.89` nats
   gives finding 11's measured dead zone its first derivation. **What remains open is the
-  span** (reach, `_SPAN_S`): the ±3σ support/tail-loss trade is still a proxy, and the
-  derived spacing bound suggests reach should be an absolute nat cap rather than `∝ s`
-  (`resolution-criterion/0003`, under test).
+  span** (reach, `_SPAN_S`): the ±3σ support/tail-loss trade is still a proxy. Enforcing
+  the absolute bound as a walk-gap cap with reach preserved was measured
+  (`resolution-criterion/0003`): it wins the scalar jump and the async rig but regresses
+  the arm 6× on its sensor-burst regime at 4.5× cost, so it does not ship. Twice now
+  (span-6 in `resolvable-regime/0017`, the cap here) a grid change that helps a 1-D rig
+  hurts the coupled 15-DOF arm through the reach/node structure, so the concrete form of
+  the open is per-axis (per-member) node count — the rectangular axial array forces one
+  `K` on every axis.
 - **AUD-2** (adaptive-grid): derive the `(φ, s)` box from the class — both ends and the
   ratio; ridge flatness defends the interior, not the box.
 - **AUD-3** (dynamics-learning): the hazard box reach — a breadth convention, tracking-flat
