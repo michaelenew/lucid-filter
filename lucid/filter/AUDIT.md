@@ -39,8 +39,8 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 
 | anchor | grade | justification | open |
 |---|---|---|---|
-| `_GAP_FACTOR = 1.5` | proxy | Sparrow resolution limit: dead zone measured to open at gap ≈ 0.7–0.8 nats independent of order (adaptive-grid finding 11 / 0003); 1.5·s runs inside it with margin. Defensible as a resolution rule; the information-theoretic optimum is not characterised. | AUD-1 |
-| `_SPAN_S = 3.0` | proxy | ±3σ support of the class prior on the log-scale (99.7% mass); node count then follows from span/gap (budget). The support/tail-loss trade is not characterised. | AUD-1 |
+| `_GAP_FACTOR = 1.5` | proxy | Sparrow resolution limit: dead zone measured to open at gap ≈ 0.7–0.8 nats independent of order (adaptive-grid finding 11 / 0003); 1.5·s runs inside it with margin. Now also measured **at the optimum of the filter's own loss**: total prequential code length resolved against both factor-2 neighbours (halving costs t = 10.5, doubling t = 6.4; 24 paired seeds, `research/resolvable-regime/0014`). The sharp criterion is still missing; the value is no longer only an analogy. | AUD-1 |
+| `_SPAN_S = 3.0` | proxy | ±3σ support of the class prior on the log-scale (99.7% mass); node count then follows from span/gap (budget). The support/tail-loss trade is not characterised. **Measured (resolvable-regime 0012–0017):** under code length the span is a *plateau* on the scalar hero rig (\|t\| ≤ 1.46 across 1.5–12, `0014`) with 6.0 the jump preference (`0015`). A wider span was tried and **reverted**: it wins the scalar rig and (with per-event reach scaling) the async rig, but NaNs the 15-DOF arm. The cause is **not** the walk cap — a walk-mean bound fails *worse* the tighter it is set (`0017`) — it is the per-node `Qg` the outer nodes inject into the Riccati step, which a coupled high-D rig compounds. 3.0 holds every rig; the derived fix is a resolution criterion for the grid (AUD-1), not a bigger span. | AUD-1 |
 | `_RIDGE = 1e-4` | budget | Fisher stabiliser. Note: absolute units (not scaled to the axis Fisher); inert against `_Ifloor` on activation-floored axes, and the per-event use is guarded by the step budget clip — but the pair (ridge, clip) is what bounds a no-information Newton step, and that interplay is asserted, not derived. | AUD-8 |
 | `_PHIS`, `_SS` | measured | Broad class box; the data down-weights unsupported corners; tracking measured flat along the identification ridge (adaptive-grid findings 13–16). `_SS` top end has a reach argument (largest one-step scale change the window represents); the ×2 ratio and `_PHIS` values are underived. Ridge flatness does not clear the bar. | AUD-2 |
 | `_SERIES_REACH = 4.0` | budget | Switch radius for the pre-factored `Q(a)` series vs the exact Van Loan route; conservative by the stated tail criterion (`nrm·reach ≤ 1`); wrong only toward compute. | — |
@@ -96,6 +96,7 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 | anchor | grade | justification | open |
 |---|---|---|---|
 | `_bank_key`, `_EngineBank`, `_LoopBank` | derived | An equivalence, not an approximation: identical math with a leading member axis, pinned step-for-step by `test_bank_matches_the_looped_members`. | — |
+| `_inv_sym` / `_logdet_sym` singular guards (`_LOGDET_SINGULAR`) | budget | Numerical safety on a finite-but-numerically-singular innovation covariance (extreme scale node, collinear sensors, cond ~1e15). Bit-identical on the non-singular path (kernel pins enforce it); a singular node's likelihood limit is 0, so the guard makes it contribute nothing rather than crash. Reachable at the shipped defaults by a wide-`ss` call on a multi-sensor fault rig (`research/resolvable-regime/0016`). | — |
 
 ### The dynamics channel
 
@@ -158,11 +159,11 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
 
 ## Scoreboard
 
-50 ledger entries; 43 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
+51 ledger entries; 45 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
 `forget` escape are ledger-only — the escape's marker is its own parameter doc).  By primary
 grade: **33 derived** (full bar), **6 proxy** (defensible, sharp
 statement open), **2 measured** (below the bar, opens logged),
-**9 budget/convention/escape** (no theoretical
+**10 budget/convention/escape** (no theoretical
 claim; consequence-freedom owed in three places, AUD-8).  11 entries carry mixed grades
 (a derived core with a proxy or measured edge — the box, the window, the offset channel).
 Every proxy and measured element references an open; no chunk is unmarked.
