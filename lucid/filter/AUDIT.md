@@ -39,12 +39,12 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 
 | anchor | grade | justification | open |
 |---|---|---|---|
-| `_GAP_FACTOR = 1.5` | proxy | Sparrow resolution limit: dead zone measured to open at gap ≈ 0.7–0.8 nats independent of order (adaptive-grid finding 11 / 0003); 1.5·s runs inside it with margin. Now also measured **at the optimum of the filter's own loss**: total prequential code length resolved against both factor-2 neighbours (halving costs t = 10.5, doubling t = 6.4; 24 paired seeds, `research/resolvable-regime/0014`). The sharp criterion is still missing; the value is no longer only an analogy. | AUD-1 |
+| `_GAP_FACTOR = 1.5` | derived + budget | **Derived:** a uniform grid at spacing `c·b` on a Gaussian of SD `b` has relative aliasing `2e^{−2π²/c²}` (Poisson summation, `research/resolution-criterion/0002`), so `c = 1.5` reproduces the blur-width Gaussian to `ε₀ = 3.1e-4` — the sharp statement AUD-1 asked for, replacing the Sparrow optical analogy (finding 11). **Budget:** finer is monotonically more accurate at node cost only, so the tolerance is a priced compute choice, not a derivable optimum. Also measured at the optimum of the filter's own loss (`resolvable-regime/0014`, t = 10.5 / 6.4 vs factor-2 neighbours). The walk additionally has an **absolute** score-sign bound, `gap ≤ 0.89` nats at `ε₀` from the exact log-scale spectrum (`0001`/`0002`), consistent with finding 11's measured 0.7–0.8-nat dead zone (its first derivation); per member the large-`s` rungs exceed it and the bank covers it. | — |
 | `_SPAN_S = 3.0` | proxy | ±3σ support of the class prior on the log-scale (99.7% mass); node count then follows from span/gap (budget). The support/tail-loss trade is not characterised. **Measured (resolvable-regime 0012–0017):** under code length the span is a *plateau* on the scalar hero rig (\|t\| ≤ 1.46 across 1.5–12, `0014`) with 6.0 the jump preference (`0015`). A wider span was tried and **reverted**: it wins the scalar rig and (with per-event reach scaling) the async rig, but NaNs the 15-DOF arm. The cause is **not** the walk cap — a walk-mean bound fails *worse* the tighter it is set (`0017`) — it is the per-node `Qg` the outer nodes inject into the Riccati step, which a coupled high-D rig compounds. 3.0 holds every rig; the derived fix is a resolution criterion for the grid (AUD-1), not a bigger span. | AUD-1 |
 | `_RIDGE = 1e-4` | budget | Fisher stabiliser. Note: absolute units (not scaled to the axis Fisher); inert against `_Ifloor` on activation-floored axes, and the per-event use is guarded by the step budget clip — but the pair (ridge, clip) is what bounds a no-information Newton step, and that interplay is asserted, not derived. | AUD-8 |
 | `_PHIS`, `_SS` | measured | Broad class box; the data down-weights unsupported corners; tracking measured flat along the identification ridge (adaptive-grid findings 13–16). `_SS` top end has a reach argument (largest one-step scale change the window represents); the ×2 ratio and `_PHIS` values are underived. Ridge flatness does not clear the bar. | AUD-2 |
 | `_SERIES_REACH = 4.0` | budget | Switch radius for the pre-factored `Q(a)` series vs the exact Van Loan route; conservative by the stated tail criterion (`nrm·reach ≤ 1`); wrong only toward compute. | — |
-| `_HAZARD_GAP = 1.5` | proxy | Per-event Fisher of a rare-event rate in log coordinates = event count ⇒ blur width 1/√n e-folds, n = 1 for the class; Sparrow factor 1.5 on it (research/dynamics-learning 0009). Same standing as `_GAP_FACTOR`, same missing sharp statement. | AUD-1 |
+| `_HAZARD_GAP = 1.5` | derived + budget | Per-event Fisher of a rare-event rate in log coordinates = event count ⇒ blur width 1/√n e-folds, n = 1 for the class (research/dynamics-learning 0009). Spacing `c = 1.5` on that blur is the **same aliasing theorem** as `_GAP_FACTOR` at the same `ε₀ = 3.1e-4` (`resolution-criterion/0002`): derived bound, budgeted tolerance. | — |
 | `_HAZARDS` | derived + proxy + measured | Top 1/2 **derived** (the class's persistence boundary); gap **proxy** (above); reach **measured** (state tracking flat across and below the box; report crossing log-priced — 0009). | AUD-3 |
 | `_RANK_TOL`, `_LOG2PI` | budget | Numerical rank tolerance; constant. | — |
 | `_OFFSET_CLASSES = 5` | budget + convention | Count is a budget; ladder floor **derived** (`V/T`, equal visibility over the memory), ceiling a **convention** (one noise sd per step) — bias-channels 0005/0012. | AUD-4 |
@@ -60,7 +60,7 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 | `_apply_split`, `_group_read/_group_write` | derived | The Fisher null direction integrates to `dQ = −dR`: the null manifold is the level set of the total; the flow moves only along it (sequence-demix 0001). | — |
 | `_split_star` | proxy | Caltrop enumeration of the pair ladder (multivariate-statfilter 0013 by analogy); the shared-arm budget rule (`arms // n_pairs`, floor 2) is a budget split; completeness over [0, π/2] holds at any resolution. | AUD-6 |
 | `_subset_groups` | derived | Single-sensor proportionality is exact by construction — Proposition 1 reached through packetisation (pointwise-streaming 0002/0003). | — |
-| `_rung_odds` | derived + proxy | Whittle MA(1) KL gives the exact arclength metric `t = arccos(1−K)` on splits (sequence-demix 0002); resolvability at the memory the weights hold is the Sparrow rule again (proxy). The `forget`-read here prunes redundant rungs only (behavior-monotone, capped by `_LADDER_MEM`), unlike the retired hazard floor which moved the launch. | AUD-1, AUD-5 |
+| `_rung_odds` | derived + budget | Whittle MA(1) KL gives the exact arclength metric `t = arccos(1−K)` on splits (sequence-demix 0002); the blur at the memory the weights hold is `√(2/mem)` (`I = 1`/step, confirmed `resolvable-regime/0009`), and spacing `c = 1.5` on it is the **same aliasing theorem** as the walk grid at the same `ε₀` (`resolution-criterion/0002`). The `forget`-read prunes redundant rungs only (behavior-monotone, capped by `_LADDER_MEM`). | AUD-5 |
 | `_mean_basis` | derived | Gauge/quotient analysis of constant offsets; the z = 1 generalized-eigenspace rule carries a drift only where its signature grows polynomially, whole towers only (bias-channels 0002/0003/0004/0007/0015, each decision measured). Cayley–Hamilton horizon 2n+2 exact. | — |
 | `_MeanChannel` | derived + measured | Friedland two-stage is exact against augmentation (pinned 1e-12, bias-channels 0003); class ladder as `_OFFSET_CLASSES`; `q = hazard × class` is the class second moment per rung (0009); feedback OFF beside the dynamics channel is a measured decision with a structural rationale (equilibrium of two explanations, dynamics-learning 0008) — the equilibrium itself is not derived. | AUD-4, AUD-7 |
 
@@ -81,7 +81,7 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 | `_Ifloor`, `_Pmu_cap` | derived | The 0010 localisation condition (`Var(μ) ≤ L²`) applied as a bound, never a freeze (multivariate-statfilter 0010). The no-information drift's saturation point (window bound vs stationary s²) has an existing open (pointwise-streaming, "the no-information drift's saturation"). | pw-opens |
 | `K* = (1−φ)/4`, `q_mu` | derived | Critical damping of the walk loop pins the gain as a pure function of φ; `q_mu` follows (adaptive-grid 0030/0031, derivation verified against the loop). Known banked residual: uniform damping vs deep-quiet capture across the observability swing (adaptive-grid finding 18 open) — characterised, not hidden. | ag-opens |
 | balanced-base Fisher | derived | Structure evaluated at the split-agnostic point so no hypothesis tunes its own walk (sequence-demix 0002, worth 1.230→1.138 measured). | — |
-| window (`_build_window`) | derived + proxy | Node prior = the class prior itself, kernel exact AR(1) (derived); spacing and span are the Sparrow/support proxies. | AUD-1 |
+| window (`_build_window`) | derived + proxy | Node prior = the class prior itself, kernel exact AR(1) (derived); spacing is now the aliasing theorem (`_GAP_FACTOR`, derived + budget); the **span** (reach) remains the ±3σ support proxy. | AUD-1 |
 | caltrop star + GPB1 collapse | proxy | The axial star in place of the tensor grid: structural argument (`dS_k` depends only on coordinate k) plus measured match to the exact grid for state tracking at linear cost (multivariate-statfilter 0013); the axial-uniform mixture in the star likelihood is part of the same approximation. No error bound. | AUD-6 |
 | `_star_QR` congruence + rank-2 | derived | Congruence of PSD is PSD at every gap; reduces exactly to the eigen form at a = 1; rank-2 node update is exact algebra. | — |
 | `_dS_axis` + live process time | derived + measured | Exact per-axis score; the zero-gap live-process-time semantics is a measured decision with the stated leading-term argument (pointwise-streaming 0003). | — |
@@ -126,10 +126,14 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 Logged in the owning workstream SUMMARYs; listed here for the grep.
 
 - **AUD-1** (adaptive-grid — EXTENDS the existing open "the grid is *justified*, not
-  proven optimal"): that open already states it for the walk grid ("the criterion that sets
-  it should be earned rather than borrowed"); the audit adds the two other Sparrow sites —
-  the split-ladder step (`_rung_odds`) and the hazard gap (`_HAZARD_GAP`) — so one earned
-  resolution criterion should replace all three at once.
+  proven optimal"). **Spacing: closed.** One theorem now sets all three Sparrow sites —
+  a uniform grid at `c·b` on a Gaussian of SD `b` has aliasing `2e^{−2π²/c²}`, so `c = 1.5`
+  is one tolerance `ε₀ = 3.1e-4` at the walk grid, `_HAZARD_GAP` and `_rung_odds`
+  (`research/resolution-criterion/0002`); the walk's absolute score-sign bound `0.89` nats
+  gives finding 11's measured dead zone its first derivation. **What remains open is the
+  span** (reach, `_SPAN_S`): the ±3σ support/tail-loss trade is still a proxy, and the
+  derived spacing bound suggests reach should be an absolute nat cap rather than `∝ s`
+  (`resolution-criterion/0003`, under test).
 - **AUD-2** (adaptive-grid): derive the `(φ, s)` box from the class — both ends and the
   ratio; ridge flatness defends the interior, not the box.
 - **AUD-3** (dynamics-learning): the hazard box reach — a breadth convention, tracking-flat
@@ -159,9 +163,9 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
 
 ## Scoreboard
 
-51 ledger entries; 45 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
+51 ledger entries; 46 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
 `forget` escape are ledger-only — the escape's marker is its own parameter doc).  By primary
-grade: **33 derived** (full bar), **6 proxy** (defensible, sharp
+grade: **35 derived** (full bar), **4 proxy** (defensible, sharp
 statement open), **2 measured** (below the bar, opens logged),
 **10 budget/convention/escape** (no theoretical
 claim; consequence-freedom owed in three places, AUD-8).  11 entries carry mixed grades

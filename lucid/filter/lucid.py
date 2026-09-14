@@ -105,9 +105,19 @@ _LOG2PI = math.log(2.0 * math.pi)
 # finite so an all-singular softmax window stays NaN-free.  No effect on any non-singular
 # node, so every run that was finite before is unchanged bit for bit.
 _LOGDET_SINGULAR = 1.0e6
-# AUDIT[proxy] grid spacing at the Sparrow resolution limit (adaptive-grid finding 11,
-# dead zone measured at ~0.8 nats); sharp information-theoretic criterion missing -- open AUD-1.
-_GAP_FACTOR = 1.5           # grid spacing gap = 1.5 s (Sparrow resolution limit, finding 11)
+# AUDIT[derived+budget] grid spacing = c * (local blur width), c = 1.5.  DERIVED: a uniform
+# grid at spacing c*b on a Gaussian of SD b has relative aliasing 2 exp(-2 pi^2/c^2) (Poisson
+# summation; resolution-criterion 0002), so c = 1.5 reproduces the blur-width Gaussian to
+# eps0 = 3.1e-4, and that ONE tolerance is what `_HAZARD_GAP` and the split ladder run at too.
+# BUDGET: finer is monotonically more accurate and costs only nodes, so the tolerance is a
+# compute choice with a now-known price, not a derivable optimum.  This replaces the Sparrow
+# optical analogy (finding 11) with the theorem it was standing in for.  The walk grid also
+# carries an ABSOLUTE bound the two ladders do not -- its centre must cross the grid, so the
+# between-node score must keep its sign; at eps0 that is gap <= 0.89 nats (from the exact
+# log-scale spectrum, 0001/0002), consistent with finding 11's measured 0.7-0.8-nat dead zone,
+# which had no derivation.  Per member the large-s rungs exceed it; the bank covers it (small-s
+# members carry the fine grid the walk moves on, large-s members carry reach).
+_GAP_FACTOR = 1.5           # grid spacing gap = 1.5 * blur (aliasing 3.1e-4; 0002)
 # AUDIT[proxy] window half-span = 3-sigma support of the class prior; trade uncharacterised -- open AUD-1.
 # NOTE (resolvable-regime 0012-0017): under the filter's own loss (code length) the span is a
 # PLATEAU on the scalar hero rig -- indistinguishable across 1.5-12 (|t| <= 1.46, 0014) -- with
@@ -135,8 +145,9 @@ _SS = (0.20, 0.40, 0.80, 1.60, 3.20)       #   fitted value; the data down-weigh
 # AUDIT[budget] series-vs-exact switch radius; conservative, wrong only toward compute.
 _SERIES_REACH = 4.0         # gaps out to 4 nominal steps: how far the pre-factored Q(a)
                             # series must stay accurate before the exact route is used instead
-# AUDIT[proxy] gap = Sparrow factor on the one-event Fisher width (0009); same standing as
-# _GAP_FACTOR, same missing sharp criterion -- open AUD-1.
+# AUDIT[derived+budget] gap = c * (one-event Fisher width), c = 1.5: the same aliasing theorem
+# as `_GAP_FACTOR` (resolution-criterion 0002) at the same tolerance eps0 = 3.1e-4 -- the blur
+# here is 1/sqrt(n) e-folds with n = 1 event (0009).  Derived bound, budgeted tolerance.
 _HAZARD_GAP = 1.5                    # rung spacing of the hazard box, in NATS of log-hazard --
                                      #   the same Sparrow rule that spaces the walk grid
                                      #   (`_GAP_FACTOR`), evaluated at this axis's own blur
@@ -384,8 +395,11 @@ def _subset_groups(eng, obs):
 
 
 # AUDIT[derived+proxy] Whittle MA(1) arclength metric derived (sequence-demix 0002);
-# Sparrow spacing proxy (AUD-1).  The forget-read prunes redundant rungs only (capped by
-# _LADDER_MEM, valid at forget = 1); monotonicity of finer rungs unverified -- open AUD-5.
+# AUDIT[derived+budget] rung spacing = 1.5 * blur, the same aliasing theorem as `_GAP_FACTOR`
+# at the same eps0 = 3.1e-4 (resolution-criterion 0002); the blur sqrt(2/mem) is the arclength's
+# own Fisher width (I = 1/step, resolvable-regime 0009).  The forget-read prunes redundant
+# rungs only (capped by _LADDER_MEM, valid at forget = 1); finer-rung monotonicity unverified
+# -- open AUD-5.
 def _rung_odds(forget):
     """The ladder of splits: complete, at the bank's own resolution, with no span constant.
 
@@ -398,8 +412,9 @@ def _rung_odds(forget):
 
     The entire space of splits is therefore an interval of arclength ``pi/2``.  Two rungs are
     resolvable when the evidence the bank can hold -- ``1/(1 - forget)`` steps -- separates them
-    by order one nat, i.e. ``dt = sqrt(2 (1 - forget))``; spacing them at the grid's own Sparrow
-    factor above that limit leaves no dead zone.  The memory entering that resolution is capped at
+    by order one nat, i.e. ``dt = sqrt(2 (1 - forget))``; spacing them at ``1.5`` of that blur
+    reproduces the split posterior to aliasing ``3.1e-4`` -- the same theorem, and the same
+    tolerance, as the walk grid (resolution-criterion 0002).  The memory entering that resolution is capped at
     ``_LADDER_MEM``, which is a node budget and not a statistical claim.  The result COVERS EVERY POSSIBLE SPLIT with a
     couple of dozen rungs, and no rung refers to the supplied base: told nothing means told
     nothing.
@@ -1134,7 +1149,8 @@ class _WalkEngine:
 
     # -- caltrop star window (the 1-D pieces are unchanged from WalkingVectorFilter) --
     # AUDIT[derived+proxy] node prior = the class prior, kernel exact AR(1); spacing/span
-    # are the Sparrow/support proxies -- open AUD-1.
+    # are: spacing the aliasing theorem (derived + budget, resolution-criterion 0002); span
+    # the +-3 sigma support proxy -- open AUD-1.
     def _build_window(self):
         # One window per axis.  Every axis keeps the same NODE COUNT (so the axial posteriors stay
         # one rectangular array) and differs only in spacing, prior and kernel -- all three read
