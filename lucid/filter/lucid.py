@@ -109,13 +109,15 @@ _LOGDET_SINGULAR = 1.0e6
 # dead zone measured at ~0.8 nats); sharp information-theoretic criterion missing -- open AUD-1.
 _GAP_FACTOR = 1.5           # grid spacing gap = 1.5 s (Sparrow resolution limit, finding 11)
 # AUDIT[proxy] window half-span = 3-sigma support of the class prior; trade uncharacterised -- open AUD-1.
-# NOTE (resolvable-regime 0012-0016): span is a code-length PLATEAU on the scalar hero rig
-# (|t| <= 1.46 across span 1.5-12, 0014) and 6.0 is that rig's jump-window preference (0015),
-# BUT the plateau is rig-local: span 6.0 costs the asynchronous multi-rate rig 1.16x -> 3.77x
-# oracle (worse than the fixed filter) because `_SPAN_S` is not a pure reach knob -- it also
-# sets `_Pmu_cap` (grows as span^2) and `_Ifloor`, so it loosens the walk on partial events
-# where per-event identifiability is already low (0016).  3.0 is the value that holds every
-# rig, so it stays; the plateau claim is scalar-rig-only.
+# NOTE (resolvable-regime 0012-0017): under the filter's own loss (code length) the span is a
+# PLATEAU on the scalar hero rig -- indistinguishable across 1.5-12 (|t| <= 1.46, 0014) -- with
+# 6.0 the jump-window preference (0015).  A wider span was tried and REVERTED: it wins the
+# scalar rig and (with per-event reach scaling) the async rig, but NaNs the 15-DOF arm, and the
+# cause is NOT the walk cap -- a walk-mean bound tested at |mu| <= {40, 20, 15} fails worse, not
+# better (0017).  The overflow is the per-node process covariance the outer nodes inject into
+# the Riccati step (`FPFt + Qg`), which a coupled high-dimensional rig compounds; span in units
+# of `s` gives a large-`s` rig a ~19-nat outer node.  3.0 holds every rig, so it stays.  The
+# clean fix is a resolution criterion for the whole grid (AUD-1), not a bigger span.
 _SPAN_S = 3.0               # window half-span in units of s (support budget -> node count)
 # AUDIT[budget] Fisher stabiliser; absolute units, guarded by the step-budget clip -- open AUD-8.
 _RIDGE = 1e-4               # Fisher stabiliser

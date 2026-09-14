@@ -5,8 +5,39 @@
 
 ## Verdict
 
-**The axiom as first written is refuted; the axiom as intended was never tested,
-because it was aimed at the wrong process.** [`0009`](exploration/0009_the_axiom_relocated.md)
+**Stationarity is NOT replaced.** The shipped filter still uses the stationary
+AR(1) box, and the one concrete change this thread derived from the new assumption
+(a wider window, `0010`–`0017`) was measurably worse and was reverted. So as a
+*replacement*, the thread did not succeed — a re-founding that makes the filter
+worse is not a re-founding.
+
+What the thread did earn is narrower and real, and should be read as **theory,
+not a filter change**:
+
+1. The AR(1) *shape* is **re-derived from resolvability** (Doob): given that we
+   sample fast enough for the data to mean something, the log-scale's linear-SDE
+   form and the `phi -> phi^a` gap rule follow, rather than being assumed.
+2. The process/sensor split is **correctly located in autocorrelation**
+   ([`0009`](exploration/0009_the_axiom_relocated.md)) — *anything white at our
+   sampling rate is measurement noise* — with a compact, parameter-free coordinate
+   (Fisher information 1/step) confirmed by measurement.
+3. The reason the swap buys no accuracy is itself a result
+   ([`0003`](exploration/0003_what_stationarity_costs.md)): a stationary class with
+   persistence allowed near 1 is **indistinguishable from a "meaningful/wandering"
+   class over any finite record**, so the old assumption was already a practical
+   stand-in for the new one. Better-founded, not better-performing.
+
+**The framing that survives:** the window's reach, the box, and the grid spacing
+are all one thing — a **resolution** question, the same family as the Sparrow
+proxy (`_GAP_FACTOR`). That is the real open, carried forward as the successor
+workstream (an information-theoretic resolution criterion, AUD-1), not this axiom.
+
+---
+
+### The original probe record (superseded framing, kept for the reasoning)
+
+**The axiom as first written is refuted; the axiom as intended was aimed at the
+wrong process.** [`0009`](exploration/0009_the_axiom_relocated.md)
 relocates it and measures the number it runs on.
 
 The constraint belongs on **how fast the state moves relative to the sensor** —
