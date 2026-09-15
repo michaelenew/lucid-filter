@@ -317,6 +317,16 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
   the calm gain for it (2.39); finite lags as delay lines diverge; the scalar jump pays 6%.
   Nothing ships; the walking-dimension form is a patient walk stepping on accumulated
   predictive evidence, with its lag chosen by the same evidence.
+- **The patient walk, and the switching leak that makes the pair work** ([`0057`](exploration/0057_the_patient_walk.md)).
+  A copy relaxing toward its eager sibling on accumulated predictive evidence never holds weight:
+  under a forget the bank keeps only the ends, because the question is a regime question and a
+  blend is never best.  Gradedness is the switching prior: a uniform leak across the copies (the
+  hazard ladder's kernel) lets the never copy hold 0.87 of the bank through the sensor burst, and
+  **SENSOR goes 2.70 -> 1.25** against the 1.16 target, jerk-mode misattribution +7.76 -> +0.20
+  nats, PROCESS/POTFAIL/BOTH unchanged, x2.  Insensitive to the rate (1/30: 1.29).  The 0056
+  delay-line divergence is an integrator with delayed feedback.  On a swapped schedule the
+  expensive burst is the *first* one off the floor whichever kind it is (PROCESS-first 2.04).
+  Candidate for shipping once the leak is a ladder and the never copy has a way back.
 
 **Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
 were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in

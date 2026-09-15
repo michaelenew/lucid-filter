@@ -109,5 +109,24 @@ things are settled by this note:
 
 | schedule | variant | calm | PROCESS | SENSOR (after) | POTFAIL | BOTH |
 |---|---|---|---|---|---|---|
-| PROCESS then SENSOR | shipped | PENDING | | | | |
-| PROCESS then SENSOR | pair + leak 1/100 | PENDING | | | | |
+| PROCESS then SENSOR | shipped | 1.18 | **2.04** | 1.15 | 1.03 | 0.97 |
+| PROCESS then SENSOR | pair + leak 1/100 | 1.18 | 2.04 | **1.03** | 1.03 | 0.97 |
+
+Two things the swap shows. The never copy is indeed dead by the time the sensor burst arrives
+(0.06 of the bank), and the pair still takes SENSOR from 1.15 to 1.03 — but SENSOR is only 1.15
+*shipped* on this schedule. The regime that is 2.70 when it comes first is 1.15 when it follows a
+process burst; and PROCESS, 1.16 when it follows the sensor burst, is 2.04 when it comes first.
+**The expensive burst is the first one, whichever it is**: the jerk modes' first climb off their
+floor is the badly-attributed one (`resolution-criterion/0006`: the ridge-dominated step at the
+floor), and once they have been off the floor the walk attributes the next burst well. The pair
+fixes the sensor-first case; a process-first burst is under-tracked (+2.97 against +5.99) and is a
+different pathology, one the eager copy owns.
+
+## Decision
+
+Not shipped from this note, but this is the first candidate in the workstream with a clean win on
+the arm's headline regime and nothing lost on the others: `{eager, never}` copies with a
+switching leak, ×2 cost. What it needs before it ships: the leak as a hazard ladder rather than a
+number; a way back for the never copy after a real process change (its state, not its prior — a
+restart keyed to a sustained collapse, or an IMM-style re-seed at the leak rate); the scalar jump's
+6% understood (the never copy taking weight at a level jump); and seeds 1–2 on both schedules.
