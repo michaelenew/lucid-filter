@@ -336,6 +336,19 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
   arm SENSOR **2.70 -> 1.45**, swapped-schedule SENSOR 1.15 -> 1.03, other regimes unchanged,
   x2 cost; scalar jump +6%; async flat; suite 55 passed.  Departure specs keep both copies at
   the step's rate (a slow copy cost the learned-dynamics rig 30%).  Open as AUD-10.
+- **To the bar** ([`0059`](exploration/0059_the_attribution_grid_to_the_bar.md)).  The first port was
+  below it (rates a convention, ladder a proxy) and was reverted.  Four forms measured: the class
+  box (separate process- and sensor-scale classes, the memory class at `phi = 1 - 1/mem`) does
+  not reproduce the effect -- patience is not a class property; the joint Fisher-scoring walk
+  changes nothing -- per-step Bayes, diagonal or joint, attributes a burst to the wider prior,
+  which is the theorem behind the copies; the memory-smoothed copy imports the eager copy's
+  excursions.  The **floor copy** is at the bar: the held axes are those at their floor (share
+  below `1/(phi_golden + 1) = 0.382`, SNR < 1, from 0006; confounded pairs to their ladder), the
+  rate is the memory's resolution floor `1/mem`, the switching ladder is the Bernoulli arcsine
+  (Jeffreys).  Arm SENSOR **2.70 -> 1.46**, swapped SENSOR 1.15 -> 1.03, other regimes
+  unchanged; scalar and learned-dynamics rigs bit-identical; async 1.16 -> 1.19; x2 cost.
+  Remaining opens (a budget of two rate rungs, the departure and no-held-axis duplicates, the
+  async cost, the memory copy's way back) are AUD-10 -- none a number set by hand.
 
 **Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
 were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in

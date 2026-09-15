@@ -59,8 +59,8 @@ way down to "no fault", complete, at the split ladder's spacing; uniform initial
 uniform prior in that coordinate; valid at ``forget = 1`` and reading nothing from ``forget``) and each rung's running predictive
 likelihood weights it; the reported `hazard` is the posterior mean, the regime the data currently
 supports.  The same treatment, one level down, is the ATTRIBUTION grid: every class cell runs twice,
-walking its process scales at the step's timescale and at the bank's memory, so a white sensor burst is
-not booked on the process before its whiteness has shown; the copies switch under a ladder of
+walking the axes at their floor (resolution-criterion 0006) at the step's timescale and at the memory's
+resolution floor, so a white sensor burst is not booked on a floor mode before its whiteness has shown; the copies switch under a ladder of
 switching rates uniform in the rate's own information coordinate (`_switch_rungs`; weight rows sharing
 the filters) and the bank reports `patience` (the weight on the memory copies) and `switch` (the
 posterior-mean switching rate) -- research multivariate-statfilter 0055-0058.  Each rung's gain, drift, cap and restart width derive from its own `(rho_j, class
@@ -184,30 +184,27 @@ _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sens
                             # supports (24 rungs).  A longer `forget` still sharpens the bank's
                             # weights; it does not buy a finer ladder, and `forget = 1` would ask
                             # for an infinite one.
-# AUDIT[convention+budget+measured] the ATTRIBUTION grid -- BELOW THE BAR, open AUD-10: two copies of every class cell, walking their
-# process scales at the two timescales the filter already owns -- the step (rate 1, the walk as
-# it was) and the bank's memory (rate 1/mem, `_LADDER_MEM`-capped, the same read as `_rung_odds`).
-# GRADE: the two rates are a CONVENTION (endpoints with a rationale, not a derivation), the count
-# a BUDGET, the step-scaling form a convention, the sensor-axes-eager and separate-state decisions
-# MEASURED; the switching ladder below is the one derived piece.  The derived form this stands in
-# for is a class box with separate process- and sensor-scale classes, the memory copy being the
-# class at phi = 1 - 1/mem -- untested.
-# WHY: a white sensor burst is booked partly on the process within a step or two, because the
-# per-step score on a process mode looks only through that mode's own channel, where an inflated
-# Q hides under the burst; the predictive likelihood sees it through the other channels and the
-# state covariance, but only across a copy that did NOT attribute (research multivariate-statfilter
-# 0055-0057).  The evidence is the divergence of the two copies' state trajectories, so each keeps
-# its own state; sensor axes walk at the step's timescale on both (their learning was measured
-# fast and right).  The copies are regime hypotheses -- "the recent innovations are sensor noise"
-# against "process noise" -- and switch under the symmetric two-state kernel at each rung of
-# `_switch_rungs` (weight rows sharing the filters, so the switching rate is read, never told:
-# `_attribution_mix`).
-# MEASURED on the 15-DOF arm: SENSOR 2.70x -> 1.45x oracle (1.25x at a pinned rate; 1.16x is the
-# price of sensor-scale learning alone), other regimes unchanged, x2 cost; scalar hero jump +6%,
-# async flat.  The memory-timescale copy replaces a "never walks" copy (identical numbers) so that
-# a wrong or absent base is learned rather than frozen.  OPEN: the memory copy has no fast way back
-# after a real process change (its weight after PROCESS is ~0 on the arm), and the first burst off
-# the floor of either kind is the expensive one (0057).
+# AUDIT[derived+budget] the ATTRIBUTION grid: two copies of every class cell, differing only on
+# the axes at their FLOOR.  WHY (research multivariate-statfilter 0055-0059): a white sensor burst
+# is booked on a floor process mode within a step, and no per-step estimator can avoid it -- the
+# per-axis walk and the joint (all-axes) Fisher-scoring step both attribute a surprise to the axis
+# with the wider prior, and a floor axis never gets the information that would narrow its prior
+# (0059).  Only multi-step evidence, the bank's predictive likelihood across a copy that did NOT
+# attribute, can move it; that is what the copies carry, each with its own state (the evidence is
+# the divergence of the two trajectories; 0056).  DERIVED: (i) which axes -- the floor of the
+# axis's coordinate, where the per-step Fisher vanishes and the per-step score is not the
+# statistic (resolution-criterion 0006): process noise below its reading noise, SNR < 1, base
+# share below `_FLOOR_SHARE`; a confounded pair is the split ladder's, not the copy's; every axis
+# above its floor walks at the step on both copies.  (ii) the copy's rate -- a rate ladder's two
+# derived ends: the step (1) and the memory's resolution floor (1/mem: a copy moving less than one
+# step's worth over the bank's whole memory is indistinguishable from one that never moves; the
+# same read as `_rung_odds`).  (iii) the switching prior -- `_switch_rungs`.  BUDGET: two rungs of
+# the rate ladder (the bank was measured to keep only the ends under a forget, 0057; the interior
+# under the switching ladder is untested).  Measured on the 15-DOF arm: SENSOR 2.70 -> 1.46x oracle,
+# other regimes unchanged, x2 cost; scalar and learned-dynamics rigs bit-identical (no held axis);
+# async whole 1.16 -> 1.19 (its one floor mode held).  OPEN AUD-10: the memory copy's way back
+# after a real process change; the first burst off the floor of either kind; the departure specs'
+# identical second copy; the async cost.
 
 def _hazard_rungs(mem=None):
     """The hazard ladder: uniform in the offset walker's Whittle arclength, complete over it.
@@ -252,6 +249,11 @@ def _switch_rungs(mem=None):
 
 
 _SWITCH = _switch_rungs()            # 24 rungs, 0.499 down to 2.7e-4
+# AUDIT[derived] the floor boundary: a process scale read at SNR x = q/r_eff has per-step local
+# share g = x / (P(x) + 1), P(x) = (x + sqrt(x^2 + 4x)) / 2 the steady predicted variance of a random
+# walk in noise (resolution-criterion 0006); at x = 1 -- process noise equal to its reading noise --
+# P = (1 + sqrt 5)/2 and g = 1/(phi_golden + 1) = 0.382.  Below it the axis is at its floor.
+_FLOOR_SHARE = 1.0 / (0.5 * (1.0 + math.sqrt(5.0)) + 1.0)
 
 
 
@@ -784,9 +786,9 @@ class LucidStep:
     #: regime the data currently supports, read off the hazard ladder's weights.  ``None``
     #: when the fault class is off; constant when the caller pinned ``faults=rho``.
     time: float = math.nan         #: the filter clock after this event (see ``timestep``)
-    patience: float = None         #: weight the bank puts on the copies that walk their process
-    #: scales at the memory's timescale -- "the recent innovations are sensor noise" (the
-    #: attribution grid, research multivariate-statfilter 0057)
+    patience: float = None         #: weight the bank puts on the copies that walk their floor axes
+    #: at the memory's resolution floor -- "the recent innovations are not this floor mode's"
+    #: (the attribution grid, research multivariate-statfilter 0055-0059)
     switch: float = None           #: posterior-mean rate at which the attribution regime switches
 
     @property
@@ -1183,7 +1185,7 @@ class _WalkEngine:
                 (self.phi_ax[k], self.s_ax[k]) = group_class[0]
                 (self.phi_ax[n + i], self.s_ax[n + i]) = group_class[1]
         self.gap = _GAP_FACTOR * self.s_ax
-        self._rate = 1.0                # the rate this copy walks its PROCESS scales at (see the attribution grid)
+        self._rate = 1.0                # the rate this copy walks its HELD axes at (the attribution grid; banks apply it)
         # AUDIT[derived] critical damping pins K* = (1-phi)/4 and q_mu with it
         # (adaptive-grid 0030/0031); the floor is the 0010 localisation condition.
         self._Kstar = (1.0 - self.phi_ax) / 4.0
@@ -1674,8 +1676,7 @@ class _WalkEngine:
             info = float(pi_ax[i] @ info_g) + _RIDGE
             grad = float(pi_ax[i] @ score_g)
             K_mu = self._Pmu[k] / (self._Pmu[k] + 1.0 / info)
-            step = float(np.clip(K_mu * (grad / info), -budget[k], budget[k]))
-            self.mu[k] += step * self._rate if k < n else step
+            self.mu[k] += float(np.clip(K_mu * (grad / info), -budget[k], budget[k]))
             self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k] * a,
                                self._Pmu_cap[k])
         if held is not None:
@@ -2099,6 +2100,12 @@ class _EngineBank:
         # state, stacked -- and handed back to the members as views
         self.mu, self._Pmu = st("mu"), st("_Pmu")
         self._rate = np.array([f._rate for f in members], float)
+        # the held axes of the memory copies: at their floor, and not a confounded pair's
+        share = np.sqrt(np.maximum(2.0 * (st("_Ichar") - _RIDGE), 0.0))
+        self._held = (share < _FLOOR_SHARE) & (self._rate[:, None] < 1.0)
+        for (k, i, _h2) in self._groups:
+            self._held[:, k] = False
+            self._held[:, self.n + i] = False
         self._m = np.zeros((M, self.n))
         self._P = np.zeros((M, self.n, self.n))
         self._pi = np.zeros((M, len(self._act), self._nn))
@@ -2411,7 +2418,7 @@ class _EngineBank:
             grad = np.einsum("bg,bg->b", pi[:, ax], score)
             Kmu = self._Pmu[:, k] / (self._Pmu[:, k] + 1.0 / info)
             step = np.clip(Kmu * (grad / info), -budget[:, k], budget[:, k])
-            self.mu[:, k] += step * self._rate if k < n else step
+            self.mu[:, k] += np.where(self._held[:, k], step * self._rate, step)
             self._Pmu[:, k] = np.minimum((1.0 - Kmu) * self._Pmu[:, k] + self._qmu[:, k] * a,
                                          self._Pmu_cap[:, k])
         self._pi[:] = pi
@@ -2969,7 +2976,8 @@ class LucidFilter:
         self.s_arr = np.array([sv for _ in phis for sv in ss for _ in bases], float)
         cells = [(ph, sv, bq, br) for ph in phis for sv in ss for (bq, br) in bases]
         # The attribution grid (see the audit note above `_hazard_rungs`): every cell twice, the
-        # process-scale walk at the step's timescale and at the bank's memory.
+        # walk on the axes at their floor at the step's timescale and at the memory's resolution
+        # floor; every other axis walks at the step on both.
         _mem = min(1.0 / (1.0 - self.forget), _LADDER_MEM) if self.forget < 1.0 else _LADDER_MEM
         self.rates = (1.0, 1.0 / _mem)
         cells = [(ph, sv, bq, br, rt) for rt in self.rates for (ph, sv, bq, br) in cells]
@@ -3040,10 +3048,11 @@ class LucidFilter:
                 e._dep = dep
                 # A departure walker keeps its noise walk LIVE at the step's timescale on both
                 # copies: the Q<->F confound is split by per-hypothesis means competing under a
-                # live noise walk (research 0002/0003), and a memory-timescale copy was measured
-                # to cost the learned-dynamics rig 30% (multivariate-statfilter 0058).  The copies
-                # of a departure spec are therefore identical -- doubled cost, no effect -- until
-                # the weight rows can carry a per-spec cell count (open AUD-10).
+                # live noise walk (research 0002/0003), and a memory-timescale copy on every
+                # process axis was measured to cost the learned-dynamics rig 30% (0058; the
+                # floor-only form of 0059 is untested there).  The copies of a departure spec are
+                # therefore identical -- doubled cost, no effect -- until the weight rows can carry
+                # a per-spec cell count (open AUD-10).
                 e._rate = 1.0
                 if hbase is not None:
                     e._hook = _augment_hook(hbase, n, dep.k)
