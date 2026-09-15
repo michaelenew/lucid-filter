@@ -3008,7 +3008,13 @@ class LucidFilter:
                 Si_c = e._fisher_Si
                 e._dyn = dep.callable_for()
                 e._dep = dep
-                e._rate = rt
+                # A departure walker keeps its noise walk LIVE at the step's timescale on both
+                # copies: the Q<->F confound is split by per-hypothesis means competing under a
+                # live noise walk (research 0002/0003), and a memory-timescale copy was measured
+                # to cost the learned-dynamics rig 30% (multivariate-statfilter 0058).  The copies
+                # of a departure spec are therefore identical -- doubled cost, no effect -- until
+                # the weight rows can carry a per-spec cell count (open AUD-10).
+                e._rate = 1.0
                 if hbase is not None:
                     e._hook = _augment_hook(hbase, n, dep.k)
                 self._members.append(e)
