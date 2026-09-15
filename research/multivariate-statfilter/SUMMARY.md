@@ -305,6 +305,18 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
   gap is.  So the regime is worth ~2x if attribution were fixed with tracking kept -- the same
   object resolution-criterion 0006/0007 reached from the coordinate side (the jerk modes sit
   at their floor, where a per-step score cannot tell a process burst from a sensor burst).
+- **A grid in the lag of attribution** ([`0056`](exploration/0056_the_lag_grid.md)).  Copies of
+  every class member whose process-scale walk is eager or never acts, weighted by the bank:
+  on the arm, SENSOR 2.70 -> **2.31** and calm 1.14 -> **1.07** with the other regimes unchanged,
+  at 2x.  The bank's weights show why: by the end of the sensor burst the never copies hold
+  the whole bank and the eager copies pay 0.67 nats/step for their inflated `Q` -- the
+  predictive likelihood sees, through the pots and the state covariance, what the local
+  score cannot see through the mode's own accelerometer channel.  Limits, all construction:
+  the evidence is the divergence of the copies' states (collapsing them erases it, 2.82); a
+  frozen-`Q` copy dies at the first real process burst (one-shot); a threshold restart trades
+  the calm gain for it (2.39); finite lags as delay lines diverge; the scalar jump pays 6%.
+  Nothing ships; the walking-dimension form is a patient walk stepping on accumulated
+  predictive evidence, with its lag chosen by the same evidence.
 
 **Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
 were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in
