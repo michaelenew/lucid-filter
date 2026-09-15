@@ -31,7 +31,7 @@ SENSOR (truth 0):
 | **{0, ∞}, separate states** | 30 | 172 | **1.07** | **2.31** | 1.16 | 1.11 | 1.06 | +4.96 |
 | {0, 10, 30, 100, ∞} | 75 | — | singular at the first burst: a delay line replays eager steps late and its integral runs away | | | | | |
 | {0, ∞}, state collapsed across copies | 30 | 171 | 1.14 | 2.82 | 1.16 | 1.11 | 1.06 | +7.76 |
-| {0, ∞}, restart from the mixture when a copy's weight collapses | 30 | — | PENDING | | | | | |
+| {0, ∞}, restart from the mixture when a copy's weight falls below 1e-3 | 30 | 171 | 1.14 | 2.39 | 1.16 | 1.11 | 1.06 | +7.76 |
 
 Scalar hero rig (12 seeds, paired): `{0, ∞}` costs the jump 6% (1.747 → 1.858, `t = +12`),
 steady and regime C flat; the five-point grid costs it 14%. Async: flat (1.16/1.44 → 1.16/1.43).
@@ -81,9 +81,13 @@ was intended. Its limits are construction, not concept:
 
 - finite lags cannot be delay lines on the step (the integral of replayed steps diverges); a
   patient walk needs a statistic accumulated over `L` steps, not an eager step deferred;
-- the never copy needs a way back after a real process change — a restart from the mixture
-  (row 5), or a slow walk instead of a frozen one — and the scalar jump's 6% is the same copy
-  taking weight at a level jump it cannot follow.
+- the never copy needs a way back after a real process change, and the first thing tried is
+  not it: re-seeding a copy from the mixture whenever its weight falls below 1e-3 (row 5) keeps
+  part of the SENSOR gain (2.39) but gives back the calm gain, because the threshold also fires
+  during the burst's onset and hands the never copy the eager state — the divergence is what it
+  needs to keep. A slow walk instead of a frozen one, or a restart keyed to a *sustained*
+  collapse rather than a threshold, are the next constructions; and the scalar jump's 6% is the
+  same copy taking weight at a level jump it cannot follow.
 
 What the walking dimension would be: the lag is the time the process-scale evidence is
 accumulated before it moves the scale, and the bank's forget already sets the memory over which
