@@ -45,6 +45,8 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 | `_PHIS`, `_SS` | measured | Broad class box; the data down-weights unsupported corners; tracking measured flat along the identification ridge (adaptive-grid findings 13–16). `_SS` top end has a reach argument (largest one-step scale change the window represents); the ×2 ratio and `_PHIS` values are underived. Ridge flatness does not clear the bar. | AUD-2 |
 | `_SERIES_REACH = 4.0` | budget | Switch radius for the pre-factored `Q(a)` series vs the exact Van Loan route; conservative by the stated tail criterion (`nrm·reach ≤ 1`); wrong only toward compute. | — |
 | `_HAZARDS` (`_hazard_rungs`) | derived + budget | **Coordinate derived:** a rung is a diffusion rate in the offset/departure walkers, so a steady gain `K(ρ)`, and its information coordinate is the Whittle arclength `t = arccos(1 − K)` — the split ladder's (`resolution-criterion/0004`; the metric on `K` is the arcsine metric on `h = K/2`, an identity). Uniform in `t` on `[0, π/3]`: top the persistence boundary (derived), bottom exactly `ρ = 0` (**complete, no reach convention**). Spacing the shared budget `c√(2/mem)` at `_LADDER_MEM`. The retired log-ρ ladder was 3.4× non-uniform in `t` and four blurs short of zero; measured equivalent on the 0009 rig. | — |
+| attribution grid (`rates`, `_rate`, `_held`, `_FLOOR_SHARE`) | derived + budget | Two copies per class cell differing only on the axes at their floor. **Derived:** *which axes* — the floor of the axis's coordinate, where the per-step Fisher vanishes and the per-step score is not the statistic (`resolution-criterion/0006`): SNR < 1, base share below `1/(φ_golden+1) = 0.382` (the share at process noise equal to its reading noise, from the steady Riccati); a confounded pair is the split ladder's; axes above the floor walk at the step on both copies. *The copy's rate* — the two derived ends of a rate ladder, the step and the memory's resolution floor `1/mem` (a copy moving less than one step's worth over the bank's memory is indistinguishable from never moving; the `_rung_odds` read). *Why copies at all* — no per-step estimator can attribute a burst away from a floor axis: the per-axis walk and the joint Fisher-scoring step both attribute to the wider prior (`multivariate-statfilter/0059`); only multi-step evidence across a copy that did not attribute can, each copy with its own state (0056). **Budget:** two rungs of the rate ladder; the interior under the switching ladder is untested (under a forget the bank keeps only the ends, 0057). **Measured** (a check, not a source): arm SENSOR 2.70 → 1.46× oracle, other regimes unchanged, ×2; scalar and learned-dynamics rigs bit-identical (no held axis); async whole 1.16 → 1.19. | AUD-10 |
+| `_attribution_mix`, `_switch_rungs` | derived + budget | **Derived:** the switch between copies is a per-step Bernoulli rate; its information coordinate is the arcsine `θ = 2 asin√ρ` (per-step Fisher 1; the same metric as the gain arclength at `h = K/2`, resolution-criterion 0004); the ladder is uniform in `θ` on `[0, π/2]` — `ρ = 0` to the persistence boundary `½` — so it is **complete**, and uniform initial weights on it are the **Jeffreys prior** on a rate. The kernel is the symmetric two-state chain, the only symmetric kernel on two copies, with exact chain power over a gap. **Budget:** spacing `c√(2/mem)` at `_LADDER_MEM`, the shared node budget (24 rungs). The rate is a posterior over rungs (`switch`), never a constant. Replaces the first port's borrowed `_HAZARDS`, whose rungs are uniform in the offset walker's gain coordinate, not in the switching rate's (a proxy). | — |
 | `_RANK_TOL`, `_LOG2PI` | budget | Numerical rank tolerance; constant. | — |
 | `_OFFSET_CLASSES = 5` | budget + convention | Count is a budget; ladder floor **derived** (`V/T`, equal visibility over the memory), ceiling a **convention** (one noise sd per step) — bias-channels 0005/0012. | AUD-4 |
 | `_LADDER_MEM = 1000` | budget | Caps the split-ladder rung count so `forget = 1` asks for a finite grid. Rung count believed monotone (finer quadrature of the split posterior) but unverified. | AUD-5 |
@@ -166,14 +168,25 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
 - **AUD-9** (dynamics-learning): the anchor-leak topology — uniform leak over k−1
   alternatives is max-entropy by convention; measure sensitivity with named anchors
   (k > 2) or derive the leak from the class.
+- **AUD-10** (multivariate-statfilter 0057–0059): the attribution grid's remaining opens. The
+  memory copy has no fast way back after a real process change (its weight after a PROCESS burst
+  is ~0; the switching prior refreshes its prior, not its state); the first burst off the floor
+  of either kind is the expensive one (PROCESS-first 2.04× on the swapped schedule, untouched);
+  the interior of the rate ladder is untested under the switching ladder (a budget of two rungs);
+  the departure specs carry an identical second copy (a per-spec cell count is plumbing); a cell
+  with no held axis carries an identical copy too (the scalar rig pays ×2 for nothing); and the
+  async rig pays 3% whole / 3% hot with its one floor mode held. The class-box form (separate
+  process- and sensor-scale classes, the memory class at `φ = 1 − 1/mem`) was built and does not
+  reproduce the effect — patience is not a class property, because a floor axis's step is
+  budget-clipped whatever its φ (0059).
 
 ## Scoreboard
 
-50 ledger entries; 45 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
+53 ledger entries; 49 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
 `forget` escape are ledger-only — the escape's marker is its own parameter doc).  By primary
-grade: **35 derived** (full bar), **3 proxy** (defensible, sharp
+grade: **38 derived** (full bar), **3 proxy** (defensible, sharp
 statement open), **2 measured** (below the bar, opens logged),
 **10 budget/convention/escape** (no theoretical
-claim; consequence-freedom owed in three places, AUD-8).  10 entries carry mixed grades
+claim; consequence-freedom owed in three places, AUD-8).  11 entries carry mixed grades
 (a derived core with a proxy or measured edge — the box, the window, the offset channel).
 Every proxy and measured element references an open; no chunk is unmarked.
