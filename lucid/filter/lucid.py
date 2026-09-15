@@ -58,7 +58,11 @@ information coordinate is the split ladder's -- from the class's persistence bou
 way down to "no fault", complete, at the split ladder's spacing; uniform initial weights ARE the
 uniform prior in that coordinate; valid at ``forget = 1`` and reading nothing from ``forget``) and each rung's running predictive
 likelihood weights it; the reported `hazard` is the posterior mean, the regime the data currently
-supports.  Each rung's gain, drift, cap and restart width derive from its own `(rho_j, class
+supports.  The same treatment, one level down, is the ATTRIBUTION grid: every class cell runs twice,
+walking its process scales at the step's timescale and at the bank's memory, so a white sensor burst is
+not booked on the process before its whiteness has shown; the copies switch under the hazard ladder's
+kernel (weight rows sharing the filters) and the bank reports `patience` (the weight on the memory
+copies) and `switch` (the posterior-mean switching rate) -- research multivariate-statfilter 0055-0057.  Each rung's gain, drift, cap and restart width derive from its own `(rho_j, class
 size)`, and its detection frontier is derived (`log(1/rho_j) / KL-rate`), not tuned.  Passing a
 number (`faults=rho`) pins the box to that one rung -- give-what-you-know, for a caller who
 truly knows the rate.  The derivations and the measured acceptance results are
@@ -179,6 +183,24 @@ _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sens
                             # supports (24 rungs).  A longer `forget` still sharpens the bank's
                             # weights; it does not buy a finer ladder, and `forget = 1` would ask
                             # for an infinite one.
+# AUDIT[derived+measured] the ATTRIBUTION grid: two copies of every class cell, walking their
+# process scales at the two timescales the filter already owns -- the step (rate 1, the walk as
+# it was) and the bank's memory (rate 1/mem, `_LADDER_MEM`-capped, the same read as `_rung_odds`).
+# WHY: a white sensor burst is booked partly on the process within a step or two, because the
+# per-step score on a process mode looks only through that mode's own channel, where an inflated
+# Q hides under the burst; the predictive likelihood sees it through the other channels and the
+# state covariance, but only across a copy that did NOT attribute (research multivariate-statfilter
+# 0055-0057).  The evidence is the divergence of the two copies' state trajectories, so each keeps
+# its own state; sensor axes walk at the step's timescale on both (their learning was measured
+# fast and right).  The copies are regime hypotheses -- "the recent innovations are sensor noise"
+# against "process noise" -- and switch under the hazard ladder's kernel over `_HAZARDS` (weight
+# rows sharing the filters, so the switching rate is read, never told: `_attribution_mix`).
+# MEASURED on the 15-DOF arm: SENSOR 2.70x -> 1.45x oracle (1.25x at a pinned rate; 1.16x is the
+# price of sensor-scale learning alone), other regimes unchanged, x2 cost; scalar hero jump +6%,
+# async flat.  The memory-timescale copy replaces a "never walks" copy (identical numbers) so that
+# a wrong or absent base is learned rather than frozen.  OPEN: the memory copy has no fast way back
+# after a real process change (its weight after PROCESS is ~0 on the arm), and the first burst off
+# the floor of either kind is the expensive one (0057).
 
 def _hazard_rungs(mem=None):
     """The hazard ladder: uniform in the offset walker's Whittle arclength, complete over it.
@@ -732,6 +754,10 @@ class LucidStep:
     #: regime the data currently supports, read off the hazard ladder's weights.  ``None``
     #: when the fault class is off; constant when the caller pinned ``faults=rho``.
     time: float = math.nan         #: the filter clock after this event (see ``timestep``)
+    patience: float = None         #: weight the bank puts on the copies that walk their process
+    #: scales at the memory's timescale -- "the recent innovations are sensor noise" (the
+    #: attribution grid, research multivariate-statfilter 0057)
+    switch: float = None           #: posterior-mean rate at which the attribution regime switches
 
     @property
     def scale(self) -> np.ndarray:
@@ -756,6 +782,8 @@ class LucidResult:
     hazard: np.ndarray = None      #: (T,) posterior-mean fault hazard, or ``None`` when off
     time: np.ndarray = None        #: (T,) the filter clock at each event
     sensor: np.ndarray = None      #: (T,) which sensor each event carried -- streams only
+    patience: np.ndarray = None    #: (T,) weight on the memory-timescale copies (see `LucidStep`)
+    switch: np.ndarray = None      #: (T,) posterior-mean attribution switching rate
 
     def __len__(self) -> int:
         return len(self.mean)
@@ -1125,6 +1153,7 @@ class _WalkEngine:
                 (self.phi_ax[k], self.s_ax[k]) = group_class[0]
                 (self.phi_ax[n + i], self.s_ax[n + i]) = group_class[1]
         self.gap = _GAP_FACTOR * self.s_ax
+        self._rate = 1.0                # the rate this copy walks its PROCESS scales at (see the attribution grid)
         # AUDIT[derived] critical damping pins K* = (1-phi)/4 and q_mu with it
         # (adaptive-grid 0030/0031); the floor is the 0010 localisation condition.
         self._Kstar = (1.0 - self.phi_ax) / 4.0
@@ -1615,7 +1644,8 @@ class _WalkEngine:
             info = float(pi_ax[i] @ info_g) + _RIDGE
             grad = float(pi_ax[i] @ score_g)
             K_mu = self._Pmu[k] / (self._Pmu[k] + 1.0 / info)
-            self.mu[k] += float(np.clip(K_mu * (grad / info), -budget[k], budget[k]))
+            step = float(np.clip(K_mu * (grad / info), -budget[k], budget[k]))
+            self.mu[k] += step * self._rate if k < n else step
             self._Pmu[k] = min((1.0 - K_mu) * self._Pmu[k] + self._qmu[k] * a,
                                self._Pmu_cap[k])
         if held is not None:
@@ -2038,6 +2068,7 @@ class _EngineBank:
                                   len(self._act), self._cap is not None)
         # state, stacked -- and handed back to the members as views
         self.mu, self._Pmu = st("mu"), st("_Pmu")
+        self._rate = np.array([f._rate for f in members], float)
         self._m = np.zeros((M, self.n))
         self._P = np.zeros((M, self.n, self.n))
         self._pi = np.zeros((M, len(self._act), self._nn))
@@ -2349,7 +2380,8 @@ class _EngineBank:
             info = np.einsum("bg,bg->b", pi[:, ax], info_g) + _RIDGE
             grad = np.einsum("bg,bg->b", pi[:, ax], score)
             Kmu = self._Pmu[:, k] / (self._Pmu[:, k] + 1.0 / info)
-            self.mu[:, k] += np.clip(Kmu * (grad / info), -budget[:, k], budget[:, k])
+            step = np.clip(Kmu * (grad / info), -budget[:, k], budget[:, k])
+            self.mu[:, k] += step * self._rate if k < n else step
             self._Pmu[:, k] = np.minimum((1.0 - Kmu) * self._Pmu[:, k] + self._qmu[:, k] * a,
                                          self._Pmu_cap[:, k])
         self._pi[:] = pi
@@ -2906,6 +2938,13 @@ class LucidFilter:
         self.phi_arr = np.array([ph for ph in phis for _ in ss for _ in bases], float)
         self.s_arr = np.array([sv for _ in phis for sv in ss for _ in bases], float)
         cells = [(ph, sv, bq, br) for ph in phis for sv in ss for (bq, br) in bases]
+        # The attribution grid (see the audit note above `_hazard_rungs`): every cell twice, the
+        # process-scale walk at the step's timescale and at the bank's memory.
+        _mem = min(1.0 / (1.0 - self.forget), _LADDER_MEM) if self.forget < 1.0 else _LADDER_MEM
+        self.rates = (1.0, 1.0 / _mem)
+        cells = [(ph, sv, bq, br, rt) for rt in self.rates for (ph, sv, bq, br) in cells]
+        self.phi_arr = np.tile(self.phi_arr, len(self.rates))
+        self.s_arr = np.tile(self.s_arr, len(self.rates))
 
         # -------- the dynamics hypotheses (the ladder of research/dynamics-learning) --------
         # The NOMINAL member is always present and never leaves: it is the hedge that makes a
@@ -2939,8 +2978,9 @@ class LucidFilter:
                 Si_c = probe._fisher_Si if Fs is F else None
                 eng = []
                 pr = _Propagator(Fs)    # one generator per hypothesis, shared by its cells
-                for ph, sv, bq, br in cells:
+                for ph, sv, bq, br, rt in cells:
                     e = _WalkEngine(bq, br, Hm, Fs, Bs, ph, sv, fisher_Si=Si_c, prop=pr)
+                    e._rate = rt
                     Si_c = e._fisher_Si
                     eng.append(e)
                 if bs is not None:
@@ -2961,13 +3001,14 @@ class LucidFilter:
             Ba = (None if Bs is None                     # characteristic linearisation the
                   else np.vstack([Bs, np.zeros((dep.k, self.p))]))   # steady Fisher wants
             Si_c = None
-            for ph, sv, bq, br in cells:   # the split rides into the augmentation with the base
+            for ph, sv, bq, br, rt in cells:   # the split rides into the augmentation with the base
                 Qa, Ra, _Ha, _w = dep.augment(bq, br, Hm)
                 e = _WalkEngine(Qa, Ra, Ha, Fa, Ba, ph, sv, walk_axes=walk, cap=dep.cap,
                                 fisher_Si=Si_c)
                 Si_c = e._fisher_Si
                 e._dyn = dep.callable_for()
                 e._dep = dep
+                e._rate = rt
                 if hbase is not None:
                     e._hook = _augment_hook(hbase, n, dep.k)
                 self._members.append(e)
@@ -3004,6 +3045,12 @@ class LucidFilter:
         else:
             self._lam2 = np.ones(1)
             self._Md = np.ones((1, 1, 1))
+        # the attribution grid's switching ladder: the hazard ladder's rungs, its kernel (uniform
+        # leak over the k = len(rates) copies), weight rows sharing the member filters
+        self._att = np.asarray(_HAZARDS, float)
+        self._Ja = self._att.size
+        ka = len(self.rates)
+        self._att_lam = np.clip(1.0 - self._att * ka / (ka - 1.0), 0.0, 1.0)
         self._learn, self.hazards = learn, np.asarray(hazards)
         # report the dynamics whenever they are not a fixed matrix the caller already has
         self._report = learn or base is not None
@@ -3076,7 +3123,7 @@ class LucidFilter:
             # (dynamics-learning 0008), equilibrium underived -- open AUD-7.
             self._mean_src = np.repeat(
                 np.array([sp[3] is None for sp in self._specs]), self._nc)
-        self._logw = np.zeros(self._ndw * self._nc)
+        self._logw = np.zeros(self._Ja * self._ndw * self._nc)
         self.loglik = 0.0
         self._alarms = np.zeros(self._J, dtype=bool)
         self._t = None
@@ -3145,11 +3192,30 @@ class LucidFilter:
         return M
 
     def _hazard_mix(self, logw, a=1.0):
-        """Propagate the bank prior through the fault class's kernel, rung by rung."""
-        W = np.exp(logw - float(logw.max())).reshape(self._J, self._ndbase, self._nc)
-        mixed = np.einsum("jdk,jdc->jkc", self._hazard_kernel(a), W)
+        """Propagate the bank prior through the fault class's kernel, rung by rung (within each
+        attribution rung, which is the leading axis of the weight rows)."""
+        W = np.exp(logw - float(logw.max())).reshape(self._Ja, self._J, self._ndbase, self._nc)
+        mixed = np.einsum("jdk,ajdc->ajkc", self._hazard_kernel(a), W)
         out = np.log(np.maximum(mixed, 1e-300)).ravel()
         return out - _logsumexp(out)
+
+    # AUDIT[derived] the attribution grid's switching prior: the hazard ladder's kernel and rungs
+    # (exact chain power over a gap), applied across the rate copies of each cell; the rate is a
+    # posterior over rungs, never a constant (see the note above `_hazard_rungs`).
+    def _attribution_mix(self, logw, a=1.0):
+        """Propagate the bank prior through the attribution grid's switching kernel, rung by rung."""
+        nr = len(self.rates)
+        W = np.exp(logw - float(logw.max())).reshape(self._Ja, self._ndw, nr, self._nc // nr)
+        lam = (self._att_lam ** a)[:, None, None, None]
+        mixed = lam * W + (1.0 - lam) * W.mean(2, keepdims=True)
+        out = np.log(np.maximum(mixed, 1e-300)).ravel()
+        return out - _logsumexp(out)
+
+    def _att_marginal(self, post):
+        """(member-row posterior summed over attribution rungs, weight on the memory-timescale
+        copies, posterior-mean switching rate)."""
+        P = post.reshape(self._Ja, self._ndw, len(self.rates), -1)
+        return P.sum(0).ravel(), float(P[:, :, 1:, :].sum()), float(P.sum(axis=(1, 2, 3)) @ self._att)
 
     def _spec_g(self, d):
         """The departure coefficients of spec ``d``'s cells, stacked ``(nc, k)``.
@@ -3242,6 +3308,7 @@ class LucidFilter:
         a = self._elapsed(t, dt)
         M = len(self._members)
         prior = self._logw - _logsumexp(self._logw)
+        prior = self._attribution_mix(prior, a)
         if self._ndbase > 1:
             prior = self._hazard_mix(prior, a)
         n = self.n
@@ -3276,7 +3343,7 @@ class LucidFilter:
         # A weight row is a (hazard rung, hypothesis, cell); its member filter is `_wm[row]`.
         # Rows sharing a filter (the nominal and the anchors, across rungs) share its
         # likelihood exactly, so the dedup is arithmetic-free: gather llv, scatter post.
-        llw = llv[self._wm]
+        llw = np.tile(llv[self._wm], self._Ja)
         if np.any(np.isfinite(yv)):
             bank_ll = _logsumexp(prior + llw)
             # ``forget`` is a memory PER NOMINAL STEP, so over a gap of ``a`` it is
@@ -3286,6 +3353,7 @@ class LucidFilter:
             bank_ll = 0.0
             self._logw = prior
         post = np.exp(self._logw - _logsumexp(self._logw))
+        post, patience, att_rate = self._att_marginal(post)       # over the attribution rungs
         pm = np.bincount(self._wm, weights=post, minlength=M)      # member marginals
         mean = pm @ mn
         dmn = mn - mean
@@ -3321,7 +3389,7 @@ class LucidFilter:
                 sen_out = so.C @ so.bbar
         if not self._report:
             return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out,
-                             time=self._t)
+                             time=self._t, patience=patience, switch=att_rate)
         Fh, Bh = self._dynamics_mean(post)
         # AUDIT[convention+derived] the readouts are posterior marginals (derived); the 1/2
         # crossing is a reporting convention, and the only inference it feeds is each rung's
@@ -3350,7 +3418,7 @@ class LucidFilter:
             self._reprice(spec=self._nb + int(j))
         self._alarms = alarms
         return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out, Fh, Bh, fault,
-                         hz, self._t)
+                         hz, self._t, patience=patience, switch=att_rate)
 
     def observe(self, sensor, value, t=None, dt=None, u=None) -> LucidStep:
         """One ``(sensor, timestamp, value)`` point -- the filter's most general input.
@@ -3421,6 +3489,7 @@ class LucidFilter:
         ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
         flt = np.empty(T) if live else None
         hzr = np.empty(T) if self._learn else None
+        pat = np.empty(T); swr = np.empty(T)
         total = 0.0
         for i, row in enumerate(Y):
             ti, di = when[i]
@@ -3438,10 +3507,12 @@ class LucidFilter:
                     ctl[i] = st.control
             if hzr is not None:
                 hzr[i] = st.hazard
+            pat[i] = st.patience; swr[i] = st.switch
         return LucidResult(mean=mean, var=var, innovation=inn,
                            process_scale=ps, measurement_scale=ms, loglik=total,
                            offset=offs, sensor_offset=sens,
-                           dynamics=dyn, control=ctl, fault=flt, hazard=hzr, time=clock)
+                           dynamics=dyn, control=ctl, fault=flt, hazard=hzr, time=clock,
+                           patience=pat, switch=swr)
 
     def stream(self, points, U=None) -> LucidResult:
         """Filter a stream of ``(sensor, timestamp, value)`` points -- one sensor at a time.
@@ -3471,6 +3542,7 @@ class LucidFilter:
         ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
         flt = np.empty(T) if live else None
         hzr = np.empty(T) if self._learn else None
+        pat = np.empty(T); swr = np.empty(T)
         total = 0.0
         for i, pt in enumerate(pts):
             try:
@@ -3497,11 +3569,12 @@ class LucidFilter:
                     ctl[i] = st.control
             if hzr is not None:
                 hzr[i] = st.hazard
+            pat[i] = st.patience; swr[i] = st.switch
         return LucidResult(mean=mean, var=var, innovation=inn,
                            process_scale=ps, measurement_scale=ms, loglik=total,
                            offset=offs, sensor_offset=sens,
                            dynamics=dyn, control=ctl, fault=flt, hazard=hzr, time=clock,
-                           sensor=which)
+                           sensor=which, patience=pat, switch=swr)
 
     def loglik_of(self, Y, U=None, t=None, dt=None) -> float:
         return self.filter(Y, U, t=t, dt=dt).loglik

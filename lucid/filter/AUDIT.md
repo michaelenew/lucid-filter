@@ -45,6 +45,8 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 | `_PHIS`, `_SS` | measured | Broad class box; the data down-weights unsupported corners; tracking measured flat along the identification ridge (adaptive-grid findings 13–16). `_SS` top end has a reach argument (largest one-step scale change the window represents); the ×2 ratio and `_PHIS` values are underived. Ridge flatness does not clear the bar. | AUD-2 |
 | `_SERIES_REACH = 4.0` | budget | Switch radius for the pre-factored `Q(a)` series vs the exact Van Loan route; conservative by the stated tail criterion (`nrm·reach ≤ 1`); wrong only toward compute. | — |
 | `_HAZARDS` (`_hazard_rungs`) | derived + budget | **Coordinate derived:** a rung is a diffusion rate in the offset/departure walkers, so a steady gain `K(ρ)`, and its information coordinate is the Whittle arclength `t = arccos(1 − K)` — the split ladder's (`resolution-criterion/0004`; the metric on `K` is the arcsine metric on `h = K/2`, an identity). Uniform in `t` on `[0, π/3]`: top the persistence boundary (derived), bottom exactly `ρ = 0` (**complete, no reach convention**). Spacing the shared budget `c√(2/mem)` at `_LADDER_MEM`. The retired log-ρ ladder was 3.4× non-uniform in `t` and four blurs short of zero; measured equivalent on the 0009 rig. | — |
+| attribution grid (`rates`, `_rate`) | derived + measured | **Derived:** two copies of every class cell walking their process scales at the two timescales the filter already owns — the step (rate 1) and the bank's memory (rate `1/mem`, `_LADDER_MEM`-capped, the `_rung_odds` read); no new constant. **Why:** a white sensor burst is booked on the process within a step because the per-step score sees a mode only through its own channel; the predictive likelihood sees the misattribution through the other channels and the state covariance, but only across a copy that did not attribute (multivariate-statfilter 0055–0057). Each copy keeps its own state (the evidence is their divergence; sharing it erases the effect). **Measured** on the arm: SENSOR 2.70 → 1.45× oracle, other regimes unchanged, ×2 cost; scalar jump +6%; async flat. The memory copy replaced a frozen-at-base copy at identical numbers, so an absent or wrong base is learned, not held. | AUD-10 |
+| `_attribution_mix` | derived | The copies are regime hypotheses and switch under the hazard ladder's kernel and rungs (`_HAZARDS`, exact chain power over a gap), as weight rows sharing the member filters; the switching rate is a posterior over rungs (reported as `switch`), never told. Under the bank's `forget` alone the patient copy could not return after losing (0057); the switching prior is what makes the pair work. | — |
 | `_RANK_TOL`, `_LOG2PI` | budget | Numerical rank tolerance; constant. | — |
 | `_OFFSET_CLASSES = 5` | budget + convention | Count is a budget; ladder floor **derived** (`V/T`, equal visibility over the memory), ceiling a **convention** (one noise sd per step) — bias-channels 0005/0012. | AUD-4 |
 | `_LADDER_MEM = 1000` | budget | Caps the split-ladder rung count so `forget = 1` asks for a finite grid. Rung count believed monotone (finer quadrature of the split posterior) but unverified. | AUD-5 |
@@ -166,12 +168,19 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
 - **AUD-9** (dynamics-learning): the anchor-leak topology — uniform leak over k−1
   alternatives is max-entropy by convention; measure sensitivity with named anchors
   (k > 2) or derive the leak from the class.
+- **AUD-10** (multivariate-statfilter 0057): the attribution grid's memory-timescale copy has no
+  fast way back after a real process change (its weight after a PROCESS burst is ~0 on the arm;
+  the switching prior refreshes its prior, not its state), and the first burst off the floor of
+  either kind is the expensive one (PROCESS-first 2.04× on the swapped schedule, untouched by the
+  grid). A restart keyed to a sustained collapse, or the memory copy re-seeded at the switching
+  rate, is the candidate; and the scalar jump's 6% is the memory copy taking weight at a level
+  jump it cannot follow.
 
 ## Scoreboard
 
-50 ledger entries; 45 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
+52 ledger entries; 47 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
 `forget` escape are ledger-only — the escape's marker is its own parameter doc).  By primary
-grade: **35 derived** (full bar), **3 proxy** (defensible, sharp
+grade: **37 derived** (full bar), **3 proxy** (defensible, sharp
 statement open), **2 measured** (below the bar, opens logged),
 **10 budget/convention/escape** (no theoretical
 claim; consequence-freedom owed in three places, AUD-8).  10 entries carry mixed grades
