@@ -5,7 +5,8 @@ import numpy as np
 sys.path.insert(0, ".")
 RIG = sys.argv[2]
 def load_pre():
-    src = open("/tmp/claude-0/-home-user-lucid-filter/56bbf4e5-3fe2-5e9c-93f7-d50a0493cfbc/scratchpad/lucid_pre.py").read()
+    import subprocess   # the pre-port source: the commit before the attribution grid landed
+    src = subprocess.run(["git", "show", "b4b8a0b^:lucid/filter/lucid.py"], capture_output=True, text=True).stdout or subprocess.run(["git", "show", "aaf94ac^:lucid/filter/lucid.py"], capture_output=True, text=True).stdout
     mod = types.ModuleType("lpre"); mod.__file__ = "lucid/filter/lucid.py"; sys.modules[mod.__name__] = mod
     exec(compile(src, "lucid/filter/lucid.py", "exec"), mod.__dict__); return mod
 A = load_pre()
