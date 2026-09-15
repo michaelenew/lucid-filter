@@ -96,6 +96,16 @@ budget is not the lever (flat). The rigorous fix has the shape the split ladder 
 has for a singly-read pair — a complete, compact ladder on the confounded direction —
 extended to pairs the sensors read twice. That is structural.
 
+**The mode ladder, built and measured** ([`0007`](exploration/0007_the_mode_ladder.md)). A
+complete SNR ladder per twice-read mode is a catastrophe on the arm (63–373× oracle): the top
+rung of a barely-read mode is the most diffuse member in the bank and takes it at step 2.
+Gated to modes within the class's reach it does what the floor analysis predicted on the
+regimes where attribution is the problem (SENSOR 2.70 → 2.07, POTFAIL 1.11 → 1.01) and loses
+where tracking is (calm ×9, PROCESS ×27). Neither ships. The lesson is precise: a ladder on
+a mode's *magnitude* has no level set holding it in, unlike a split; the rigorous object is a
+split at fixed total against the mode's reading channel with the walk kept on the total —
+the diagonalisation, applied to twice-read modes. Structural; not attempted.
+
 The **span** (reach), as before. Twice now — span-6 ([`resolvable-regime/0016`](../resolvable-regime/exploration/0016_the_full_battery.md)–`0017`)
 and the cap here — a grid change that helps a 1-D or partial-event rig has hurt
 the coupled 15-DOF arm, and both times the mechanism is the reach/node structure
@@ -114,5 +124,6 @@ constant, and it is the next thing to build if this is picked up.
   [`0003`](exploration/0003_the_cap_experiment.md) the enforcement test;
   [`0004`](exploration/0004_the_hazard_ladder_in_its_coordinate.md) the hazard ladder, derived and shipped;
   [`0005`](exploration/0005_the_split_ladder_verified.md) the split ladder verified, AUD-5 closed;
-  [`0006`](exploration/0006_the_walk_coordinate.md) the walk's coordinate: exact above the floor, the arm at it.
+  [`0006`](exploration/0006_the_walk_coordinate.md) the walk's coordinate: exact above the floor, the arm at it;
+  [`0007`](exploration/0007_the_mode_ladder.md) the mode ladder built and run on the arm: attribution won, tracking lost, does not ship.
 - `output/` — empty; the theorem lives in `0002` and in the filter's audit.

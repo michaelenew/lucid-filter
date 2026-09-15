@@ -40,7 +40,7 @@ On the arm all fifteen modes qualify. Their reading noise spans eight decades:
 | shipped | 15 | 1× | 1.16 / 1.44 | 1.14 | 2.70 | 1.16 | 1.11 | 1.06 |
 | ladder, 2 rungs/mode (`{off, top}`) | 465 | 20× | 3.53 / 6.84 | **266** | **135** | **243** | **373** | **63** |
 | ladder, 3 rungs/mode | 690 | 30× | — | stopped: same mechanism, see below | | | | |
-| ladder gated to the class's reach (modes 10–14 only, 3 rungs) | 240 | ~9× | 1.16 / 1.44 (no mode qualifies) | PENDING | | | | |
+| ladder gated to the class's reach (modes 10–14 only, 3 rungs) | 240 | 15× | 1.16 / 1.44 (no mode qualifies) | **10.08** | **2.07** | **31.11** | **1.01** | **4.23** |
 
 **The ungated ladder is a catastrophe** — two orders of magnitude worse than shipped on every
 arm regime, and 5× worse on the async rig's sensor-hot phase. Finite throughout.
@@ -82,6 +82,29 @@ cannot read within the class's reach has no scale to estimate, and neither a wal
 should carry one. The shipped activation rule (`hv_norm > 1e-8`) admits them; the `e^{30}`
 excursions of `0006` are what admitting them costs.
 
-The gated variant tests the ladder where it can apply — the five jerk modes, whose top rung
-is within the class box's reach of the base. Its arm row decides whether the ladder helps
-where the coordinate's premise holds.
+**The gated variant is the informative one.** Restricted to the five jerk modes, whose top rung
+is within the class box's reach of the base, the ladder does exactly what the floor analysis
+predicted on the two regimes where the walk's floor pathology bites — the sensor burst
+(2.70 → **2.07**, the best SENSOR number any variant in this workstream has produced) and the
+pot failure (1.11 → **1.01**) — because a sensor burst can no longer be attributed to a jerk
+mode climbing out of its floor. And it loses badly where the *walk* was doing real work: calm
+×9 and the process-noise regime ×27. Three rungs (`off`, `x = 0.12`, `x = 28.6`) cannot track
+a jerk-noise level that the walk followed continuously, and the top rung, `e^{10}` above the
+base, is still diffuse enough to take transients in the calm phase. At 15× the cost.
+
+## Decision
+
+**Does not ship**, in either form. The result is nonetheless the sharpest statement of the
+open this workstream has reached, because it separates the two things the floor conflated:
+
+- *attribution* — which axis a burst belongs to — is what a compact ladder fixes, and the
+  SENSOR/POTFAIL rows show the size of the prize (a quarter of the arm's sensor-burst error);
+- *tracking* — following a process-noise level that genuinely moves — is what the walk does
+  and a coarse ladder cannot.
+
+The shipped filter has the walk and pays in attribution (the `e^{30}` excursions); the ladder
+has attribution and pays in tracking. The rigorous object needs both: a ladder on the
+confounded direction *at fixed total* (so no rung is more diffuse than what the sensors see —
+the split ladder's property, which the SNR ladder lacked) with the walk kept on the total.
+That is the sequence-demix diagonalisation applied to twice-read modes, and it is a real
+restructuring of the star. Not attempted here.
