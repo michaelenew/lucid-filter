@@ -8,7 +8,9 @@ import numpy as np
 sys.path.insert(0, ".")
 SRC = "lucid/filter/lucid.py"
 PER, RIG = sys.argv[1], sys.argv[2]
+GATE = len(sys.argv) > 4 and sys.argv[4] == "gate"
 HELPERS = '''
+_MODE_GATE = GATE
 
 def _mode_groups(eng, I):
     """Twice-read modes at their floor: active, read by the sensors, not a singly-read pair, base share < 1/2."""
@@ -22,6 +24,8 @@ def _mode_groups(eng, I):
         w = float(((hv * hv) / eng.rho).sum())
         if w <= 0.0:
             continue
+        if _MODE_GATE and math.log((1.0 / w) / max(eng.lam[k], 1e-300)) > 3.0 * max(_SS):
+            continue                                  # the rung K -> 1 lies outside the class's reach: not a ladder, a structural question
         out.append((k, 1.0 / w))                      # r_eff: the noise the mode is read in, unit gain
     return out
 
@@ -54,7 +58,7 @@ def load(variant):
     src = open(SRC).read()
     if variant == "C":
         src = src.replace("\n\n# AUDIT[derived] exact null flow: dQ = -dR, the level set of the total (sequence-demix 0001).",
-                          HELPERS + "\n\n# AUDIT[derived] exact null flow: dQ = -dR, the level set of the total (sequence-demix 0001).")
+                          HELPERS.replace('_MODE_GATE = GATE', '_MODE_GATE = %r' % GATE) + "\n\n# AUDIT[derived] exact null flow: dQ = -dR, the level set of the total (sequence-demix 0001).")
         old = "        bases = [_apply_split(probe, v) for v in self.split_arr]\n"
         per = "None" if PER == "budget" else PER
         new = old + '''        modes = _mode_groups(probe, _scale_fisher(probe, *probe._balanced_base(), probe._fisher_Si))
