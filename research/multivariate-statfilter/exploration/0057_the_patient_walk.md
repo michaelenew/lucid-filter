@@ -75,5 +75,39 @@ moment it is right again, and the finite lags have a chance to be the best in th
 | leak per step | calm | SENSOR | PROCESS | POTFAIL | BOTH | never's weight after PROCESS |
 |---|---|---|---|---|---|---|
 | 0 (forget only) | 1.07 | 2.31 | 1.16 | 1.11 | 1.06 | 0.00 |
-| 1/100 | PENDING | | | | | |
-| 1/30 | PENDING | | | | | |
+| **1/100** | 1.11 | **1.25** | 1.16 | 1.11 | 1.06 | 0.00 |
+| 1/30 | 1.11 | 1.29 | 1.16 | 1.11 | 1.06 | 0.00 |
+
+With the leak the never copies hold 0.87 of the bank through the sensor burst (0.23 under the
+forget alone), the mixture's jerk-mode scale during the burst is **+0.20 nats** against +7.76
+shipped, and **SENSOR lands at 1.25× the oracle** — against 2.70 shipped and against the 1.16 that
+[`0055`](0055_sensor_regime_decomposition.md) set as the price of sensor-scale learning alone.
+PROCESS, POTFAIL and BOTH are unchanged; calm is 1.11 (1.14 shipped, 1.07 for the pair without
+a leak). The rate is insensitive across the factor of three tried. Scalar hero rig with the leak:
+jump +6% (1.747 → 1.854, `t = +12`), steady and C flat, ×1.6.
+
+## Reading
+
+The proposal works, and its mechanism is now fully visible in the bank's weights: a copy that
+does not attribute, kept alive by a switching prior, is what lets the bank read the whiteness of a
+sensor burst off its own predictive likelihood before the process scale is committed. Three
+things are settled by this note:
+
+- **Gradedness lives in the switching prior, not in the walk.** Every finite-patience copy is
+  dominated by the ends whatever its rule, because the question the bank is answering is a
+  regime question — sensor noise or process noise, now — and the evidence for it is the divergence
+  of two committed hypotheses, not a blend. The intermediate copies could only ever be less bad.
+  What is graded is how fast a losing hypothesis is allowed back, and that is the leak.
+- **The leak is a hazard.** It is the same object as the fault ladder's rate — how often the
+  attribution regime can switch — and gets the same treatment: not a constant to tune but a
+  ladder the evidence weights (`_hazard_rungs`). 1/100 and 1/30 measure the same here; the
+  ladder is what makes that a derived statement instead of a lucky one.
+- **The never copy still has no way back after a real process change** (its weight after
+  PROCESS is 0.00 with or without the leak: the leak refreshes its prior, not its state). On this
+  rig no sensor burst follows the process burst, so nothing is lost; the swapped schedule below
+  is the test that matters for shipping.
+
+| schedule | variant | calm | PROCESS | SENSOR (after) | POTFAIL | BOTH |
+|---|---|---|---|---|---|---|
+| PROCESS then SENSOR | shipped | PENDING | | | | |
+| PROCESS then SENSOR | pair + leak 1/100 | PENDING | | | | |
