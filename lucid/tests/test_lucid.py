@@ -401,14 +401,20 @@ def test_faults_hazard_validated():
 
 
 def test_hazard_box_is_structural_not_forget_derived():
-    """faults=True mixes over the fixed broad box: rungs 1.5 nats apart (the Sparrow rule
-    at the axis's one-event blur width) down from the class's own persistence boundary.  Nothing structural reads ``forget`` -- the box is identical at any
+    """faults=True mixes over the fixed ladder: uniform in the offset walker's Whittle
+    arclength t = arccos(1 - K(rho)), from the class's own persistence boundary down to
+    "no fault" (resolution-criterion 0004).  Nothing structural reads ``forget`` -- the box is identical at any
     memory, and the construction is valid at the NOMINAL filter, ``forget = 1`` (pure Bayes):
     forget is the engineering escape for the stationarity assumption being violated, and it
     is admissible only because nothing depends on it (adaptive-grid 0029, research 0009)."""
     f = LucidFilter(dynamics=[[0.9]], faults=True)
-    assert f.hazards[0] == 0.5                      # the class's persistence boundary
-    assert np.allclose(np.log(f.hazards[:-1] / f.hazards[1:]), 1.5)   # 1.5-nat rungs
+    hz = np.asarray(f.hazards)
+    assert hz[0] < 0.5 and hz[-1] > 0.0 and np.all(np.diff(hz) < 0)   # descending, below the boundary
+    P = (hz + np.sqrt(hz * hz + 4 * hz)) / 2                            # the walker's steady gain
+    t = np.arccos(1 - P / (P + 1))
+    assert np.allclose(np.diff(t), t[1] - t[0])                         # uniform in arclength ...
+    assert np.isclose(t[0] - (t[1] - t[0]) / 2, np.pi / 3)              # ... cell-centred up to rho = 1/2
+    assert np.isclose(t[-1] + (t[1] - t[0]) / 2, 0.0)                   # ... and down to rho = 0
     for fg in (0.99, 1.0):                          # forget never reaches the box
         g = LucidFilter(dynamics=[[0.9]], faults=True, forget=fg)
         assert np.array_equal(g.hazards, f.hazards)
