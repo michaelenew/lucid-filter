@@ -199,8 +199,9 @@ _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sens
 # derived ends: the step (1) and the memory's resolution floor (1/mem: a copy moving less than one
 # step's worth over the bank's whole memory is indistinguishable from one that never moves; the
 # same read as `_rung_odds`).  (iii) the switching prior -- `_switch_rungs`.  BUDGET: two rungs of
-# the rate ladder (the bank was measured to keep only the ends under a forget, 0057; the interior
-# under the switching ladder is untested).  Measured on the 15-DOF arm: SENSOR 2.70 -> 1.46x oracle,
+# the rate ladder -- the coarsest point of a family MONOTONE IN CODE LENGTH (2/3/5/9 rungs: 30847,
+# 30860, 30907, 31548 on the arm, 0060) whose interior rungs buy state transients the acceptance
+# windows do not score (a 1.77 m tip excursion at an onset at 9 rungs).  Measured on the 15-DOF arm: SENSOR 2.70 -> 1.46x oracle,
 # other regimes unchanged, x2 cost; scalar and learned-dynamics rigs bit-identical (no held axis);
 # async whole 1.16 -> 1.19 (its one floor mode held).  OPEN AUD-10: the memory copy's way back
 # after a real process change; the first burst off the floor of either kind; the departure specs'

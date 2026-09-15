@@ -349,6 +349,10 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
   unchanged; scalar and learned-dynamics rigs bit-identical; async 1.16 -> 1.19; x2 cost.
   Remaining opens (a budget of two rate rungs, the departure and no-held-axis duplicates, the
   async cost, the memory copy's way back) are AUD-10 -- none a number set by hand.
+- **The rate ladder's interior** ([`0060`](exploration/0060_the_rate_ladder_interior.md)): monotone in
+  code length at 2/3/5/9 rungs (30847 -> 31548), so a budget by the rubric with two rungs its floor;
+  not monotone in the state -- the interior rungs buy onset transients (1.77 m at nine rungs) that
+  the acceptance windows skip.  The filter's loss and the rigs' part company there.
 
 **Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
 were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in
