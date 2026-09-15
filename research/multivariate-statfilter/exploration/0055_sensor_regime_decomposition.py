@@ -1,4 +1,4 @@
-"""0011 -- why the arm's SENSOR regime sits at 2.7x the oracle, and how much of that is learning lag.
+"""0055 -- why the arm's SENSOR regime sits at 2.7x the oracle, and how much of that is learning lag.
 
 The 0054 arm rig, SENSOR phase (steps 250-500): every accelerometer's noise sd x15 (+5.42 nats of log-variance),
 scored from step 290.  Decomposition, per seed:
@@ -11,14 +11,14 @@ scored from step 290.  Decomposition, per seed:
   filter      the shipped LucidFilter
 and the estimated accelerometer log-scale trajectory: rise times to 50% / 90% of +5.42 nats, settled mean and sd,
 what the pots and the process scales do meanwhile, and the exit decay.
-    python 0011_sensor_regime_decomposition.py [seed]"""
+    python 0055_sensor_regime_decomposition.py [seed]"""
 import os, sys, time
 import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "multivariate-statfilter", "scripts")); sys.path.insert(0, os.path.join(HERE, "..", ".."))
+sys.path.insert(0, os.path.join(HERE, "..", "scripts")); sys.path.insert(0, os.path.join(HERE, "..", "..", ".."))
 import arm5dof as A
 import importlib.util
-spec = importlib.util.spec_from_file_location("p54", os.path.join(HERE, "..", "multivariate-statfilter", "exploration", "0054_physical_sensors.py"))
+spec = importlib.util.spec_from_file_location("p54", os.path.join(HERE, "0054_physical_sensors.py"))
 m54 = importlib.util.module_from_spec(spec); spec.loader.exec_module(m54)
 from lucid import LucidFilter
 np.seterr(all="ignore")
@@ -66,4 +66,3 @@ print(f"{'window':>26} | {'oracle':>7} {'fixed':>7} {'filter':>7} {'plug-in':>7}
 for nm, a, b in wins:
     o = score(orc, a, b)
     print(f"{nm:>26} | {1.0:7.2f} {score(fix,a,b)/o:7.2f} {score(est,a,b)/o:7.2f} {score(plug,a,b)/o:7.2f} {score(plugR,a,b)/o:7.2f} {score(lagorc,a,b)/o:7.2f} {score(biasorc,a,b)/o:8.2f}   (oracle {o:.4f} m)")
-np.savez(os.path.join(HERE, f"0011_seed{seed}.npz"), eta=eta, xi=xi, est=est, orc=orc, plug=plug)

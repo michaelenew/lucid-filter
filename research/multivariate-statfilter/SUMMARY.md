@@ -294,6 +294,17 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
   4.7x the oracle until the second axis restored the lever arm).  Nothing in the construction
   prices relative degree in; a rig audit is not done until every disturbance axis has a
   sensor at comparable relative degree.
+- **The arm's SENSOR regime, decomposed: attribution, not lag** ([`0055`](exploration/0055_sensor_regime_decomposition.md)).
+  With every accelerometer at x15, the shipped filter scores 2.1-3.5x the oracle (three
+  seeds).  Switching one thing at a time in a plain Kalman: the sensor scale is learned fast
+  (half the +5.4 nats in one step, nine tenths in ~20, settled within 0.2 nats), and a Kalman
+  given the filter's own `R` trajectory with the true `Q` is at **1.04-1.35x** -- the whole
+  price of learning lag and bias.  Feeding it the filter's `Q` too reproduces the filter's
+  number: during the burst the jerk modes' process scale is pushed to **+4 to +8 nats** (truth
+  0), the burst being booked partly on the process.  The bank and collapse are not where the
+  gap is.  So the regime is worth ~2x if attribution were fixed with tracking kept -- the same
+  object resolution-criterion 0006/0007 reached from the coordinate side (the jerk modes sit
+  at their floor, where a per-step score cannot tell a process burst from a sensor burst).
 
 **Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
 were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in
