@@ -60,9 +60,10 @@ uniform prior in that coordinate; valid at ``forget = 1`` and reading nothing fr
 likelihood weights it; the reported `hazard` is the posterior mean, the regime the data currently
 supports.  The same treatment, one level down, is the ATTRIBUTION grid: every class cell runs twice,
 walking its process scales at the step's timescale and at the bank's memory, so a white sensor burst is
-not booked on the process before its whiteness has shown; the copies switch under the hazard ladder's
-kernel (weight rows sharing the filters) and the bank reports `patience` (the weight on the memory
-copies) and `switch` (the posterior-mean switching rate) -- research multivariate-statfilter 0055-0057.  Each rung's gain, drift, cap and restart width derive from its own `(rho_j, class
+not booked on the process before its whiteness has shown; the copies switch under a ladder of
+switching rates uniform in the rate's own information coordinate (`_switch_rungs`; weight rows sharing
+the filters) and the bank reports `patience` (the weight on the memory copies) and `switch` (the
+posterior-mean switching rate) -- research multivariate-statfilter 0055-0058.  Each rung's gain, drift, cap and restart width derive from its own `(rho_j, class
 size)`, and its detection frontier is derived (`log(1/rho_j) / KL-rate`), not tuned.  Passing a
 number (`faults=rho`) pins the box to that one rung -- give-what-you-know, for a caller who
 truly knows the rate.  The derivations and the measured acceptance results are
@@ -183,9 +184,14 @@ _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sens
                             # supports (24 rungs).  A longer `forget` still sharpens the bank's
                             # weights; it does not buy a finer ladder, and `forget = 1` would ask
                             # for an infinite one.
-# AUDIT[derived+measured] the ATTRIBUTION grid: two copies of every class cell, walking their
+# AUDIT[convention+budget+measured] the ATTRIBUTION grid -- BELOW THE BAR, open AUD-10: two copies of every class cell, walking their
 # process scales at the two timescales the filter already owns -- the step (rate 1, the walk as
 # it was) and the bank's memory (rate 1/mem, `_LADDER_MEM`-capped, the same read as `_rung_odds`).
+# GRADE: the two rates are a CONVENTION (endpoints with a rationale, not a derivation), the count
+# a BUDGET, the step-scaling form a convention, the sensor-axes-eager and separate-state decisions
+# MEASURED; the switching ladder below is the one derived piece.  The derived form this stands in
+# for is a class box with separate process- and sensor-scale classes, the memory copy being the
+# class at phi = 1 - 1/mem -- untested.
 # WHY: a white sensor burst is booked partly on the process within a step or two, because the
 # per-step score on a process mode looks only through that mode's own channel, where an inflated
 # Q hides under the burst; the predictive likelihood sees it through the other channels and the
@@ -193,8 +199,9 @@ _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sens
 # 0055-0057).  The evidence is the divergence of the two copies' state trajectories, so each keeps
 # its own state; sensor axes walk at the step's timescale on both (their learning was measured
 # fast and right).  The copies are regime hypotheses -- "the recent innovations are sensor noise"
-# against "process noise" -- and switch under the hazard ladder's kernel over `_HAZARDS` (weight
-# rows sharing the filters, so the switching rate is read, never told: `_attribution_mix`).
+# against "process noise" -- and switch under the symmetric two-state kernel at each rung of
+# `_switch_rungs` (weight rows sharing the filters, so the switching rate is read, never told:
+# `_attribution_mix`).
 # MEASURED on the 15-DOF arm: SENSOR 2.70x -> 1.45x oracle (1.25x at a pinned rate; 1.16x is the
 # price of sensor-scale learning alone), other regimes unchanged, x2 cost; scalar hero jump +6%,
 # async flat.  The memory-timescale copy replaces a "never walks" copy (identical numbers) so that
@@ -222,6 +229,29 @@ def _hazard_rungs(mem=None):
 
 
 _HAZARDS = _hazard_rungs()           # the default hazard box: 16 rungs, 0.42 down to 2.9e-7, complete to 0
+
+
+# AUDIT[derived+budget] the attribution grid's switching ladder: a per-step probability of
+# switching regime is a Bernoulli rate, whose information coordinate is the arcsine,
+# theta = 2 asin sqrt(rho) (per-step Fisher 1; the same metric as the gain arclength at
+# h = K/2, resolution-criterion 0004).  Uniform in theta on [0, pi/2] -- rho from 0 ("the regime
+# never switches") to the persistence boundary 1/2 -- at the shared spacing budget c sqrt(2/mem)
+# (`_LADDER_MEM`, a node budget): COMPLETE, and uniform initial weights on these rungs are the
+# Jeffreys prior on a rate.  Not `_HAZARDS`: that ladder is uniform in the OFFSET WALKER's gain
+# coordinate, a different object (its rungs are not uniform in the switching rate's own
+# coordinate).
+def _switch_rungs(mem=None):
+    """Switching-rate rungs, uniform in the Bernoulli arcsine coordinate, complete to rho = 0."""
+    mem = _LADDER_MEM if mem is None else mem
+    step = _GAP_FACTOR * math.sqrt(2.0 / mem)
+    top = 0.5 * math.pi                                   # rho = 1/2
+    J = int(math.ceil(top / step))
+    theta = (np.arange(J) + 0.5) * top / J
+    rho = np.sin(0.5 * theta) ** 2
+    return tuple(float(r) for r in rho[::-1])
+
+
+_SWITCH = _switch_rungs()            # 24 rungs, 0.499 down to 2.7e-4
 
 
 
@@ -3051,9 +3081,10 @@ class LucidFilter:
         else:
             self._lam2 = np.ones(1)
             self._Md = np.ones((1, 1, 1))
-        # the attribution grid's switching ladder: the hazard ladder's rungs, its kernel (uniform
-        # leak over the k = len(rates) copies), weight rows sharing the member filters
-        self._att = np.asarray(_HAZARDS, float)
+        # the attribution grid's switching ladder (`_switch_rungs`): the symmetric two-state chain
+        # at each rung (the only symmetric kernel on two copies; exact chain power over a gap),
+        # weight rows sharing the member filters
+        self._att = np.asarray(_SWITCH, float)
         self._Ja = self._att.size
         ka = len(self.rates)
         self._att_lam = np.clip(1.0 - self._att * ka / (ka - 1.0), 0.0, 1.0)
@@ -3205,9 +3236,9 @@ class LucidFilter:
         out = np.log(np.maximum(mixed, 1e-300)).ravel()
         return out - _logsumexp(out)
 
-    # AUDIT[derived] the attribution grid's switching prior: the hazard ladder's kernel and rungs
-    # (exact chain power over a gap), applied across the rate copies of each cell; the rate is a
-    # posterior over rungs, never a constant (see the note above `_hazard_rungs`).
+    # AUDIT[derived] the attribution grid's switching prior: the symmetric two-state chain (exact
+    # chain power over a gap) at each rung of `_switch_rungs`, applied across the rate copies of
+    # each cell; the rate is a posterior over rungs, never a constant.
     def _attribution_mix(self, logw, a=1.0):
         """Propagate the bank prior through the attribution grid's switching kernel, rung by rung."""
         nr = len(self.rates)

@@ -45,8 +45,8 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 | `_PHIS`, `_SS` | measured | Broad class box; the data down-weights unsupported corners; tracking measured flat along the identification ridge (adaptive-grid findings 13–16). `_SS` top end has a reach argument (largest one-step scale change the window represents); the ×2 ratio and `_PHIS` values are underived. Ridge flatness does not clear the bar. | AUD-2 |
 | `_SERIES_REACH = 4.0` | budget | Switch radius for the pre-factored `Q(a)` series vs the exact Van Loan route; conservative by the stated tail criterion (`nrm·reach ≤ 1`); wrong only toward compute. | — |
 | `_HAZARDS` (`_hazard_rungs`) | derived + budget | **Coordinate derived:** a rung is a diffusion rate in the offset/departure walkers, so a steady gain `K(ρ)`, and its information coordinate is the Whittle arclength `t = arccos(1 − K)` — the split ladder's (`resolution-criterion/0004`; the metric on `K` is the arcsine metric on `h = K/2`, an identity). Uniform in `t` on `[0, π/3]`: top the persistence boundary (derived), bottom exactly `ρ = 0` (**complete, no reach convention**). Spacing the shared budget `c√(2/mem)` at `_LADDER_MEM`. The retired log-ρ ladder was 3.4× non-uniform in `t` and four blurs short of zero; measured equivalent on the 0009 rig. | — |
-| attribution grid (`rates`, `_rate`) | derived + measured | **Derived:** two copies of every class cell walking their process scales at the two timescales the filter already owns — the step (rate 1) and the bank's memory (rate `1/mem`, `_LADDER_MEM`-capped, the `_rung_odds` read); no new constant. **Why:** a white sensor burst is booked on the process within a step because the per-step score sees a mode only through its own channel; the predictive likelihood sees the misattribution through the other channels and the state covariance, but only across a copy that did not attribute (multivariate-statfilter 0055–0057). Each copy keeps its own state (the evidence is their divergence; sharing it erases the effect). **Measured** on the arm: SENSOR 2.70 → 1.45× oracle, other regimes unchanged, ×2 cost; scalar jump +6%; async flat. The memory copy replaced a frozen-at-base copy at identical numbers, so an absent or wrong base is learned, not held. | AUD-10 |
-| `_attribution_mix` | derived | The copies are regime hypotheses and switch under the hazard ladder's kernel and rungs (`_HAZARDS`, exact chain power over a gap), as weight rows sharing the member filters; the switching rate is a posterior over rungs (reported as `switch`), never told. Under the bank's `forget` alone the patient copy could not return after losing (0057); the switching prior is what makes the pair work. | — |
+| attribution grid (`rates`, `_rate`) | **convention + budget + measured** | Two copies per class cell, the process-scale walk's Newton step scaled by a rate. **Convention:** the two rates are the two timescales the filter owns, the step (1) and the bank's memory (`1/mem`, the `_rung_odds` read) — a choice of endpoints with a rationale, not a derivation; the step-scaling form (rather than a slower class drift or gain) is also a convention. **Budget:** two points; whether a rate grid needs more, and in what coordinate a rate is resolvable, is not derived (the finite-lag copies of 0057 held zero weight, but that was measured under the bank's `forget`, before the switching ladder). Sensor axes at rate 1 on both copies: **measured** (0055). Separate states per copy: a mechanism argument (the evidence is the trajectories' divergence) confirmed by measurement (0056), not derived. **Measured** on the arm: SENSOR 2.70 → 1.45× oracle, other regimes unchanged, ×2. The derived form this stands in for: a class box with separate process- and sensor-scale classes, the memory copy being the class at `φ = 1 − 1/mem` — untested. | AUD-10 |
+| `_attribution_mix`, `_switch_rungs` | derived + budget | **Derived:** the switch between copies is a per-step Bernoulli rate; its information coordinate is the arcsine `θ = 2 asin√ρ` (per-step Fisher 1; the same metric as the gain arclength at `h = K/2`, resolution-criterion 0004); the ladder is uniform in `θ` on `[0, π/2]` — `ρ = 0` to the persistence boundary `½` — so it is **complete**, and uniform initial weights on it are the **Jeffreys prior** on a rate. The kernel is the symmetric two-state chain, the only symmetric kernel on two copies, with exact chain power over a gap. **Budget:** spacing `c√(2/mem)` at `_LADDER_MEM`, the shared node budget (24 rungs). The rate is a posterior over rungs (`switch`), never a constant. Replaces the first port's borrowed `_HAZARDS`, whose rungs are uniform in the offset walker's gain coordinate, not in the switching rate's (a proxy). | — |
 | `_RANK_TOL`, `_LOG2PI` | budget | Numerical rank tolerance; constant. | — |
 | `_OFFSET_CLASSES = 5` | budget + convention | Count is a budget; ladder floor **derived** (`V/T`, equal visibility over the memory), ceiling a **convention** (one noise sd per step) — bias-channels 0005/0012. | AUD-4 |
 | `_LADDER_MEM = 1000` | budget | Caps the split-ladder rung count so `forget = 1` asks for a finite grid. Rung count believed monotone (finer quadrature of the split posterior) but unverified. | AUD-5 |
@@ -168,21 +168,24 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
 - **AUD-9** (dynamics-learning): the anchor-leak topology — uniform leak over k−1
   alternatives is max-entropy by convention; measure sensitivity with named anchors
   (k > 2) or derive the leak from the class.
-- **AUD-10** (multivariate-statfilter 0057): the attribution grid's memory-timescale copy has no
-  fast way back after a real process change (its weight after a PROCESS burst is ~0 on the arm;
-  the switching prior refreshes its prior, not its state), and the first burst off the floor of
-  either kind is the expensive one (PROCESS-first 2.04× on the swapped schedule, untouched by the
-  grid). A restart keyed to a sustained collapse, or the memory copy re-seeded at the switching
-  rate, is the candidate; and the scalar jump's 6% is the memory copy taking weight at a level
-  jump it cannot follow.
+- **AUD-10** (multivariate-statfilter 0057/0058): the attribution grid is **below the bar** — a
+  convention at its two rates (the step and the memory), a budget at its count, measured in its
+  sensor-axis and separate-state decisions, and its claim of sufficiency (two points) untested
+  under the switching ladder. The derived form is a class box with separate process- and
+  sensor-scale classes (the memory copy = the class at `φ = 1 − 1/mem`), which would make the
+  copies members of the existing derived grid rather than a bolt-on. Also open: the memory copy
+  has no fast way back after a real process change (its weight after a PROCESS burst is ~0; the
+  switching prior refreshes its prior, not its state); the first burst off the floor of either
+  kind is the expensive one (PROCESS-first 2.04×, untouched); the scalar jump pays 6%; the
+  departure specs carry an identical second copy.
 
 ## Scoreboard
 
-52 ledger entries; 47 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
+52 ledger entries; 48 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
 `forget` escape are ledger-only — the escape's marker is its own parameter doc).  By primary
-grade: **37 derived** (full bar), **3 proxy** (defensible, sharp
+grade: **36 derived** (full bar), **3 proxy** (defensible, sharp
 statement open), **2 measured** (below the bar, opens logged),
-**10 budget/convention/escape** (no theoretical
-claim; consequence-freedom owed in three places, AUD-8).  10 entries carry mixed grades
+**11 budget/convention/escape** (no theoretical
+claim; consequence-freedom owed in three places, AUD-8).  11 entries carry mixed grades
 (a derived core with a proxy or measured edge — the box, the window, the offset channel).
 Every proxy and measured element references an open; no chunk is unmarked.
