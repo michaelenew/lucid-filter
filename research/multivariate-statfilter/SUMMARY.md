@@ -353,6 +353,18 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
   code length at 2/3/5/9 rungs (30847 -> 31548), so a budget by the rubric with two rungs its floor;
   not monotone in the state -- the interior rungs buy onset transients (1.77 m at nine rungs) that
   the acceptance windows skip.  The filter's loss and the rigs' part company there.
+- **The interior is theory, not budget** ([`0061`](exploration/0061_the_interior_is_theory.md)).  The
+  degradation is a handover to a copy whose state is stale but whose one-step likelihood ties,
+  in a regime whose unmasked channels cannot see the state component the copies disagree on
+  (POTFAIL: the pot is the only direct reader of position, the accelerometer two integrations
+  away).  Simplest repro: one joint of the arm (pot on position, accelerometer on acceleration),
+  PROCESS then POTFAIL -- 2.6x at two rungs, 3.0x at five; a 1-D level does not reproduce it.
+  Reason: the bank mixes weights under a switching prior and never mixes states, so under no
+  evidence it averages divergent states; two rungs escape only because the never copy is too
+  stale to tie.  The consistent switching filter (IMM: states mixed at the ladder's rate) makes
+  the interior flat and the chain rig 0.84x, arm POTFAIL 1.11 -> 1.01 and the swapped schedule
+  near the oracle, but erodes SENSOR to 2.30 because the gain is the copies' divergence.  Open:
+  mixing conditional on evidence.
 
 **Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
 were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in

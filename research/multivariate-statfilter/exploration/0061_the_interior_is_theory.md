@@ -105,7 +105,17 @@ rate erodes it over a 250-step burst:
 | floor copy, 5 rungs, weights + states mixed | 1.13 | 2.31 | 1.19 | 1.03 | 1.34 |
 | swapped schedule, 2 rungs, weights + states mixed: PROCESS-first / SENSOR-after / POTFAIL / BOTH | | 0.99 | 2.02 | 1.00 | 0.86 |
 
-PATIENCE_SWITCH_PENDING
+With states mixed the copies no longer stay apart, and the read-outs show it: `patience` is 0.70 through
+SENSOR but also 0.89 through POTFAIL and 0.95 in the calm after (weights-only: 0.74, ≤ 0.05, ≤ 0.05),
+and the switching rate the ladder reads rises from 0.005 to 0.026 — copies that agree are cheap to
+switch between. All-steps tip RMSE on the normal schedule is 0.0123 m shipped against 0.0130 m
+(2 rungs) and 0.0131 m (5 rungs) mixed; on the swapped schedule 0.0536 m shipped against 0.0221 m
+mixed, because the shipped filter's own BOTH-onset spike (1.46 m at step 1451) is halved.
+
+One more thing the reruns show, incidental but real: two identical runs of the *shipped* filter on
+the same data gave all-steps RMSE 0.0123 m and 0.0152 m, differing only at the BOTH onset (worst
+step 0.09 m against 0.47 m at step 1450). The shipped onset behaviour is numerically fragile
+there — presumably the pseudo-inverse fallback's path — and that is where every ladder's spike lives.
 
 ## 4. What this settles
 
