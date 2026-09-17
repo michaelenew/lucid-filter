@@ -198,7 +198,8 @@ _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sens
 # above its floor walks at the step on both copies.  (ii) the copy's rate -- a rate ladder's two
 # derived ends: the step (1) and the memory's resolution floor (1/mem: a copy moving less than one
 # step's worth over the bank's whole memory is indistinguishable from one that never moves; the
-# same read as `_rung_odds`).  (iii) the switching rate -- `1/mem` again, derived above.  BUDGET: two rungs of
+# same read as `_rung_odds` and `_hazard_rungs` make -- the node budget, never `forget`).
+# (iii) the switching rate -- `1/mem` again, derived above.  BUDGET: two rungs of
 # the rate ladder -- the coarsest point of a family MONOTONE IN CODE LENGTH (2/3/5/9 rungs: 30847,
 # 30860, 30907, 31548 on the arm, 0060) whose interior rungs buy state transients the acceptance
 # windows do not score (a 1.77 m tip excursion at an onset at 9 rungs).  Measured on the 15-DOF arm: SENSOR 2.70 -> 1.46x oracle,
@@ -234,7 +235,9 @@ _HAZARDS = _hazard_rungs()           # the default hazard box: 16 rungs, 0.42 do
 # lost regain weight when it becomes right again.  A uniform leak `r` floors a copy's weight at
 # ~`r`, so revival costs `log(1/r)` nats of evidence, and it caps the accumulated log-odds at an
 # effective window of `1/r` steps.  The BINDING bound is the second: a leak faster than the bank's
-# own memory discards evidence that memory still holds, so `1/r >= mem`.  The first is a bound in
+# own memory discards evidence that memory still holds, so `1/r >= mem`, with `mem` the NODE
+# BUDGET `_LADDER_MEM` -- read directly, never off `forget`, like every other ladder here, so
+# this grid is unchanged at the nominal `forget = 1`.  The first is a bound in
 # the other direction but a weak one -- revival needs only `r > 0`, and at `r = 1/mem` it costs
 # ~7 nats, ~10 steps at the evidence rates these copies see.  So take the LARGEST admissible rate,
 # which maximises revival speed subject to discarding nothing: `r = 1/mem`, uniquely -- the same
@@ -629,8 +632,9 @@ class _MeanChannel:
     same rule.  So the channel runs `_OFFSET_CLASSES` copies of the recursion at geometrically
     spaced class widths and mixes them by their own predictive likelihood on the bank's
     ``forget`` timescale, exactly as the ``(phi, s)`` box is mixed one level down.  The ladder's
-    floor is DERIVED -- ``V / T`` with ``T = 1/(1 - forget)`` is where a constant and the noise
-    it sits in are equally visible over the filter's own memory, so the bottom rung is "no
+    floor is DERIVED -- ``V / T`` with ``T = _LADDER_MEM`` (the node budget, not ``forget``) is
+    where a constant and the noise
+    it sits in are equally visible over that memory, so the bottom rung is "no
     offset" in the only sense the filter can hold that belief -- and its ceiling is the
     scale-free convention used everywhere else here, one noise sd per step.  Neither end is
     fitted; the rung count is a compute budget.
@@ -2956,7 +2960,9 @@ class LucidFilter:
         # output, so nothing below this line changes and no member pays for it.
         self._mean = self._sensor = None
         if offsets:
-            mem = 1.0 / max(1.0 - self.forget, 1e-12)
+            # T is the NODE BUDGET, never `forget`: the floor V/T must mean the same thing at the
+            # nominal `forget = 1` (research 0009, corrected), and 1/(1 - forget) diverges there.
+            mem = _LADDER_MEM
             basis = _mean_basis(F, Hm)
             if basis.shape[1]:
                 self._mean = _MeanChannel(basis, n, F, Hm, Q0, R0, hazards, mem,
@@ -2975,7 +2981,10 @@ class LucidFilter:
                                             feedback=False)
         probe = _WalkEngine(Q0, R0, Hm, F, B, phis[0], ss[0])
         self.groups = probe._groups
-        self.split_arr = _split_star(np.log(_rung_odds(self.forget)), len(self.groups))
+        # `_rung_odds` at the node budget, not at `forget`: the read only ever pruned rungs and
+        # was already capped by `_LADDER_MEM`, so this is a no-op at the default and makes the
+        # ladder independent of the escape.
+        self.split_arr = _split_star(np.log(_rung_odds(1.0)), len(self.groups))
         bases = [_apply_split(probe, v) for v in self.split_arr]
         self.phi_arr = np.array([ph for ph in phis for _ in ss for _ in bases], float)
         self.s_arr = np.array([sv for _ in phis for sv in ss for _ in bases], float)
@@ -2983,8 +2992,12 @@ class LucidFilter:
         # The attribution grid (see the audit note above `_hazard_rungs`): every cell twice, the
         # walk on the axes at their floor at the step's timescale and at the memory's resolution
         # floor; every other axis walks at the step on both.
-        _mem = min(1.0 / (1.0 - self.forget), _LADDER_MEM) if self.forget < 1.0 else _LADDER_MEM
-        self.rates = (1.0, 1.0 / _mem)
+        # The memory here is the NODE BUDGET `_LADDER_MEM`, read directly and never off `forget`
+        # -- exactly as `_hazard_rungs` reads it, and for the same reason: every construction in
+        # this filter must stay valid at the nominal `forget = 1` (research 0009, corrected), so
+        # nothing structural may read the one engineering escape.  A shorter `forget` sharpens the
+        # bank's weights; it does not move this grid.
+        self.rates = (1.0, 1.0 / _LADDER_MEM)
         cells = [(ph, sv, bq, br, rt) for rt in self.rates for (ph, sv, bq, br) in cells]
         self.phi_arr = np.tile(self.phi_arr, len(self.rates))
         self.s_arr = np.tile(self.s_arr, len(self.rates))
