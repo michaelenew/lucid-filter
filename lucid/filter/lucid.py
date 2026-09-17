@@ -61,8 +61,8 @@ likelihood weights it; the reported `hazard` is the posterior mean, the regime t
 supports.  The same treatment, one level down, is the ATTRIBUTION grid: every class cell runs twice,
 walking the axes at their floor (resolution-criterion 0006) at the step's timescale and at the memory's
 resolution floor, so a white sensor burst is not booked on a floor mode before its whiteness has shown; the copies switch under a ladder of
-switching rates uniform in the rate's own information coordinate (`_switch_rungs`; weight rows sharing
-the filters) and the bank reports `patience` (the weight on the memory copies) and `switch` (the
+a switching kernel at the rate the bank's own memory sets (`1/mem`, which is the
+patient copy's own rate) and the bank reports `patience` (the weight on the memory copies) and `switch` (the
 posterior-mean switching rate) -- research multivariate-statfilter 0055-0058.  Each rung's gain, drift, cap and restart width derive from its own `(rho_j, class
 size)`, and its detection frontier is derived (`log(1/rho_j) / KL-rate`), not tuned.  Passing a
 number (`faults=rho`) pins the box to that one rung -- give-what-you-know, for a caller who
@@ -198,7 +198,7 @@ _LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sens
 # above its floor walks at the step on both copies.  (ii) the copy's rate -- a rate ladder's two
 # derived ends: the step (1) and the memory's resolution floor (1/mem: a copy moving less than one
 # step's worth over the bank's whole memory is indistinguishable from one that never moves; the
-# same read as `_rung_odds`).  (iii) the switching prior -- `_switch_rungs`.  BUDGET: two rungs of
+# same read as `_rung_odds`).  (iii) the switching rate -- `1/mem` again, derived above.  BUDGET: two rungs of
 # the rate ladder -- the coarsest point of a family MONOTONE IN CODE LENGTH (2/3/5/9 rungs: 30847,
 # 30860, 30907, 31548 on the arm, 0060) whose interior rungs buy state transients the acceptance
 # windows do not score (a 1.77 m tip excursion at an onset at 9 rungs).  Measured on the 15-DOF arm: SENSOR 2.70 -> 1.46x oracle,
@@ -229,27 +229,23 @@ def _hazard_rungs(mem=None):
 _HAZARDS = _hazard_rungs()           # the default hazard box: 16 rungs, 0.42 down to 2.9e-7, complete to 0
 
 
-# AUDIT[derived+budget] the attribution grid's switching ladder: a per-step probability of
-# switching regime is a Bernoulli rate, whose information coordinate is the arcsine,
-# theta = 2 asin sqrt(rho) (per-step Fisher 1; the same metric as the gain arclength at
-# h = K/2, resolution-criterion 0004).  Uniform in theta on [0, pi/2] -- rho from 0 ("the regime
-# never switches") to the persistence boundary 1/2 -- at the shared spacing budget c sqrt(2/mem)
-# (`_LADDER_MEM`, a node budget): COMPLETE, and uniform initial weights on these rungs are the
-# Jeffreys prior on a rate.  Not `_HAZARDS`: that ladder is uniform in the OFFSET WALKER's gain
-# coordinate, a different object (its rungs are not uniform in the switching rate's own
-# coordinate).
-def _switch_rungs(mem=None):
-    """Switching-rate rungs, uniform in the Bernoulli arcsine coordinate, complete to rho = 0."""
-    mem = _LADDER_MEM if mem is None else mem
-    step = _GAP_FACTOR * math.sqrt(2.0 / mem)
-    top = 0.5 * math.pi                                   # rho = 1/2
-    J = int(math.ceil(top / step))
-    theta = (np.arange(J) + 0.5) * top / J
-    rho = np.sin(0.5 * theta) ** 2
-    return tuple(float(r) for r in rho[::-1])
+# AUDIT[derived] the attribution grid's SWITCHING RATE, from the bank's own memory
+# (multivariate-statfilter 0062).  The switching prior has one structural job: letting a copy that
+# lost regain weight when it becomes right again.  A uniform leak `r` floors a copy's weight at
+# ~`r`, so revival costs `log(1/r)` nats of evidence, and it caps the accumulated log-odds at an
+# effective window of `1/r` steps.  Those two bound `r` from opposite sides: revival within the
+# bank's evidence horizon wants `r` LARGE, and not discarding what that horizon holds wants
+# `1/r >= mem`.  They meet at exactly one point, `r = 1/mem` -- the same constant, from the same
+# resolution-floor argument, as the patient copy's own walk rate, so the grid carries ONE derived
+# number appearing twice.  A rate LADDER was tried here and is retired: uniform on the Bernoulli
+# arcsine coordinate is Jeffreys for a rate but has MEAN 0.18 on [0, 1/2], and the ladder needs
+# ~1000 steps to escape that prior while the burst it governs arrives at step 250 -- so during the
+# phase that matters the ladder runs at its prior, not its inference (measured: arm SENSOR 1.46x
+# against 1.24x at `1/mem`, and every restricted-top ladder scored exactly where its PRIOR MEAN
+# falls on the pinned-rate curve).  Deeper, there was nothing there to infer: the copies are two
+# settings of one estimator, not two states of nature, so the data-generating process holds no
+# such rate, and what the ladder converged to tracked the test rig's own phase schedule.
 
-
-_SWITCH = _switch_rungs()            # 24 rungs, 0.499 down to 2.7e-4
 # AUDIT[derived] the floor boundary: a process scale read at SNR x = q/r_eff has per-step local
 # share g = x / (P(x) + 1), P(x) = (x + sqrt(x^2 + 4x)) / 2 the steady predicted variance of a random
 # walk in noise (resolution-criterion 0006); at x = 1 -- process noise equal to its reading noise --
@@ -790,7 +786,8 @@ class LucidStep:
     patience: float = None         #: weight the bank puts on the copies that walk their floor axes
     #: at the memory's resolution floor -- "the recent innovations are not this floor mode's"
     #: (the attribution grid, research multivariate-statfilter 0055-0059)
-    switch: float = None           #: posterior-mean rate at which the attribution regime switches
+    switch: float = None           #: the rate the attribution copies switch at -- the memory's
+    #: revival floor ``1/mem``, derived, not inferred (see `_attribution_mix`)
 
     @property
     def scale(self) -> np.ndarray:
@@ -816,7 +813,7 @@ class LucidResult:
     time: np.ndarray = None        #: (T,) the filter clock at each event
     sensor: np.ndarray = None      #: (T,) which sensor each event carried -- streams only
     patience: np.ndarray = None    #: (T,) weight on the memory-timescale copies (see `LucidStep`)
-    switch: np.ndarray = None      #: (T,) posterior-mean attribution switching rate
+    switch: np.ndarray = None      #: (T,) the attribution switching rate (derived; constant)
 
     def __len__(self) -> int:
         return len(self.mean)
@@ -3091,11 +3088,12 @@ class LucidFilter:
         else:
             self._lam2 = np.ones(1)
             self._Md = np.ones((1, 1, 1))
-        # the attribution grid's switching ladder (`_switch_rungs`): the symmetric two-state chain
-        # at each rung (the only symmetric kernel on two copies; exact chain power over a gap),
-        # weight rows sharing the member filters
-        self._att = np.asarray(_SWITCH, float)
-        self._Ja = self._att.size
+        # the attribution grid's switching kernel: the symmetric chain on the copies (the only
+        # symmetric kernel on `k` copies; exact chain power over a gap) at the rate the bank's own
+        # memory sets -- which IS the patient copy's rate, `min(self.rates) = 1/mem`.  Nothing here
+        # is inferred, so there is one kernel and not a ladder of them.
+        self._att = np.asarray([float(min(self.rates))], float)
+        self._Ja = 1
         ka = len(self.rates)
         self._att_lam = np.clip(1.0 - self._att * ka / (ka - 1.0), 0.0, 1.0)
         self._learn, self.hazards = learn, np.asarray(hazards)
@@ -3246,11 +3244,11 @@ class LucidFilter:
         out = np.log(np.maximum(mixed, 1e-300)).ravel()
         return out - _logsumexp(out)
 
-    # AUDIT[derived] the attribution grid's switching prior: the symmetric two-state chain (exact
-    # chain power over a gap) at each rung of `_switch_rungs`, applied across the rate copies of
-    # each cell; the rate is a posterior over rungs, never a constant.
+    # AUDIT[derived] the attribution grid's switching prior: the symmetric chain on the copies
+    # (exact chain power over a gap) at the memory's revival floor `1/mem`.  One kernel, not a
+    # ladder -- there is no rate here to infer (see the audit note above the floor boundary).
     def _attribution_mix(self, logw, a=1.0):
-        """Propagate the bank prior through the attribution grid's switching kernel, rung by rung."""
+        """Propagate the bank prior through the attribution grid's switching kernel."""
         nr = len(self.rates)
         W = np.exp(logw - float(logw.max())).reshape(self._Ja, self._ndw, nr, self._nc // nr)
         lam = (self._att_lam ** a)[:, None, None, None]
@@ -3259,8 +3257,7 @@ class LucidFilter:
         return out - _logsumexp(out)
 
     def _att_marginal(self, post):
-        """(member-row posterior summed over attribution rungs, weight on the memory-timescale
-        copies, posterior-mean switching rate)."""
+        """(member-row posterior, weight on the memory-timescale copies, the switching rate)."""
         P = post.reshape(self._Ja, self._ndw, len(self.rates), -1)
         return P.sum(0).ravel(), float(P[:, :, 1:, :].sum()), float(P.sum(axis=(1, 2, 3)) @ self._att)
 
@@ -3400,7 +3397,7 @@ class LucidFilter:
             bank_ll = 0.0
             self._logw = prior
         post = np.exp(self._logw - _logsumexp(self._logw))
-        post, patience, att_rate = self._att_marginal(post)       # over the attribution rungs
+        post, patience, att_rate = self._att_marginal(post)
         pm = np.bincount(self._wm, weights=post, minlength=M)      # member marginals
         mean = pm @ mn
         dmn = mn - mean
