@@ -1,0 +1,11 @@
+def _switch_rungs_top(top_rho, mem=None):
+    """The switching ladder with its TOP at `top_rho` instead of the persistence boundary 1/2."""
+    mem = _LADDER_MEM if mem is None else mem
+    step = _GAP_FACTOR * math.sqrt(2.0 / mem)
+    top = 2.0 * math.asin(math.sqrt(top_rho))
+    J = int(math.ceil(top / step))
+    theta = (np.arange(J) + 0.5) * top / J
+    return tuple(float(r) for r in (np.sin(0.5 * theta) ** 2)[::-1])
+
+
+def _switch_rungs(mem=None):
