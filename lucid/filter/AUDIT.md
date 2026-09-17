@@ -119,7 +119,7 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 | anchor | grade | justification | open |
 |---|---|---|---|
 | `_elapsed`, per-step semantics | derived + convention | Everything supplied is per nominal step; elapsed maps take each to its exact power (pointwise-streaming 0001/0004). `R` unscaled: a reading's variance belongs to the reading (derived from the event model). | — |
-| `forget` | escape | The one declared engineering parameter; documented at the parameter itself; nothing structural reads it (0009-corrected). Eliminable in principle (adaptive-grid open). | ag-opens |
+| `forget` | escape | The one declared engineering parameter. **Nothing structural reads it** — verified and repaired (`multivariate-statfilter/0063`): the attribution grid, the offset channel's class floor and the split ladder's rung count all read `_LADDER_MEM` directly, so the filter's structure is identical from 0.9 to 1.0. **But its value is a knob by this repo's own test**, contrary to the parameter doc: on the hero rig the jump window improves monotonically as the memory shortens (23% at T = 10) and steady state improves monotonically as it lengthens, and the shipped 0.999 is optimal on none of the three windows — two opposing monotone effects, the same test that condemned a pinned fault hazard in dynamics-learning 0009. At `forget = 1` (pure Bayes) every rig is unchanged or better except one window (scalar regime C, +3.8%), so what the escape still buys is bank re-weighting across *static* hypotheses when the noise class changes. The house-rule remedy — grid it — is built and measured (0063): a memory ladder beats the fixed value on seven windows and regresses one by 4%, but its **range is underived** (short memories win every 1-D window and destabilise the arm), so it does not ship. | AUD-11 |
 | `filter`/`stream`/`observe`/`update` plumbing | convention | API surface; no inference content beyond what is graded above. | — |
 
 ## Opens raised by this audit
@@ -179,6 +179,14 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
   process- and sensor-scale classes, the memory class at `φ = 1 − 1/mem`) was built and does not
   reproduce the effect — patience is not a class property, because a floor axis's step is
   budget-clipped whatever its φ (0059).
+- **AUD-11** (multivariate-statfilter 0063): the escape's removal. `forget` is structurally inert but its
+  value is a knob, and the house-rule remedy (a memory ladder, weight rows sharing the member filters, rungs
+  scored by their own mixture predictive density and switching at the derived `1/_LADDER_MEM`) is measured and
+  nearly shippable: better on seven windows, one 4% regression (arm BOTH), blocked on deriving the admissible
+  memory RANGE — the evidence wants short memories, short memories destabilise the coupled arm, and the working
+  floor `T ≳ 100` is hand-chosen. The class's own slowest relaxation `1/(1 − φ_max) = 20` is the obvious derived
+  floor and does not bind. Same open as AUD-10's, from the other ladder: which rungs of a weight-mixing ladder a
+  coupled high-dimensional rig can carry.
 
 ## Scoreboard
 

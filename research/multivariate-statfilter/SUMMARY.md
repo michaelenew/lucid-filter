@@ -365,6 +365,24 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
   the interior flat and the chain rig 0.84x, arm POTFAIL 1.11 -> 1.01 and the swapped schedule
   near the oracle, but erodes SENSOR to 2.30 because the gain is the copies' divergence.  Open:
   mixing conditional on evidence.
+- **The switching rate is the memory, not an inferred hazard** ([`0062`](exploration/0062_the_switching_rate.md)).
+  The derived grid lost the arm's SENSOR regime to the hand-tuned form (1.46 vs 1.25) and the cause was
+  the switching LADDER, not the rate: every pinned rate recovers 1.24-1.26, including the ladder's own
+  converged value, because the ladder runs at its Jeffreys prior (mean 0.18 on [0, 1/2]) for ~1000
+  steps while the burst arrives at 250 -- every restricted-top ladder scores exactly where its prior
+  mean falls on the pinned curve.  And there was nothing to infer: the copies are estimator settings,
+  not states of nature, and what the ladder converged to tracked the rig's phase schedule.  The slot's
+  derived occupant is the bank's own memory: `1/r >= mem` is binding, revival needs only `r > 0`, so
+  take the largest admissible rate `r = 1/mem` -- the patient copy's own rate.  Measured flat at 1.24
+  for every rate in [1e-4, 2e-3] and degrading above, the signature of the right bound.  **Shipped on
+  the branch**: arm SENSOR 2.70 -> 1.24, calm 1.14 -> 1.10, misattribution +7.76 -> +0.05 nats, scalar
+  and learned-dynamics rigs bit-identical, suite 55 passed, weight rows down 24x.
+- **The last escape** ([`0063`](exploration/0063_the_last_escape.md)).  Nothing structural reads
+  `forget` any more (three reads moved to the node budget; structure identical 0.9 -> 1.0).  What it
+  still buys is one window (scalar regime C, 3.8%).  But its VALUE is a knob by this repo's own test --
+  two opposing monotone effects, shipped value optimal on none -- refuting the parameter doc.  The
+  house-rule remedy is built: a memory ladder, better on seven windows, one 4% regression, blocked on
+  deriving its range (AUD-11).
 
 **Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
 were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in
