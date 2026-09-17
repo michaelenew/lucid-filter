@@ -233,16 +233,23 @@ _HAZARDS = _hazard_rungs()           # the default hazard box: 16 rungs, 0.42 do
 # (multivariate-statfilter 0062).  The switching prior has one structural job: letting a copy that
 # lost regain weight when it becomes right again.  A uniform leak `r` floors a copy's weight at
 # ~`r`, so revival costs `log(1/r)` nats of evidence, and it caps the accumulated log-odds at an
-# effective window of `1/r` steps.  Those two bound `r` from opposite sides: revival within the
-# bank's evidence horizon wants `r` LARGE, and not discarding what that horizon holds wants
-# `1/r >= mem`.  They meet at exactly one point, `r = 1/mem` -- the same constant, from the same
-# resolution-floor argument, as the patient copy's own walk rate, so the grid carries ONE derived
-# number appearing twice.  A rate LADDER was tried here and is retired: uniform on the Bernoulli
+# effective window of `1/r` steps.  The BINDING bound is the second: a leak faster than the bank's
+# own memory discards evidence that memory still holds, so `1/r >= mem`.  The first is a bound in
+# the other direction but a weak one -- revival needs only `r > 0`, and at `r = 1/mem` it costs
+# ~7 nats, ~10 steps at the evidence rates these copies see.  So take the LARGEST admissible rate,
+# which maximises revival speed subject to discarding nothing: `r = 1/mem`, uniquely -- the same
+# constant, from the same resolution-floor argument, as the patient copy's own walk rate, so the
+# grid carries ONE derived number appearing twice.  Measured on the arm (SENSOR, x oracle): flat
+# at 1.24 for every rate from 1e-4 to 2e-3, then 1.25, 1.26, 1.33, 1.45 at 4.6e-3, 1e-2, 3e-2,
+# 1e-1 -- flat on the admissible side of the bound and degrading past it, which is the signature
+# of the bound being the right one; and `r = 0` costs SENSOR 2.31 and BOTH 1.45, so the revival
+# job is real.  A rate LADDER was tried here and is retired: uniform on the Bernoulli
 # arcsine coordinate is Jeffreys for a rate but has MEAN 0.18 on [0, 1/2], and the ladder needs
 # ~1000 steps to escape that prior while the burst it governs arrives at step 250 -- so during the
 # phase that matters the ladder runs at its prior, not its inference (measured: arm SENSOR 1.46x
 # against 1.24x at `1/mem`, and every restricted-top ladder scored exactly where its PRIOR MEAN
-# falls on the pinned-rate curve).  Deeper, there was nothing there to infer: the copies are two
+# falls on the pinned-rate curve: tops 1/2, 0.05, 0.02 have prior means 0.18, 0.0167, 0.0066 and
+# score 1.46, 1.33, 1.27).  Deeper, there was nothing there to infer: the copies are two
 # settings of one estimator, not two states of nature, so the data-generating process holds no
 # such rate, and what the ladder converged to tracked the test rig's own phase schedule.
 
