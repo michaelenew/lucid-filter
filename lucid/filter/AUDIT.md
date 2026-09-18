@@ -26,8 +26,10 @@ parameters.**  Grades, calibrated on review examples:
 - **`AUDIT[convention]`** — a truth-free choice (units, initialisation, a reporting
   threshold, a tie-break) whose consequences are shown to wash out or to touch only a
   report.  A convention with unproven consequence-freedom carries an open.
-- **`AUDIT[escape]`** — the one declared engineering parameter, `forget`.  Exactly one
-  instance; see its parameter doc.
+- **`AUDIT[escape]`** — a declared engineering parameter.  There are none: the last one,
+  `forget` (the bank's weight memory), was a knob by this ledger's own test and is now a
+  nuisance the filter grids — the memory ladder, `_memory_rungs` (multivariate-statfilter
+  0063/0064).
 
 Reference resolution: bare `research 00NN` in older comments resolves to
 `research/multivariate-statfilter/exploration/00NN_*`; `finding N` to
@@ -49,7 +51,8 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 | `_attribution_mix` (switching rate) | derived | **The rate is the bank's own memory, `1/mem` — not an inferred hazard** (`multivariate-statfilter/0062`). A uniform leak `r` floors a copy's weight at `~r` (revival costs `log(1/r)` nats) and caps the accumulated log-odds at a window of `1/r` steps. The binding bound is the second: a leak faster than the memory discards evidence the memory still holds, so `1/r ≥ mem`. Revival needs only `r > 0` (weak: ~7 nats, ~10 steps at `1/mem`). Take the largest admissible rate — `r = 1/mem`, uniquely — which is the patient copy's own rate, so the grid carries one derived number twice. Kernel: the symmetric chain on the copies, the only symmetric kernel on `k`, exact chain power over a gap. **Measured** (arm SENSOR, × oracle): flat 1.24 for every rate in `[1e-4, 2e-3]`, then 1.25/1.26/1.33/1.45 at 4.6e-3/1e-2/3e-2/1e-1 — flat on the admissible side, degrading past the bound; `r = 0` costs SENSOR 2.31 and BOTH 1.45. **A rate ladder is retired here:** uniform on the Bernoulli arcsine coordinate is Jeffreys but has mean 0.18 on `[0, ½]`, and it needs ~1000 steps to escape that prior while the burst it governs arrives at step 250 — every restricted-top ladder scored exactly where its prior mean fell on the pinned curve (tops ½/0.05/0.02 → prior means 0.18/0.0167/0.0066 → 1.46/1.33/1.27). And there was nothing to infer: the copies are two settings of one estimator, not two states of nature, so the generating process holds no such rate; what the ladder converged to tracked the test rig's phase schedule. | — |
 | `_RANK_TOL`, `_LOG2PI` | budget | Numerical rank tolerance; constant. | — |
 | `_OFFSET_CLASSES = 5` | budget + convention | Count is a budget; ladder floor **derived** (`V/T`, equal visibility over the memory), ceiling a **convention** (one noise sd per step) — bias-channels 0005/0012. | AUD-4 |
-| `_LADDER_MEM = 1000` | budget | Caps the split-ladder rung count so `forget = 1` asks for a finite grid. Rung count believed monotone (finer quadrature of the split posterior) but unverified. | AUD-5 |
+| `_LADDER_MEM = 1000` | budget | The node budget behind every ladder's spacing (split, hazard, memory) and the switching rates; pure Bayes would ask for an infinite grid. Rung count believed monotone (finer quadrature of the split posterior) but unverified. | AUD-5 |
+| `_memory_floor`, `_memory_rungs` (the memory ladder) | derived + budget | The bank's weight memory, gridded. **Coordinate derived:** a rung's log-weights `L ← f L + ℓ`, `f = 1 − 1/T`, are exactly `T` times the local-level smoother of the log-likelihood stream at gain `K = 1/T`, so a rung is a gain and its information coordinate is the gain's Whittle arclength `t = arccos(1 − K)` — the split ladder's rungs read as memories `T = 1/K` (`multivariate-statfilter/0064`); `t = 0` is pure Bayes, `t = π/2` the per-step ML member. **Floor derived:** a cell's log-likelihood is a function of its innovation `ν = H e + v`, and a wrong scale hypothesis on a slow state direction is exposed there only on that direction's own closed-loop timescale `τ_v = 1/(1 − |λ_v|)` of `(I − K H) F`; a memory shorter than `τ` holds only the fast directions' evidence and ranks cells by them alone — its score is not the statistic, the same rule that places `_FLOOR_SHARE`. So the ladder runs from pure Bayes down to the nominal model's slowest `τ` — *the weights may not forget faster than the state does* — complete over `[0, arccos(1 − 1/τ)]`, cell-centred; `τ = ∞` (an unobservable direction) gives one rung, pure Bayes. **Spacing** the shared budget, `1.5 √(2/mem)`. The rungs are switching hypotheses and carry the derived `1/mem` kernel (0062), not a memory of their own. **Measured (a check):** the per-rung trace shows the ladder faithfully follows the best-scoring rung and on the arm that is the shortest one — its score is better by 1–4 nats/step through every burst while its tip error is 30–50% worse (BOTH 1.40 vs 1.06; swapped PROCESS 3.11 vs 2.04), with the excess on the base-yaw modes that ARE the arm's slow direction (`τ = 141`, joint 0's `(θ, ω)`, read by its pot alone); fixed memories `T = 10, 33` break the arm, `T = 100` leaves a 4% residual, `T ≥ 333` is clean — the floor 0063 found by hand. With the derived rungs the arm is unchanged or better on every window (both schedules), the async rig (`τ = 802`, one rung) is pure Bayes, the hero rig keeps the ladder's gains (jump 1.75 → 1.46, regime C 0.889 → 0.815) at a 2.4% steady cost that is the open below. | AUD-11 |
 
 ### Structure functions
 
@@ -61,7 +64,7 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 | `_apply_split`, `_group_read/_group_write` | derived | The Fisher null direction integrates to `dQ = −dR`: the null manifold is the level set of the total; the flow moves only along it (sequence-demix 0001). | — |
 | `_split_star` | proxy | Caltrop enumeration of the pair ladder (multivariate-statfilter 0013 by analogy); the shared-arm budget rule (`arms // n_pairs`, floor 2) is a budget split; completeness over [0, π/2] holds at any resolution. | AUD-6 |
 | `_subset_groups` | derived | Single-sensor proportionality is exact by construction — Proposition 1 reached through packetisation (pointwise-streaming 0002/0003). | — |
-| `_rung_odds` | derived + budget | Whittle MA(1) KL gives the exact arclength metric `t = arccos(1−K)` on splits (sequence-demix 0002); the blur at the memory the weights hold is `√(2/mem)` (`I = 1`/step, confirmed `resolvable-regime/0009`), and spacing `c = 1.5` on it is the **same aliasing theorem** as the walk grid at the same `ε₀` (`resolution-criterion/0002`). The `forget`-read prunes redundant rungs only (behavior-monotone, capped by `_LADDER_MEM`). | AUD-5 |
+| `_rung_odds` | derived + budget | Whittle MA(1) KL gives the exact arclength metric `t = arccos(1−K)` on splits (sequence-demix 0002); the blur at the memory the weights hold is `√(2/mem)` (`I = 1`/step, confirmed `resolvable-regime/0009`), and spacing `c = 1.5` on it is the **same aliasing theorem** as the walk grid at the same `ε₀` (`resolution-criterion/0002`). Reads the node budget only (0063 moved the last memory-read there); the same rung set, read as memories `1/K`, is the memory ladder. | AUD-5 |
 | `_mean_basis` | derived | Gauge/quotient analysis of constant offsets; the z = 1 generalized-eigenspace rule carries a drift only where its signature grows polynomially, whole towers only (bias-channels 0002/0003/0004/0007/0015, each decision measured). Cayley–Hamilton horizon 2n+2 exact. | — |
 | `_MeanChannel` | derived + measured | Friedland two-stage is exact against augmentation (pinned 1e-12, bias-channels 0003); class ladder as `_OFFSET_CLASSES`; `q = hazard × class` is the class second moment per rung (0009); feedback OFF beside the dynamics channel is a measured decision with a structural rationale (equilibrium of two explanations, dynamics-learning 0008) — the equilibrium itself is not derived. | AUD-4, AUD-7 |
 
@@ -119,7 +122,7 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 | anchor | grade | justification | open |
 |---|---|---|---|
 | `_elapsed`, per-step semantics | derived + convention | Everything supplied is per nominal step; elapsed maps take each to its exact power (pointwise-streaming 0001/0004). `R` unscaled: a reading's variance belongs to the reading (derived from the event model). | — |
-| `forget` | escape | The one declared engineering parameter. **Nothing structural reads it** — verified and repaired (`multivariate-statfilter/0063`): the attribution grid, the offset channel's class floor and the split ladder's rung count all read `_LADDER_MEM` directly, so the filter's structure is identical from 0.9 to 1.0. **But its value is a knob by this repo's own test**, contrary to the parameter doc: on the hero rig the jump window improves monotonically as the memory shortens (23% at T = 10) and steady state improves monotonically as it lengthens, and the shipped 0.999 is optimal on none of the three windows — two opposing monotone effects, the same test that condemned a pinned fault hazard in dynamics-learning 0009. At `forget = 1` (pure Bayes) every rig is unchanged or better except one window (scalar regime C, +3.8%), so what the escape still buys is bank re-weighting across *static* hypotheses when the noise class changes. The house-rule remedy — grid it — is built and measured (0063): a memory ladder beats the fixed value on seven windows and regresses one by 4%, but its **range is underived** (short memories win every 1-D window and destabilise the arm), so it does not ship. | AUD-11 |
+| (`forget`, removed) | — | The former escape. Structurally inert by 0063 (every construction reads the node budget), a knob by this ledger's own test (two opposing monotone effects on the hero rig), and replaced by the memory ladder above (0064). No parameter of the filter is a memory now; the offset channel's class-ladder decay `_MeanChannel._decay` is pinned at the node budget and is the one remaining pinned weight memory — AUD-12. | AUD-12 |
 | `filter`/`stream`/`observe`/`update` plumbing | convention | API surface; no inference content beyond what is graded above. | — |
 
 ## Opens raised by this audit
@@ -179,22 +182,25 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
   process- and sensor-scale classes, the memory class at `φ = 1 − 1/mem`) was built and does not
   reproduce the effect — patience is not a class property, because a floor axis's step is
   budget-clipped whatever its φ (0059).
-- **AUD-11** (multivariate-statfilter 0063): the escape's removal. `forget` is structurally inert but its
-  value is a knob, and the house-rule remedy (a memory ladder, weight rows sharing the member filters, rungs
-  scored by their own mixture predictive density and switching at the derived `1/_LADDER_MEM`) is measured and
-  nearly shippable: better on seven windows, one 4% regression (arm BOTH), blocked on deriving the admissible
-  memory RANGE — the evidence wants short memories, short memories destabilise the coupled arm, and the working
-  floor `T ≳ 100` is hand-chosen. The class's own slowest relaxation `1/(1 − φ_max) = 20` is the obvious derived
-  floor and does not bind. Same open as AUD-10's, from the other ladder: which rungs of a weight-mixing ladder a
-  coupled high-dimensional rig can carry.
+- **AUD-11** (multivariate-statfilter 0063/0064): the memory ladder's floor is read off the NOMINAL model,
+  as every structural construction here is (`_mean_basis`, the walk probe). A filter told nothing
+  (`Q0 = I, R0 = I`) has `τ = 1.6` and admits rungs down to `T = 1.7`, while its walk settles the hero rig
+  at an effective state memory of 7.6 (calm) to 22 (regime C); the rungs between are below the running
+  floor and cost the steady window 2.4% (0.3833 → 0.3926) — the only regression the ladder carries, and the
+  theory names it. The remedy is a floor from the bank's running gain (the model-averaged `Kc` is already
+  computed for the offset channel); its runtime form (which rungs a step scores) is a convention not yet
+  designed. The rate-ladder question of AUD-10 (which rungs of a weight-mixing ladder a coupled rig can
+  carry) is answered for the memory ladder by the same floor.
+- **AUD-12** (0064): `_MeanChannel._decay`, the offset channel's class-ladder weight decay, is a pinned memory
+  at the node budget — the same object the bank's memory ladder replaced one level up. Not gridded.
 
 ## Scoreboard
 
-53 ledger entries; 49 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
-`forget` escape are ledger-only — the escape's marker is its own parameter doc).  By primary
-grade: **38 derived** (full bar), **3 proxy** (defensible, sharp
+54 ledger entries; 51 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
+removed `forget` row are ledger-only).  By primary
+grade: **39 derived** (full bar), **3 proxy** (defensible, sharp
 statement open), **2 measured** (below the bar, opens logged),
-**10 budget/convention/escape** (no theoretical
-claim; consequence-freedom owed in three places, AUD-8).  11 entries carry mixed grades
+**10 budget/convention** (no theoretical claim, and no escape: the filter has no
+declared engineering parameter; consequence-freedom owed in three places, AUD-8).  12 entries carry mixed grades
 (a derived core with a proxy or measured edge — the box, the window, the offset channel).
 Every proxy and measured element references an open; no chunk is unmarked.

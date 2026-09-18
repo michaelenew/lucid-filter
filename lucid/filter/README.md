@@ -69,7 +69,6 @@ Configure by **give-what-you-know**; every argument has a working default.
 | `anchors` | named fault hypotheses, each carried as its own full filter | none |
 | `offsets` | carry a constant **process offset** — a drift, a climbing bias | `False` |
 | `phis`, `ss` | the `(phi, s)` box the bank averages over | a broad dead-zone-free range |
-| `forget` | the bank's weight memory — the single residual knob | 0.999 |
 
 A rough base is fine: the walk breathes around it with unbounded reach. Where a
 base is not just rough but *silent* about the process/sensor split, the bank
@@ -111,7 +110,7 @@ persistent — and its hazard is a nuisance, not a knob: the filter mixes over a
 broad hazard **box** (rungs 1.5 nats apart in log-hazard — the walk grid's own
 Sparrow spacing rule at this axis's one-event blur width — down from the
 class's persistence boundary, 1/2 per step; a class-breadth convention like
-the `(phi, s)` box, valid at `forget = 1`; see `_HAZARDS`) and each rung's running predictive
+the `(phi, s)` box, reading no memory; see `_HAZARDS`) and each rung's running predictive
 likelihood weights it, so the rate is *read off the data and reported*
 (`r.hazard`), never asserted. Per
 rung everything follows: the departure's drift is that rung's own second moment
