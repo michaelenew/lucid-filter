@@ -111,7 +111,12 @@ The arm's slow direction is a physical fact of the rig: the two eigenvalues at `
 joint 0's `(θ, ω)` — the base yaw, which gravity cannot see and only its own pot reads (0054's remark
 that "absolute yaw still rests on the encoder"); every other joint's slowest mode is `τ ≈ 34`, read by
 gravity in the accelerometers. Mask pot 0 alone and `τ = ∞`; mask any other pot and it stays 140.6.
-The per-mode trace on the short rung is the same fact seen from the weights: (per-mode trace pending: rerun after a container restart)
+The per-mode trace on the short rung is the same fact seen from the weights: the `T = 10` rung's posterior-mean
+process scale disagrees with the pure-Bayes rung's on the **θ (position) modes** and agrees on ω — swapped
+PROCESS θ +0.76 vs +0.12 (ω +2.36 vs +2.19), the swapped calm after SENSOR θ +0.42 vs +0.16 (ω +0.06 vs
++0.36, and the accelerometer scale under-booked, +0.33 vs +1.01), normal BOTH θ +0.90 vs +2.01 (ω +2.63 vs
++2.61). The sign varies; the direction does not: the hypothesis a ten-step score cannot pin down is the one
+on the position modes, whose errors the innovations expose only over `τ` steps.
 
 ## 4. The derived ladder on every rig
 
