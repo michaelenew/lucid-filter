@@ -5,11 +5,10 @@ a random-walk level) and the *observation* (`H`, default: identity).  Everything
 infers online: which process eigenmode is drifting, which sensor is glitching, and how far -- by
 WALKING a per-component log-scale grid with unbounded reach, and it does not even take the AR(1) class
 `(phi, s)` -- it runs a small bank across a broad `(phi, s)` box and lets the data average it out
-(the flat identification ridge integrates away).  The nominal filter is ``forget = 1``, pure Bayes,
-solved under the class's one shape assumption -- the log-scales are a STATIONARY AR(1) family.
-``forget < 1`` is not part of that theory: it is the engineering escape for the stationarity
-assumption itself being violated, and it is admissible only because it lives on the ridge, where
-its value provably barely reaches the estimate -- see the ``forget`` parameter doc.
+(the flat identification ridge integrates away).  The bank's weight MEMORY -- how fast the world may
+leave the class -- is not a parameter either: it is a nuisance, gridded and weighted by the evidence
+like every other one (a MEMORY LADDER, `_memory_rungs`: from pure Bayes down to the filter's own
+state memory, in the gain's information coordinate).  There is no free parameter in this filter.
 
     theta_t = F theta_{t-1} + B u_t + w_t,   w_t ~ N(0, Q(t))
     y_t     = H theta_t          + v_t,      v_t ~ N(0, R(t))
@@ -36,7 +35,7 @@ a fully synchronous row at a fixed rate is the special case, ``filter(Y)``, and 
 arithmetic it always did.  ``timestep`` fixes the time unit: everything supplied about the
 model and every class timescale is per NOMINAL STEP, and an event ``a = dt / timestep``
 steps after the last takes each of them to that power -- ``F(a) = exp(a log F)``,
-``Q -> Q a``, ``phi -> phi**a``, ``forget -> forget**a``, and the fault kernel to its exact
+``Q -> Q a``, ``phi -> phi**a``, each memory rung ``f -> f**a``, and the fault kernel to its exact
 ``a``-step chain power ``M**a``.
 ``R`` alone is not scaled: a measurement variance belongs to the reading, not to the gap
 before it.  See ``research/pointwise-streaming/SUMMARY.md``.
@@ -56,9 +55,14 @@ grid it and let the evidence weight it.  The bank runs a hazard LADDER (`_HAZARD
 offset walker's own Whittle arclength -- a rung is a diffusion rate, hence a gain, and the gain's
 information coordinate is the split ladder's -- from the class's persistence boundary 1/2 all the
 way down to "no fault", complete, at the split ladder's spacing; uniform initial weights ARE the
-uniform prior in that coordinate; valid at ``forget = 1`` and reading nothing from ``forget``) and each rung's running predictive
+uniform prior in that coordinate; reading the node budget, never a memory) and each rung's running predictive
 likelihood weights it; the reported `hazard` is the posterior mean, the regime the data currently
-supports.  Each rung's gain, drift, cap and restart width derive from its own `(rho_j, class
+supports.  The same treatment, one level down, is the ATTRIBUTION grid: every class cell runs twice,
+walking the axes at their floor (resolution-criterion 0006) at the step's timescale and at the memory's
+resolution floor, so a white sensor burst is not booked on a floor mode before its whiteness has shown; the copies switch under a ladder of
+a switching kernel at the rate the bank's own memory sets (`1/mem`, which is the
+patient copy's own rate) and the bank reports `patience` (the weight on the memory copies) and `switch` (the
+posterior-mean switching rate) -- research multivariate-statfilter 0055-0058.  Each rung's gain, drift, cap and restart width derive from its own `(rho_j, class
 size)`, and its detection frontier is derived (`log(1/rho_j) / KL-rate`), not tuned.  Passing a
 number (`faults=rho`) pins the box to that one rung -- give-what-you-know, for a caller who
 truly knows the rate.  The derivations and the measured acceptance results are
@@ -84,7 +88,7 @@ operating point -- Proposition 1 in coordinates (research/sequence-demix/0001). 
 those pairs structurally and carries the split as a dimension of the BANK instead: a ladder of
 anchored hypotheses, each a complete filter, so the sequence evidence reaches it through the
 member's own mean (a rung with too much process chases sensor noise and pays for it in its own
-predictive likelihood) and its weight accumulates on the `forget` timescale.  The rungs are placed
+predictive likelihood) and its weight accumulates on the bank's memory.  The rungs are placed
 by their consequence rather than by an offset from the supplied base, which makes the ladder
 COMPLETE -- see `_rung_odds`.  A structure where every process mode is read more than once has no
 such pair, gets no ladder, and costs exactly what it did before.
@@ -157,8 +161,8 @@ _SERIES_REACH = 4.0         # gaps out to 4 nominal steps: how far the pre-facto
 # boundary (above 1/2 the dynamics would leave a hypothesis more often than persist), the bottom is
 # EXACTLY ``rho = 0``, so there is no reach convention -- the ladder ends where the coordinate ends.
 # Spacing is the split ladder's, ``c sqrt(2/mem)`` with ``mem`` the node budget `_LADDER_MEM` -- a
-# budget, never a read of ``forget`` (0009: reading the memory made the one engineering parameter
-# load-bearing and failed at ``forget = 1``).  Transform back is closed form.  The retired ladder,
+# budget, never a memory (0009: reading the weight memory made the then-parameter `forget`
+# load-bearing and failed at pure Bayes).  Transform back is closed form.  The retired ladder,
 # uniform in log-hazard ("1.5 nats"), was non-uniform by 3.4x in ``t`` and stopped four blurs short
 # of "no fault"; the two are measured equivalent on the 0009 rig (delay, false alarms, tracking and
 # read-out all within one standard error) at 16 rungs against 6.  The rate is still a nuisance the
@@ -173,12 +177,35 @@ _OFFSET_CLASSES = 5         # rungs of the offset channel's class ladder -- a co
                             # the sense of `order`, not a fitted value: the two ENDS are derived
                             # (the memory's resolution floor, one noise sd per step above) and
                             # the rungs sit geometrically between them.
-# AUDIT[budget] caps the split ladder at forget = 1; rung-count monotonicity unverified -- open AUD-5.
-_LADDER_MEM = 1000.0        # node budget for the split ladder, in the same sense as _SPAN_S: the
+# AUDIT[budget] the node budget behind every ladder's spacing; rung-count monotonicity unverified -- open AUD-5.
+_LADDER_MEM = 1000.0        # node budget for the ladders, in the same sense as _SPAN_S: the
                             # finest grid the engine will build is the one a thousand-step memory
-                            # supports (24 rungs).  A longer `forget` still sharpens the bank's
-                            # weights; it does not buy a finer ladder, and `forget = 1` would ask
-                            # for an infinite one.
+                            # supports (24 rungs of the split ladder).  A budget, never a claim
+                            # about the data: the bank's actual memory is the memory ladder's
+                            # posterior, and pure Bayes would ask for an infinite grid.
+# AUDIT[derived+budget] the ATTRIBUTION grid: two copies of every class cell, differing only on
+# the axes at their FLOOR.  WHY (research multivariate-statfilter 0055-0059): a white sensor burst
+# is booked on a floor process mode within a step, and no per-step estimator can avoid it -- the
+# per-axis walk and the joint (all-axes) Fisher-scoring step both attribute a surprise to the axis
+# with the wider prior, and a floor axis never gets the information that would narrow its prior
+# (0059).  Only multi-step evidence, the bank's predictive likelihood across a copy that did NOT
+# attribute, can move it; that is what the copies carry, each with its own state (the evidence is
+# the divergence of the two trajectories; 0056).  DERIVED: (i) which axes -- the floor of the
+# axis's coordinate, where the per-step Fisher vanishes and the per-step score is not the
+# statistic (resolution-criterion 0006): process noise below its reading noise, SNR < 1, base
+# share below `_FLOOR_SHARE`; a confounded pair is the split ladder's, not the copy's; every axis
+# above its floor walks at the step on both copies.  (ii) the copy's rate -- a rate ladder's two
+# derived ends: the step (1) and the memory's resolution floor (1/mem: a copy moving less than one
+# step's worth over the bank's whole memory is indistinguishable from one that never moves; the
+# same read as `_rung_odds` and `_hazard_rungs` make -- the node budget, never a memory).
+# (iii) the switching rate -- `1/mem` again, derived above.  BUDGET: two rungs of
+# the rate ladder -- the coarsest point of a family MONOTONE IN CODE LENGTH (2/3/5/9 rungs: 30847,
+# 30860, 30907, 31548 on the arm, 0060) whose interior rungs buy state transients the acceptance
+# windows do not score (a 1.77 m tip excursion at an onset at 9 rungs).  Measured on the 15-DOF arm: SENSOR 2.70 -> 1.46x oracle,
+# other regimes unchanged, x2 cost; scalar and learned-dynamics rigs bit-identical (no held axis);
+# async whole 1.16 -> 1.19 (its one floor mode held).  OPEN AUD-10: the memory copy's way back
+# after a real process change; the first burst off the floor of either kind; the departure specs'
+# identical second copy; the async cost.
 
 def _hazard_rungs(mem=None):
     """The hazard ladder: uniform in the offset walker's Whittle arclength, complete over it.
@@ -200,6 +227,101 @@ def _hazard_rungs(mem=None):
 
 
 _HAZARDS = _hazard_rungs()           # the default hazard box: 16 rungs, 0.42 down to 2.9e-7, complete to 0
+
+
+# AUDIT[derived+budget] the MEMORY LADDER: coordinate DERIVED, floor DERIVED, spacing the shared
+# budget (multivariate-statfilter 0063-0064).  The bank's weight memory was the one declared
+# engineering parameter, `forget`; on the hero rig its value is a knob by this repo's own test (two
+# opposing monotone effects: the jump window wants it short, steady state wants it long; 0063), so
+# it is gridded like every other nuisance.  A memory rung's log-weights obey ``L <- f L + ll`` with
+# ``f = 1 - 1/T``, which is EXACTLY ``T`` times the local-level smoother of the log-likelihood stream
+# at gain ``K = 1/T``: a rung is a gain, so its information coordinate is the gain's Whittle
+# arclength ``t = arccos(1 - K)`` (`_rung_odds`), and the memory ladder is the split ladder's rung
+# set read as memories ``T = 1/K``.  ``t = 0`` is pure Bayes; ``t = pi/2`` is the per-step
+# maximum-likelihood member.  FLOOR: a cell's log-likelihood is a function of its innovation, and a
+# wrong scale hypothesis on a slow state direction is exposed there only on that direction's own
+# closed-loop timescale ``tau_v = 1/(1 - |lambda_v|)`` of ``(I - K H) F``; a weight memory shorter
+# than ``tau`` holds only the fast directions' evidence and ranks cells by them alone, so its score
+# is not the statistic (the same rule that places `_FLOOR_SHARE`).  The ladder therefore runs from
+# pure Bayes down to the nominal model's own slowest closed-loop time constant -- THE WEIGHTS MAY NOT
+# FORGET FASTER THAN THE STATE DOES -- complete over ``[0, arccos(1 - 1/tau)]`` at the node
+# budget's spacing, cell-centred like the other two ladders.  A model with an unobservable direction
+# (``tau = inf``) gets one rung, pure Bayes.  Measured (0064): the arm's ``tau = 141`` is the floor
+# 0063 found by hand (``T = 10, 33`` break it, ``T >= 100`` is clean); the rungs are switching
+# hypotheses and carry the derived ``1/_LADDER_MEM`` kernel (0062), not a memory of their own.
+# OPEN AUD-11: the floor is read off the NOMINAL model, as every structural construction here is;
+# a filter told nothing (``Q0 = I, R0 = I``, ``tau = 1.6``) admits rungs its walk later moves below.
+def _memory_floor(F, H, Q, R, iters=20000, tol=1e-12):
+    """The slowest closed-loop time constant of the steady-state filter for ``(F, H, Q, R)``:
+    ``1 / (1 - rho((I - K H) F))``, ``inf`` when some direction is unobservable."""
+    F = np.asarray(F, float)
+    H = np.atleast_2d(np.asarray(H, float))
+    Q = np.atleast_2d(np.asarray(Q, float))
+    R = np.asarray(R, float)
+    R = np.diag(R) if R.ndim == 1 else R
+    n = F.shape[0]
+    P = Q + np.eye(n)
+    K = np.zeros((n, H.shape[0]))
+    I = np.eye(n)
+    for _ in range(iters):
+        Pp = F @ P @ F.T + Q
+        S = H @ Pp @ H.T + R
+        K = Pp @ H.T @ np.linalg.solve(S, np.eye(S.shape[0]))
+        A = I - K @ H
+        Pn = A @ Pp @ A.T + K @ R @ K.T          # Joseph form: stays symmetric positive
+        Pn = 0.5 * (Pn + Pn.T)
+        if np.max(np.abs(Pn - P)) < tol * (1.0 + np.max(np.abs(P))):
+            break
+        P = Pn
+    r = float(np.max(np.abs(np.linalg.eigvals((np.eye(n) - K @ H) @ F))))
+    return math.inf if r >= 1.0 else 1.0 / (1.0 - r)
+
+
+def _memory_rungs(F, H, Q, R, mem=None):
+    """The memory ladder: memories ``T = 1/K`` uniform in the gain's Whittle arclength from pure
+    Bayes down to the model's own state memory `_memory_floor`; ``inf`` alone when that is."""
+    mem = _LADDER_MEM if mem is None else mem
+    tau = _memory_floor(F, H, Q, R)
+    if not math.isfinite(tau):
+        return (math.inf,)
+    step = _GAP_FACTOR * math.sqrt(2.0 / mem)
+    top = math.acos(1.0 - 1.0 / tau)
+    J = max(int(math.ceil(top / step)), 1)
+    t = (np.arange(J) + 0.5) * top / J
+    return tuple(float(1.0 / (1.0 - math.cos(x))) for x in t)
+
+
+# AUDIT[derived] the attribution grid's SWITCHING RATE, from the bank's own memory
+# (multivariate-statfilter 0062).  The switching prior has one structural job: letting a copy that
+# lost regain weight when it becomes right again.  A uniform leak `r` floors a copy's weight at
+# ~`r`, so revival costs `log(1/r)` nats of evidence, and it caps the accumulated log-odds at an
+# effective window of `1/r` steps.  The BINDING bound is the second: a leak faster than the bank's
+# own memory discards evidence that memory still holds, so `1/r >= mem`, with `mem` the NODE
+# BUDGET `_LADDER_MEM` -- read directly, never off a memory, like every other ladder here, so
+# this grid is unchanged whatever memory the memory ladder settles on.  The first is a bound in
+# the other direction but a weak one -- revival needs only `r > 0`, and at `r = 1/mem` it costs
+# ~7 nats, ~10 steps at the evidence rates these copies see.  So take the LARGEST admissible rate,
+# which maximises revival speed subject to discarding nothing: `r = 1/mem`, uniquely -- the same
+# constant, from the same resolution-floor argument, as the patient copy's own walk rate, so the
+# grid carries ONE derived number appearing twice.  Measured on the arm (SENSOR, x oracle): flat
+# at 1.24 for every rate from 1e-4 to 2e-3, then 1.25, 1.26, 1.33, 1.45 at 4.6e-3, 1e-2, 3e-2,
+# 1e-1 -- flat on the admissible side of the bound and degrading past it, which is the signature
+# of the bound being the right one; and `r = 0` costs SENSOR 2.31 and BOTH 1.45, so the revival
+# job is real.  A rate LADDER was tried here and is retired: uniform on the Bernoulli
+# arcsine coordinate is Jeffreys for a rate but has MEAN 0.18 on [0, 1/2], and the ladder needs
+# ~1000 steps to escape that prior while the burst it governs arrives at step 250 -- so during the
+# phase that matters the ladder runs at its prior, not its inference (measured: arm SENSOR 1.46x
+# against 1.24x at `1/mem`, and every restricted-top ladder scored exactly where its PRIOR MEAN
+# falls on the pinned-rate curve: tops 1/2, 0.05, 0.02 have prior means 0.18, 0.0167, 0.0066 and
+# score 1.46, 1.33, 1.27).  Deeper, there was nothing there to infer: the copies are two
+# settings of one estimator, not two states of nature, so the data-generating process holds no
+# such rate, and what the ladder converged to tracked the test rig's own phase schedule.
+
+# AUDIT[derived] the floor boundary: a process scale read at SNR x = q/r_eff has per-step local
+# share g = x / (P(x) + 1), P(x) = (x + sqrt(x^2 + 4x)) / 2 the steady predicted variance of a random
+# walk in noise (resolution-criterion 0006); at x = 1 -- process noise equal to its reading noise --
+# P = (1 + sqrt 5)/2 and g = 1/(phi_golden + 1) = 0.382.  Below it the axis is at its floor.
+_FLOOR_SHARE = 1.0 / (0.5 * (1.0 + math.sqrt(5.0)) + 1.0)
 
 
 
@@ -322,7 +444,7 @@ def _split_star(los, n_pairs):
     filters: five pairs at full resolution is 116 vectors, and a pots-only 5-DOF arm measured 1740
     members and 1.5 s/step.  So the NODE BUDGET is what one pair's resolution costs, and several
     pairs share it -- the same "support budget -> node count" trade `_SPAN_S` already makes, and
-    it needs no constant of its own because the budget is the resolution `forget` supports.  The
+    it needs no constant of its own because the budget is the resolution the node budget supports.  The
     grid stays COMPLETE over `[0, pi/2]` at every pair count; what degrades is its resolution, and
     that is the honest thing to give up when there is more to resolve and the same budget to do it
     with.
@@ -391,10 +513,9 @@ def _subset_groups(eng, obs):
 # AUDIT[derived+proxy] Whittle MA(1) arclength metric derived (sequence-demix 0002);
 # AUDIT[derived+budget] rung spacing = 1.5 * blur, the same aliasing theorem as `_GAP_FACTOR`
 # at the same eps0 = 3.1e-4 (resolution-criterion 0002); the blur sqrt(2/mem) is the arclength's
-# own Fisher width (I = 1/step, resolvable-regime 0009).  The forget-read prunes redundant
-# rungs only (capped by _LADDER_MEM, valid at forget = 1); finer-rung monotonicity unverified
-# -- open AUD-5.
-def _rung_odds(forget):
+# own Fisher width (I = 1/step, resolvable-regime 0009).  Reads the node budget only;
+# finer-rung monotonicity unverified -- open AUD-5.
+def _rung_odds(mem=None):
     """The ladder of splits: complete, at the bank's own resolution, with no span constant.
 
     A split acts only through the filter's gain ``K``.  A local-level filter run at gain ``K``
@@ -405,15 +526,15 @@ def _rung_odds(forget):
         dt = d th / sqrt(1 - th^2),   t = arccos(1 - K)  in  [0, pi/2].
 
     The entire space of splits is therefore an interval of arclength ``pi/2``.  Two rungs are
-    resolvable when the evidence the bank can hold -- ``1/(1 - forget)`` steps -- separates them
-    by order one nat, i.e. ``dt = sqrt(2 (1 - forget))``; spacing them at ``1.5`` of that blur
+    resolvable when the evidence the bank can hold -- ``mem`` steps -- separates them
+    by order one nat, i.e. ``dt = sqrt(2 / mem)``; spacing them at ``1.5`` of that blur
     reproduces the split posterior to aliasing ``3.1e-4`` -- the same theorem, and the same
-    tolerance, as the walk grid (resolution-criterion 0002).  The memory entering that resolution is capped at
-    ``_LADDER_MEM``, which is a node budget and not a statistical claim.  The result COVERS EVERY POSSIBLE SPLIT with a
+    tolerance, as the walk grid (resolution-criterion 0002).  ``mem`` is the node budget
+    ``_LADDER_MEM``, not a statistical claim.  The result COVERS EVERY POSSIBLE SPLIT with a
     couple of dozen rungs, and no rung refers to the supplied base: told nothing means told
     nothing.
     """
-    mem = min(1.0 / (1.0 - forget), _LADDER_MEM) if forget < 1.0 else _LADDER_MEM
+    mem = _LADDER_MEM if mem is None else mem
     step = _GAP_FACTOR * math.sqrt(2.0 / mem)
     J = int(math.ceil((0.5 * math.pi) / step))
     t = (np.arange(J) + 0.5) * (0.5 * math.pi) / J
@@ -569,10 +690,11 @@ class _MeanChannel:
     nothing, and no fixed choice is defensible because the good end depends on the supplied base
     being loose -- a caller who supplies a TIGHT base would get the narrow behaviour from the
     same rule.  So the channel runs `_OFFSET_CLASSES` copies of the recursion at geometrically
-    spaced class widths and mixes them by their own predictive likelihood on the bank's
-    ``forget`` timescale, exactly as the ``(phi, s)`` box is mixed one level down.  The ladder's
-    floor is DERIVED -- ``V / T`` with ``T = 1/(1 - forget)`` is where a constant and the noise
-    it sits in are equally visible over the filter's own memory, so the bottom rung is "no
+    spaced class widths and mixes them by their own predictive likelihood at the node-budget
+    memory, exactly as the ``(phi, s)`` box is mixed one level down.  The ladder's
+    floor is DERIVED -- ``V / T`` with ``T = _LADDER_MEM`` (the node budget, not a memory) is
+    where a constant and the noise
+    it sits in are equally visible over that memory, so the bottom rung is "no
     offset" in the only sense the filter can hold that belief -- and its ceiling is the
     scale-free convention used everywhere else here, one noise sd per step.  Neither end is
     fitted; the rung count is a compute budget.
@@ -614,7 +736,9 @@ class _MeanChannel:
         cls = np.stack([floor * step ** j for j in range(_OFFSET_CLASSES)])   # (J0, k)
         self.cls = np.concatenate([cls] * len(hazards))            # (J0 * Jh, k) crossed
         self.q = np.concatenate([hz * cls for hz in hazards])
-        self.forget = 1.0 - 1.0 / max(mem, 1.0)
+        # AUDIT[budget] the channel's class-ladder weight decay, pinned at the node budget -- the
+        # same object the bank's memory ladder replaced one level up; not gridded here -- open AUD-12.
+        self._decay = 1.0 - 1.0 / max(mem, 1.0)
         self.reset()
 
     def reset(self):
@@ -693,7 +817,7 @@ class _MeanChannel:
             self.b = self.b + np.einsum("jak,jk->ja", Kb, r)
             self.Pb = self.Pb - np.einsum("jam,mb,jbc->jac", Kb, U, self.Pb)
             self.Pb = 0.5 * (self.Pb + np.swapaxes(self.Pb, 1, 2))
-            self.logw = self.forget * (self.logw - _logsumexp(self.logw)) + ll
+            self.logw = self._decay * (self.logw - _logsumexp(self.logw)) + ll
             self.V = Vp - K @ U
         else:
             self.V = Vp
@@ -732,6 +856,14 @@ class LucidStep:
     #: regime the data currently supports, read off the hazard ladder's weights.  ``None``
     #: when the fault class is off; constant when the caller pinned ``faults=rho``.
     time: float = math.nan         #: the filter clock after this event (see ``timestep``)
+    patience: float = None         #: weight the bank puts on the copies that walk their floor axes
+    #: at the memory's resolution floor -- "the recent innovations are not this floor mode's"
+    #: (the attribution grid, research multivariate-statfilter 0055-0059)
+    switch: float = None           #: the rate the attribution copies switch at -- the memory's
+    #: revival floor ``1/mem``, derived, not inferred (see `_attribution_mix`)
+    memory: float = None           #: the bank's weight memory the data currently supports: the
+    #: posterior-mean forgetting per step ``1/T`` over the memory ladder, inverted (``inf`` is
+    #: pure Bayes; see `_memory_rungs`)
 
     @property
     def scale(self) -> np.ndarray:
@@ -756,6 +888,9 @@ class LucidResult:
     hazard: np.ndarray = None      #: (T,) posterior-mean fault hazard, or ``None`` when off
     time: np.ndarray = None        #: (T,) the filter clock at each event
     sensor: np.ndarray = None      #: (T,) which sensor each event carried -- streams only
+    patience: np.ndarray = None    #: (T,) weight on the memory-timescale copies (see `LucidStep`)
+    switch: np.ndarray = None      #: (T,) the attribution switching rate (derived; constant)
+    memory: np.ndarray = None      #: (T,) the posterior-mean weight memory (see `LucidStep`)
 
     def __len__(self) -> int:
         return len(self.mean)
@@ -1125,6 +1260,7 @@ class _WalkEngine:
                 (self.phi_ax[k], self.s_ax[k]) = group_class[0]
                 (self.phi_ax[n + i], self.s_ax[n + i]) = group_class[1]
         self.gap = _GAP_FACTOR * self.s_ax
+        self._rate = 1.0                # the rate this copy walks its HELD axes at (the attribution grid; banks apply it)
         # AUDIT[derived] critical damping pins K* = (1-phi)/4 and q_mu with it
         # (adaptive-grid 0030/0031); the floor is the 0010 localisation condition.
         self._Kstar = (1.0 - self.phi_ax) / 4.0
@@ -1631,7 +1767,7 @@ class _WalkEngine:
             # degrades.  The excursion is allowed, because it is what absorbs a level jump, but
             # it is a TRANSIENT and not a verdict: it reverts to this member's hypothesis at the
             # class's own rate ``phi``, at the total the walk just established.  The verdict is
-            # the bank's, on the ``forget`` timescale (research 0053's lesson b).
+            # the bank's, on the bank's memory (research 0053's lesson b).
             rev = self._revert if a == 1.0 else self._revert ** a
             tots, los = zip(*self._group_read(self.mu))
             back = [an + rev * (lo - an) for an, lo in zip(self._anchor_lo, los)]
@@ -2038,6 +2174,13 @@ class _EngineBank:
                                   len(self._act), self._cap is not None)
         # state, stacked -- and handed back to the members as views
         self.mu, self._Pmu = st("mu"), st("_Pmu")
+        self._rate = np.array([f._rate for f in members], float)
+        # the held axes of the memory copies: at their floor, and not a confounded pair's
+        share = np.sqrt(np.maximum(2.0 * (st("_Ichar") - _RIDGE), 0.0))
+        self._held = (share < _FLOOR_SHARE) & (self._rate[:, None] < 1.0)
+        for (k, i, _h2) in self._groups:
+            self._held[:, k] = False
+            self._held[:, self.n + i] = False
         self._m = np.zeros((M, self.n))
         self._P = np.zeros((M, self.n, self.n))
         self._pi = np.zeros((M, len(self._act), self._nn))
@@ -2349,7 +2492,8 @@ class _EngineBank:
             info = np.einsum("bg,bg->b", pi[:, ax], info_g) + _RIDGE
             grad = np.einsum("bg,bg->b", pi[:, ax], score)
             Kmu = self._Pmu[:, k] / (self._Pmu[:, k] + 1.0 / info)
-            self.mu[:, k] += np.clip(Kmu * (grad / info), -budget[:, k], budget[:, k])
+            step = np.clip(Kmu * (grad / info), -budget[:, k], budget[:, k])
+            self.mu[:, k] += np.where(self._held[:, k], step * self._rate, step)
             self._Pmu[:, k] = np.minimum((1.0 - Kmu) * self._Pmu[:, k] + self._qmu[:, k] * a,
                                          self._Pmu_cap[:, k])
         self._pi[:] = pi
@@ -2692,8 +2836,8 @@ class LucidFilter:
         weighted by its own running predictive likelihood -- so the rate is read off the data
         and reported (``LucidStep.hazard``), never asserted.  The ladder has no breadth
         convention (state tracking is measured-flat across it; only the fault report's
-        crossing time reads a rung, 1/KL steps per nat) and is valid at
-        ``forget = 1``.  A float pins the box to that one rung (give-what-you-know, for a
+        crossing time reads a rung, 1/KL steps per nat) and reads no memory.  A float pins
+        the box to that one rung (give-what-you-know, for a
         caller who truly knows the rate; must lie in (0, 1/2]), and a sequence is an explicit
         box.  Per rung the detection delay is derived, ``log(1/rho_j) / KL-rate``; see
         `_HAZARDS` and research 0009.
@@ -2728,30 +2872,17 @@ class LucidFilter:
     phis, ss : sequences, optional
         The ``(phi, s)`` box the bank averages over.  Defaults to a broad dead-zone-free range;
         not a fitted value.
-    forget : float, optional
-        The bank's weight memory (default 0.999) -- **a theoretically relevant free parameter,
-        included deliberately, and the only one**.  It is NOT part of the solved filter: the
-        nominal filter is ``forget = 1``, pure Bayes, exact under the one shape assumption the
-        class makes (the log-scales are a stationary AR(1) family).  That assumption was chased
-        to its residue and the residue measured before this parameter was admitted
-        (research/adaptive-grid findings 13-16): the class coordinates ``(phi, s)`` are
-        identified but SLOPPY -- their loose combination is a flat identification ridge, the
-        provably least impactful axis that still matters -- and the bank marginalises the
-        ridge by evidence weighting, which at ``forget = 1`` concentrates and then freezes.
-        ``forget < 1`` is the engineering escape for the stationarity assumption ITSELF being
-        violated -- how fast the world may leave the class -- and it is admissible only
-        because it acts on that ridge, where its value provably barely reaches the estimate
-        (0029: tracking identical across {1.0, 0.999, 0.99} and even frozen stale; any value
-        near 1 is free).  Nothing structural may read it: no floor, box end, or class bound
-        derives from ``forget``, and every construction in this filter must remain valid at
-        ``forget = 1`` (research 0009, corrected).  It is eliminable in principle -- deriving
-        the class drift rate from the shape assumption already made -- without violating the
-        no-free-parameters commitment; ~0.999 is measurably indistinguishable from that
-        optimum.
+    (no memory parameter)
+        Earlier versions took ``forget``, the bank's weight memory, as the one declared
+        engineering parameter -- the escape for the stationarity assumption itself being
+        violated, claimed free near 1.  It was a knob by this repo's own test (0063: the jump
+        window improves monotonically as it shortens, steady state as it lengthens), so it is
+        now a nuisance the filter grids and the evidence weights: the MEMORY LADDER, from pure
+        Bayes down to the model's own state memory (`_memory_rungs`), reported as ``memory``.
     timestep : float, optional
         How long ONE NOMINAL STEP is, in whatever units the timestamps are in (default 1.0,
         i.e. time is counted in steps).  Everything supplied about the model -- ``dynamics``,
-        ``process`` -- and every class timescale -- ``phis``, ``ss``, ``forget``, ``faults``
+        ``process`` -- and every class timescale -- ``phis``, ``ss``, the memory rungs, ``faults``
         -- is per nominal step; ``timestep`` is what lets an event carry a real ``t`` or
         ``dt``.  Sampling at 100 Hz with timestamps in seconds: ``timestep=0.01``.
 
@@ -2767,7 +2898,7 @@ class LucidFilter:
 
     def __init__(self, dynamics=0, control=None, H=None, process=None, measurement=None,
                  n=None, faults=None, departures=None, anchors=None, offsets=False,
-                 phis=_PHIS, ss=_SS, forget=0.999, timestep=1.0):
+                 phis=_PHIS, ss=_SS, timestep=1.0):
         learn = dynamics is None or faults is not None
         if anchors is not None and not learn:
             learn = True                        # named fault hypotheses imply a fault class
@@ -2817,8 +2948,6 @@ class LucidFilter:
             raise ValueError(f"measurement must have {m} positive entries")
         if B is not None and B.shape[0] != n:
             raise ValueError(f"control must have {n} rows")
-        if not 0.0 < forget <= 1.0:
-            raise ValueError("forget must lie in (0, 1]")
         timestep = float(timestep)
         if not timestep > 0.0:
             raise ValueError("timestep (the duration of one nominal step) must be positive")
@@ -2842,7 +2971,6 @@ class LucidFilter:
         self.n, self.m, self.D = n, m, n + m
         self.p = 0 if B is None else B.shape[1]
         self.B = B
-        self.forget = float(forget)
         self.timestep = timestep
         self._Mdcache = {}
         # Which directions can no per-step score ever carry?  Where a process eigenmode is read
@@ -2851,7 +2979,7 @@ class LucidFilter:
         # carried as a dimension of the BANK: every member is a complete filter anchored at one
         # rung of the ladder, the evidence reaches it through its own MEAN (a rung with too much
         # process chases sensor noise and pays for it in its own predictive likelihood), and its
-        # weight accumulates on the `forget` timescale.  No EMA, no whiteness statistic, and no
+        # weight accumulates on the bank's memory.  No EMA, no whiteness statistic, and no
         # rung refers to the supplied base.  A structure with no such pair -- any rig where every
         # process mode is read by more than one sensor -- gets no ladder and no extra cost.
         #
@@ -2882,7 +3010,9 @@ class LucidFilter:
         # output, so nothing below this line changes and no member pays for it.
         self._mean = self._sensor = None
         if offsets:
-            mem = 1.0 / max(1.0 - self.forget, 1e-12)
+            # T is the NODE BUDGET, never a memory: the floor V/T must mean the same thing at
+            # pure Bayes (research 0009, corrected), where a memory diverges.
+            mem = _LADDER_MEM
             basis = _mean_basis(F, Hm)
             if basis.shape[1]:
                 self._mean = _MeanChannel(basis, n, F, Hm, Q0, R0, hazards, mem,
@@ -2900,12 +3030,31 @@ class LucidFilter:
                 self._sensor = _MeanChannel(sb, n, F, Hm, Q0, R0, hazards, mem,
                                             feedback=False)
         probe = _WalkEngine(Q0, R0, Hm, F, B, phis[0], ss[0])
+        # the memory ladder, from the same nominal model every structural construction reads
+        self.memories = _memory_rungs(np.eye(n) if F is None else F, Hm, Q0, R0)
+        self._Jm = len(self.memories)
+        self._fgm = np.array([0.0 if not math.isfinite(T) else 1.0 - 1.0 / T for T in self.memories])
+        self._fgm = np.where(np.isfinite(np.asarray(self.memories, float)), self._fgm, 1.0)
+        self._Kmem = np.array([0.0 if not math.isfinite(T) else 1.0 / T for T in self.memories])
         self.groups = probe._groups
-        self.split_arr = _split_star(np.log(_rung_odds(self.forget)), len(self.groups))
+        # `_rung_odds` at the node budget: the split ladder's resolution is a budget, not a memory.
+        self.split_arr = _split_star(np.log(_rung_odds()), len(self.groups))
         bases = [_apply_split(probe, v) for v in self.split_arr]
         self.phi_arr = np.array([ph for ph in phis for _ in ss for _ in bases], float)
         self.s_arr = np.array([sv for _ in phis for sv in ss for _ in bases], float)
         cells = [(ph, sv, bq, br) for ph in phis for sv in ss for (bq, br) in bases]
+        # The attribution grid (see the audit note above `_hazard_rungs`): every cell twice, the
+        # walk on the axes at their floor at the step's timescale and at the memory's resolution
+        # floor; every other axis walks at the step on both.
+        # The memory here is the NODE BUDGET `_LADDER_MEM`, read directly and never a memory
+        # -- exactly as `_hazard_rungs` reads it, and for the same reason: every construction in
+        # this filter must stay valid at pure Bayes (research 0009, corrected), so nothing
+        # structural may read the bank's weight memory, which is now itself inferred (the memory
+        # ladder).  A shorter memory sharpens the bank's weights; it does not move this grid.
+        self.rates = (1.0, 1.0 / _LADDER_MEM)
+        cells = [(ph, sv, bq, br, rt) for rt in self.rates for (ph, sv, bq, br) in cells]
+        self.phi_arr = np.tile(self.phi_arr, len(self.rates))
+        self.s_arr = np.tile(self.s_arr, len(self.rates))
 
         # -------- the dynamics hypotheses (the ladder of research/dynamics-learning) --------
         # The NOMINAL member is always present and never leaves: it is the hedge that makes a
@@ -2939,8 +3088,9 @@ class LucidFilter:
                 Si_c = probe._fisher_Si if Fs is F else None
                 eng = []
                 pr = _Propagator(Fs)    # one generator per hypothesis, shared by its cells
-                for ph, sv, bq, br in cells:
+                for ph, sv, bq, br, rt in cells:
                     e = _WalkEngine(bq, br, Hm, Fs, Bs, ph, sv, fisher_Si=Si_c, prop=pr)
+                    e._rate = rt
                     Si_c = e._fisher_Si
                     eng.append(e)
                 if bs is not None:
@@ -2961,13 +3111,21 @@ class LucidFilter:
             Ba = (None if Bs is None                     # characteristic linearisation the
                   else np.vstack([Bs, np.zeros((dep.k, self.p))]))   # steady Fisher wants
             Si_c = None
-            for ph, sv, bq, br in cells:   # the split rides into the augmentation with the base
+            for ph, sv, bq, br, rt in cells:   # the split rides into the augmentation with the base
                 Qa, Ra, _Ha, _w = dep.augment(bq, br, Hm)
                 e = _WalkEngine(Qa, Ra, Ha, Fa, Ba, ph, sv, walk_axes=walk, cap=dep.cap,
                                 fisher_Si=Si_c)
                 Si_c = e._fisher_Si
                 e._dyn = dep.callable_for()
                 e._dep = dep
+                # A departure walker keeps its noise walk LIVE at the step's timescale on both
+                # copies: the Q<->F confound is split by per-hypothesis means competing under a
+                # live noise walk (research 0002/0003), and a memory-timescale copy on every
+                # process axis was measured to cost the learned-dynamics rig 30% (0058; the
+                # floor-only form of 0059 is untested there).  The copies of a departure spec are
+                # therefore identical -- doubled cost, no effect -- until the weight rows can carry
+                # a per-spec cell count (open AUD-10).
+                e._rate = 1.0
                 if hbase is not None:
                     e._hook = _augment_hook(hbase, n, dep.k)
                 self._members.append(e)
@@ -3004,6 +3162,14 @@ class LucidFilter:
         else:
             self._lam2 = np.ones(1)
             self._Md = np.ones((1, 1, 1))
+        # the attribution grid's switching kernel: the symmetric chain on the copies (the only
+        # symmetric kernel on `k` copies; exact chain power over a gap) at the rate the bank's own
+        # memory sets -- which IS the patient copy's rate, `min(self.rates) = 1/mem`.  Nothing here
+        # is inferred, so there is one kernel and not a ladder of them.
+        self._att = np.asarray([float(min(self.rates))], float)
+        self._Ja = 1
+        ka = len(self.rates)
+        self._att_lam = np.clip(1.0 - self._att * ka / (ka - 1.0), 0.0, 1.0)
         self._learn, self.hazards = learn, np.asarray(hazards)
         # report the dynamics whenever they are not a fixed matrix the caller already has
         self._report = learn or base is not None
@@ -3076,7 +3242,8 @@ class LucidFilter:
             # (dynamics-learning 0008), equilibrium underived -- open AUD-7.
             self._mean_src = np.repeat(
                 np.array([sp[3] is None for sp in self._specs]), self._nc)
-        self._logw = np.zeros(self._ndw * self._nc)
+        self._logw = np.zeros((self._Jm, self._Ja * self._ndw * self._nc))
+        self._mlogw = np.zeros(self._Jm)          # the memory ladder's own weights
         self.loglik = 0.0
         self._alarms = np.zeros(self._J, dtype=bool)
         self._t = None
@@ -3094,7 +3261,7 @@ class LucidFilter:
         """Advance the clock and return the gap in NOMINAL STEPS.
 
         Everything the caller supplied about the model -- ``dynamics``, ``process`` -- and
-        every class timescale -- ``phis``, ``ss``, ``forget``, ``faults`` -- is per nominal
+        every class timescale -- ``phis``, ``ss``, the memory rungs, ``faults`` -- is per nominal
         step, and ``timestep`` says how long one of those is in the caller's time units.
         Supplying neither ``t`` nor ``dt`` advances exactly one nominal step, which is the
         uniform-sampling filter this one generalises.
@@ -3145,11 +3312,29 @@ class LucidFilter:
         return M
 
     def _hazard_mix(self, logw, a=1.0):
-        """Propagate the bank prior through the fault class's kernel, rung by rung."""
-        W = np.exp(logw - float(logw.max())).reshape(self._J, self._ndbase, self._nc)
-        mixed = np.einsum("jdk,jdc->jkc", self._hazard_kernel(a), W)
+        """Propagate the bank prior through the fault class's kernel, rung by rung (within each
+        attribution rung, which is the leading axis of the weight rows)."""
+        W = np.exp(logw - float(logw.max())).reshape(self._Ja, self._J, self._ndbase, self._nc)
+        mixed = np.einsum("jdk,ajdc->ajkc", self._hazard_kernel(a), W)
         out = np.log(np.maximum(mixed, 1e-300)).ravel()
         return out - _logsumexp(out)
+
+    # AUDIT[derived] the attribution grid's switching prior: the symmetric chain on the copies
+    # (exact chain power over a gap) at the memory's revival floor `1/mem`.  One kernel, not a
+    # ladder -- there is no rate here to infer (see the audit note above the floor boundary).
+    def _attribution_mix(self, logw, a=1.0):
+        """Propagate the bank prior through the attribution grid's switching kernel."""
+        nr = len(self.rates)
+        W = np.exp(logw - float(logw.max())).reshape(self._Ja, self._ndw, nr, self._nc // nr)
+        lam = (self._att_lam ** a)[:, None, None, None]
+        mixed = lam * W + (1.0 - lam) * W.mean(2, keepdims=True)
+        out = np.log(np.maximum(mixed, 1e-300)).ravel()
+        return out - _logsumexp(out)
+
+    def _att_marginal(self, post):
+        """(member-row posterior, weight on the memory-timescale copies, the switching rate)."""
+        P = post.reshape(self._Ja, self._ndw, len(self.rates), -1)
+        return P.sum(0).ravel(), float(P[:, :, 1:, :].sum()), float(P.sum(axis=(1, 2, 3)) @ self._att)
 
     def _spec_g(self, d):
         """The departure coefficients of spec ``d``'s cells, stacked ``(nc, k)``.
@@ -3241,9 +3426,11 @@ class LucidFilter:
             raise ValueError("filter has no control map; do not pass u")
         a = self._elapsed(t, dt)
         M = len(self._members)
-        prior = self._logw - _logsumexp(self._logw)
+        # one weight vector per memory rung, each propagated through the same kernels
+        prior = np.stack([r - _logsumexp(r) for r in self._logw])
+        prior = np.stack([self._attribution_mix(r, a) for r in prior])
         if self._ndbase > 1:
-            prior = self._hazard_mix(prior, a)
+            prior = np.stack([self._hazard_mix(r, a) for r in prior])
         n = self.n
         mn = np.empty((M, n)); vr = np.empty((M, n, n)); inn = np.empty((M, self.m))
         llv = np.empty(M); psc = np.empty((M, n)); msc = np.empty((M, self.m))
@@ -3276,16 +3463,31 @@ class LucidFilter:
         # A weight row is a (hazard rung, hypothesis, cell); its member filter is `_wm[row]`.
         # Rows sharing a filter (the nominal and the anchors, across rungs) share its
         # likelihood exactly, so the dedup is arithmetic-free: gather llv, scatter post.
-        llw = llv[self._wm]
+        llw = np.tile(llv[self._wm], self._Ja)
         if np.any(np.isfinite(yv)):
-            bank_ll = _logsumexp(prior + llw)
-            # ``forget`` is a memory PER NOMINAL STEP, so over a gap of ``a`` it is
-            # ``forget**a`` -- the bank's weight memory is a duration, not a count of events.
-            self._logw = (self.forget ** a) * prior + llw
+            # each rung scored by its OWN mixture predictive density; a memory is PER NOMINAL
+            # STEP, so over a gap of ``a`` it is ``f**a`` -- a duration, not a count of events
+            rung_ll = np.array([_logsumexp(prior[j] + llw) for j in range(self._Jm)])
+            self._logw = (self._fgm[:, None] ** a) * prior + llw[None]
+            # the rungs are SWITCHING hypotheses (which memory is right moves with the regime),
+            # so they carry the derived switching kernel at ``1/_LADDER_MEM`` (0062), exact chain
+            # power over the gap, and no memory of their own
+            k = self._Jm
+            if k > 1:
+                lam = max(1.0 - k / ((k - 1.0) * _LADDER_MEM), 0.0) ** a
+                W = np.exp(self._mlogw - self._mlogw.max())
+                W = lam * W + (1.0 - lam) * W.mean()
+                self._mlogw = np.log(np.maximum(W, 1e-300))
+            self._mlogw = self._mlogw - _logsumexp(self._mlogw) + rung_ll
+            bank_ll = _logsumexp(self._mlogw)
         else:
             bank_ll = 0.0
             self._logw = prior
-        post = np.exp(self._logw - _logsumexp(self._logw))
+        mw = np.exp(self._mlogw - _logsumexp(self._mlogw))
+        post = mw @ np.stack([np.exp(r - _logsumexp(r)) for r in self._logw])
+        post, patience, att_rate = self._att_marginal(post)
+        kbar = float(mw @ self._Kmem)
+        memory = math.inf if kbar <= 0.0 else 1.0 / kbar
         pm = np.bincount(self._wm, weights=post, minlength=M)      # member marginals
         mean = pm @ mn
         dmn = mn - mean
@@ -3321,7 +3523,7 @@ class LucidFilter:
                 sen_out = so.C @ so.bbar
         if not self._report:
             return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out,
-                             time=self._t)
+                             time=self._t, patience=patience, switch=att_rate, memory=memory)
         Fh, Bh = self._dynamics_mean(post)
         # AUDIT[convention+derived] the readouts are posterior marginals (derived); the 1/2
         # crossing is a reporting convention, and the only inference it feeds is each rung's
@@ -3350,7 +3552,7 @@ class LucidFilter:
             self._reprice(spec=self._nb + int(j))
         self._alarms = alarms
         return LucidStep(mean, var, innov, bank_ll, ps, ms, off_out, sen_out, Fh, Bh, fault,
-                         hz, self._t)
+                         hz, self._t, patience=patience, switch=att_rate, memory=memory)
 
     def observe(self, sensor, value, t=None, dt=None, u=None) -> LucidStep:
         """One ``(sensor, timestamp, value)`` point -- the filter's most general input.
@@ -3421,6 +3623,7 @@ class LucidFilter:
         ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
         flt = np.empty(T) if live else None
         hzr = np.empty(T) if self._learn else None
+        pat = np.empty(T); swr = np.empty(T); memv = np.empty(T)
         total = 0.0
         for i, row in enumerate(Y):
             ti, di = when[i]
@@ -3438,10 +3641,12 @@ class LucidFilter:
                     ctl[i] = st.control
             if hzr is not None:
                 hzr[i] = st.hazard
+            pat[i] = st.patience; swr[i] = st.switch; memv[i] = st.memory
         return LucidResult(mean=mean, var=var, innovation=inn,
                            process_scale=ps, measurement_scale=ms, loglik=total,
                            offset=offs, sensor_offset=sens,
-                           dynamics=dyn, control=ctl, fault=flt, hazard=hzr, time=clock)
+                           dynamics=dyn, control=ctl, fault=flt, hazard=hzr, time=clock,
+                           patience=pat, switch=swr, memory=memv)
 
     def stream(self, points, U=None) -> LucidResult:
         """Filter a stream of ``(sensor, timestamp, value)`` points -- one sensor at a time.
@@ -3471,6 +3676,7 @@ class LucidFilter:
         ctl = np.empty((T, self.n, self.p)) if live and self.B is not None else None
         flt = np.empty(T) if live else None
         hzr = np.empty(T) if self._learn else None
+        pat = np.empty(T); swr = np.empty(T); memv = np.empty(T)
         total = 0.0
         for i, pt in enumerate(pts):
             try:
@@ -3497,11 +3703,12 @@ class LucidFilter:
                     ctl[i] = st.control
             if hzr is not None:
                 hzr[i] = st.hazard
+            pat[i] = st.patience; swr[i] = st.switch; memv[i] = st.memory
         return LucidResult(mean=mean, var=var, innovation=inn,
                            process_scale=ps, measurement_scale=ms, loglik=total,
                            offset=offs, sensor_offset=sens,
                            dynamics=dyn, control=ctl, fault=flt, hazard=hzr, time=clock,
-                           sensor=which)
+                           sensor=which, patience=pat, switch=swr, memory=memv)
 
     def loglik_of(self, Y, U=None, t=None, dt=None) -> float:
         return self.filter(Y, U, t=t, dt=dt).loglik

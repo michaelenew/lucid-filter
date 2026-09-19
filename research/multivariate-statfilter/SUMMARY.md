@@ -327,6 +327,92 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
   delay-line divergence is an integrator with delayed feedback.  On a swapped schedule the
   expensive burst is the *first* one off the floor whichever kind it is (PROCESS-first 2.04).
   Candidate for shipping once the leak is a ladder and the never copy has a way back.
+- **Shipped: the attribution grid** ([`0058`](exploration/0058_the_attribution_grid.md)).  Every
+  class cell twice, walking its process scales at the step's timescale and at the bank's memory
+  (`1/mem`, the `_rung_odds` read -- replacing the frozen "never" copy at identical numbers, so a
+  wrong or absent base is learned, not held), switching under the hazard ladder's kernel over
+  `_HAZARDS` on weight rows that share the filters (the rate a posterior, reported as `switch`;
+  the weight on the memory copies as `patience`).  No static value.  A/B of the shipped filter:
+  arm SENSOR **2.70 -> 1.45**, swapped-schedule SENSOR 1.15 -> 1.03, other regimes unchanged,
+  x2 cost; scalar jump +6%; async flat; suite 55 passed.  Departure specs keep both copies at
+  the step's rate (a slow copy cost the learned-dynamics rig 30%).  Open as AUD-10.
+- **To the bar** ([`0059`](exploration/0059_the_attribution_grid_to_the_bar.md)).  The first port was
+  below it (rates a convention, ladder a proxy) and was reverted.  Four forms measured: the class
+  box (separate process- and sensor-scale classes, the memory class at `phi = 1 - 1/mem`) does
+  not reproduce the effect -- patience is not a class property; the joint Fisher-scoring walk
+  changes nothing -- per-step Bayes, diagonal or joint, attributes a burst to the wider prior,
+  which is the theorem behind the copies; the memory-smoothed copy imports the eager copy's
+  excursions.  The **floor copy** is at the bar: the held axes are those at their floor (share
+  below `1/(phi_golden + 1) = 0.382`, SNR < 1, from 0006; confounded pairs to their ladder), the
+  rate is the memory's resolution floor `1/mem`, the switching ladder is the Bernoulli arcsine
+  (Jeffreys).  Arm SENSOR **2.70 -> 1.46**, swapped SENSOR 1.15 -> 1.03, other regimes
+  unchanged; scalar and learned-dynamics rigs bit-identical; async 1.16 -> 1.19; x2 cost.
+  Remaining opens (a budget of two rate rungs, the departure and no-held-axis duplicates, the
+  async cost, the memory copy's way back) are AUD-10 -- none a number set by hand.
+- **The rate ladder's interior** ([`0060`](exploration/0060_the_rate_ladder_interior.md)): monotone in
+  code length at 2/3/5/9 rungs (30847 -> 31548), so a budget by the rubric with two rungs its floor;
+  not monotone in the state -- the interior rungs buy onset transients (1.77 m at nine rungs) that
+  the acceptance windows skip.  The filter's loss and the rigs' part company there.
+- **The interior is theory, not budget** ([`0061`](exploration/0061_the_interior_is_theory.md)).  The
+  degradation is a handover to a copy whose state is stale but whose one-step likelihood ties,
+  in a regime whose unmasked channels cannot see the state component the copies disagree on
+  (POTFAIL: the pot is the only direct reader of position, the accelerometer two integrations
+  away).  Simplest repro: one joint of the arm (pot on position, accelerometer on acceleration),
+  PROCESS then POTFAIL -- 2.6x at two rungs, 3.0x at five; a 1-D level does not reproduce it.
+  Reason: the bank mixes weights under a switching prior and never mixes states, so under no
+  evidence it averages divergent states; two rungs escape only because the never copy is too
+  stale to tie.  The consistent switching filter (IMM: states mixed at the ladder's rate) makes
+  the interior flat and the chain rig 0.84x, arm POTFAIL 1.11 -> 1.01 and the swapped schedule
+  near the oracle, but erodes SENSOR to 2.30 because the gain is the copies' divergence.  Open:
+  mixing conditional on evidence.
+- **The switching rate is the memory, not an inferred hazard** ([`0062`](exploration/0062_the_switching_rate.md)).
+  The derived grid lost the arm's SENSOR regime to the hand-tuned form (1.46 vs 1.25) and the cause was
+  the switching LADDER, not the rate: every pinned rate recovers 1.24-1.26, including the ladder's own
+  converged value, because the ladder runs at its Jeffreys prior (mean 0.18 on [0, 1/2]) for ~1000
+  steps while the burst arrives at 250 -- every restricted-top ladder scores exactly where its prior
+  mean falls on the pinned curve.  And there was nothing to infer: the copies are estimator settings,
+  not states of nature, and what the ladder converged to tracked the rig's phase schedule.  The slot's
+  derived occupant is the bank's own memory: `1/r >= mem` is binding, revival needs only `r > 0`, so
+  take the largest admissible rate `r = 1/mem` -- the patient copy's own rate.  Measured flat at 1.24
+  for every rate in [1e-4, 2e-3] and degrading above, the signature of the right bound.  **Shipped on
+  the branch**: arm SENSOR 2.70 -> 1.24, calm 1.14 -> 1.10, misattribution +7.76 -> +0.05 nats, scalar
+  and learned-dynamics rigs bit-identical, suite 55 passed, weight rows down 24x.
+- **The last escape** ([`0063`](exploration/0063_the_last_escape.md)).  Nothing structural reads
+  `forget` any more (three reads moved to the node budget; structure identical 0.9 -> 1.0).  What it
+  still buys is one window (scalar regime C, 3.8%).  But its VALUE is a knob by this repo's own test --
+  two opposing monotone effects, shipped value optimal on none -- refuting the parameter doc.  The
+  house-rule remedy is built: a memory ladder, better on seven windows, one 4% regression, blocked on
+  deriving its range (AUD-11).
+- **The memory floor** ([`0064`](exploration/0064_the_memory_floor.md)).  The range derived, and
+  `forget` removed.  A memory rung's log-weights are exactly `T` times the local-level smoother of the
+  log-likelihood stream at gain `1/T`: a memory IS a gain, its coordinate is the split ladder's Whittle
+  arclength, and the memory ladder is the split ladder's rungs read as memories.  The floor: a wrong
+  scale hypothesis on a slow state direction is exposed in the innovations only on that direction's own
+  closed-loop timescale `tau = 1/(1 - rho((I - KH)F))`, so a weight memory shorter than `tau` ranks cells
+  by their fast directions alone -- its score is not the statistic -- and THE WEIGHTS MAY NOT FORGET
+  FASTER THAN THE STATE DOES.  The per-rung trace shows why it was needed: the ladder faithfully follows
+  the best-scoring rung, on the arm that is `T = 10` by 1-4 nats/step through every burst, and its tip
+  error is 30-50% worse.  The arm's `tau = 141` (the base yaw, read by its pot alone) is the floor 0063
+  found by hand.  **Shipped on the branch**: rungs from each filter's nominal model; arm unchanged or
+  better on every window of both schedules, learned-dynamics ratio 1.099 -> 1.053, async pure Bayes
+  (`tau = 802`), hero jump 1.75 -> 1.46 and regime C 0.889 -> 0.815 at a 2.4% steady cost -- which the
+  theory names: a filter told nothing (`tau = 1.6`) admits rungs its walk later moves below (the running
+  floor is 7.6; capping there recovers half of it).  The filter has no declared engineering parameter
+  left; AUD-11 narrowed to the nominal-vs-running floor, AUD-12 for the offset channel's pinned decay.
+- **The battery, main against the branch** ([`0065`](exploration/0065_the_battery.md)).  Every regime
+  window of the arm and the drone is unchanged or better, and three aggregates the windows skip say the
+  branch is NOT mergeable: the arm's whole-burst tip RMSE 0.019 -> 0.068 m (a ~1 m excursion for 40 steps
+  at seed 1's first sensor onset -- the attribution grid's, AUD-10's "first burst off the floor", now
+  sized), the drone's no-crate mission 1.02 -> 1.55x oracle (the grid's, in the GPS multipath window and
+  the calm after it; the crate mission unchanged), and the scalar hero's steady penalty 3.5 -> 7.2% on the
+  README seed (the memory ladder's told-nothing floor, AUD-11).  The memory ladder itself moves none of the
+  first two.
+- **The memory ladder alone, on main** ([`0066`](exploration/0066_the_memory_ladder_alone.md)).  The
+  grid-free measurement: main + the ladder, nothing of the grid.  Arm bit-identical (3 seeds, every regime,
+  every seed's worst error); drone within 0.02 on every window and better on three, no-crate control
+  identical; async hot 1.44 -> 1.40; learned-dynamics ratio 1.099 -> 1.053; hero jump 1.75 -> 1.46 and
+  regime C 0.889 -> 0.815.  ONE regression: the hero's steady window, 2.4% over 12 seeds (AUD-11, the
+  told-nothing floor).  This patch, not the branch's tree, is the shippable form of the ladder.
 
 **Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
 were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in
