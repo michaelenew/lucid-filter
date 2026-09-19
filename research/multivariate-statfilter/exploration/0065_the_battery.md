@@ -79,3 +79,39 @@ branch is not mergeable as it stands: the arm's whole-burst RMSE (×3.6, the gri
 drone's no-crate mission (1.02 → 1.55, the grid's multipath handling), and the hero's steady penalty
 (3.5 → 7.2%, the memory ladder's told-nothing floor). The first two are the attribution grid's, both
 already named in AUD-10 as opens, now with sizes that the windowed tables hid; the third is AUD-11.
+
+## 5. The two mechanisms, as far as the per-copy traces take them
+
+[`0065_per_copy_trace.py`](0065_per_copy_trace.py): each copy's weight, its OWN error from its own members' states,
+its scales, per phase — at the grid commit and, as the control, `main`'s single filter on the same seed.
+
+**Arm, seed 1, the first sensor burst.** In the onset's first 40 steps the eager copy holds weight 1.00 and
+its own tip error is **144× the oracle (1.083 m)**, with the accelerometer burst booked on the sensors at +7.70
+*and on the process axes at +2.84* (log-scale, all modes); the patient copy is 33× (0.78 m) and takes the weight
+by step 290 (0.96, own error 1.00×). `main`'s single filter at the same onset: 2.95× (0.033 m), sensors +4.68,
+process +1.69 — the same misattribution at a third of the size, and no excursion. **The eager copy is not
+`main`'s filter**, although its walk is the same rule at rate 1: something the grid shares between the copies
+(the bank's collapse, the star window, or the per-rung restart — not the offset channel, which this rig does not
+run) carries the patient copy's held state into the eager copy's step at the onset, and the excursion is the
+product. Which shared piece is not yet isolated; it is the next measurement, and it is the same question 0061
+asked of the rate ladder's interior (weights mixed, states not mixed) from the other side.
+
+**Drone, no-crate seed 0, the GPS multipath window.** Held axes on this rig: process modes 0–8 and sensor
+channels 9–11. Through the window the patient copy holds weight 0.98 with its own error **10.8× the oracle**;
+the eager copy is 2.35× (= `main`) at weight 0.02. Both copies have the GPS-position scales at +4.99 (= 2 ln 12,
+correct). The patient copy's held process modes sit at their nominal 0.01 and its held sensor channels at 0.01 —
+*the oracle's own model* — while the eager copy carries attitude-mode process scales at +2.4 (raised in WIND,
+never brought back) and channels 9–11 at +1.3. So the copy with the right scales is five times worse than the
+copy with the wrong ones, and the evidence prefers it by 0.14 nats/step. A correctly-scaled Kalman filter that
+is 10× a correctly-scaled oracle differs from it in its *state*, not its noise model: the candidates are the
+patient copy's departure walker (this rig runs the dynamics channel; the copies' departure rows are duplicated
+at rate 1 — AUD-10) and whatever the shared piece above is. The score prefers it because position under
+GPS ×12 is a slow direction — the score cannot see the position error, exactly the blindness `_memory_floor`
+derives. Not yet isolated.
+
+**What this means for the branch.** The memory ladder (0063/0064) is independent of the grid: its derivation
+reads only the nominal model, and on every rig its effect is the one 0064 measured. The attribution grid
+(0059–0062) carries two defects of size on the README battery that its windowed acceptance hid, and both are
+in the same place — the copies share something they should not, or the score ranks copies on a slow direction
+it cannot see. The grid should not merge until that piece is found; the memory ladder can be carried onto
+`main` without it and re-measured there.
