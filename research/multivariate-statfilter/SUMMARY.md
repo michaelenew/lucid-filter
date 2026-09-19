@@ -407,6 +407,12 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
   the calm after it; the crate mission unchanged), and the scalar hero's steady penalty 3.5 -> 7.2% on the
   README seed (the memory ladder's told-nothing floor, AUD-11).  The memory ladder itself moves none of the
   first two.
+- **The memory ladder alone, on main** ([`0066`](exploration/0066_the_memory_ladder_alone.md)).  The
+  grid-free measurement: main + the ladder, nothing of the grid.  Arm bit-identical (3 seeds, every regime,
+  every seed's worst error); drone within 0.02 on every window and better on three, no-crate control
+  identical; async hot 1.44 -> 1.40; learned-dynamics ratio 1.099 -> 1.053; hero jump 1.75 -> 1.46 and
+  regime C 0.889 -> 0.815.  ONE regression: the hero's steady window, 2.4% over 12 seeds (AUD-11, the
+  told-nothing floor).  This patch, not the branch's tree, is the shippable form of the ladder.
 
 **Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
 were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in
