@@ -182,6 +182,12 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
   process- and sensor-scale classes, the memory class at `φ = 1 − 1/mem`) was built and does not
   reproduce the effect — patience is not a class property, because a floor axis's step is
   budget-clipped whatever its φ (0059).
+  **Sized on the README battery (0065):** the first-burst excursion is ~1 m at the tip for 40 steps at seed 1's
+  SENSOR onset (oracle 3 mm), which takes the arm's whole-burst RMSE from 0.019 to 0.068 m (3 seeds) while every
+  regime window improves; and on the drone's no-crate mission the grid takes RMSE/oracle from 1.02 to 1.55 (GPS
+  multipath window 2.35 → 10.70 on seed 0, the calm after it 1.09 → 2.37) while the crate mission is unchanged.
+  Both are the grid's (present at 3806147, absent at 08b925b; the memory ladder does not move them). **These block
+  merging the grid**; the windowed tables that graded it skip the onsets.
 - **AUD-11** (multivariate-statfilter 0063/0064): the memory ladder's floor is read off the NOMINAL model,
   as every structural construction here is (`_mean_basis`, the walk probe). A filter told nothing
   (`Q0 = I, R0 = I`) has `τ = 1.6` and admits rungs down to `T = 1.7`, while its walk settles the hero rig
