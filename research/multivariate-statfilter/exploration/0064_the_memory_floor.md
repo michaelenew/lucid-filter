@@ -137,7 +137,14 @@ Suite: 56 passed, 16 skipped (one test rewritten, one added).
 The one regression has a precise cause. A filter told nothing has `Q0 = I, R0 = I`, `τ = 1.6`, and admits
 rungs down to `T = 1.7`; the hero rig's walk then settles the bank at an effective state memory of 7.6
 (calm) to 22 (regime C). The rungs between 1.7 and ~7 are below the *running* floor — exactly the
-rungs §3 says have no statistic — and they are what the steady window pays for: (the ladder capped at the true-model floor 7.6 is pending: rerun after a container restart)
+rungs §3 says have no statistic — and they are what the steady window pays for: the same ladder capped at the true-model
+floor (`t ≤ arccos(1 − 1/7.59)`, 8 rungs from 1900 down to 8.6) gives jump 1.5304 / steady **0.3885** /
+C 0.8148 against the told-nothing ladder's 1.4637 / 0.3926 / 0.8149 — the rungs below the running floor
+are half of the steady cost and all of the extra jump gain. The other half (0.3885 against 0.3833) is the
+ladder's own resolution: rungs `1.5 √(2/mem)` apart are, by construction, separable only over `mem` steps,
+so in a 300-step stationary window the short rungs above the floor keep weight (0.03–0.07 each in early
+calm) and the mixture pays their jitter. That is the same price the split ladder pays for completeness,
+not a range question.
 
 So the residual is not a hole in the derivation; it is the derivation applied to the wrong model. The
 floor should be the *bank's* closed-loop time constant, not the nominal's, and the model-averaged gain it

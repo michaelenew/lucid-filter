@@ -383,6 +383,22 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
   two opposing monotone effects, shipped value optimal on none -- refuting the parameter doc.  The
   house-rule remedy is built: a memory ladder, better on seven windows, one 4% regression, blocked on
   deriving its range (AUD-11).
+- **The memory floor** ([`0064`](exploration/0064_the_memory_floor.md)).  The range derived, and
+  `forget` removed.  A memory rung's log-weights are exactly `T` times the local-level smoother of the
+  log-likelihood stream at gain `1/T`: a memory IS a gain, its coordinate is the split ladder's Whittle
+  arclength, and the memory ladder is the split ladder's rungs read as memories.  The floor: a wrong
+  scale hypothesis on a slow state direction is exposed in the innovations only on that direction's own
+  closed-loop timescale `tau = 1/(1 - rho((I - KH)F))`, so a weight memory shorter than `tau` ranks cells
+  by their fast directions alone -- its score is not the statistic -- and THE WEIGHTS MAY NOT FORGET
+  FASTER THAN THE STATE DOES.  The per-rung trace shows why it was needed: the ladder faithfully follows
+  the best-scoring rung, on the arm that is `T = 10` by 1-4 nats/step through every burst, and its tip
+  error is 30-50% worse.  The arm's `tau = 141` (the base yaw, read by its pot alone) is the floor 0063
+  found by hand.  **Shipped on the branch**: rungs from each filter's nominal model; arm unchanged or
+  better on every window of both schedules, learned-dynamics ratio 1.099 -> 1.053, async pure Bayes
+  (`tau = 802`), hero jump 1.75 -> 1.46 and regime C 0.889 -> 0.815 at a 2.4% steady cost -- which the
+  theory names: a filter told nothing (`tau = 1.6`) admits rungs its walk later moves below (the running
+  floor is 7.6; capping there recovers half of it).  The filter has no declared engineering parameter
+  left; AUD-11 narrowed to the nominal-vs-running floor, AUD-12 for the offset channel's pinned decay.
 
 **Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
 were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in
