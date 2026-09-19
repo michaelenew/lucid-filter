@@ -262,11 +262,14 @@ def _memory_floor(F, H, Q, R, iters=20000, tol=1e-12):
     n = F.shape[0]
     P = Q + np.eye(n)
     K = np.zeros((n, H.shape[0]))
+    I = np.eye(n)
     for _ in range(iters):
         Pp = F @ P @ F.T + Q
         S = H @ Pp @ H.T + R
-        K = np.linalg.solve(S, H @ Pp).T
-        Pn = Pp - K @ H @ Pp
+        K = Pp @ H.T @ np.linalg.solve(S, np.eye(S.shape[0]))
+        A = I - K @ H
+        Pn = A @ Pp @ A.T + K @ R @ K.T          # Joseph form: stays symmetric positive
+        Pn = 0.5 * (Pn + Pn.T)
         if np.max(np.abs(Pn - P)) < tol * (1.0 + np.max(np.abs(P))):
             break
         P = Pn

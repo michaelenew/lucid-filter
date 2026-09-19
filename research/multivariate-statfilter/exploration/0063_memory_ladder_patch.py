@@ -1,4 +1,5 @@
 """Patch the filter with a MEMORY LADDER: rungs of the bank's weight memory, weight rows sharing the
+import os
 member filters, each rung carrying its own weight vector and scored by its own mixture predictive
 density; the rungs themselves are switching hypotheses and so leak at the derived 1/_LADDER_MEM."""
 def arc_rungs(mem=1000.0, top=None):
@@ -17,7 +18,7 @@ def patched_source(mems="10,32,100,316,1000,inf", classonly=False):
         mems = arc_rungs(top=None if mems == "arc" else float(mems[3:]))
     if tau_mode:
         mems = "inf"     # placeholder; the rungs are computed per filter below
-    src = open("lucid/filter/lucid.py").read()
+    src = open(os.environ.get("LUCID_SRC", "lucid/filter/lucid.py")).read()
     def rep(old, new):
         nonlocal src
         assert old in src, old[:70]
