@@ -15,7 +15,7 @@ if src != "tree":
             setattr(lucid.filter, name, getattr(mod, name))
             if hasattr(_top, name): setattr(_top, name, getattr(mod, name))
     from lucid import LucidFilter as _chk
-    assert not hasattr(_chk(), "memories"), "swap did not reach `lucid.LucidFilter`"
+    assert _chk is mod.LucidFilter, "swap did not reach `lucid.LucidFilter`"
     print("filter source:", src, "| memory ladder:", hasattr(mod, "_memory_rungs"), flush=True)
 else:
     import lucid.filter.lucid as L; print("filter source: tree | memory ladder:", hasattr(L, "_memory_rungs"), flush=True)
