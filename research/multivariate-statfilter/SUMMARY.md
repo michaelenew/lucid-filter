@@ -399,6 +399,14 @@ dimension-stable false-alarm floor. It is not yet unified into the production st
   theory names: a filter told nothing (`tau = 1.6`) admits rungs its walk later moves below (the running
   floor is 7.6; capping there recovers half of it).  The filter has no declared engineering parameter
   left; AUD-11 narrowed to the nominal-vs-running floor, AUD-12 for the offset channel's pinned decay.
+- **The battery, main against the branch** ([`0065`](exploration/0065_the_battery.md)).  Every regime
+  window of the arm and the drone is unchanged or better, and three aggregates the windows skip say the
+  branch is NOT mergeable: the arm's whole-burst tip RMSE 0.019 -> 0.068 m (a ~1 m excursion for 40 steps
+  at seed 1's first sensor onset -- the attribution grid's, AUD-10's "first burst off the floor", now
+  sized), the drone's no-crate mission 1.02 -> 1.55x oracle (the grid's, in the GPS multipath window and
+  the calm after it; the crate mission unchanged), and the scalar hero's steady penalty 3.5 -> 7.2% on the
+  README seed (the memory ladder's told-nothing floor, AUD-11).  The memory ladder itself moves none of the
+  first two.
 
 **Reprofiled against the extended domain (research 0029).** Most "doesn't matter much" verdicts
 were filed on simple domains; re-measuring each open's cost (mis-specified filter / oracle) in
