@@ -1,5 +1,5 @@
-"""Patch the filter with a MEMORY LADDER: rungs of the bank's weight memory, weight rows sharing the
 import os
+"""Patch the filter with a MEMORY LADDER: rungs of the bank's weight memory, weight rows sharing the
 member filters, each rung carrying its own weight vector and scored by its own mixture predictive
 density; the rungs themselves are switching hypotheses and so leak at the derived 1/_LADDER_MEM."""
 def arc_rungs(mem=1000.0, top=None):
