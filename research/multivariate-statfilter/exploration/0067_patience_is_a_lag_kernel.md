@@ -132,3 +132,32 @@ The minimal form is a one-step lag on the weight update, `L_t = f L_{t−1} + �
 report left at lag 0. Under it the spike step cannot move the weights; at `t + 1` cell 4 predicts 4.87 rad
 against a reading of 0.03 and cannot win. [`0067_lag1_weights_patch.py`](0067_lag1_weights_patch.py) builds
 it on `main` and on the grid commit; measurements in §5.
+
+## 5. The lag-1 weights, measured: neutral on `main`, and not enough for the grid
+
+| | `main` | `main` + lag-1 weights | grid | grid + lag-1 weights |
+|---|---|---|---|---|
+| arm, 3 seeds: regimes, worst errors, burst RMSE | — | **bit-identical to `main`** | seed 1: 1.083 m at SENSOR+0, 41 steps; SENSOR 8.00 | seed 1: **1.072 m at SENSOR+1, 41 steps; SENSOR 13.41**; seed 0's BOTH excursion 0.384 → 0.344 m |
+| scalar hero, 12 seeds: jump / steady / C | 1.7474 / 0.3833 / 0.8890 | 1.7548 / 0.3834 / 0.8870 | | |
+
+Delaying the evidence by one step moves nothing on `main` (its spike-step weight already went to a sane
+cell) and does not repair the grid's onset. The per-copy trace under the lag-1 weights: the eager copy still
+holds 0.99 of the weight through the onset window at 141× the oracle. So §4's reading was incomplete. The
+spike step is where the state is destroyed, but it is not the only step that rewards it: **a destroyed cell
+is self-consistent under its own inflated noise.** Cell 4's window excursed its sensor scales to +7.6, and
+with the pots claimed at ×e⁷·⁶ its 4.87-rad position error costs it ~4 nats per pot channel per step (the
+entropy of the claim), while the sane cells — whose walk climbs at 0.02 nats per step toward the 5.4 nats a
+×15 burst asks for — are surprised by ~1000 nats per step on ten accelerometer channels until they get there.
+The degenerate cell out-scores the honest ones at every lag for as long as the honest walk takes, which is
+the ~40 steps of the excursion. `main`'s SENSOR window (2.7–3.5× oracle) is the same rate limit seen from the
+mixture. A kernel over lags delays when evidence is read; it does not change what the evidence says, and
+what it says here is blind to the position for the same reason 0064 derived — the destroyed cell has made the
+pots uninformative and the score cannot see the state.
+
+What the theory of 0068 then points at is the **window**, not the weights: the attribution on this rig is
+made inside the star window at lag 0 — an accelerometer spike excurses the process axes' and the pots'
+windows in the same update — and that is the place `D(0) = 0` has to be applied: an innovation on one sensor
+may move that sensor's window at lag 0, and the windows of the axes it is confounded with only when the
+lag-`l` evidence (`D(l)`, the loop's own impulse response) has arrived. That is a change to the window's
+per-axis node weights, not to the bank's weights, and it is the next build. The stage-A copies (§3) and the
+lag-1 weights (§5) are both retired, each for a reason the derivation names.
