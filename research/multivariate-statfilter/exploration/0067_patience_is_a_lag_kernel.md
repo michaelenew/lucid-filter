@@ -35,10 +35,18 @@ evidence as the kernel-weighted sum of its members' log-likelihoods). Stage A be
 
 ## 2. Stage A: the construction
 
-One member per class cell per kernel mode `m ∈ MODES`. A mode-`m` member walks every scale axis on
-`grad_w = Σ_l w_m(l) grad_{t−l}` and `info_w = Σ_l w_m(l) info_{t−l}` over its own trailing buffer (the buffer is
-per axis; until it reaches the kernel's support the member walks on the current score). Mode 0 is `main`'s
-walk exactly (verified bit-identical on the scalar rig). The copies compete in the bank's joint posterior as
+One member per class cell per kernel mode `m ∈ MODES`. Each step's innovation on an axis implies a **scale
+reading** — the current scale plus that step's own clipped Newton increment, `μ_t + clip(grad/info)` — and a
+mode-`m` member moves toward the kernel-weighted average of its trailing readings, `μ ← μ + K_μ (Σ_l w_m(l) r_{t−l} − μ)`,
+clipped to the budget as always (the buffer is per axis; until it reaches the kernel's support the member reads
+the latest only). Mode 0 is `main`'s walk exactly (verified bit-identical on the scalar rig).
+
+*Not* this: the first form buffered the raw scores and stepped on their kernel average. That re-applies a
+spike's gradient, computed at the old scale, for the whole length of the kernel after the scale has already
+moved — twenty steps at the full budget — and the scales ran off to a singular innovation covariance on both
+arm seeds. A kernel over lags must weight *readings* (evidence about the scale), not stale gradients; the
+reading form has the fixed point the gradient form lacks (once the scale sits at the readings' average the
+step is zero). The copies compete in the bank's joint posterior as
 the rate copies did; `patience` is the weight on the modes above 0. Kernels used (chi-squared, `b = 2`):
 
 | mode | `w(0..5)` | buffer `N` |

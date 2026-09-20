@@ -45,28 +45,30 @@ rep('''        self.mu, self._Pmu = st("mu"), st("_Pmu")
         for j, k in enumerate(kers):
             self._WK[j, :len(k)] = k
         self._gbuf = np.zeros((len(self._act), self._Nk, M))
-        self._ibuf = np.zeros((len(self._act), self._Nk, M))
         self._nfill = np.zeros(len(self._act), int)
         self._m = np.zeros((M, self.n))
 ''')
 rep('''            info = np.einsum("bg,bg->b", pi[:, ax], info_g) + _RIDGE
             grad = np.einsum("bg,bg->b", pi[:, ax], score)
             Kmu = self._Pmu[:, k] / (self._Pmu[:, k] + 1.0 / info)
+            self.mu[:, k] += np.clip(Kmu * (grad / info), -budget[:, k], budget[:, k])
 ''', '''            info = np.einsum("bg,bg->b", pi[:, ax], info_g) + _RIDGE
             grad = np.einsum("bg,bg->b", pi[:, ax], score)
+            Kmu = self._Pmu[:, k] / (self._Pmu[:, k] + 1.0 / info)
             if self._Nk > 1:
-                # the lag-kernel walk: the step is taken on the kernel-weighted score and
-                # information over this axis's trailing buffer (mode-0 members read lag 0 only)
-                self._gbuf[ax, 1:] = self._gbuf[ax, :-1]; self._gbuf[ax, 0] = grad
-                self._ibuf[ax, 1:] = self._ibuf[ax, :-1]; self._ibuf[ax, 0] = info
+                # the lag-kernel walk: each step's innovation implies a scale reading, the
+                # current scale plus its own (clipped) Newton increment; the member moves toward
+                # the kernel-weighted average of its trailing readings (mode 0: the latest only)
+                reading = self.mu[:, k] + np.clip(grad / info, -budget[:, k], budget[:, k])
+                self._gbuf[ax, 1:] = self._gbuf[ax, :-1]; self._gbuf[ax, 0] = reading
                 nf = int(min(self._nfill[ax] + 1, self._Nk)); self._nfill[ax] = nf
                 Wn = self._WK[:, :nf]
                 mass = Wn.sum(1, keepdims=True)
-                # until the buffer reaches the kernel's support, walk on the current score
                 Wn = np.where(mass > 1e-9, Wn / np.maximum(mass, 1e-300), np.eye(1, nf)[0][None, :])
-                grad = np.einsum("bl,lb->b", Wn, self._gbuf[ax, :nf])
-                info = np.einsum("bl,lb->b", Wn, self._ibuf[ax, :nf])
-            Kmu = self._Pmu[:, k] / (self._Pmu[:, k] + 1.0 / info)
+                target = np.einsum("bl,lb->b", Wn, self._gbuf[ax, :nf])
+                self.mu[:, k] += np.clip(Kmu * (target - self.mu[:, k]), -budget[:, k], budget[:, k])
+            else:
+                self.mu[:, k] += np.clip(Kmu * (grad / info), -budget[:, k], budget[:, k])
 ''')
 # the cells: one per mode
 rep('''        self.phi_arr = np.array([ph for ph in phis for _ in ss for _ in bases], float)
