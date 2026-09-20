@@ -89,3 +89,46 @@ kernel on that direction is.
 
 **Stage A is rejected**, for a reason that is derivable rather than measured: a lag kernel on the walk slows
 the identifiable sum; the object it belongs to is the split.
+
+## 4. What the bank does at the spike step, member by member
+
+[`0067_diag_onset.py`](0067_diag_onset.py) on arm seed 1, the first sensor onset at `t = 250`, `main` and the
+grid commit side by side. Every member's joint-1 position state (truth ≈ 0.15 rad) and the bank's weights:
+
+| | `t = 249` | `t = 250` (the spike step) | `t = 251` |
+|---|---|---|---|
+| **`main`**, weights over the 15 cells | cell 11: 0.32, cell 12: 0.68 | **cell 12: 1.00** | cell 7: 1.00 |
+| `main`, position state of cells 4 and 9 (the widest windows) | 0.16 | **4.87 / 4.85 rad** | 4.87 / 4.85 |
+| `main`, position state of the winning cell | 0.146 | 0.153 | 0.157 |
+| **grid**, weights over the eager copy's 15 cells | cell 11: 0.13, cell 12: 0.28 | **cell 4: 1.00** | cell 4: 1.00 |
+| grid, position state of eager cell 4 / its patient twin | 0.146 / 0.146 | **4.87 / 2.49 rad** | 4.87 / 2.53 |
+| grid, log-likelihood, eager cell 4 vs its patient twin | +25.0 vs +25.7 | **−27 vs −919** | −27 vs −1031 |
+
+Three facts, in order:
+
+1. **The state is destroyed inside the spike step, in `main` too.** Cells 4 and 9 — the widest `(φ, s)`
+   windows — jump from 0.16 to 4.87 rad in the single update at `t = 250`. Their predicted measurement going
+   in was right (0.151 against a pot reading of 0.114); the accelerometer innovation was −1.16 (a 2.6σ event
+   under the burst); the star window handed the update to a far node with process and sensor scales excursed
+   by +2.7 and +7.9, and at that node's gain one accelerometer innovation moves the joint by 4.7 rad. The
+   misattribution is the window's, at lag 0, before any walk step — 0059's theorem seen at the level of the
+   window rather than the walk.
+2. **`main` survives by not listening.** Its weights hand the spike step to cell 12, whose state stays at
+   0.153; cells 4 and 9 carry no weight because 250 calm steps had starved them (the exponential memory at
+   0.999 had pushed them to ~e⁻³⁰), and a one-step likelihood margin cannot lift them from there. Not a rule —
+   an accident of the memory.
+3. **The grid listens.** The attribution leak mixes each cell's weight toward its twin's at `1/mem` every step,
+   which floors cell 4's eager weight at ~`r ×` its twin's; from that floor the spike step's likelihood margin
+   (a window that explains the spike by misattributing beats one that cannot, by ~900 nats) hands cell 4
+   the entire weight at `t = 250`, and the tip follows its 4.87-rad state — the metre. The patient twin is
+   scored −919 at the same step for *not* misattributing, its cumulative evidence goes to −∞, and only the
+   leak revives it forty steps later (0065 §5's "shared piece" was this: not states, weights).
+
+This is the user's statement made exact: the spike step is the uninformative step, the score at that step
+rewards the widest prior, and the bank's weights currently read it at full strength. 0068's `D(0) = 0` says
+what to do — the weights must not read a step's evidence until the members' *responses* to it are visible.
+The minimal form is a one-step lag on the weight update, `L_t = f L_{t−1} + ℓ_{t−1}`, the kernel
+`w(0) = 0, w(l) = f^{l−1}` — which is exactly the scalar `D(l)` of 0068 — with the predictive-density
+report left at lag 0. Under it the spike step cannot move the weights; at `t + 1` cell 4 predicts 4.87 rad
+against a reading of 0.03 and cannot win. [`0067_lag1_weights_patch.py`](0067_lag1_weights_patch.py) builds
+it on `main` and on the grid commit; measurements in §5.
