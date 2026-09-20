@@ -56,6 +56,36 @@ the rate copies did; `patience` is the weight on the modes above 0. Kernels used
 | 2 | 0, .16, .19, .17, .14, .11 | 22 |
 | 4 | 0, .04, .09, .13, .14, .13 | 26 |
 
-## 3. Measurements
+## 3. Stage A, measured: the mode copies never take weight on the arm, and the reason is structural
 
-(pending)
+Arm seed 1 (the seed with the grid's metre excursion), per-copy traces, chi-squared kernels:
+
+| window | mixture | eager copy (mode 0): weight, own error | patient copies (modes 1 / 2 / 4): weight, own error |
+|---|---|---|---|
+| SENSOR onset (40 steps) | 13.96× (worst 0.091 m) | 1.00, 13.96× | 0.00, 27.9× (worst 0.224 m) — identical for modes 1, 2, 4 |
+| SENSOR | 5.95× | 1.00, 5.95× | 0.00, 57× |
+| PROCESS / POTFAIL / BOTH | 1.40 / 1.80 / 2.59× | 1.00 | 0.00; own errors 137× / 148× / 17× |
+
+Seed 0 diverged to NaN under every mode set (a numerical failure of the patch on that seed, not traced). Scalar
+hero, 12 seeds: jump 1.7474 → 1.8367 ({0,1}) / 1.8820 ({0,1,2,4}), steady 0.3833 → 0.3821, C unchanged — the
+patient copies hold ~half the weight in calm and lose it at the jump, which they delay.
+
+Note first what the eager copy does here against `main` on the same seed: 13.96× / 5.95× in SENSOR against
+`main`'s 2.95× / 3.48×, with no metre excursion (worst 0.091 m). So on this seed the mode-0 copy is *not*
+`main`'s filter even though its walk is bit-identical to `main`'s on the scalar rig — the same coupling
+0065 §5 found with the rate copies (something the copies share moves the eager one), now with copies that
+never win. That coupling is prior to any kernel question and is still not isolated.
+
+Why the patient copies cannot win, from the step trace ([`diag`](0067_lag_kernel_patch.py) of one cell,
+joint 0's accelerometer axis, through the onset): the walk on the arm is *rate-limited*, `K_μ × budget ≈
+0.075 × 0.3 = 0.02` nats per step, so the sensor scale needs ~250 steps to climb the 5.4 nats a ×15 burst
+asks for; the eager member climbs at that rate and the patient member at ~70% of it (its target averages
+readings taken at older, lower scales). A sustained burst is not a transient: at every lag the reading says
+"higher", the kernel has nothing to discriminate, and the patient member is simply the slower walker on
+the one quantity that *is* identifiable per step — the total innovation variance. It loses the predictive
+likelihood at every step and never holds weight. The kernel was applied to the magnitude of the walk; the
+attribution question is about its *direction* (which of a confounded pair moves), and 0068 says what the
+kernel on that direction is.
+
+**Stage A is rejected**, for a reason that is derivable rather than measured: a lag kernel on the walk slows
+the identifiable sum; the object it belongs to is the split.
