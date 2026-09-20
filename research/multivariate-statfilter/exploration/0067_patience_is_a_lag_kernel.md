@@ -5,6 +5,10 @@
 > Per-copy traces with [`0065_per_copy_trace.py`](0065_per_copy_trace.py); scalar A/B 12 seeds. Measurements
 > in §3 as they land.
 
+![regime windows, the onsets, seed 1 step by step, the spike step inside the bank, the copies' evidence, the derived kernels](../figures/0067_onset_and_kernel.png)
+
+*Figure ([`0067_figure.py`](0067_figure.py)): A the arm's regime windows; B the whole-burst RMSE they skip; C seed 1's onset; D every cell's joint-1 state across the spike step, dot size the weight; E the grid copies' per-step evidence; F the derived kernel `D(l)` (0068).*
+
 ## 1. The idea (the user's, restated in the filter's terms)
 
 Every construction so far weights past evidence by lag `k = t − s` with `w(k) = f^k`: exponential, maximal at the
