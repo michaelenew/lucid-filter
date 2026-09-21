@@ -400,13 +400,12 @@ def test_faults_hazard_validated():
         LucidFilter(dynamics=[[0.5]], faults=1e-4, anchors=[np.eye(2)])
 
 
-def test_hazard_box_is_structural_not_forget_derived():
+def test_hazard_box_is_structural_not_memory_derived():
     """faults=True mixes over the fixed ladder: uniform in the offset walker's Whittle
     arclength t = arccos(1 - K(rho)), from the class's own persistence boundary down to
-    "no fault" (resolution-criterion 0004).  Nothing structural reads ``forget`` -- the box is identical at any
-    memory, and the construction is valid at the NOMINAL filter, ``forget = 1`` (pure Bayes):
-    forget is the engineering escape for the stationarity assumption being violated, and it
-    is admissible only because nothing depends on it (adaptive-grid 0029, research 0009)."""
+    "no fault" (resolution-criterion 0004).  Nothing structural reads a memory -- the box is the
+    same whatever the memory ladder holds, and the construction is valid at pure Bayes, the
+    ladder's top rung (research 0009; multivariate-statfilter 0064)."""
     f = LucidFilter(dynamics=[[0.9]], faults=True)
     hz = np.asarray(f.hazards)
     assert hz[0] < 0.5 and hz[-1] > 0.0 and np.all(np.diff(hz) < 0)   # descending, below the boundary
@@ -415,12 +414,37 @@ def test_hazard_box_is_structural_not_forget_derived():
     assert np.allclose(np.diff(t), t[1] - t[0])                         # uniform in arclength ...
     assert np.isclose(t[0] - (t[1] - t[0]) / 2, np.pi / 3)              # ... cell-centred up to rho = 1/2
     assert np.isclose(t[-1] + (t[1] - t[0]) / 2, 0.0)                   # ... and down to rho = 0
-    for fg in (0.99, 1.0):                          # forget never reaches the box
-        g = LucidFilter(dynamics=[[0.9]], faults=True, forget=fg)
-        assert np.array_equal(g.hazards, f.hazards)
-    pure = LucidFilter(dynamics=[[0.9]], faults=True, forget=1.0)
-    st = pure.update([0.3])
+    g = LucidFilter(dynamics=[[0.9]], faults=True, process=[[0.01]])   # a different memory ladder ...
+    assert len(g.memories) != len(f.memories) and np.array_equal(g.hazards, f.hazards)   # ... same box
+    st = f.update([0.3])
     assert np.isfinite(st.loglik) and 0.0 <= st.fault <= 1.0 and st.hazard > 0.0
+
+
+def test_memory_ladder_runs_from_pure_bayes_down_to_the_state_memory():
+    """The bank's weight memory is a nuisance the evidence weights, not a parameter: rungs
+    uniform in the gain's Whittle arclength t = arccos(1 - 1/T) from pure Bayes (t = 0) down to
+    the nominal model's own slowest closed-loop time constant tau -- the weights may not forget
+    faster than the state does (multivariate-statfilter 0064).  A model with an unobservable
+    direction has tau = inf and one rung, pure Bayes."""
+    from lucid.filter.lucid import _memory_floor, _memory_rungs, _LADDER_MEM
+    tau = _memory_floor([[1.0]], [[1.0]], [[0.02]], [1.0])              # local level, SNR 0.02
+    rho = 0.02; P = (rho + np.sqrt(rho * rho + 4 * rho)) / 2; K = P / (P + 1)
+    assert np.isclose(tau, 1.0 / K)                                     # scalar: tau = 1 / K exactly
+    T = np.asarray(_memory_rungs([[1.0]], [[1.0]], [[0.02]], [1.0]))
+    t = np.arccos(1 - 1 / T)
+    assert np.all(np.diff(T) < 0) and np.allclose(np.diff(t), t[1] - t[0])      # uniform in arclength ...
+    assert np.isclose(t[0] - (t[1] - t[0]) / 2, 0.0)                    # ... cell-centred from pure Bayes
+    assert np.isclose(t[-1] + (t[1] - t[0]) / 2, np.arccos(1 - 1 / tau))    # ... down to the state memory
+    assert np.isclose(t[1] - t[0], (np.arccos(1 - 1 / tau)) / len(T)) and t[1] - t[0] <= 1.5 * np.sqrt(2 / _LADDER_MEM)
+    slow = _memory_rungs([[1.0, 0.0], [0.0, 1.0]], [[1.0, 0.0], [0.0, 1.0]], np.diag([1e-4, 1.0]), [1.0, 1.0])
+    assert len(slow) < len(T) and min(slow) > 50.0                      # a slow direction raises the floor
+    blind = _memory_rungs([[1.0, 0.0], [0.0, 1.0]], [[0.0, 1.0]], np.eye(2), [1.0])
+    assert blind == (np.inf,)                                           # an unobservable one: pure Bayes only
+    f = LucidFilter()
+    st = f.update([0.5])
+    assert np.isfinite(st.loglik) and 0.0 < st.memory <= np.inf
+    r = LucidFilter(dynamics=[[1.0, 0.0], [0.0, 1.0]], H=[[0.0, 1.0]]).filter(np.zeros((5, 1)))
+    assert np.all(np.isinf(r.memory))                                   # the one-rung ladder reports pure Bayes
 
 
 def test_hazard_is_read_not_told():
