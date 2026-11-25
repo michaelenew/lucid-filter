@@ -118,6 +118,13 @@ Rules, exactly:
    set, and since its rate is `1/(elapsed steps)`, a change of sampling rate rescales it
    consistently.
 
+> **Correction after review.** Share `1/t` is not admissible. Its rate depends on the index
+> of the observation, i.e. on where the record began, which breaks the time-homogeneity the
+> class rests on. Reading 3's "consistent under a change of sampling rate" is true but beside
+> the point: it is scale-free and origin-dependent, where the requirement is origin-free.
+> The clamp is origin-free *and* timescale-free; its constant is a dimensionless level. The
+> numbers below stand as measurements only.
+
 4. **The cost of share `1/t` is logarithmic stickiness.** After a run of `t` steps a change
    costs about `ln(M·t)` nats to notice, against pure Bayes's cost that grows linearly in
    `t`. At `t = 10^6` that is 16.5 nats, twice the clamp's 8.
