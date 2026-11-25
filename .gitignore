@@ -8,3 +8,4 @@ dist/
 *_run.log
 *.so
 .pytest_cache/
+research/**/0018_cache.pkl

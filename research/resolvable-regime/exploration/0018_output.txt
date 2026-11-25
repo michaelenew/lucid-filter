@@ -1,0 +1,29 @@
+theory vs simulation, excess kurtosis: worst |z| over lags (z = (sim - theory) / SE)
+kind     phi     s    th N=1  sim N=1   th N=128 sim N=128  max|z|
+proc   0.000  1.00     5.155    5.163     0.0403    0.0370    0.76
+proc   0.700  1.00     5.155    5.132     0.1737    0.1646    3.30
+proc   0.900  1.00     5.155    5.105     0.5497    0.6274    2.15
+proc   0.970  1.00     5.155    5.202     1.5840    1.5924    0.72
+proc   0.995  1.00     5.155    5.188     3.8345    3.9871    1.02
+proc   0.900  0.40     0.521    0.521     0.0688    0.0865    2.54
+proc   0.900  0.60     1.300    1.291     0.1636    0.1781    1.63
+proc   0.900  0.80     2.689    2.720     0.3152    0.2939    1.32
+proc   0.900  1.00     5.155    5.122     0.5497    0.5550    0.93
+proc   0.900  1.20     9.662    9.704     0.9150    0.9485    1.27
+meas   0.000  1.00     2.577    2.606     2.5774    2.6204    1.16
+meas   0.700  1.00     4.098    4.068     2.5774    2.5650    0.73
+meas   0.900  1.00     4.767    5.019     2.5774    2.7479    1.60
+meas   0.970  1.00     5.034    5.021     2.6081    2.6311    0.94
+meas   0.995  1.00     5.135    5.491     3.6168    3.8521    1.92
+meas   0.900  0.40     0.493    0.490     0.2603    0.2641    1.72
+meas   0.900  0.60     1.224    1.233     0.6500    0.6501    1.39
+meas   0.900  0.80     2.513    2.556     1.3447    1.3608    2.33
+meas   0.900  1.00     4.767    4.870     2.5774    2.6068    0.94
+meas   0.900  1.20     8.813    8.811     4.8310    4.9283    0.99
+variance  measurement, fixed level                             max rel err vs theory 0.0008
+variance  process, fixed level                                 max rel err vs theory 0.0038
+variance  measurement, wandering level (phi=0.9, s=1.0)        max rel err vs theory 0.0010
+variance  process, wandering level (phi=0.9, s=1.0)            max rel err vs theory 0.0124
+mixed record (process phi=0.97 s=0.8, measurement phi=0.7 s=1.0): c4 sim / (sum of the two closed forms)
+  N=1: 0.992  N=2: 1.002  N=3: 0.996  N=4: 0.990  N=6: 0.988  N=8: 0.987  N=12: 0.986  N=16: 0.992  N=24: 0.983  N=32: 0.985  N=48: 0.991  N=64: 1.002  N=96: 1.019  N=128: 1.038
+process inversion from kurtosis at N=1,2: s^2 = 1.0000 (true 1), phi = 0.9000 (true 0.9)

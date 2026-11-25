@@ -89,6 +89,7 @@ workstream's uncertainty read-out; nothing below it should be cited without it.
 | the per-step **step ratio** is a usable confidence read-out | **half-established, one-sided** | rank correlation 1.000 with decimation disagreement below the seam; **saturates and decreases above it**, so a low reading is not a clean bill of health ([`0008`](exploration/0008_the_indicator.md)) |
 | `_PHIS` does not reach near enough to 1 | **measured on one rig** | shipped-like reach costs 2.9× and 3.5× on wandering log-scales, rail-pinned on every seed, and costs nothing on a stationary one ([`0007`](exploration/0007_phi_reach.md)) |
 | `sqrt(2)` is a **seam** (drift below, jump above), not a ceiling | **interpretation of a measurement** | consistent with [`0005`](exploration/0005_the_seam.md)'s +10.0%; the mechanism is not separately measured |
+| `(phi, s)` are invisible in the variance of the lag-`N` change and live in its **fourth cumulant**: `c4 = 3·Var(accumulated level)`, settling for measurement noise, growing for process noise; two lags pin `(s, phi)` as two lags pin `(Q, R)`; `phi` is learnable only while `1/(1−phi)` sits between one step and the record length | **established** (closed form + simulation, stationary case; diagnostic only, not a filter change) | 20 `(phi, s)` cells × 14 lags, worst `\|z\|` 3.3; mixed-record additivity 0.98–1.04 ([`0018`](exploration/0018_moments_by_lag.md)) |
 | **C1** — `Q(a) = Q·a` breaks refinement covariance | **untested here** | algebraic; the misfit is already measured elsewhere (45% of `Q` at `‖A‖a ≈ 1.2`, `pointwise-streaming`) |
 
 ## Why the swap fails, in one paragraph
@@ -225,4 +226,6 @@ would settle it.
   [`0002`](exploration/0002_the_ridge.md), [`0003`](exploration/0003_what_stationarity_costs.md),
   [`0005`](exploration/0005_the_seam.md), [`0007`](exploration/0007_phi_reach.md),
   [`0008`](exploration/0008_the_indicator.md) carry the measurements.
+  [`0018`](exploration/0018_moments_by_lag.md) is the moments-by-lag picture of the four parameters.
+- `figures/` — the 0018 charts.
 - `output/` — empty. Nothing here stands on its own yet.
