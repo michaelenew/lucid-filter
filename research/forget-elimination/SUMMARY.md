@@ -32,6 +32,15 @@ thing: `forget` keeps homogeneity but carries a timescale; share `1/t` carries n
 but picks an origin; the clamp keeps both and pays with a dimensionless level. Whether a
 homogeneous, timescale-free rule can also be free of that level is the open question.
 
+**A third candidate, from a different principle** ([`0002`](exploration/0002_the_ceiling_world.md)):
+assume `(phi, s)` drift between neighbouring members as fast as each pair can be resolved,
+and filter under that chain. Time-homogeneous, no timescale, rates read from the
+resolution table. Best of all rules when the truth changes every ~100 steps or faster
+(1.5× better than the clamp, 4× better than `forget` at the ceiling); pays a standing cost
+of about half its hop rate when the world is calmer (5.5e-3 nats/step: 16× the clamp, 50×
+`forget = 0.999`). The choice between it and the clamp is a stance on how restless the
+world is, not something this rig can settle.
+
 The idea that started the thread — forget each pair of members on the time it takes to tell
 that pair apart — is right about the *behaviour* and wrong about the *mechanism*: a
 pair-blind cap or floor produces per-pair memories on its own, while supplying per-pair
@@ -46,6 +55,9 @@ timescales explicitly failed both ways it was tried.
 | a log-odds clamp re-selects on the pair's own resolution time | **supported loosely** (r = +0.59, median 2× slow) | `0001` |
 | clamp-`eps0` and share `1/t` beat `forget = 0.999` in code length under change, at negligible static cost | **measured, one rig** | `0001` §B |
 | share `1/t` is an admissible replacement | **NO — violates time-homogeneity** (reads the observation index) | principle, not measurement |
+| the resolvability ceiling applied to **any** pair of members is vacuous (far members resolve in ~1 step, so every rate saturates) | **measured** (59–69e-3 everywhere) | [`0002`](exploration/0002_the_ceiling_world.md) Q1 |
+| applied to **neighbours** it is a working rule: wins at dwell ≲ 100 and at the ceiling, standing cost ≈ 0.57 × hop rate when calm | **measured, one rig** | `0002` Q2–Q4 |
+| the level `c` that defines "resolved" is weakly felt in the local rule (7× in `c`, ~2× in result) | **measured, one rig** | `0002` |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |
@@ -57,6 +69,9 @@ timescales explicitly failed both ways it was tried.
    * prior + llw`), but two structures also read `forget` and need a decision: the split
    ladder's rung pruning (`_rung_odds(forget)`, already capped by `_LADDER_MEM`) and a
    `mem`-derived floor. Both are documented as valid at `forget = 1`.
+1b. **Online rates for the local ceiling rule.** It reads a `KL` table measured offline;
+   the shipped filter would need it estimated from the bank's own running likelihood
+   differences.
 2. **Slow drift and off-grid truths** on this rig — the abrupt, on-grid hops used so far
    favour any rule that re-selects quickly.
 3. **Remove or derive the clamp's level.** A homogeneous version of the `1/t` idea would
@@ -70,5 +85,7 @@ timescales explicitly failed both ways it was tried.
 
 - `exploration/` — numbered, later is more recent.
   [`0001`](exploration/0001_pairwise_resolution.md): the table, the race, the predictions.
+  [`0002`](exploration/0002_the_ceiling_world.md): the resolvability ceiling as the model.
+  [`rig.py`](exploration/rig.py): the shared scalar rig.
 - `figures/` — the 0001 charts.
 - `output/` — empty.

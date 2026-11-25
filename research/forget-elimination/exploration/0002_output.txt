@@ -1,0 +1,25 @@
+regret, nats/step x 1000, against the currently-true member (mean; SE in the .pkl)
+rule                                  static       any 100      any 1000     any 10000       nbr 100      nbr 1000     nbr 10000  world c=8.08  world c=1.12
+forget 0.999 (shipped)                  0.11         69.28         52.80         11.69         47.76         15.99          0.72         49.97         70.10
+clamp 8.08                              0.35         34.74          6.06          0.98         16.74          4.91          0.76         18.70         39.36
+ceiling local, c = 1.125               12.57         24.72         14.77         13.38         14.67         13.23          6.68         15.09         25.72
+ceiling local, c = 8.08                 5.49         26.64          9.13          5.99         11.12          6.90          2.62         12.05         29.50
+ceiling full,  c = 1.125               65.13         65.48         68.69         67.84         61.39         59.61         65.48         66.49         65.48
+ceiling full,  c = 8.08                64.26         64.66         67.71         66.95         60.62         58.79         65.21         65.71         64.91
+SE x 1000
+forget 0.999 (shipped)                  0.03          0.91          3.08          1.64          1.92          1.12          0.25          1.54          0.73
+clamp 8.08                              0.06          0.36          0.22          0.03          0.63          0.23          0.07          0.97          1.17
+ceiling local, c = 1.125                2.74          0.22          0.65          0.74          0.55          0.79          2.25          0.51          0.75
+ceiling local, c = 8.08                 1.18          0.30          0.47          0.34          0.35          0.50          0.91          0.53          0.85
+ceiling full,  c = 1.125                7.60          0.71          1.16          1.78          0.99          2.16          2.43          0.82          0.28
+ceiling full,  c = 8.08                 7.35          0.67          1.16          1.78          0.94          2.11          2.31          0.79          0.27
+
+mean dwell in the ceiling worlds: c = 8.08: 96 steps;  c = 1.125: 14 steps
+chain c=1.125 local: leave-rate per step min 0.0023 median 0.0652 max 0.1821
+chain c=1.125 full : leave-rate per step min 0.5000 median 0.5000 max 0.5000
+chain c=8.079 local: leave-rate per step min 0.0003 median 0.0091 max 0.0254
+chain c=8.079 full : leave-rate per step min 0.2398 median 0.5000 max 0.5000
+
+Q2: static regret of 'ceiling local, c = 8.08' per member vs that member's total neighbour rate:
+   (0.70,0.2) 0.32/0.32  (0.70,0.4) 1.41/2.44  (0.70,0.8) 5.48/9.65  (0.70,1.6) 12.39/25.36  (0.70,3.2) 11.85/20.22  (0.85,0.2) 0.36/0.48  (0.85,0.4) 1.66/2.83  (0.85,0.8) 5.20/9.07  (0.85,1.6) 10.90/23.28  (0.85,3.2) 11.59/23.02  (0.95,0.2) 0.42/0.55  (0.95,0.4) 1.35/2.36  (0.95,0.8) 3.96/6.38  (0.95,1.6) 8.01/15.26  (0.95,3.2) 7.41/14.78
+   ratio regret / rate: median 0.57, range 0.47-1.00
