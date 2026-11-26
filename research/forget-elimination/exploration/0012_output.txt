@@ -1,0 +1,1 @@
+mode          fixed KF  A default   S None    S/A  t(S-A)   worst blk A worst blk S   dloglik/step      t   rate frac  extra

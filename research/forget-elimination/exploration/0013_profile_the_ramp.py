@@ -19,7 +19,7 @@ spec = importlib.util.spec_from_file_location("m12", os.path.join(HERE, "0012_ne
 src = open(os.path.join(HERE, "0012_new_stress_modes.py")).read().split("MODES = [")[0]      # generators only
 m12 = {"__file__": os.path.join(HERE, "0012_new_stress_modes.py"), "__name__": "m12"}; exec(compile(src, "0012_gen", "exec"), m12)
 make, kalman = m12["make"], m12["kalman"]
-TAG = "v2"; SEEDS = list(range(8))
+TAG = "v3"; SEEDS = list(range(8))
 PHASES = (("flat before", 100, 1000), ("rising", 1000, 3000), ("falling", 3000, 5000), ("flat after", 5000, 6000))
 
 def run(d, kw, carry=True, rest=None):

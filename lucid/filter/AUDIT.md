@@ -129,7 +129,8 @@ Record: `research/forget-elimination/` (`SUMMARY.md`, probes 0001–0012).
 | the chain over an elapsed time, `exp(τG)` | derived | The exact exponential of the (symmetric) generator, like every other elapsed map here; a proper transition matrix for any gap and rate. Replaced a first-order `I + τG` with a row cap, which made the star's nodes identical over long gaps and pinned the walk at the ceiling (0012 `gappy`: 27% worse than the default; see 0014 for the re-run). | — |
 | `_DRIFT_VMIN` | budget | Numerical guard: the walk stops at `e^{−17}` of the ceiling. | — |
 | `_carry` (state travels with weight) | measured | The interacting-multiple-model step, within a hypothesis and a split rung. Without it the bank selects members whose state has gone bad while unobserved (arm: 105× the oracle for 100 steps, 0008); with it the worst stretch is below the default's on every seed (0009). **Which** state is settled by measurement only: mean and covariance yes, the scale walk no (carrying its centres is destructive, 0009). | AUD-10 |
-| the split ladder, hazard rungs and dynamics hypotheses under the drift | measured | They get no chain and run as pure Bayes (`forget = 1`). Not isolated; the battery (0010) is the only evidence it is harmless. | AUD-10 |
+| the split ladder's own ceiling | derived | Neighbouring rungs on an arm of the split star may swap no faster than their Whittle divergence (the metric `_rung_odds` is built in) over `_DRIFT_LEVEL`; `2/mem` per step for the one-pair ladder. The same star's fraction scales both chains. **Why it exists:** with the split left as pure Bayes the drift was 9% worse than the default on a slow ramp of sensor noise and 27% worse through irregular gaps (0012); keeping any forgetting on the split turned the ramp into a 5% win (0013). | — |
+| the hazard rungs and dynamics hypotheses under the drift | measured | The hazard-rung weights run as pure Bayes; the dynamics hypotheses keep their own kernel (`_hazard_mix`). Not isolated beyond the suite running with the drift as default (0010b). | AUD-10 |
 
 ### Time and API
 
@@ -191,15 +192,15 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
   scale information in place of the constant `1/I = 2`); (b) derive, or bound, the
   zero-floored lead as a rule (its calm-world standing cost is the visible price);
   (c) why the scale walk's state cannot travel with weight, and whether a re-expressed
-  window could; (d) isolate the other bank dimensions, which run as pure Bayes under the
-  drift; (e) the default: `forget=None` is opt-in until the battery in
+  window could; (d) the hazard rungs still run as pure Bayes under the drift (the split ladder now has
+  its own derived chain); (e) the default: `forget=None` is opt-in until the battery in
   `research/forget-elimination/0010`–`0012` is accepted.
 
 ## Scoreboard
 
-61 ledger entries; 52 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
+62 ledger entries; 54 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
 `forget` escape are ledger-only — the escape's marker is its own parameter doc).  By primary
-grade: **40 derived** (full bar), **3 proxy** (defensible, sharp
+grade: **41 derived** (full bar), **3 proxy** (defensible, sharp
 statement open), **5 measured** (below the bar, opens logged),
 **13 budget/convention/escape** (no theoretical
 claim; consequence-freedom owed in three places, AUD-8).  12 entries carry mixed grades
@@ -207,6 +208,6 @@ claim; consequence-freedom owed in three places, AUD-8).  12 entries carry mixed
 the class drift's spacing and divergence table).
 Every proxy and measured element references an open; no chunk is unmarked.
 
-The class drift adds 11 of those entries: 5 derived (two with a budget or proxy edge), 3
+The class drift adds 12 of those entries: 6 derived (two with a budget or proxy edge), 3
 measured, 3 budget/convention.  It is opt-in; the three measured entries are what stands
 between it and the bar.

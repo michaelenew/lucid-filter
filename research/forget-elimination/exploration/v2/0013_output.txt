@@ -1,0 +1,46 @@
+ramp mode, 8 seeds.  RMSE over the oracle's, by phase; log-likelihood minus the default's; paired t against the default on the whole record
+arm                        whole       t  flat before       rising      falling   flat after   dloglik    scale lag: rising / falling (nats)  scale jitter
+A default                  1.130   +0.00        1.015        1.171        1.125        1.022      +0.0             -0.085 / +0.049                  0.0696
+B forget=1                 1.300   +8.99        1.014        1.325        1.355        1.045     -16.0             -0.088 / +0.029                  0.0676
+S forget=None              1.233   +9.86        1.015        1.271        1.255        1.057     -26.2             -0.079 / +0.052                  0.1593
+S0 no state step           1.247  +11.54        1.015        1.287        1.273        1.051     -27.4             -0.079 / +0.049                  0.1588
+S + 0.999 on the rest      1.074   -5.34        1.015        1.108        1.058        1.022      -9.0             -0.070 / +0.064                  0.1709
+one class (0.95, 0.2)      1.136   +3.67        1.015        1.172        1.138        1.030     -20.0             -0.085 / +0.062                  0.0478
+one class (0.95, 0.8)      1.136   +3.13        1.014        1.180        1.129        1.024      +1.8             -0.094 / +0.036                  0.0473
+one class (0.70, 0.4)      1.150   +3.04        1.026        1.191        1.145        1.039    -211.2             -0.050 / +0.007                  0.3150
+
+log predictive per step x 1000, minus the default's, by phase (and the first 100 steps):
+  A default                flat before   +0.00  rising   +0.00  falling   +0.00  flat after   +0.00
+  B forget=1               flat before   +0.02  rising   -3.38  falling   -3.20  flat after   -2.82
+  S forget=None            flat before   -4.32  rising   -3.38  falling   -3.33  flat after   -8.78
+  S0 no state step         flat before   -4.35  rising   -3.75  falling   -3.80  flat after   -8.31
+  S + 0.999 on the rest    flat before   -4.58  rising   -0.38  falling   -0.76  flat after   -2.51
+  one class (0.95, 0.2)    flat before   -2.20  rising   +0.03  falling   -7.19  flat after   -4.53
+  one class (0.95, 0.8)    flat before   +1.58  rising   -0.22  falling   +0.07  flat after   -0.26
+  one class (0.70, 0.4)    flat before  -35.00  rising  -36.12  falling  -33.22  flat after  -38.99
+
+mean bank weight by class (phi, s), whole record:
+  A default          (0.95,0.8) 0.31  (0.95,3.2) 0.24  (0.95,1.6) 0.17  (0.95,0.4) 0.16  (0.95,0.2) 0.10
+  B forget=1         (0.95,0.8) 0.54  (0.95,0.4) 0.27  (0.95,1.6) 0.07  (0.95,3.2) 0.05  (0.95,0.2) 0.05
+  S forget=None      (0.95,0.2) 0.30  (0.95,0.4) 0.25  (0.95,0.8) 0.17  (0.95,1.6) 0.09  (0.95,3.2) 0.07   rate fraction 0.246
+  S0 no state step   (0.95,0.2) 0.31  (0.95,0.4) 0.25  (0.95,0.8) 0.17  (0.95,1.6) 0.09  (0.95,3.2) 0.07   rate fraction 0.308
+  S + 0.999 on the rest (0.95,0.2) 0.24  (0.95,0.4) 0.21  (0.95,0.8) 0.19  (0.95,1.6) 0.13  (0.95,3.2) 0.10   rate fraction 0.246
+
+mean bank weight by s (summed over phi), per phase:
+  A default      flat before  s=0.2: 0.19  s=0.4: 0.14  s=0.8: 0.46  s=1.6: 0.19  s=3.2: 0.02
+  A default      rising       s=0.2: 0.19  s=0.4: 0.12  s=0.8: 0.34  s=1.6: 0.21  s=3.2: 0.14
+  A default      falling      s=0.2: 0.04  s=0.4: 0.24  s=0.8: 0.25  s=1.6: 0.11  s=3.2: 0.36
+  A default      flat after   s=0.2: 0.00  s=0.4: 0.13  s=0.8: 0.25  s=1.6: 0.24  s=3.2: 0.38
+  B forget=1     flat before  s=0.2: 0.18  s=0.4: 0.15  s=0.8: 0.53  s=1.6: 0.14  s=3.2: 0.00
+  B forget=1     rising       s=0.2: 0.08  s=0.4: 0.18  s=0.8: 0.58  s=1.6: 0.15  s=3.2: 0.01
+  B forget=1     falling      s=0.2: 0.02  s=0.4: 0.37  s=0.8: 0.52  s=1.6: 0.00  s=3.2: 0.10
+  B forget=1     flat after   s=0.2: 0.00  s=0.4: 0.40  s=0.8: 0.51  s=1.6: 0.00  s=3.2: 0.09
+  S forget=None  flat before  s=0.2: 0.38  s=0.4: 0.20  s=0.8: 0.17  s=1.6: 0.13  s=3.2: 0.12
+  S forget=None  rising       s=0.2: 0.60  s=0.4: 0.18  s=0.8: 0.11  s=1.6: 0.06  s=3.2: 0.05
+  S forget=None  falling      s=0.2: 0.16  s=0.4: 0.44  s=0.8: 0.22  s=1.6: 0.10  s=3.2: 0.07
+  S forget=None  flat after   s=0.2: 0.02  s=0.4: 0.17  s=0.8: 0.32  s=1.6: 0.26  s=3.2: 0.24
+  S + 0.999 on the rest flat before  s=0.2: 0.33  s=0.4: 0.20  s=0.8: 0.19  s=1.6: 0.15  s=3.2: 0.13
+  S + 0.999 on the rest rising       s=0.2: 0.45  s=0.4: 0.23  s=0.8: 0.15  s=1.6: 0.10  s=3.2: 0.08
+  S + 0.999 on the rest falling      s=0.2: 0.15  s=0.4: 0.30  s=0.8: 0.24  s=1.6: 0.17  s=3.2: 0.14
+  S + 0.999 on the rest flat after   s=0.2: 0.03  s=0.4: 0.15  s=0.8: 0.34  s=1.6: 0.26  s=3.2: 0.22
+EXIT 0

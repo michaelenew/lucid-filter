@@ -2748,11 +2748,14 @@ class _ClassDrift:
     state with it (the interacting-multiple-model step), because a member the weights have
     ignored for long runs on alone and its state goes bad (0008, 0009).
 
-    The chain acts between cells that are neighbours in ``phi`` or in ``s`` at the same split
-    rung; the split ladder, the hazard rungs and the dynamics hypotheses get no chain.
+    A cell is a class ``(phi, s)`` AND a split rung, and the chain moves along both: between
+    neighbours in ``phi`` or ``s`` at one split rung, and between neighbouring split rungs at
+    one class (the split is as much a property of the noise as its spread is, and a ramp in
+    one sensor's noise moves it: forget-elimination 0013).  The hazard rungs and the dynamics
+    hypotheses get no chain -- the dynamics have their own kernel, `_hazard_mix`.
     """
 
-    def __init__(self, phi_arr, s_arr, ndw):
+    def __init__(self, phi_arr, s_arr, ndw, split_arr=None):
         nc = len(phi_arr)
         phis = list(dict.fromkeys(np.round(np.asarray(phi_arr, float), 12).tolist()))
         ss = list(dict.fromkeys(np.round(np.asarray(s_arr, float), 12).tolist()))
@@ -2783,6 +2786,36 @@ class _ClassDrift:
         self.gen = 0.5 * (gen + gen.T)
         self._lam, self._V = np.linalg.eigh(self.gen)
         self._lam = np.minimum(self._lam, 0.0)
+        # AUDIT[derived] the split ladder's own ceiling, from the metric it is built in
+        # (`_rung_odds`): two splits with MA(1) parameters th, th' are separated by Whittle's
+        # D = 0.5 log[(1 - 2 th th' + th'^2) / (1 - th^2)] nats per step, so neighbours on an
+        # arm of the split star may swap no faster than D / _DRIFT_LEVEL.  For the one-pair
+        # ladder at spacing `_GAP_FACTOR * sqrt(2 / mem)` that is 2 / mem per step.
+        nb = self.nb
+        Hs = np.zeros((nb, nb))
+        sp = None if split_arr is None else np.atleast_2d(np.asarray(split_arr, float))
+        if nb > 1 and sp is not None and sp.shape[0] == nb and sp.shape[1] > 0:
+            od = np.exp(sp)                                         # the rungs are LOG odds
+            Kg = 0.5 * (-od + np.sqrt(od * od + 4.0 * od))          # odds K^2/(1-K) -> gain K
+            th = 1.0 - Kg
+
+            def dsplit(x, y):
+                return 0.5 * math.log(max((1.0 - 2.0 * x * y + y * y) / max(1.0 - x * x, 1e-300),
+                                          1.0))
+            for g in range(sp.shape[1]):
+                others = np.delete(np.arange(sp.shape[1]), g)
+                on = [b for b in range(nb) if np.allclose(sp[b, others], sp[0, others])]
+                on.sort(key=lambda b: sp[b, g])
+                for b0, b1 in zip(on[:-1], on[1:]):
+                    if np.isclose(sp[b0, g], sp[b1, g]):
+                        continue
+                    h = 0.5 * (dsplit(th[b0, g], th[b1, g])
+                               + dsplit(th[b1, g], th[b0, g])) / _DRIFT_LEVEL
+                    Hs[b0, b1] = Hs[b1, b0] = h
+        self._split = bool(Hs.any())
+        gs = Hs - np.diag(Hs.sum(axis=1))
+        self._slam, self._sV = np.linalg.eigh(0.5 * (gs + gs.T))
+        self._slam = np.minimum(self._slam, 0.0)
         self.k = np.arange(-_DRIFT_K, _DRIFT_K + 1)
         self.node_prior = -_DRIFT_LEVEL * self.k ** 2.0
         self.reset()
@@ -2802,15 +2835,20 @@ class _ClassDrift:
         return math.exp(min(v, 0.0)) * a
 
     def _P(self, tau):
-        """``exp(tau G)``, [from, to]."""
-        P = (self._V * np.exp(tau * self._lam)) @ self._V.T
-        return np.maximum(P, 0.0)
+        """``exp(tau G)`` over the classes and over the split rungs, each [from, to]."""
+        Pc = np.maximum((self._V * np.exp(tau * self._lam)) @ self._V.T, 0.0)
+        Ps = np.maximum((self._sV * np.exp(tau * self._slam)) @ self._sV.T, 0.0)
+        return Pc, Ps
+
+    def _live(self, rate):
+        return rate > 0.0 and self.nb and (self.nps > 1 or self._split)
 
     def _chain(self, logp, rate):
-        if rate <= 0.0 or not self.nb or self.nps < 2:
+        if not self._live(rate):
             return logp
+        Pc, Ps = self._P(rate)
         W = np.exp(logp).reshape(self.ndw, self.nps, self.nb)
-        W = np.einsum("dpb,pq->dqb", W, self._P(rate))
+        W = np.einsum("dpb,pq,bc->dqc", W, Pc, Ps)
         out = np.log(np.maximum(W, 1e-300)).ravel()
         return out - _logsumexp(out)
 
@@ -2867,11 +2905,12 @@ class _ClassDrift:
     # stored against its own centre and spacing).  Standard IMM interaction; which state to
     # carry is settled by measurement, not derivation -- open AUD-10.
     def _carry(self, flt, post, rate):
-        if rate <= 0.0 or not self.nb or self.nps < 2:
+        if not self._live(rate):
             return
-        nc, nps, nb = self.nc, self.nps, self.nb
+        nc = self.nc
         pm = np.bincount(flt._wm, weights=post, minlength=len(flt._members))
-        P = self._P(rate)                                               # [from, to]
+        Pc, Ps = self._P(rate)
+        P = np.kron(Pc, Ps)                                             # cells, [from, to]
         full = np.arange(nc)
         for bank in flt._banks:
             gi = np.asarray(bank.idx)
@@ -2882,30 +2921,26 @@ class _ClassDrift:
                 if rows.size != nc or not np.array_equal(cell[rows], full):
                     continue                # a partial hypothesis: nothing to carry between
                 if stacked:
-                    m, Pc = bank._m[rows], bank._P[rows]
+                    m, Pm = bank._m[rows], bank._P[rows]
                 else:
                     mem = [bank.members[r] for r in rows]
                     if any(getattr(e, "_m", None) is None or getattr(e, "_P", None) is None
                            for e in mem):
                         continue
-                    m, Pc = np.stack([e._m for e in mem]), np.stack([e._P for e in mem])
+                    m, Pm = np.stack([e._m for e in mem]), np.stack([e._P for e in mem])
                 na = m.shape[1]
-                w = pm[gi[rows]].reshape(nps, nb)
-                Mx = np.einsum("ib,ij->bji", w, P)                      # [base, to, from]
-                tot = Mx.sum(axis=2, keepdims=True)
-                dead = tot[..., 0] <= 1e-300
-                Mx = np.where(tot > 1e-300, Mx / np.maximum(tot, 1e-300), 0.0)
+                Mx = pm[gi[rows]][:, None] * P                          # weight from i arriving at j
+                tot = Mx.sum(axis=0)
+                dead = tot <= 1e-300
+                Mx = (Mx / np.where(dead, 1.0, tot)).T                  # [to, from]
                 if dead.any():
-                    bb, jj = np.nonzero(dead)
-                    Mx[bb, jj, jj] = 1.0
-                m3 = m.reshape(nps, nb, na)
-                P3 = Pc.reshape(nps, nb, na, na)
-                mn = np.einsum("bji,iba->jba", Mx, m3)
-                dm = m3[None, :, :, :] - mn[:, None, :, :]             # [to, from, base, a]
-                Pn = (np.einsum("bji,ibac->jbac", Mx, P3)
-                      + np.einsum("bji,jiba,jibc->jbac", Mx, dm, dm))
-                Pn = 0.5 * (Pn + np.swapaxes(Pn, 2, 3))
-                mn, Pn = mn.reshape(nc, na), Pn.reshape(nc, na, na)
+                    Mx[dead] = 0.0
+                    Mx[dead, dead] = 1.0
+                mn = Mx @ m
+                second = Pm + m[:, :, None] * m[:, None, :]             # E[x x^T] per member
+                Pn = ((Mx @ second.reshape(nc, na * na)).reshape(nc, na, na)
+                      - mn[:, :, None] * mn[:, None, :])
+                Pn = 0.5 * (Pn + np.swapaxes(Pn, 1, 2))
                 if stacked:
                     bank._m[rows] = mn
                     bank._P[rows] = Pn
@@ -3329,7 +3364,7 @@ class LucidFilter:
             self._mean_src = np.repeat(
                 np.array([sp[3] is None for sp in self._specs]), self._nc)
         self._logw = np.zeros(self._ndw * self._nc)
-        self._drift = (_ClassDrift(self.phi_arr, self.s_arr, self._ndw)
+        self._drift = (_ClassDrift(self.phi_arr, self.s_arr, self._ndw, self.split_arr)
                        if self._drift_on else None)
         self.loglik = 0.0
         self._alarms = np.zeros(self._J, dtype=bool)
