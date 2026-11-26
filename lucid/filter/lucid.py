@@ -2674,6 +2674,235 @@ def _basis(n, p, departures):
 
 
 # ------------------------------------------------------------- the public filter
+# ---------------------------------------------------------------------------------------------
+# The class drift: how fast (phi, s) may change, bounded by resolvability and found beneath it.
+# This is what ``forget=None`` selects in place of the ``forget`` escape
+# (research/forget-elimination 0001-0010).
+#
+# AUDIT[derived] the recentring level IS the window prior at one node out: nodes at
+# `_GAP_FACTOR` blur widths carry log-weight -(_GAP_FACTOR**2 / 2) k^2, and K follows from
+# `_SPAN_S` exactly as in `_WalkEngine._build_window` (inherits AUD-1 for the span).
+_DRIFT_LEVEL = 0.5 * _GAP_FACTOR ** 2
+_DRIFT_K = int(math.ceil(_SPAN_S / _GAP_FACTOR))
+# AUDIT[derived+proxy] the level of the fixed noise in `y = log e^2 = lam + log z^2`, taken at
+# its INFORMATION (one draw carries I = 1/2 about its log-variance, so 1/I = 2), not its
+# variance (pi^2/2): with it Whittle's divergence rate reproduces the simulated table to a
+# median 5% on a scalar rig (forget-elimination 0005).  PROXY: exact only for small
+# differences and for a scale every observation reads directly; in a coupled filter the
+# per-step scale information depends on the noise shares -- open AUD-10.  The walk finds
+# the fraction of the ceiling itself, so a table wrong by a common factor is absorbed
+# (measured insensitive over 30x: forget-elimination 0005, 0008).
+_DRIFT_NOISE = 2.0
+# AUDIT[budget] numerical guards: no row of the ceiling chain leaves faster than 1/2 per step,
+# and the walk does not descend below e^-17 of the ceiling (indistinguishable from zero).
+_DRIFT_LEAVE = 0.5
+_DRIFT_VMIN = -17.0
+
+
+# AUDIT[derived+budget] the star's spacing is the walk grid's ABSOLUTE no-dead-zone bound
+# (resolution-criterion 0002), for the one-event rate likelihood exp(v - e^v), spectrum
+# |Gamma(1 + i w)| = sqrt(pi w / sinh(pi w)):  (2 pi / D) * 2 |g^(2 pi / D)| = eps0, with
+# eps0 the aliasing tolerance `_GAP_FACTOR` already runs at.  0.768 nats; the same expression
+# with |Gamma(1/2 + i w)| returns the log-variance grid's 0.89 (forget-elimination 0006).
+def _drift_spacing():
+    eps0 = 2.0 * math.exp(-2.0 * math.pi ** 2 / _GAP_FACTOR ** 2)
+
+    def alias(D):
+        w = 2.0 * math.pi / D
+        return w * 2.0 * math.sqrt(math.pi * w / math.sinh(math.pi * w))
+    lo, hi = 0.2, 3.0
+    for _ in range(200):
+        mid = 0.5 * (lo + hi)
+        lo, hi = (mid, hi) if alias(mid) < eps0 else (lo, mid)
+    return 0.5 * (lo + hi)
+
+
+_DRIFT_GAP = _drift_spacing()
+_DRIFT_W = (np.arange(4096) + 0.5) * math.pi / 4096
+
+
+def _class_divergence(a, b):
+    """Whittle divergence rate, nats per step, between two ``(phi, s)`` classes of log-scale."""
+    def spec(c):
+        return (c[1] ** 2 * (1.0 - c[0] ** 2)
+                / (1.0 + c[0] ** 2 - 2.0 * c[0] * np.cos(_DRIFT_W)) + _DRIFT_NOISE)
+    r = spec(a) / spec(b)
+    return 0.5 * float(np.mean(r - 1.0 - np.log(r)))
+
+
+class _ClassDrift:
+    """The bank's weight rule when ``forget`` is None: no memory length, no origin.
+
+    Three statements (research/forget-elimination SUMMARY):
+
+    1. CEILING.  The class cannot meaningfully drift from one ``(phi, s)`` cell to a
+       neighbouring one faster than the pair can be resolved, so the fastest rate is one
+       over that pair's resolution time, ``KL(i, j) / _DRIFT_LEVEL`` (0002, 0005).
+    2. UNKNOWN.  The world drifts at a fraction ``e^v <= 1`` of the ceiling; the bank's
+       weights are filtered under the chain ``P = I + e^v H``.  ``v -> -inf`` is pure Bayes.
+    3. WALK.  ``v`` is tracked by a star of ``2K + 1`` nodes at the no-dead-zone spacing, each
+       carrying its own copy of the weights.  A node's evidence lead never falls below zero;
+       node ``k`` weighs ``exp(lead_k - _DRIFT_LEVEL k^2)``; the star recentres when the
+       posterior mode leaves the centre (0004, 0006).
+
+    And one consequence the bank needs: weight that moves between members carries their
+    state with it (the interacting-multiple-model step), because a member the weights have
+    ignored for long runs on alone and its state goes bad (0008, 0009).
+
+    The chain acts between cells that are neighbours in ``phi`` or in ``s`` at the same split
+    rung; the split ladder, the hazard rungs and the dynamics hypotheses get no chain.
+    """
+
+    def __init__(self, phi_arr, s_arr, ndw):
+        nc = len(phi_arr)
+        phis = list(dict.fromkeys(np.round(np.asarray(phi_arr, float), 12).tolist()))
+        ss = list(dict.fromkeys(np.round(np.asarray(s_arr, float), 12).tolist()))
+        nps = len(phis) * len(ss)
+        self.nc, self.ndw, self.nps = nc, ndw, nps
+        self.nb = nc // nps if nps and nc % nps == 0 else 0
+        Hc = np.zeros((nps, nps))
+        if self.nb:
+            cache = {}
+            for ip, ph in enumerate(phis):
+                for js, sv in enumerate(ss):
+                    nbr = ([(ip + d, js) for d in (-1, 1) if 0 <= ip + d < len(phis)]
+                           + [(ip, js + d) for d in (-1, 1) if 0 <= js + d < len(ss)])
+                    for i2, j2 in nbr:
+                        a, b = (ph, sv), (phis[i2], ss[j2])
+                        key = (a, b) if a <= b else (b, a)
+                        if key not in cache:
+                            cache[key] = 0.5 * (_class_divergence(a, b)
+                                                + _class_divergence(b, a)) / _DRIFT_LEVEL
+                        Hc[ip * len(ss) + js, i2 * len(ss) + j2] = cache[key]
+            tot = Hc.sum(axis=1, keepdims=True)
+            Hc = np.where(tot > _DRIFT_LEAVE, Hc * _DRIFT_LEAVE / np.maximum(tot, 1e-300), Hc)
+        self.gen = Hc - np.diag(Hc.sum(axis=1))            # (nps, nps) generator at the ceiling
+        self.top = max(float(Hc.sum(axis=1).max()), 1e-12)
+        self.k = np.arange(-_DRIFT_K, _DRIFT_K + 1)
+        self.node_prior = -_DRIFT_LEVEL * self.k ** 2.0
+        self.reset()
+
+    def reset(self):
+        n = self.k.size
+        self.lw = np.zeros((n, self.ndw * self.nc))
+        # AUDIT[convention] the walk starts AT the ceiling -- the principle's own default
+        # (assume the fastest resolvable drift until the data says slower); measured not to
+        # matter (forget-elimination 0007c).
+        self.v = 0.0
+        self.lead = np.zeros(n)
+        self._pri = None
+
+    def _rate(self, v, a):
+        return min(math.exp(min(v, 0.0)) * a, _DRIFT_LEAVE / self.top)
+
+    def _chain(self, logp, rate):
+        if rate <= 0.0 or not self.nb or self.nps < 2:
+            return logp
+        W = np.exp(logp).reshape(self.ndw, self.nps, self.nb)
+        W = W + rate * np.einsum("dpb,pq->dqb", W, self.gen)
+        out = np.log(np.maximum(W, 1e-300)).ravel()
+        return out - _logsumexp(out)
+
+    def prior(self, flt, a):
+        """Each node's bank prior: normalise, the fault kernel, then the chain at its rate."""
+        pri = np.empty_like(self.lw)
+        for i in range(self.k.size):
+            p = self.lw[i] - _logsumexp(self.lw[i])
+            if flt._ndbase > 1:
+                p = flt._hazard_mix(p, a)
+            pri[i] = self._chain(p, self._rate(self.v + self.k[i] * _DRIFT_GAP, a))
+        self._pri = pri
+        return pri
+
+    def post(self, flt, llw, a, finite):
+        """``(bank log-predictive, posterior over the weight rows)``; moves the star."""
+        pri, n, c = self._pri, self.k.size, _DRIFT_K
+        lq = self.lead + self.node_prior
+        lq = lq - _logsumexp(lq)
+        if not finite:
+            self.lw = pri.copy()
+            return 0.0, np.exp(lq) @ np.exp(pri)
+        lp = np.array([_logsumexp(pri[i] + llw) for i in range(n)])
+        bank_ll = _logsumexp(lq + lp)
+        self.lw = pri + llw[None, :]
+        # AUDIT[measured] a node's lead is floored at zero -- the repeated sequential test
+        # (Page's CUSUM) that gives the walk a finite memory with no memory length.  The
+        # construction is the one a per-pair forgetting rule collapses to (0001) and is
+        # measured against a complete ladder of rates (0003, 0004); it is not derived as
+        # optimal -- open AUD-10.
+        lead = np.maximum(self.lead + lp - lp[c], 0.0)
+        lead[c] = 0.0
+        sc = lead + self.node_prior
+        best = int(np.argmax(sc))
+        d = best - c if sc[best] > 1e-12 else 0
+        d = min(d, int(math.floor((1e-9 - self.v) / _DRIFT_GAP)))       # the ceiling: v <= 0
+        if self.v + d * _DRIFT_GAP < _DRIFT_VMIN:
+            d = 0
+        if d:
+            self.lw = self.lw[np.clip(np.arange(n) + d, 0, n - 1)]
+            self.v += d * _DRIFT_GAP
+            lead = np.zeros(n)
+        self.lead = lead
+        lq = lead + self.node_prior
+        lq = lq - _logsumexp(lq)
+        post = np.zeros(self.lw.shape[1])
+        for i in range(n):
+            post += math.exp(lq[i]) * np.exp(self.lw[i] - _logsumexp(self.lw[i]))
+        self._carry(flt, post, self._rate(self.v, a))
+        return bank_ll, post
+
+    # AUDIT[measured] the state mean and covariance travel with the weight; the scale walk
+    # does NOT (carrying its centres is destructive, 0009: a member's window posterior is
+    # stored against its own centre and spacing).  Standard IMM interaction; which state to
+    # carry is settled by measurement, not derivation -- open AUD-10.
+    def _carry(self, flt, post, rate):
+        if rate <= 0.0 or not self.nb or self.nps < 2:
+            return
+        nc, nps, nb = self.nc, self.nps, self.nb
+        pm = np.bincount(flt._wm, weights=post, minlength=len(flt._members))
+        P = np.eye(nps) + rate * self.gen                               # [from, to]
+        full = np.arange(nc)
+        for bank in flt._banks:
+            gi = np.asarray(bank.idx)
+            spec, cell = gi // nc, gi % nc
+            stacked = isinstance(bank, _EngineBank)
+            for dsp in np.unique(spec):
+                rows = np.flatnonzero(spec == dsp)
+                if rows.size != nc or not np.array_equal(cell[rows], full):
+                    continue                # a partial hypothesis: nothing to carry between
+                if stacked:
+                    m, Pc = bank._m[rows], bank._P[rows]
+                else:
+                    mem = [bank.members[r] for r in rows]
+                    if any(getattr(e, "_m", None) is None or getattr(e, "_P", None) is None
+                           for e in mem):
+                        continue
+                    m, Pc = np.stack([e._m for e in mem]), np.stack([e._P for e in mem])
+                na = m.shape[1]
+                w = pm[gi[rows]].reshape(nps, nb)
+                Mx = np.einsum("ib,ij->bji", w, P)                      # [base, to, from]
+                tot = Mx.sum(axis=2, keepdims=True)
+                dead = tot[..., 0] <= 1e-300
+                Mx = np.where(tot > 1e-300, Mx / np.maximum(tot, 1e-300), 0.0)
+                if dead.any():
+                    bb, jj = np.nonzero(dead)
+                    Mx[bb, jj, jj] = 1.0
+                m3 = m.reshape(nps, nb, na)
+                P3 = Pc.reshape(nps, nb, na, na)
+                mn = np.einsum("bji,iba->jba", Mx, m3)
+                dm = m3[None, :, :, :] - mn[:, None, :, :]             # [to, from, base, a]
+                Pn = (np.einsum("bji,ibac->jbac", Mx, P3)
+                      + np.einsum("bji,jiba,jibc->jbac", Mx, dm, dm))
+                Pn = 0.5 * (Pn + np.swapaxes(Pn, 2, 3))
+                mn, Pn = mn.reshape(nc, na), Pn.reshape(nc, na, na)
+                if stacked:
+                    bank._m[rows] = mn
+                    bank._P[rows] = Pn
+                else:
+                    for e, mi, Pi in zip(mem, mn, Pn):
+                        e._m, e._P = mi, Pi
+
+
 class LucidFilter:
     """The single public filter: supply dynamics + observation, it infers all the noise online.
 
@@ -2748,6 +2977,13 @@ class LucidFilter:
         the class drift rate from the shape assumption already made -- without violating the
         no-free-parameters commitment; ~0.999 is measurably indistinguishable from that
         optimum.
+
+        ``forget=None`` selects that derivation instead of a memory length (`_ClassDrift`,
+        research/forget-elimination): the class may drift between neighbouring ``(phi, s)``
+        cells no faster than the pair can be resolved, the actual rate is found beneath that
+        ceiling by a walking star at the filter's own no-dead-zone spacing, and member state
+        travels with the weight it moves.  It carries no timescale and no origin.  Opt-in
+        while its acceptance battery is being run; see AUDIT.md (AUD-10).
     timestep : float, optional
         How long ONE NOMINAL STEP is, in whatever units the timestamps are in (default 1.0,
         i.e. time is counted in steps).  Everything supplied about the model -- ``dynamics``,
@@ -2817,8 +3053,13 @@ class LucidFilter:
             raise ValueError(f"measurement must have {m} positive entries")
         if B is not None and B.shape[0] != n:
             raise ValueError(f"control must have {n} rows")
+        # ``forget=None`` selects the derived class drift (`_ClassDrift`) in place of the escape;
+        # every other weight in the bank then runs as pure Bayes.
+        self._drift_on = forget is None
+        if forget is None:
+            forget = 1.0
         if not 0.0 < forget <= 1.0:
-            raise ValueError("forget must lie in (0, 1]")
+            raise ValueError("forget must lie in (0, 1], or be None for the derived class drift")
         timestep = float(timestep)
         if not timestep > 0.0:
             raise ValueError("timestep (the duration of one nominal step) must be positive")
@@ -3077,6 +3318,8 @@ class LucidFilter:
             self._mean_src = np.repeat(
                 np.array([sp[3] is None for sp in self._specs]), self._nc)
         self._logw = np.zeros(self._ndw * self._nc)
+        self._drift = (_ClassDrift(self.phi_arr, self.s_arr, self._ndw)
+                       if self._drift_on else None)
         self.loglik = 0.0
         self._alarms = np.zeros(self._J, dtype=bool)
         self._t = None
@@ -3241,9 +3484,12 @@ class LucidFilter:
             raise ValueError("filter has no control map; do not pass u")
         a = self._elapsed(t, dt)
         M = len(self._members)
-        prior = self._logw - _logsumexp(self._logw)
-        if self._ndbase > 1:
-            prior = self._hazard_mix(prior, a)
+        if self._drift is None:
+            prior = self._logw - _logsumexp(self._logw)
+            if self._ndbase > 1:
+                prior = self._hazard_mix(prior, a)
+        else:
+            prior = self._drift.prior(self, a)
         n = self.n
         mn = np.empty((M, n)); vr = np.empty((M, n, n)); inn = np.empty((M, self.m))
         llv = np.empty(M); psc = np.empty((M, n)); msc = np.empty((M, self.m))
@@ -3277,7 +3523,9 @@ class LucidFilter:
         # Rows sharing a filter (the nominal and the anchors, across rungs) share its
         # likelihood exactly, so the dedup is arithmetic-free: gather llv, scatter post.
         llw = llv[self._wm]
-        if np.any(np.isfinite(yv)):
+        if self._drift is not None:
+            bank_ll, post = self._drift.post(self, llw, a, bool(np.any(np.isfinite(yv))))
+        elif np.any(np.isfinite(yv)):
             bank_ll = _logsumexp(prior + llw)
             # ``forget`` is a memory PER NOMINAL STEP, so over a gap of ``a`` it is
             # ``forget**a`` -- the bank's weight memory is a duration, not a count of events.
@@ -3285,7 +3533,8 @@ class LucidFilter:
         else:
             bank_ll = 0.0
             self._logw = prior
-        post = np.exp(self._logw - _logsumexp(self._logw))
+        if self._drift is None:
+            post = np.exp(self._logw - _logsumexp(self._logw))
         pm = np.bincount(self._wm, weights=post, minlength=M)      # member marginals
         mean = pm @ mn
         dmn = mn - mean

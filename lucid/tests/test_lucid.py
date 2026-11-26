@@ -1152,3 +1152,77 @@ def test_stream_with_a_dynamics_channel():
     assert np.all(np.isfinite(r.mean)) and r.fault is not None
     assert abs(r.dynamics[-1, 0, 0] - 0.6) < 0.35
 
+
+
+# ------------------------------------------------- the class drift (forget=None)
+# The derived replacement for the `forget` escape (research/forget-elimination).  Opt-in:
+# the default path is untouched, which the rest of this file already pins.
+
+def test_class_drift_is_opt_in():
+    assert LucidFilter()._drift is None
+    f = LucidFilter(forget=None)
+    assert f._drift is not None and f.forget == 1.0
+    with pytest.raises(ValueError):
+        LucidFilter(forget=0.0)
+
+
+def test_class_drift_constants_are_the_derived_ones():
+    from lucid.filter import lucid as L
+    assert L._DRIFT_LEVEL == pytest.approx(0.5 * L._GAP_FACTOR ** 2)     # the window prior, one node out
+    assert L._DRIFT_K == int(math.ceil(L._SPAN_S / L._GAP_FACTOR))
+    assert L._DRIFT_GAP == pytest.approx(0.7684, abs=1e-3)               # the no-dead-zone bound
+    # a class is at zero divergence from itself, and wider apart is further
+    a, b, c = (0.85, 0.4), (0.85, 0.8), (0.85, 1.6)
+    assert L._class_divergence(a, a) == pytest.approx(0.0, abs=1e-12)
+    assert 0.0 < L._class_divergence(a, b) < L._class_divergence(a, c)
+
+
+def test_class_drift_tracks_and_stays_under_its_ceiling():
+    Y, theta = local_level(T=500, q=1.0, s2=1.0, seed=42)
+    f = LucidFilter(forget=None)
+    r = f.filter(Y)
+    assert np.all(np.isfinite(r.mean)) and np.all(np.isfinite(r.var))
+    rmse = float(np.sqrt(np.mean((r.mean[:, 0] - theta) ** 2)))
+    assert rmse < float(np.sqrt(np.mean((Y[:, 0] - theta) ** 2)))
+    assert f._drift.v <= 1e-9                    # the walk never passes the resolvability ceiling
+
+
+def test_class_drift_reselects_where_the_escape_holds():
+    """A level jump and a x3 sensor change: the drift re-selects the class and out-predicts
+    the fixed memory (the scalar hero rig of forget-elimination 0007, one seed)."""
+    r = rng(11)
+    N = 900
+    th = np.cumsum(r.normal(0, math.sqrt(0.02), N))
+    th[380:] += 9.0
+    Y = (th + r.normal(0, np.where(np.arange(N) < 600, 1.0, 3.0)))[:, None]
+    a, b = LucidFilter(), LucidFilter(forget=None)
+    a.filter(Y)
+    b.filter(Y)
+    assert b.loglik > a.loglik + 5.0
+
+
+@pytest.mark.parametrize("kw", [
+    dict(dynamics=None, process=[[0.09]], measurement=[0.25]),            # the dynamics channel
+    dict(dynamics=[[0.9]], process=[[0.09]], measurement=[0.25], faults=True),   # hazard ladder
+    dict(dynamics=[[0.9]], process=[[0.09]], measurement=[0.25], faults=1e-3),   # pinned hazard
+    dict(offsets=True),                                                   # the first-moment channel
+    dict(phis=(0.85,), ss=(0.4,)),                                        # one class: nothing to drift between
+])
+def test_class_drift_runs_in_every_bank_layout(kw):
+    Y, x = ar1(T=400, seed=3)
+    f = LucidFilter(forget=None, **kw)
+    r = f.filter(Y)
+    assert np.all(np.isfinite(r.mean)) and np.all(np.isfinite(r.var))
+    assert np.isfinite(f.loglik)
+    assert _rmse(r.mean[:, 0], x, lo=100) < float(np.sqrt(np.mean((Y[100:, 0] - x[100:]) ** 2))) * 1.05
+
+
+def test_class_drift_streams_through_gaps_and_partial_rows():
+    Y, _ = local_level(T=200, seed=7)
+    f = LucidFilter(forget=None, timestep=1.0)
+    t = 0.0
+    for k, y in enumerate(Y):
+        t += 1.0 if k % 7 else 25.0                 # an occasional long gap
+        st = f.update(y if k % 5 else np.array([np.nan]), t=t)
+        assert np.all(np.isfinite(st.mean))
+    assert f._drift.v <= 1e-9
