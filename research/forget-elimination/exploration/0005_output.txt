@@ -1,0 +1,27 @@
+Whittle (theory) / measured divergence rate
+  all 210 ordered pairs : median 0.41  10-90% 0.127-0.67   Spearman 0.976
+  44 neighbour pairs    : median 0.45  range 0.13-0.80   Spearman 0.985
+  neighbour pairs by the smaller s of the pair (theory/measured, min-median-max):
+    s = 0.2:  phi-neighbours 0.15 0.32 0.37   s-neighbours 0.13 0.20 0.34
+    s = 0.4:  phi-neighbours 0.22 0.32 0.41   s-neighbours 0.22 0.35 0.53
+    s = 0.8:  phi-neighbours 0.40 0.42 0.49   s-neighbours 0.41 0.54 0.61
+    s = 1.6:  phi-neighbours 0.48 0.58 0.63   s-neighbours 0.53 0.68 0.75
+    s = 3.2:  phi-neighbours 0.64 0.73 0.80   s-neighbours -
+  measured table's own SE on neighbour pairs: median relative SE 0.04
+  ceiling leave-rate per member, theory / measured: median 0.48  range 0.15-0.70
+
+walking star (c = 1.125): regret nats/step x 1000 with measured vs theory rates; the fraction a it sits at
+scenario                      g=1 measured  g=1 theory  ratio   a meas a theory    g=2 measured  g=2 theory  ratio
+calm                                  0.61        0.44   0.73   0.0039   0.0078            0.20        0.18   0.91
+nbr 10000                             0.47        0.50   1.05   0.0078   0.0156            0.52        0.53   1.02
+nbr 1000                              3.55        3.64   1.03   0.0156   0.0156            3.84        3.87   1.01
+nbr 100                              11.31       11.44   1.01   0.1250   0.2500           11.71       11.72   1.00
+any 10000                             1.64        1.77   1.08   0.0039   0.0039            1.57        1.67   1.07
+any 1000                              7.97        8.24   1.03   0.0312   0.0625            7.90        8.08   1.02
+any 100                              24.65       25.21   1.02   0.5000   1.0000           24.99       25.61   1.02
+drift a=0.01                          2.16        2.13   0.98   0.0156   0.0312            2.32        2.27   0.98
+drift a=0.14                         12.30       12.33   1.00   0.1250   0.2500           12.65       12.48   0.99
+drift a=1.0                          26.02       26.69   1.03   1.0000   1.0000           26.54       27.30   1.03
+calm -> ceiling (2nd half)           26.62       27.19   1.02   1.0000   1.0000           26.69       27.56   1.03
+ceiling -> calm (2nd half)            0.73        0.61   0.83   0.0078   0.0156            0.38        0.34   0.90
+EXIT 0

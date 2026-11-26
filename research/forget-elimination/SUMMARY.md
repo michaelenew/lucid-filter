@@ -28,10 +28,11 @@ The construction, in three statements:
    never falls behind the centre; when it leads by the grid's own resolution criterion
    (1.125 nats) the star recentres on it. It starts at the ceiling.
 
-It is time-homogeneous and carries no timescale and no level of its own. What it still
+It is time-homogeneous and carries no timescale and no level of its own. The rates `H`
+are a closed-form calculation from `(phi, s)` of each pair
+([`0005`](exploration/0005_the_table_from_theory.md)), not a measurement. What it still
 carries: the arm length (one or two octaves; within 8% of each other under change, not
-derived) and a table of pairwise separations that the shipped filter would have to
-estimate online.
+derived).
 
 Measured against `forget = 0.999`: 1.5–7× better when anything changes. In a calm world it
 is 2–5× *worse* (0.2–0.6e-3 nats/step against 0.11e-3), because an arm always keeps some
@@ -68,16 +69,20 @@ members, which are a separate channel the rig does not model.
 | a 3-node walking star on the rate matches the 14-rung ladder within 0–9% wherever the truth changes, with no cap on rung weights | **measured, one rig** | [`0004`](exploration/0004_the_walking_star.md) S1 |
 | the star's recentring level may be the stricter `ln(1/eps0)` | **FALSE** — 8.08 nats descends too slowly (calm 4.68e-3 against 0.61e-3); the grid's own 1.125 is the level the data picks | `0004` S3 |
 | the star costs nothing in a calm world | **FALSE** — 0.2–0.6e-3 standing cost, 2–5× `forget = 0.999` | `0004` |
+| the rate table has a closed form: Whittle's divergence rate in `log e²` with the fixed noise at its information-equivalent level `1/I = 2` | **measured agreement** — formula/simulation median 1.05 on the 44 neighbour pairs (range 0.69–1.90; ±40% across the grid) | [`0005`](exploration/0005_the_table_from_theory.md) |
+| the same formula with the noise at its variance (4.93) is adequate in absolute value | **FALSE** — 2–7× too small, worst at small `s`; explained by `(I_gauss/I_true)² = 0.16` | `0005` T1 |
+| the walking star needs an accurate table | **FALSE** — within 8% with rates 2–7× off; only the ranking matters (Spearman 0.98) | `0005` T3 |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |
 
 ## Open, in order
 
-1. **Estimate the rates `H` online.** They come from a `KL` table measured offline for
-   this rig. The bank already computes the per-step likelihood differences the table
-   averages; whether a running estimate is stable enough is untested and is the main
-   obstacle to the shipped filter.
+1. **Carry the closed-form rates into the shipped filter.** On the rig each observation
+   reads the level directly and the noise level in the formula is the constant `1/I = 2`.
+   In the filter `I` depends on the noise shares, the sensors reporting and the state; the
+   stated extension is to use the per-step scale information the walk already computes
+   (`_scale_fisher`). Untested.
 2. **Derive the star's arm length** the way the filter's scale walk derives its spacing,
    and reduce the calm-world standing cost (an arm's permanent share of the weight).
 3. **Off-grid truths and continuous drift** on this rig.
@@ -95,6 +100,7 @@ members, which are a separate channel the rig does not model.
   [`0002`](exploration/0002_the_ceiling_world.md): the resolvability ceiling as the model.
   [`0003`](exploration/0003_the_rate_below_the_ceiling.md): the ceiling as the top of a ladder.
   [`0004`](exploration/0004_the_walking_star.md): the rate on a walking star; the current candidate.
+  [`0005`](exploration/0005_the_table_from_theory.md): the rate table from its definition.
   [`rig.py`](exploration/rig.py): the shared scalar rig.
 - `figures/` — the charts.
 - `output/` — empty.
