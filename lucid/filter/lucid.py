@@ -2693,9 +2693,8 @@ _DRIFT_K = int(math.ceil(_SPAN_S / _GAP_FACTOR))
 # the fraction of the ceiling itself, so a table wrong by a common factor is absorbed
 # (measured insensitive over 30x: forget-elimination 0005, 0008).
 _DRIFT_NOISE = 2.0
-# AUDIT[budget] numerical guards: no row of the ceiling chain leaves faster than 1/2 per step,
-# and the walk does not descend below e^-17 of the ceiling (indistinguishable from zero).
-_DRIFT_LEAVE = 0.5
+# AUDIT[budget] numerical guard: the walk does not descend below e^-17 of the ceiling
+# (indistinguishable from zero).
 _DRIFT_VMIN = -17.0
 
 
@@ -2774,10 +2773,16 @@ class _ClassDrift:
                             cache[key] = 0.5 * (_class_divergence(a, b)
                                                 + _class_divergence(b, a)) / _DRIFT_LEVEL
                         Hc[ip * len(ss) + js, i2 * len(ss) + j2] = cache[key]
-            tot = Hc.sum(axis=1, keepdims=True)
-            Hc = np.where(tot > _DRIFT_LEAVE, Hc * _DRIFT_LEAVE / np.maximum(tot, 1e-300), Hc)
-        self.gen = Hc - np.diag(Hc.sum(axis=1))            # (nps, nps) generator at the ceiling
-        self.top = max(float(Hc.sum(axis=1).max()), 1e-12)
+        # AUDIT[derived] the chain over an elapsed time is the EXACT exponential of its
+        # generator, like every other elapsed map in this filter (`_elapsed`): the rates are
+        # symmetric, so `exp(tau G) = V exp(tau lam) V^T` is a proper transition matrix for any
+        # gap and any rate, and needs no cap.  (A first-order `I + tau G` with a cap on the
+        # rows made every node of the star identical over long gaps and pinned the walk at the
+        # ceiling: forget-elimination 0012, `gappy`.)
+        gen = Hc - np.diag(Hc.sum(axis=1))                 # (nps, nps) generator at the ceiling
+        self.gen = 0.5 * (gen + gen.T)
+        self._lam, self._V = np.linalg.eigh(self.gen)
+        self._lam = np.minimum(self._lam, 0.0)
         self.k = np.arange(-_DRIFT_K, _DRIFT_K + 1)
         self.node_prior = -_DRIFT_LEVEL * self.k ** 2.0
         self.reset()
@@ -2793,13 +2798,19 @@ class _ClassDrift:
         self._pri = None
 
     def _rate(self, v, a):
-        return min(math.exp(min(v, 0.0)) * a, _DRIFT_LEAVE / self.top)
+        """Elapsed chain time: the fraction of the ceiling, times the elapsed nominal steps."""
+        return math.exp(min(v, 0.0)) * a
+
+    def _P(self, tau):
+        """``exp(tau G)``, [from, to]."""
+        P = (self._V * np.exp(tau * self._lam)) @ self._V.T
+        return np.maximum(P, 0.0)
 
     def _chain(self, logp, rate):
         if rate <= 0.0 or not self.nb or self.nps < 2:
             return logp
         W = np.exp(logp).reshape(self.ndw, self.nps, self.nb)
-        W = W + rate * np.einsum("dpb,pq->dqb", W, self.gen)
+        W = np.einsum("dpb,pq->dqb", W, self._P(rate))
         out = np.log(np.maximum(W, 1e-300)).ravel()
         return out - _logsumexp(out)
 
@@ -2860,7 +2871,7 @@ class _ClassDrift:
             return
         nc, nps, nb = self.nc, self.nps, self.nb
         pm = np.bincount(flt._wm, weights=post, minlength=len(flt._members))
-        P = np.eye(nps) + rate * self.gen                               # [from, to]
+        P = self._P(rate)                                               # [from, to]
         full = np.arange(nc)
         for bank in flt._banks:
             gi = np.asarray(bank.idx)

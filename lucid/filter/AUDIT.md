@@ -112,12 +112,31 @@ Reference resolution: bare `research 00NN` in older comments resolves to
 | `_mean_src` mask (offset reads walkers out) | measured | Gain/covariance read off caller-space members only; measured consequence of mixing walkers in (0008: fault 0.37 vs 0.04). Structural rationale stated; not derived. | AUD-7 |
 | `_dynamics_mean` | derived | Posterior-mean report over the weight rows. | — |
 
+### The class drift (`forget=None`, `_ClassDrift`)
+
+Opt-in.  The derived replacement for the `forget` escape: no memory length, no origin.
+Record: `research/forget-elimination/` (`SUMMARY.md`, probes 0001–0012).
+
+| anchor | grade | justification | open |
+|---|---|---|---|
+| the ceiling: cell `i → j` no faster than `KL(i,j) / _DRIFT_LEVEL` | derived | A class cannot meaningfully drift between two cells faster than the pair can be resolved; one over the pair's resolution time is the fastest rate (0002). Applied to neighbours only — for far pairs the bound is vacuous (measured: every rate saturates), which is the jump channel's business, not this one's. | — |
+| the fraction `e^v ≤ 1` beneath the ceiling | derived | One dimensionless unknown on a closed interval; `v → −∞` is pure Bayes, `v = 0` the ceiling. Measured to land within 3% of the best fixed rate in every steady scenario on a scalar rig (0003). | — |
+| `_DRIFT_LEVEL = _GAP_FACTOR²/2`, `_DRIFT_K` | derived | The window prior at spacing `_GAP_FACTOR` blur widths puts log-weight `−(c²/2)k²` on node `k`; `K = ⌈_SPAN_S/_GAP_FACTOR⌉`. The same rule `_build_window` uses, so it inherits `_SPAN_S`'s proxy. Measured: the stricter `ln(1/ε₀)` in its place is worse in 10 of 12 scenarios (0004). | AUD-1 |
+| `_DRIFT_GAP` (0.768 nats) | derived + budget | The walk grid's absolute no-dead-zone bound (`resolution-criterion/0002`) for the one-event rate likelihood, spectrum `|Γ(1+iω)|`, at the tolerance `_GAP_FACTOR` already runs at. The same expression with `|Γ(½+iω)|` returns the log-variance grid's 0.89 (0006). That a rate has a scale's likelihood shape is supported where testable (R² 0.98–0.99 on two of four scenarios; two uninformative). | — |
+| `_DRIFT_NOISE = 2`, `_class_divergence` | derived + proxy | Whittle's divergence rate in `log e²` with the fixed noise at its *information* level `1/I`, `I = ½`. Reproduces the simulated table to a median 5% on the 44 neighbour pairs of the shipped box, ±40% across it (0005). **Proxy:** exact for small differences and for a scale every observation reads directly; in a coupled filter `I` depends on the noise shares. Defended by insensitivity, not derivation: the walk absorbs a common factor (results within 8% with rates 2–7× off, 0005; unchanged over 30× on the arm, 0008). | AUD-10 |
+| node lead floored at zero; recentre on the posterior mode | measured | The repeated sequential test (CUSUM) that gives the walk a finite memory with no memory length. It is what a per-pair forgetting rule collapses to (0001) and it matches a complete ladder of rates within 0–9% (0004, 0006); not derived as optimal. Its cost is measured: a standing 0.41e-3 nats/step in a calm world on the scalar rig, 4× the escape's. | AUD-10 |
+| the walk starts at the ceiling | convention | The principle's own default. Measured not to matter: a start at 0.0025 of the ceiling gives the same arm record to within 1.5% (0007c). | — |
+| the chain over an elapsed time, `exp(τG)` | derived | The exact exponential of the (symmetric) generator, like every other elapsed map here; a proper transition matrix for any gap and rate. Replaced a first-order `I + τG` with a row cap, which made the star's nodes identical over long gaps and pinned the walk at the ceiling (0012 `gappy`: 27% worse than the default; see 0014 for the re-run). | — |
+| `_DRIFT_VMIN` | budget | Numerical guard: the walk stops at `e^{−17}` of the ceiling. | — |
+| `_carry` (state travels with weight) | measured | The interacting-multiple-model step, within a hypothesis and a split rung. Without it the bank selects members whose state has gone bad while unobserved (arm: 105× the oracle for 100 steps, 0008); with it the worst stretch is below the default's on every seed (0009). **Which** state is settled by measurement only: mean and covariance yes, the scale walk no (carrying its centres is destructive, 0009). | AUD-10 |
+| the split ladder, hazard rungs and dynamics hypotheses under the drift | measured | They get no chain and run as pure Bayes (`forget = 1`). Not isolated; the battery (0010) is the only evidence it is harmless. | AUD-10 |
+
 ### Time and API
 
 | anchor | grade | justification | open |
 |---|---|---|---|
 | `_elapsed`, per-step semantics | derived + convention | Everything supplied is per nominal step; elapsed maps take each to its exact power (pointwise-streaming 0001/0004). `R` unscaled: a reading's variance belongs to the reading (derived from the event model). | — |
-| `forget` | escape | The one declared engineering parameter; documented at the parameter itself; nothing structural reads it (0009-corrected). Eliminable in principle (adaptive-grid open). | ag-opens |
+| `forget` | escape | The one declared engineering parameter; documented at the parameter itself; nothing structural reads it (0009-corrected). **Its derived replacement now exists as `forget=None`** (the class drift, above) and is opt-in pending its battery; the escape remains the default until that is decided. | ag-opens, AUD-10 |
 | `filter`/`stream`/`observe`/`update` plumbing | convention | API surface; no inference content beyond what is graded above. | — |
 
 ## Opens raised by this audit
@@ -167,13 +186,27 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
   alternatives is max-entropy by convention; measure sensitivity with named anchors
   (k > 2) or derive the leak from the class.
 
+- **AUD-10** (forget-elimination): the class drift's measured and proxy elements —
+  (a) the divergence table's noise level in a coupled filter (use the walk's own per-step
+  scale information in place of the constant `1/I = 2`); (b) derive, or bound, the
+  zero-floored lead as a rule (its calm-world standing cost is the visible price);
+  (c) why the scale walk's state cannot travel with weight, and whether a re-expressed
+  window could; (d) isolate the other bank dimensions, which run as pure Bayes under the
+  drift; (e) the default: `forget=None` is opt-in until the battery in
+  `research/forget-elimination/0010`–`0012` is accepted.
+
 ## Scoreboard
 
-50 ledger entries; 45 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
+61 ledger entries; 52 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
 `forget` escape are ledger-only — the escape's marker is its own parameter doc).  By primary
-grade: **35 derived** (full bar), **3 proxy** (defensible, sharp
-statement open), **2 measured** (below the bar, opens logged),
-**10 budget/convention/escape** (no theoretical
-claim; consequence-freedom owed in three places, AUD-8).  10 entries carry mixed grades
-(a derived core with a proxy or measured edge — the box, the window, the offset channel).
+grade: **40 derived** (full bar), **3 proxy** (defensible, sharp
+statement open), **5 measured** (below the bar, opens logged),
+**13 budget/convention/escape** (no theoretical
+claim; consequence-freedom owed in three places, AUD-8).  12 entries carry mixed grades
+(a derived core with a proxy or measured edge — the box, the window, the offset channel,
+the class drift's spacing and divergence table).
 Every proxy and measured element references an open; no chunk is unmarked.
+
+The class drift adds 11 of those entries: 5 derived (two with a budget or proxy edge), 3
+measured, 3 budget/convention.  It is opt-in; the three measured entries are what stands
+between it and the bar.

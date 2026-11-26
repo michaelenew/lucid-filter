@@ -12,7 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.abspath(os.pat
 os.chdir(ROOT); sys.path.insert(0, ROOT); sys.path.insert(0, HERE)
 from lucid.filter.lucid import LucidFilter
 from rig import cached
-TAG = "v1"                                   # bump when the filter's drift code changes
+TAG = "v2"                                   # bump when the filter's drift code changes
 ARMS = [("A default", {}), ("S forget=None", dict(forget=None))]
 only = set(sys.argv[1:]) or {"scalar", "async", "arm"}
 

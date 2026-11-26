@@ -1,0 +1,18 @@
+...............................................F.......F..F......        [100%]
+=================================== FAILURES ===================================
+E   assert 1.3238996301293817 < 1.25
+/home/user/lucid-filter/lucid/tests/test_lucid.py:991: assert 1.3238996301293817 < 1.25
+E   assert <lucid.filter.lucid._ClassDrift object at 0x7fcf67bde2b0> is None
+     +  where <lucid.filter.lucid._ClassDrift object at 0x7fcf67bde2b0> = <lucid.filter.lucid.LucidFilter object at 0x7fcf69db2e90>._drift
+     +    where <lucid.filter.lucid.LucidFilter object at 0x7fcf69db2e90> = LucidFilter()
+/home/user/lucid-filter/lucid/tests/test_lucid.py:1162: assert <lucid.filter.lucid._ClassDrift object at 0x7fcf67bde2b0> is None
+E   assert -1701.991502570203 > (-1701.991502570203 + 5.0)
+     +  where -1701.991502570203 = <lucid.filter.lucid.LucidFilter object at 0x7fcf69db2e90>.loglik
+     +  and   -1701.991502570203 = <lucid.filter.lucid.LucidFilter object at 0x7fcf69db39d0>.loglik
+/home/user/lucid-filter/lucid/tests/test_lucid.py:1201: assert -1701.991502570203 > (-1701.991502570203 + 5.0)
+=========================== short test summary info ============================
+FAILED lucid/tests/test_lucid.py::test_pointwise_decomposition_tracks_the_joint_row
+FAILED lucid/tests/test_lucid.py::test_class_drift_is_opt_in - assert <lucid....
+FAILED lucid/tests/test_lucid.py::test_class_drift_reselects_where_the_escape_holds
+3 failed, 62 passed in 311.41s (0:05:11)
+EXIT 1

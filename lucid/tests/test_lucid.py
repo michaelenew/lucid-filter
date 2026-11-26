@@ -1195,7 +1195,7 @@ def test_class_drift_reselects_where_the_escape_holds():
     th = np.cumsum(r.normal(0, math.sqrt(0.02), N))
     th[380:] += 9.0
     Y = (th + r.normal(0, np.where(np.arange(N) < 600, 1.0, 3.0)))[:, None]
-    a, b = LucidFilter(), LucidFilter(forget=None)
+    a, b = LucidFilter(forget=0.999), LucidFilter(forget=None)
     a.filter(Y)
     b.filter(Y)
     assert b.loglik > a.loglik + 5.0
