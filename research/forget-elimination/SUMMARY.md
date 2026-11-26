@@ -12,21 +12,29 @@
 ## Current state
 
 **`forget` is replaced by a drift rate that is bounded above by resolvability and found
-beneath that bound by a derived five-node walking star. On a scalar rig it is at or near the
-best rule wherever the truth changes. In the shipped filter it improves the filter's own
-loss on every rig and halves the arm's worst regime, but it is not shippable as built: on
-one arm seed in three the state estimate spikes after a burst.**
-([`0003`](exploration/0003_the_rate_below_the_ceiling.md),
-[`0004`](exploration/0004_the_walking_star.md),
-[`0006`](exploration/0006_the_star_from_resolution.md),
-[`0007`](exploration/0007_the_star_in_the_filter.md))
+beneath that bound by a derived five-node walking star, with each member's state carried
+along with the weight the star moves. On a scalar rig it is at or near the best rule
+wherever the truth changes. In the shipped filter it improves the filter's own loss on
+every rig and, on the arm, is better than shipped in three of five windows and within 5% in
+the other two. Not yet general: the state-carrying step exists only for the arm's bank
+layout.**
+([`0006`](exploration/0006_the_star_from_resolution.md),
+[`0007`](exploration/0007_the_star_in_the_filter.md),
+[`0008`](exploration/0008_the_bad_seed.md),
+[`0009`](exploration/0009_state_moves_with_weight.md))
 
-**In the shipped filter** (patched at load; `lucid/` untouched): log-likelihood +16 nats
-on the hero rig (`t` = 9.5), +31 on the async rig (`t` = 7.2), +7–14% on the arm; hero
-loud-window RMSE 0.889 → 0.783 (`t` = −3.2); arm SENSOR window 2.77× → 1.52× the oracle,
-better on all three seeds. Against that: arm calm window 0.56× → 6.84× on one seed (two
-100-step spikes after bursts, star at its ceiling), POTFAIL +9%. Suspected cause, untested:
-the chain moves weight between members without moving state.
+**In the shipped filter** (patched at load; `lucid/` untouched):
+
+- Hero rig, weights-only star: log-likelihood +16 nats (`t` = 9.5); loud-window RMSE
+  0.889 → 0.783 (`t` = −3.2). Async rig: +31 nats (`t` = 7.2), RMSE unchanged.
+- Arm, star with state carried, 3 seeds, × the oracle (shipped → star): calm 0.94 → 0.87,
+  SENSOR 2.78 → 1.70, PROCESS 1.12 → 1.17, POTFAIL 1.07 → 1.11, BOTH 2.10 → 1.23;
+  log-likelihood +11%; worst 100-step stretch lower than shipped on every seed.
+- The weights-only star failed on the arm (calm 6.84× on one seed). Cause found: the
+  shipped bank never re-selects there (all weight on `s = 0.8`, always), so members had
+  been running unobserved; once weights were free to move, the bank selected a wide member
+  with a bad state. Carrying state with weight fixes it. Carrying the scale-walk state as
+  well is destructive.
 
 The construction, in three statements:
 
@@ -89,24 +97,32 @@ members, which are a separate channel the rig does not model.
 | the derived five-node star matches the hand-set stars | **measured, one rig** — within 0–3% wherever the truth changes; calm 0.41e-3 | `0006` §4 |
 | in the shipped filter the star improves the filter's own loss on the hero, async and arm rigs | **measured** — +16.1 nats (`t` 9.5, 12 seeds), +31.3 (`t` 7.2, 5 seeds), +2,100–4,200 (3 seeds) | [`0007`](exploration/0007_the_star_in_the_filter.md) |
 | it halves the arm's SENSOR-window gap | **measured, 3 seeds** — 2.70/3.48/2.14 → 1.85/1.37/1.33 | `0007` |
-| it leaves the arm's other windows within ±10% | **FALSE** — calm 12× worse on one seed in three (transient spikes); POTFAIL +9% | `0007` F4 |
+| the weights-only star leaves the arm's other windows within ±10% | **FALSE** — calm 12× worse on one seed in three (transient spikes); POTFAIL +9%. Repaired in `0009` | `0007` F4 |
 | the spikes are caused by starting at the ceiling | **FALSE** — a star started at 0.0025 of the ceiling gives the same spikes (calm 6.94× against 6.84×), at a rate of 0.54 of the ceiling | `0007` §5, `0007c` |
+| the arm spikes are the bank selecting a wide member whose own state is 30–200× off | **measured** (weight 0.96–1.00 on that member at the spikes) | [`0008`](exploration/0008_the_bad_seed.md) |
+| the spikes come from the rates being too high | **FALSE** — unchanged to three digits over a 30× range | `0008` G3 |
+| on the arm the shipped bank does not re-select at all | **measured, seed 2** — weight 1.000 on `s = 0.8` in every block | `0008` |
+| carrying member state (mean, covariance) with moved weight removes the spikes | **measured, 3 seeds** — worst 100-step block 4.9/1.8/6.1× against shipped's 5.9/3.6/14.8× | [`0009`](exploration/0009_state_moves_with_weight.md) |
+| carrying the scale-walk centres too helps | **FALSE** — destructive alone (calm 88.7×) and combined (BOTH 13.7×) | `0009` H2 |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |
 
 ## Open, in order
 
-1. **The arm's post-burst spikes.** Test the suspected mechanism: mix member states along
-   with the weights the chain moves (the interacting-multiple-model step), and replace the
-   constant noise level in the rate formula by the filter's own per-step scale information
-   (`_scale_fisher`), which should cut the rates on axes the sensors barely read.
-2. **Isolate the other bank dimensions.** The split ladder and hazard rungs ran at
-   `forget = 1` under the star; run the star with `forget = 0.999` kept for them.
-3. **More arm seeds and the acceptance gates**, once 1 is resolved.
-4. **The calm-world standing cost** (0.41e-3 nats/step on the scalar rig, 4× `forget = 0.999`).
-5. **The small-`s` corner.** `phi` is unresolvable at `s = 0.2` within 10^4–10^5 steps, so
-   three of the fifteen members are one member in practice. Bears on AUD-2 (the box ends).
+1. **Generalise the state-carrying step** to banks with a split ladder and a fault class
+   (mix within a split rung and within a dynamics hypothesis), then re-run the hero and
+   async rigs with it. Until then their numbers are for the weights-only star.
+2. **Move from a load-time patch to the filter itself** and run the test suite and
+   acceptance gates. `forget` is also read by the split ladder's pruning and a
+   `mem`-derived floor; both are documented valid at `forget = 1`.
+3. **More arm seeds and schedules**; PROCESS (+5%) and POTFAIL (+4%) are slightly worse.
+4. **Why carrying the scale-walk state fails** (suspected: a member's window posterior is
+   stored relative to its own centre and spacing).
+5. **The split ladder and hazard rungs** run at `forget = 1` under the star; whether they
+   need the same treatment is untested.
+6. **The calm-world standing cost** on the scalar rig (0.41e-3 nats/step, 4× `forget = 0.999`).
+7. **The small-`s` corner** (`phi` unresolvable at `s = 0.2`); bears on AUD-2.
 
 ## Layout
 
@@ -118,6 +134,8 @@ members, which are a separate channel the rig does not model.
   [`0005`](exploration/0005_the_table_from_theory.md): the rate table from its definition.
   [`0006`](exploration/0006_the_star_from_resolution.md): the star's spacing and size derived.
   [`0007`](exploration/0007_the_star_in_the_filter.md): the star in the shipped filter, three rigs.
+  [`0008`](exploration/0008_the_bad_seed.md): the arm failure traced.
+  [`0009`](exploration/0009_state_moves_with_weight.md): state carried with weight; the current candidate.
   [`rig.py`](exploration/rig.py): the shared scalar rig; [`star_filter.py`](exploration/star_filter.py): the load-time patch.
 - `figures/` — the charts.
 - `output/` — empty.

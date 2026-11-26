@@ -1,1 +1,9 @@
 seed 0:  tip RMSE over the oracle's per window; log-likelihood; worst 100-step block (x oracle)
+  shipped              calm 1.141  SENSOR 2.700  PROCESS 1.160  POTFAIL 1.114  BOTH 1.063   loglik 30574   worst block 5.9x at 200
+  star, weights only   calm 1.184  SENSOR 1.854  PROCESS 1.095  POTFAIL 1.232  BOTH 1.384   loglik 32664   worst block 5.7x at 200
+  star + m             calm 1.154  SENSOR 1.719  PROCESS 1.318  POTFAIL 1.114  BOTH 0.911   loglik 33661   worst block 4.9x at 200
+seed 1:  tip RMSE over the oracle's per window; log-likelihood; worst 100-step block (x oracle)
+  shipped              calm 1.102  SENSOR 3.480  PROCESS 1.027  POTFAIL 1.160  BOTH 1.723   loglik 29722   worst block 3.6x at 300
+  star, weights only   calm 1.058  SENSOR 1.365  PROCESS 1.065  POTFAIL 1.142  BOTH 1.690   loglik 33960   worst block 42.9x at 200
+  star + m             calm 0.950  SENSOR 1.317  PROCESS 1.027  POTFAIL 1.054  BOTH 0.915   loglik 33343   worst block 1.8x at 1300
+EXIT 0
