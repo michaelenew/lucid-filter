@@ -1,1 +1,22 @@
 star: spacing 0.768 nats, 5 nodes, recentre level 1.125 nats
+
+SCALAR hero rig, 12 seeds.  RMSE per window, total log-likelihood, ms/step
+  A shipped    jump 1.7474  steady 0.3833  loud 0.8890   loglik -1714.80   1.17 ms/step
+  B forget=1   jump 1.7445  steady 0.3832  loud 0.9225   loglik -1718.01   1.17 ms/step
+  S star       jump 1.7031  steady 0.3832  loud 0.7833   loglik -1698.70   1.61 ms/step
+  B forget=1 minus A, paired:  jump dMSE -0.0103+-0.0414 (t=-0.25)  steady dMSE -0.0001+-0.0002 (t=-0.66)  loud dMSE +0.0607+-0.0134 (t=+4.52)   dloglik -3.21+-0.23 (t=-13.95)
+  S star minus A, paired:  jump dMSE -0.1529+-0.1063 (t=-1.44)  steady dMSE -0.0001+-0.0003 (t=-0.31)  loud dMSE -0.1768+-0.0551 (t=-3.21)   dloglik +16.10+-1.69 (t=+9.52)
+  star: final rate fraction median 0.464 (range 0.464-1.000), moves per record 0.7
+
+ASYNC rig, 5 seeds.  RMSE over the oracle's (whole 0.0345, hot 0.0241), total log-likelihood
+  A shipped    whole 1.163x  hot 1.438x  (worst hot 2.787x)   loglik 1722.3
+  B forget=1   whole 1.154x  hot 1.398x  (worst hot 2.823x)   loglik 1713.0
+  S star       whole 1.175x  hot 1.363x  (worst hot 2.913x)   loglik 1753.6
+  B forget=1 minus A, paired:  whole dRMSE -0.00028+-0.00045 (t=-0.62)  hot dRMSE -0.00099+-0.00077 (t=-1.29)  dloglik -9.28+-1.45 (t=-6.38)
+  S star minus A, paired:  whole dRMSE +0.00045+-0.00074 (t=+0.61)  hot dRMSE -0.00182+-0.00313 (t=-0.58)  dloglik +31.26+-4.33 (t=+7.22)
+
+ARM seed 0 (1900 steps).  tip RMSE over the oracle's, per window; total log-likelihood
+  A shipped    (78 ms/step): calm 1.141  SENSOR 2.700  PROCESS 1.160  POTFAIL 1.114  BOTH 1.063   loglik 30574.5
+  B forget=1   (80 ms/step): calm 1.141  SENSOR 2.700  PROCESS 1.160  POTFAIL 1.114  BOTH 1.063   loglik 30565.6
+  S star       (77 ms/step): calm 1.184  SENSOR 1.854  PROCESS 1.095  POTFAIL 1.232  BOTH 1.384   loglik 32664.1  star rate fraction 0.2151, 12 moves
+EXIT 0

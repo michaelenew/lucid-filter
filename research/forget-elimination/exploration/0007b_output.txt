@@ -1,0 +1,4 @@
+seed 1  A shipped : calm 1.102  SENSOR 3.480  PROCESS 1.027  POTFAIL 1.160  BOTH 1.723   loglik 29722.4
+seed 1  S star    : calm 1.058  SENSOR 1.365  PROCESS 1.065  POTFAIL 1.142  BOTH 1.690   loglik 33959.7  rate fraction 0.0997, 17 moves
+seed 2  A shipped : calm 0.563  SENSOR 2.144  PROCESS 1.157  POTFAIL 0.941  BOTH 3.516   loglik 30299.0
+seed 2  S star    : calm 6.841  SENSOR 1.327  PROCESS 1.198  POTFAIL 1.138  BOTH 2.782   loglik 32793.5  rate fraction 0.2151, 18 moves
