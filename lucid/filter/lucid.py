@@ -2751,11 +2751,13 @@ class _ClassDrift:
     A cell is a class ``(phi, s)`` AND a split rung, and the chain moves along both: between
     neighbours in ``phi`` or ``s`` at one split rung, and between neighbouring split rungs at
     one class (the split is as much a property of the noise as its spread is, and a ramp in
-    one sensor's noise moves it: forget-elimination 0013).  The hazard rungs and the dynamics
-    hypotheses get no chain -- the dynamics have their own kernel, `_hazard_mix`.
+    one sensor's noise moves it: forget-elimination 0013).  With a hazard ladder it moves along
+    that too, between neighbouring rungs -- how fault-prone the world is can change, and a
+    belief about it that cannot be unlearned reports faults late (0014).  Inside a rung the
+    dynamics hypotheses keep their own kernel, `_hazard_mix`.
     """
 
-    def __init__(self, phi_arr, s_arr, ndw, split_arr=None):
+    def __init__(self, phi_arr, s_arr, ndw, split_arr=None, hazards=None):
         nc = len(phi_arr)
         phis = list(dict.fromkeys(np.round(np.asarray(phi_arr, float), 12).tolist()))
         ss = list(dict.fromkeys(np.round(np.asarray(s_arr, float), 12).tolist()))
@@ -2791,6 +2793,9 @@ class _ClassDrift:
         # D = 0.5 log[(1 - 2 th th' + th'^2) / (1 - th^2)] nats per step, so neighbours on an
         # arm of the split star may swap no faster than D / _DRIFT_LEVEL.  For the one-pair
         # ladder at spacing `_GAP_FACTOR * sqrt(2 / mem)` that is 2 / mem per step.
+        def dsplit(x, y):
+            return 0.5 * math.log(max((1.0 - 2.0 * x * y + y * y) / max(1.0 - x * x, 1e-300),
+                                      1.0))
         nb = self.nb
         Hs = np.zeros((nb, nb))
         sp = None if split_arr is None else np.atleast_2d(np.asarray(split_arr, float))
@@ -2798,10 +2803,6 @@ class _ClassDrift:
             od = np.exp(sp)                                         # the rungs are LOG odds
             Kg = 0.5 * (-od + np.sqrt(od * od + 4.0 * od))          # odds K^2/(1-K) -> gain K
             th = 1.0 - Kg
-
-            def dsplit(x, y):
-                return 0.5 * math.log(max((1.0 - 2.0 * x * y + y * y) / max(1.0 - x * x, 1e-300),
-                                          1.0))
             for g in range(sp.shape[1]):
                 others = np.delete(np.arange(sp.shape[1]), g)
                 on = [b for b in range(nb) if np.allclose(sp[b, others], sp[0, others])]
@@ -2816,6 +2817,30 @@ class _ClassDrift:
         gs = Hs - np.diag(Hs.sum(axis=1))
         self._slam, self._sV = np.linalg.eigh(0.5 * (gs + gs.T))
         self._slam = np.minimum(self._slam, 0.0)
+        # AUDIT[derived] the hazard ladder's ceiling, by the same rule.  A rung is a rate rho,
+        # hence a steady gain K(rho) of its walker, and the ladder is uniform in that gain's
+        # Whittle arclength (`_hazard_rungs`; resolution-criterion 0004 -- the same grid as the
+        # split ladder), so neighbouring rungs are separated by the same divergence and may
+        # swap no faster than D / _DRIFT_LEVEL.  Without it the belief about how fault-prone
+        # the world is cannot be unlearned (forget-elimination 0014).
+        hz = np.zeros(0) if hazards is None else np.atleast_1d(np.asarray(hazards, float))
+        J = hz.size if hz.size > 1 else 1
+        self.J = J if ndw % J == 0 else 1
+        Hj = np.zeros((self.J, self.J))
+        if self.J > 1:
+            Pm = 0.5 * (hz + np.sqrt(hz * hz + 4.0 * hz))               # rho = P^2/(P+1) -> P
+            thj = 1.0 - Pm / (1.0 + Pm)
+            order = np.argsort(hz)
+            for j0, j1 in zip(order[:-1], order[1:]):
+                if np.isclose(hz[j0], hz[j1]):
+                    continue
+                h = 0.5 * (dsplit(thj[j0], thj[j1]) + dsplit(thj[j1], thj[j0])) / _DRIFT_LEVEL
+                Hj[j0, j1] = Hj[j1, j0] = h
+        self._haz = bool(Hj.any())
+        gj = Hj - np.diag(Hj.sum(axis=1))
+        self._jlam, self._jV = np.linalg.eigh(0.5 * (gj + gj.T))
+        self._jlam = np.minimum(self._jlam, 0.0)
+        self._where, self._plan = None, {}
         self.k = np.arange(-_DRIFT_K, _DRIFT_K + 1)
         self.node_prior = -_DRIFT_LEVEL * self.k ** 2.0
         self.reset()
@@ -2835,20 +2860,24 @@ class _ClassDrift:
         return math.exp(min(v, 0.0)) * a
 
     def _P(self, tau):
-        """``exp(tau G)`` over the classes and over the split rungs, each [from, to]."""
+        """``exp(tau G)`` over the classes, the split rungs and the hazard rungs, each
+        [from, to]."""
         Pc = np.maximum((self._V * np.exp(tau * self._lam)) @ self._V.T, 0.0)
         Ps = np.maximum((self._sV * np.exp(tau * self._slam)) @ self._sV.T, 0.0)
-        return Pc, Ps
+        Pj = np.maximum((self._jV * np.exp(tau * self._jlam)) @ self._jV.T, 0.0)
+        return Pc, Ps, Pj
 
     def _live(self, rate):
-        return rate > 0.0 and self.nb and (self.nps > 1 or self._split)
+        return rate > 0.0 and self.nb and (self.nps > 1 or self._split or self._haz)
 
     def _chain(self, logp, rate):
         if not self._live(rate):
             return logp
-        Pc, Ps = self._P(rate)
-        W = np.exp(logp).reshape(self.ndw, self.nps, self.nb)
-        W = np.einsum("dpb,pq,bc->dqc", W, Pc, Ps)
+        Pc, Ps, Pj = self._P(rate)
+        W = np.exp(logp).reshape(self.J, self.ndw // self.J, self.nps, self.nb)
+        W = np.einsum("jdpb,jk->kdpb", W, Pj)                  # one chain at a time
+        W = np.einsum("jdpb,pq->jdqb", W, Pc)
+        W = np.einsum("jdpb,bc->jdpc", W, Ps)
         out = np.log(np.maximum(W, 1e-300)).ravel()
         return out - _logsumexp(out)
 
@@ -2907,46 +2936,91 @@ class _ClassDrift:
     def _carry(self, flt, post, rate):
         if not self._live(rate):
             return
-        nc = self.nc
+        if self._where is None:
+            self._where, self._plan = {}, {}
+            for bi, bank in enumerate(flt._banks):
+                for row, gi in enumerate(np.asarray(bank.idx)):
+                    self._where[int(gi)] = (bi, row)
         pm = np.bincount(flt._wm, weights=post, minlength=len(flt._members))
-        Pc, Ps = self._P(rate)
-        P = np.kron(Pc, Ps)                                             # cells, [from, to]
-        full = np.arange(nc)
-        for bank in flt._banks:
-            gi = np.asarray(bank.idx)
-            spec, cell = gi // nc, gi % nc
-            stacked = isinstance(bank, _EngineBank)
-            for dsp in np.unique(spec):
-                rows = np.flatnonzero(spec == dsp)
-                if rows.size != nc or not np.array_equal(cell[rows], full):
-                    continue                # a partial hypothesis: nothing to carry between
-                if stacked:
-                    m, Pm = bank._m[rows], bank._P[rows]
-                else:
-                    mem = [bank.members[r] for r in rows]
-                    if any(getattr(e, "_m", None) is None or getattr(e, "_P", None) is None
-                           for e in mem):
-                        continue
-                    m, Pm = np.stack([e._m for e in mem]), np.stack([e._P for e in mem])
-                na = m.shape[1]
-                Mx = pm[gi[rows]][:, None] * P                          # weight from i arriving at j
-                tot = Mx.sum(axis=0)
-                dead = tot <= 1e-300
-                Mx = (Mx / np.where(dead, 1.0, tot)).T                  # [to, from]
-                if dead.any():
-                    Mx[dead] = 0.0
-                    Mx[dead, dead] = 1.0
-                mn = Mx @ m
-                second = Pm + m[:, :, None] * m[:, None, :]             # E[x x^T] per member
-                Pn = ((Mx @ second.reshape(nc, na * na)).reshape(nc, na, na)
-                      - mn[:, :, None] * mn[:, None, :])
-                Pn = 0.5 * (Pn + np.swapaxes(Pn, 1, 2))
-                if stacked:
-                    bank._m[rows] = mn
-                    bank._P[rows] = Pn
-                else:
-                    for e, mi, Pi in zip(mem, mn, Pn):
-                        e._m, e._P = mi, Pi
+        Pc, Ps, Pj = self._P(rate)
+        one = np.ones((1, 1))
+        # hypotheses shared by every hazard rung (the nominal, the anchors): cells only
+        for d in range(flt._nb):
+            self._mix(flt, (d,), pm, one, Pc, Ps)
+        # each rung's own walker: along the rungs as well
+        if flt._learn:
+            specs = tuple(flt._nb + jj for jj in range(flt._J))
+            self._mix(flt, specs, pm, Pj if self.J == len(specs) else np.eye(len(specs)), Pc, Ps)
+
+    def _group(self, flt, specs):
+        """Where the members ``specs x cells`` live: ``[(bank, rows, slots)]``, or None."""
+        if specs not in self._plan:
+            nc = self.nc
+            gids = (np.asarray(specs)[:, None] * nc + np.arange(nc)[None, :]).ravel()
+            plan = None
+            if all(int(g) in self._where for g in gids):
+                per = {}
+                for slot, g in enumerate(gids):
+                    bi, row = self._where[int(g)]
+                    per.setdefault(bi, ([], []))
+                    per[bi][0].append(row); per[bi][1].append(slot)
+                plan = (gids, [(flt._banks[bi], np.array(r), np.array(sl)) for bi, (r, sl) in per.items()])
+            self._plan[specs] = plan
+        return self._plan[specs]
+
+    def _mix(self, flt, specs, pm, Pj, Pc, Ps):
+        """Mix the state of the members ``specs x cells`` along the three chains, separably."""
+        plan = self._group(flt, specs)
+        if plan is None:
+            return
+        gids, parts = plan
+        nps, nb, S, N = self.nps, self.nb, len(specs), len(gids)
+        na = None
+        for bank, rows, slots in parts:
+            if isinstance(bank, _EngineBank):
+                k = bank._m.shape[1]
+            else:
+                mem = [bank.members[r] for r in rows]
+                if any(getattr(e, "_m", None) is None or getattr(e, "_P", None) is None
+                       for e in mem):
+                    return
+                k = mem[0]._m.shape[0]
+            if na is None:
+                na = k
+            elif k != na:
+                return
+        m = np.empty((N, na))
+        Pm = np.empty((N, na, na))
+        for bank, rows, slots in parts:
+            if isinstance(bank, _EngineBank):
+                m[slots], Pm[slots] = bank._m[rows], bank._P[rows]
+            else:
+                m[slots] = np.stack([bank.members[r]._m for r in rows])
+                Pm[slots] = np.stack([bank.members[r]._P for r in rows])
+        second = (Pm + m[:, :, None] * m[:, None, :]).reshape(S, nps, nb, na * na)   # E[x x^T]
+        m4 = m.reshape(S, nps, nb, na)
+        w = pm[gids].reshape(S, nps, nb)
+
+        def push(x):                        # sum over sources, one chain at a time
+            x = np.einsum("jpb...,jk->kpb...", x, Pj)
+            x = np.einsum("jpb...,pq->jqb...", x, Pc)
+            return np.einsum("jpb...,bc->jpc...", x, Ps)
+        tot = push(w)
+        dead = tot <= 1e-300
+        if dead.all():
+            return
+        den = np.where(dead, 1.0, tot)[..., None]
+        mn = np.where(dead[..., None], m4, push(w[..., None] * m4) / den).reshape(N, na)
+        Pn = np.where(dead[..., None], second, push(w[..., None] * second) / den).reshape(N, na, na)
+        Pn = Pn - mn[:, :, None] * mn[:, None, :]
+        Pn = 0.5 * (Pn + np.swapaxes(Pn, 1, 2))
+        for bank, rows, slots in parts:
+            if isinstance(bank, _EngineBank):
+                bank._m[rows] = mn[slots]
+                bank._P[rows] = Pn[slots]
+            else:
+                for r, sl in zip(rows, slots):
+                    bank.members[r]._m, bank.members[r]._P = mn[sl], Pn[sl]
 
 
 class LucidFilter:
@@ -3364,7 +3438,8 @@ class LucidFilter:
             self._mean_src = np.repeat(
                 np.array([sp[3] is None for sp in self._specs]), self._nc)
         self._logw = np.zeros(self._ndw * self._nc)
-        self._drift = (_ClassDrift(self.phi_arr, self.s_arr, self._ndw, self.split_arr)
+        self._drift = (_ClassDrift(self.phi_arr, self.s_arr, self._ndw, self.split_arr,
+                                   self.hazards if self._J > 1 else None)
                        if self._drift_on else None)
         self.loglik = 0.0
         self._alarms = np.zeros(self._J, dtype=bool)

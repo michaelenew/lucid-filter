@@ -1,0 +1,1 @@
+  calm arm                      hazard before false alarms first > 1/2  held 50 RMSE +300 calm loglik/step - default (x1000) star frac (calm)
