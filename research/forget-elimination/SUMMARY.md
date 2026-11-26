@@ -11,30 +11,33 @@
 
 ## Current state
 
-**On a scalar rig, a ladder of drift rates beneath the resolvability ceiling replaces
-`forget` and is at or near the best rule in every condition tried. It has not been run in
-the shipped filter.** ([`0003`](exploration/0003_the_rate_below_the_ceiling.md))
+**On a scalar rig, `forget` is replaced by a drift rate that is bounded above by
+resolvability and found beneath that bound by a three-node walking star. It is at or near
+the best rule wherever the truth changes. It has not been run in the shipped filter.**
+([`0003`](exploration/0003_the_rate_below_the_ceiling.md),
+[`0004`](exploration/0004_the_walking_star.md))
 
 The construction, in three statements:
 
 1. **The ceiling.** `(phi, s)` cannot meaningfully drift from one bank member to a
    neighbour faster than that pair can be resolved. That fixes a matrix of fastest rates
    `H`, one over each neighbour pair's resolution time.
-2. **The unknown.** The world drifts at a fraction `a` in `[0, 1]` of the ceiling. A
-   complete ladder of rungs covers the interval; each rung filters the bank under
-   `P(a) = I + a·H`; `a = 0` is pure Bayes.
-3. **The rungs are weighted by evidence**, with their log-odds capped (8.08 nats) so the
-   rate itself may change.
+2. **The unknown.** The world drifts at a fraction `a` in `[0, 1]` of the ceiling; the bank
+   is filtered under `P(a) = I + a·H`. `a = 0` is pure Bayes.
+3. **The walk.** `log a` is tracked by a star — a centre and an arm either side. An arm
+   never falls behind the centre; when it leads by the grid's own resolution criterion
+   (1.125 nats) the star recentres on it. It starts at the ceiling.
 
-It is time-homogeneous and carries no timescale. What it still carries: a rung budget, a
-cap on the rungs' log-odds (felt only when the rate of change itself changes; one value
-tried), and a table of pairwise separations that the shipped filter would have to estimate
-online.
+It is time-homogeneous and carries no timescale and no level of its own. What it still
+carries: the arm length (one or two octaves; within 8% of each other under change, not
+derived) and a table of pairwise separations that the shipped filter would have to
+estimate online.
 
-Measured against `forget = 0.999`: 2× better when nothing changes, 1.5–7× better when
-anything does. Against a member-level log-odds clamp ([`0001`](exploration/0001_pairwise_resolution.md)):
-1.4–1.6× better on drift and neighbour moves, 1.3–1.7× worse on rare jumps to far members,
-which are a separate channel the rig does not model.
+Measured against `forget = 0.999`: 1.5–7× better when anything changes. In a calm world it
+is 2–5× *worse* (0.2–0.6e-3 nats/step against 0.11e-3), because an arm always keeps some
+weight; `0003`'s 14-rung ladder with capped rung weights does not have that cost (0.05e-3)
+but has a cap constant. Both lose 1.3–1.7× to a member-level clamp on rare jumps to far
+members, which are a separate channel the rig does not model.
 
 **How this was reached, and what was dropped on the way:**
 
@@ -62,6 +65,9 @@ which are a separate channel the rig does not model.
 | a ladder over the fraction of the ceiling rate lands within 3% of the best single rate in every steady scenario, and removes `0002`'s standing cost (calm: 0.05e-3) | **measured, one rig** | [`0003`](exploration/0003_the_rate_below_the_ceiling.md) R1 |
 | weighting the rungs by pure Bayes adapts when the rate itself changes | **FALSE** — freezes, 24× worse than the best rung after a restless-then-calm record | `0003` R3 |
 | capping the rungs' log-odds repairs that at no steady-state cost | **measured, one value (8.08 nats), one rig** | `0003` |
+| a 3-node walking star on the rate matches the 14-rung ladder within 0–9% wherever the truth changes, with no cap on rung weights | **measured, one rig** | [`0004`](exploration/0004_the_walking_star.md) S1 |
+| the star's recentring level may be the stricter `ln(1/eps0)` | **FALSE** — 8.08 nats descends too slowly (calm 4.68e-3 against 0.61e-3); the grid's own 1.125 is the level the data picks | `0004` S3 |
+| the star costs nothing in a calm world | **FALSE** — 0.2–0.6e-3 standing cost, 2–5× `forget = 0.999` | `0004` |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |
@@ -72,8 +78,8 @@ which are a separate channel the rig does not model.
    this rig. The bank already computes the per-step likelihood differences the table
    averages; whether a running estimate is stable enough is untested and is the main
    obstacle to the shipped filter.
-2. **Sweep the rungs' log-odds cap**, and try the construction on itself (the rate of the
-   rate has its own resolvability ceiling) to see whether the regress closes.
+2. **Derive the star's arm length** the way the filter's scale walk derives its spacing,
+   and reduce the calm-world standing cost (an arm's permanent share of the weight).
 3. **Off-grid truths and continuous drift** on this rig.
 4. **Run it in the shipped filter** against the hero gate, the async rig and the arm, with
    jumps left to the existing hazard channel. Two structures also read `forget` (the split
@@ -87,7 +93,8 @@ which are a separate channel the rig does not model.
 - `exploration/` — numbered, later is more recent.
   [`0001`](exploration/0001_pairwise_resolution.md): the table, the race, the predictions.
   [`0002`](exploration/0002_the_ceiling_world.md): the resolvability ceiling as the model.
-  [`0003`](exploration/0003_the_rate_below_the_ceiling.md): the ceiling as the top of a ladder; the current candidate.
+  [`0003`](exploration/0003_the_rate_below_the_ceiling.md): the ceiling as the top of a ladder.
+  [`0004`](exploration/0004_the_walking_star.md): the rate on a walking star; the current candidate.
   [`rig.py`](exploration/rig.py): the shared scalar rig.
 - `figures/` — the charts.
 - `output/` — empty.

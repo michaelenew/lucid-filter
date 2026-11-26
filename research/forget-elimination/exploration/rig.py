@@ -118,3 +118,95 @@ def draws_from_path(idx, rng):
     return np.exp(0.5 * s * z) * rng.standard_normal((T, R))
 
 def lab(m): return f"({MEMBERS[m][0]:.2f},{MEMBERS[m][1]:.1f})"
+
+
+# ------------------------------------------------------------------------------------------
+# Added for 0004: the ceiling rates, the 0003 ladder, the drifting worlds, cached likelihoods.
+# (0003 carries its own copies of these; they are kept identical.)
+C_RES = 1.5 ** 2 / 2                                   # 1.125 nats: spacing of 1.5 blur widths
+
+def ceiling_rates():
+    """H[i, j]: fastest resolvable drift from member i to grid neighbour j (0002)."""
+    KL = pickle.load(open(os.path.join(CACHE, "partA.pkl"), "rb"))[0]
+    KLs = 0.5 * (KL + KL.T)
+    H = np.zeros((M, M))
+    for i in range(M):
+        js = neighbours(i); H[i, js] = KLs[i, js] / C_RES
+        if H[i].sum() > 0.5: H[i] *= 0.5 / H[i].sum()
+    return H
+
+def world(T, R, alpha_of_t, seed, H):
+    """Truth drawn from the local chain at a (possibly time-varying) fraction of the ceiling."""
+    rng = np.random.default_rng(seed)
+    idx = np.empty((T, R), int); cur = rng.integers(M, size=R)
+    nb = [neighbours(i) for i in range(M)]
+    for t in range(T):
+        a = alpha_of_t(t)
+        if a > 0:
+            u = rng.random(R)
+            for r in range(R):
+                i = cur[r]; p = a * H[i, nb[i]]; c = np.cumsum(p)
+                if u[r] < c[-1]: cur[r] = nb[i][np.searchsorted(c, u[r])]
+        idx[t] = cur
+    return idx, draws_from_path(idx, rng)
+
+HALF = 30000
+def scenarios(H, R=8):
+    """name -> thunk returning (idx, ll, score_from).  Same seeds as 0003."""
+    out = {}
+    for hop, D, T in [("nbr", 10000, 120000), ("nbr", 1000, 60000), ("nbr", 100, 60000),
+                      ("any", 10000, 120000), ("any", 1000, 60000), ("any", 100, 60000)]:
+        out[f"{hop} {D}"] = (lambda hop=hop, D=D, T=T: simulate(T, R, D, hop, 5000 + D + (0 if hop == "any" else 7)), D)
+    for a in (0.01, 0.14, 1.0):
+        out[f"drift a={a}"] = (lambda a=a: world(60000, R, lambda t: a, 300 + int(1000 * a), H), 2000)
+    for name, f in (("calm -> ceiling", lambda t: 0.0 if t < HALF else 1.0),
+                    ("ceiling -> calm", lambda t: 1.0 if t < HALF else 0.0)):
+        out[name + " (2nd half)"] = (lambda f=f, name=name: world(2 * HALF, R, f, 77 + len(name), H), HALF)
+    return out
+
+def scenario_ll(name, gen):
+    """(idx, ll) for a scenario, cached on disk (float32)."""
+    def make():
+        idx, e = gen()
+        return idx.astype(np.int16), member_loglik(e).astype(np.float32)
+    idx, ll = cached("ll_" + name.replace(" ", "_").replace(">", "").replace("(", "").replace(")", ""), make)
+    return idx.astype(int), ll.astype(float)
+
+ALPHAS = np.array([0.0] + [2.0 ** -k for k in range(12, -1, -1)])
+
+def ladder_rungs(ll, H):
+    """0003: per-rung one-step log-predictives (T, R, 14)."""
+    NR = len(ALPHAS)
+    PS = np.stack([np.eye(M) + a * (H - np.diag(H.sum(axis=1))) for a in ALPHAS])
+    T, R, _ = ll.shape
+    w = np.full((R, NR - 1, M), 1.0 / M); l0 = np.full((R, M), -np.log(M))
+    out = np.empty((T, R, NR))
+    for t in range(T):
+        out[t, :, 0] = lse(l0 + ll[t]); l0 = l0 + ll[t]; l0 -= lse(l0, keepdims=True)
+        mx = ll[t].max(axis=1)[:, None, None]
+        j = np.maximum(w, 1e-300) * np.exp(ll[t][:, None, :] - mx)
+        s = np.maximum(j.sum(axis=2), 1e-300)
+        out[t, :, 1:] = np.log(s) + mx[:, :, 0]
+        w = np.einsum("rkm,kmn->rkn", j / s[..., None], PS[1:])
+    return out
+
+def ladder_mix(lp, clamp=None):
+    T, R, NR = lp.shape
+    lw = np.full((R, NR), -np.log(NR)); mix = np.empty((T, R)); am = np.empty((T, R))
+    for t in range(T):
+        mix[t] = lse(lw + lp[t]); am[t] = np.exp(lw) @ ALPHAS
+        lw = lw + lp[t]
+        if clamp: lw = np.maximum(lw, lw.max(axis=1, keepdims=True) - clamp)
+        lw -= lse(lw, keepdims=True)
+    return mix, am
+
+def simple_rule(ll, rule, v):
+    """`forget` (v = f) or member-level clamp (v = c nats)."""
+    T, R, _ = ll.shape
+    logw = np.full((R, M), -np.log(M)); mix = np.empty((T, R))
+    for t in range(T):
+        mix[t] = lse(logw + ll[t])
+        nxt = logw + ll[t]
+        logw = v * logw + ll[t] if rule == "forget" else np.maximum(nxt, nxt.max(axis=1, keepdims=True) - v)
+        logw -= lse(logw, keepdims=True)
+    return mix
