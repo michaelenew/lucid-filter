@@ -5,7 +5,7 @@ Variants of `star_filter.MIX`: () weights only (0007); ("m",) state mean+covaria
 checkpointed to `_cache/`.
 
 Run from the repository root:
-    python research/forget-elimination/exploration/0009_state_moves_with_weight.py [seed ...] [--only both]
+    python research/forget-elimination/exploration/0009_state_moves_with_weight.py [seed ...] [--only]     (--only: shipped, weights only, star + m)
 """
 import gc, importlib.util, math, os, sys
 import numpy as np
@@ -24,7 +24,7 @@ jstd, pot, acc = m54.schedule(); Wn = m54.windows()
 VARIANTS = [("shipped", "shipped", {}, ()), ("star, weights only", "star", dict(forget=1.0), ()),
             ("star + m", "star", dict(forget=1.0), ("m",)), ("star + mu", "star", dict(forget=1.0), ("mu",)),
             ("star + m + mu", "star", dict(forget=1.0), ("m", "mu"))]
-if only_both: VARIANTS = [VARIANTS[0], VARIANTS[1], VARIANTS[4]]
+if only_both: VARIANTS = [VARIANTS[0], VARIANTS[1], VARIANTS[2]]     # shipped, weights only, star + m
 for seed in seeds:
     U, St, Y = AR.simulate(seed, jstd, pot, acc); Pt = m54.tip(St)
     orc = AR.kalman(U, Y, [j ** 2 * (AR.B @ AR.B.T) for j in jstd],

@@ -1,0 +1,1 @@
+seed 0:  tip RMSE over the oracle's per window; log-likelihood; worst 100-step block (x oracle)
