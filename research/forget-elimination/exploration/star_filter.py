@@ -84,7 +84,7 @@ def _star_prior(self, a):
         p = st["lw"][k] - _lse(st["lw"][k])
         if self._ndbase > 1:
             p = self._hazard_mix(p, a)
-        rate = min(math.exp(min(st["v"] + (k - K) * G, 0.0)) * a, 0.5 / st["maxleave"])
+        rate = min(RATE_SCALE * math.exp(min(st["v"] + (k - K) * G, 0.0)) * a, 0.5 / st["maxleave"])
         if rate > 0.0:
             Wm = np.exp(p).reshape(self._ndw, self._nc)
             Wm = Wm + rate * (Wm @ st["HD"])
@@ -116,6 +116,8 @@ def _star_post(self, llw, a, finite):
     post = np.zeros(st["lw"].shape[1])
     for k in range(n):
         post += math.exp(lq[k]) * np.exp(st["lw"][k] - _lse(st["lw"][k]))
+    if MIX:
+        _star_mix(self, post, min(RATE_SCALE * math.exp(min(st["v"], 0.0)) * a, 0.5 / st["maxleave"]))
     return bank_ll, post
 
 _OLD_PRIOR = """        prior = self._logw - _logsumexp(self._logw)
@@ -137,8 +139,45 @@ _NEW_POST = "        bank_ll, post = self._star_post(llw, a, bool(np.any(np.isfi
 _OLD_RESET = "        self._logw = np.zeros(self._ndw * self._nc)\n"
 _NEW_RESET = _OLD_RESET + "        self._star = None\n"
 
-def load(variant):
+_OLD_MIX = "        mean = pm @ mn\n"
+_NEW_MIX = _OLD_MIX + "        if getattr(self, '_dbg', None) is not None: self._dbg(self, post, mn)\n"
+RATE_SCALE = 1.0     # multiplies the ceiling rates (diagnostics only; 1 is the derived value)
+MIX = ()             # which member state the chain carries with the weight it moves (0009):
+                     # any of "m" (state mean and covariance), "mu" (scale-walk centres and their
+                     # variance).  Empty = weights only, as in 0007.
+
+def _star_mix(self, post, rate):
+    """Interacting-multiple-model step: member j's state becomes the mixture of the states of
+    the members its weight just came from, mu_{i|j} = post_i P_ij / sum_i post_i P_ij, with
+    P = I + rate * HD the chain at the star's centre.  Implemented for the case of one stacked
+    bank whose rows are the cells (no split ladder, no fault class) -- the arm."""
+    if not MIX or len(self._banks) != 1 or self._ndw != 1 or len(self._wm) != self._nc:
+        return
+    bank = self._banks[0]
+    if not hasattr(bank, "_m") or bank._m.shape[0] != self._nc:
+        return
+    st = self._star
+    P = np.eye(self._nc) + rate * st["HD"]
+    Mx = post[:, None] * P                                   # [i, j]: weight arriving at j from i
+    Mx = (Mx / np.maximum(Mx.sum(axis=0, keepdims=True), 1e-300)).T      # [j, i]
+    if "m" in MIX:
+        m, Pc = bank._m.copy(), bank._P.copy()
+        mn = Mx @ m; d = m[None, :, :] - mn[:, None, :]      # [j, i, n]
+        bank._m[...] = mn
+        bank._P[...] = np.einsum("ji,iab->jab", Mx, Pc) + np.einsum("ji,jia,jib->jab", Mx, d, d)
+    if "mu" in MIX:
+        mu, Pm = bank.mu.copy(), bank._Pmu.copy()
+        mun = Mx @ mu; d = mu[None, :, :] - mun[:, None, :]
+        bank.mu[...] = mun
+        bank._Pmu[...] = np.minimum(Mx @ Pm + np.einsum("ji,jid->jd", Mx, d * d), bank._Pmu_cap)
+
+def load(variant, debug=False):
+    """`debug=True` adds a no-op-unless-set hook `self._dbg(self, post, member_means)` after the
+    bank's mixing step; it does not change any output."""
     src = open(SRC).read()
+    if debug:
+        assert src.count(_OLD_MIX) == 1
+        src = src.replace(_OLD_MIX, _NEW_MIX)
     if variant == "star":
         for old, new in ((_OLD_PRIOR, _NEW_PRIOR), (_OLD_POST, _NEW_POST), (_OLD_RESET, _NEW_RESET)):
             assert src.count(old) == 1, old
