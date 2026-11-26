@@ -11,40 +11,41 @@
 
 ## Current state
 
-**On a scalar rig a pair-blind log-odds clamp replaces `forget` and beats it; it has not
-been run in the shipped filter. The constant-free alternative is disqualified on principle.**
+**On a scalar rig, a ladder of drift rates beneath the resolvability ceiling replaces
+`forget` and is at or near the best rule in every condition tried. It has not been run in
+the shipped filter.** ([`0003`](exploration/0003_the_rate_below_the_ceiling.md))
 
-- **Clamp at `eps0`** — no member may fall more than `ln(1/eps0) = 8.08` nats behind the
-  leader. Up to 12× better than `forget = 0.999` in code length when `(phi, s)` change,
-  negligibly worse on a static truth. It respects both symmetries the class is built on:
-  it is **time-homogeneous** (the same rule at every step, no origin) and it carries **no
-  timescale** (its constant is a dimensionless evidence level, so nothing needs rescaling
-  when the sampling rate changes — unlike `forget`, which must become `forget**a`). What
-  remains is one dimensionless tolerance, felt logarithmically above ~8 nats.
-- ~~**Share `1/t`**~~ — after the Bayes update, `w <- (1 − a_t)·w + a_t/M`,
-  `a_t = 1/(t+1)`. No constant, and it performed as well as the clamp. **Withdrawn**: it
-  reads the index of the observation, so the rule at step `t` depends on where the record
-  began. That breaks time-homogeneity, the assumption the AR(1) shape itself is derived
-  from (Doob; `resolvable-regime` ledger). Its measurements stand; it is not a candidate.
+The construction, in three statements:
 
-**The trade the two symmetries force.** Of the rules tried, each gives up exactly one
-thing: `forget` keeps homogeneity but carries a timescale; share `1/t` carries no scale
-but picks an origin; the clamp keeps both and pays with a dimensionless level. Whether a
-homogeneous, timescale-free rule can also be free of that level is the open question.
+1. **The ceiling.** `(phi, s)` cannot meaningfully drift from one bank member to a
+   neighbour faster than that pair can be resolved. That fixes a matrix of fastest rates
+   `H`, one over each neighbour pair's resolution time.
+2. **The unknown.** The world drifts at a fraction `a` in `[0, 1]` of the ceiling. A
+   complete ladder of rungs covers the interval; each rung filters the bank under
+   `P(a) = I + a·H`; `a = 0` is pure Bayes.
+3. **The rungs are weighted by evidence**, with their log-odds capped (8.08 nats) so the
+   rate itself may change.
 
-**A third candidate, from a different principle** ([`0002`](exploration/0002_the_ceiling_world.md)):
-assume `(phi, s)` drift between neighbouring members as fast as each pair can be resolved,
-and filter under that chain. Time-homogeneous, no timescale, rates read from the
-resolution table. Best of all rules when the truth changes every ~100 steps or faster
-(1.5× better than the clamp, 4× better than `forget` at the ceiling); pays a standing cost
-of about half its hop rate when the world is calmer (5.5e-3 nats/step: 16× the clamp, 50×
-`forget = 0.999`). The choice between it and the clamp is a stance on how restless the
-world is, not something this rig can settle.
+It is time-homogeneous and carries no timescale. What it still carries: a rung budget, a
+cap on the rungs' log-odds (felt only when the rate of change itself changes; one value
+tried), and a table of pairwise separations that the shipped filter would have to estimate
+online.
 
-The idea that started the thread — forget each pair of members on the time it takes to tell
-that pair apart — is right about the *behaviour* and wrong about the *mechanism*: a
-pair-blind cap or floor produces per-pair memories on its own, while supplying per-pair
-timescales explicitly failed both ways it was tried.
+Measured against `forget = 0.999`: 2× better when nothing changes, 1.5–7× better when
+anything does. Against a member-level log-odds clamp ([`0001`](exploration/0001_pairwise_resolution.md)):
+1.4–1.6× better on drift and neighbour moves, 1.3–1.7× worse on rare jumps to far members,
+which are a separate channel the rig does not model.
+
+**How this was reached, and what was dropped on the way:**
+
+- `0001`: a single memory cannot fit the bank (resolution times span <1 to 166,000 steps).
+  A pair-blind clamp gives per-pair memories on its own; literal per-pair forgetting fails.
+- ~~Share `1/t`~~ (`0001`): performed well, **withdrawn** — it reads the observation
+  index and so breaks time-homogeneity.
+- `0002`: the ceiling used as *the* rate. Vacuous for arbitrary pairs (far members resolve
+  in a step); for neighbours a working rule, but with a standing cost in a calm world
+  (5.5–12.6e-3 nats/step). `0003` removes that cost by treating the ceiling as an upper
+  bound.
 
 ## The confidence ledger
 
@@ -58,27 +59,27 @@ timescales explicitly failed both ways it was tried.
 | the resolvability ceiling applied to **any** pair of members is vacuous (far members resolve in ~1 step, so every rate saturates) | **measured** (59–69e-3 everywhere) | [`0002`](exploration/0002_the_ceiling_world.md) Q1 |
 | applied to **neighbours** it is a working rule: wins at dwell ≲ 100 and at the ceiling, standing cost ≈ 0.57 × hop rate when calm | **measured, one rig** | `0002` Q2–Q4 |
 | the level `c` that defines "resolved" is weakly felt in the local rule (7× in `c`, ~2× in result) | **measured, one rig** | `0002` |
+| a ladder over the fraction of the ceiling rate lands within 3% of the best single rate in every steady scenario, and removes `0002`'s standing cost (calm: 0.05e-3) | **measured, one rig** | [`0003`](exploration/0003_the_rate_below_the_ceiling.md) R1 |
+| weighting the rungs by pure Bayes adapts when the rate itself changes | **FALSE** — freezes, 24× worse than the best rung after a restless-then-calm record | `0003` R3 |
+| capping the rungs' log-odds repairs that at no steady-state cost | **measured, one value (8.08 nats), one rig** | `0003` |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |
 
 ## Open, in order
 
-1. **Run clamp-`eps0` in the shipped filter** against the hero gate, the
-   async rig and the arm. The weight update is one line (`lucid.py`, `self._logw = forget**a
-   * prior + llw`), but two structures also read `forget` and need a decision: the split
-   ladder's rung pruning (`_rung_odds(forget)`, already capped by `_LADDER_MEM`) and a
-   `mem`-derived floor. Both are documented as valid at `forget = 1`.
-1b. **Online rates for the local ceiling rule.** It reads a `KL` table measured offline;
-   the shipped filter would need it estimated from the bank's own running likelihood
-   differences.
-2. **Slow drift and off-grid truths** on this rig — the abrupt, on-grid hops used so far
-   favour any rule that re-selects quickly.
-3. **Remove or derive the clamp's level.** A homogeneous version of the `1/t` idea would
-   clock the floor on a *state* (how long the current leader has led) instead of the index;
-   untested, and near-equivalent members that trade the lead may defeat it. Alternatively
-   show the level is a budget, or tie it to `eps0` by more than analogy.
-4. **The small-`s` corner.** `phi` is unresolvable at `s = 0.2` within 10^4–10^5 steps, so
+1. **Estimate the rates `H` online.** They come from a `KL` table measured offline for
+   this rig. The bank already computes the per-step likelihood differences the table
+   averages; whether a running estimate is stable enough is untested and is the main
+   obstacle to the shipped filter.
+2. **Sweep the rungs' log-odds cap**, and try the construction on itself (the rate of the
+   rate has its own resolvability ceiling) to see whether the regress closes.
+3. **Off-grid truths and continuous drift** on this rig.
+4. **Run it in the shipped filter** against the hero gate, the async rig and the arm, with
+   jumps left to the existing hazard channel. Two structures also read `forget` (the split
+   ladder's rung pruning and a `mem`-derived floor); both are documented valid at
+   `forget = 1`.
+5. **The small-`s` corner.** `phi` is unresolvable at `s = 0.2` within 10^4–10^5 steps, so
    three of the fifteen members are one member in practice. Bears on AUD-2 (the box ends).
 
 ## Layout
@@ -86,6 +87,7 @@ timescales explicitly failed both ways it was tried.
 - `exploration/` — numbered, later is more recent.
   [`0001`](exploration/0001_pairwise_resolution.md): the table, the race, the predictions.
   [`0002`](exploration/0002_the_ceiling_world.md): the resolvability ceiling as the model.
+  [`0003`](exploration/0003_the_rate_below_the_ceiling.md): the ceiling as the top of a ladder; the current candidate.
   [`rig.py`](exploration/rig.py): the shared scalar rig.
-- `figures/` — the 0001 charts.
+- `figures/` — the charts.
 - `output/` — empty.
