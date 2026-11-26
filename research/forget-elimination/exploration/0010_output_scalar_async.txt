@@ -1,0 +1,11 @@
+SCALAR hero rig, 24 seeds.  RMSE per window, total log-likelihood, ms/step
+  A default      jump 1.8148  steady 0.3740  loud 0.9277   loglik -1721.69   1.18 ms/step
+  S forget=None  jump 1.7593  steady 0.3738  loud 0.7471   loglik -1704.62   1.88 ms/step
+  S minus A, paired:  jump dMSE -0.1982+-0.2184 (t=-0.91)  steady dMSE -0.0001+-0.0003 (t=-0.37)  loud dMSE -0.3025+-0.0430 (t=-7.04)   dloglik +17.07+-0.86 (t=+19.85)
+  final rate fraction: median 1.000, range 1.000-1.000
+
+ASYNC rig, 8 seeds.  RMSE over the oracle's (whole 0.0345, hot 0.0241), total log-likelihood
+  A default      whole 1.149x  hot 1.530x  (worst hot 2.787x)   loglik 1735.6
+  S forget=None  whole 1.112x  hot 1.430x  (worst hot 2.654x)   loglik 1766.0
+  S minus A, paired:  whole dRMSE -0.00126+-0.00169 (t=-0.74)  hot dRMSE -0.00241+-0.00476 (t=-0.51)  dloglik +30.42+-2.77 (t=+10.99)
+EXIT 0

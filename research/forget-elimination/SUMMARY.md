@@ -26,12 +26,12 @@ until this is accepted.** ([`0010`](exploration/0010_the_battery.md),
 | hero, jump / steady RMSE | 1.815 / 0.374 → 1.759 / 0.374 | no |
 | async, log-likelihood (8 seeds) | 1735.6 → 1766.0 | `t` = +11.0 |
 | async, RMSE whole / hot (× oracle) | 1.149 / 1.530 → 1.112 / 1.430 | no |
-| arm, calm (6 seeds, × oracle) | 1.036 → 0.941 | `t` = −3.3 |
+| arm, calm (6 seeds, × oracle) | 1.036 → 0.948 | `t` = −3.0 |
 | arm, SENSOR | 2.455 → 1.549 | `t` = −3.3 |
-| arm, PROCESS / POTFAIL / BOTH | 1.248 / 1.108 / 1.599 → 1.228 / 1.093 / 1.137 | no |
+| arm, PROCESS / POTFAIL / BOTH | 1.248 / 1.108 / 1.599 → 1.232 / 1.096 / 1.131 | no |
 | arm, worst 100-step stretch | 14.8× → 4.7× the oracle | |
-| shipped suite, default path | 65 passed | |
-| shipped suite with the drift as default | 63 passed, 1 failed (a one-seed ratio bound) | |
+| shipped suite, default path | 66 passed | |
+| shipped suite with the drift as default | 64 passed, 1 failed (a one-seed ratio bound) | |
 | stress: ramp, flicker 25, flicker 400, stale, manoeuvre, coloured, gappy | 3–31% better | `t` from −6 to −23 |
 | stress: outliers | 1% better | no |
 | stress: flicker 100 | 4.3% worse (24 seeds) | `t` = +2.2; log-likelihood better at `t` = +24 |

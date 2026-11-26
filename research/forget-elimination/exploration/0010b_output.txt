@@ -1,8 +1,8 @@
-...............................................F................         [100%]
+...............................................F.................        [100%]
 =================================== FAILURES ===================================
-E   assert 1.321149069958538 < 1.25
-/home/user/lucid-filter/lucid/tests/test_lucid.py:991: assert 1.321149069958538 < 1.25
+E   assert 1.3099131328141298 < 1.25
+/home/user/lucid-filter/lucid/tests/test_lucid.py:991: assert 1.3099131328141298 < 1.25
 =========================== short test summary info ============================
 FAILED lucid/tests/test_lucid.py::test_pointwise_decomposition_tracks_the_joint_row
-1 failed, 63 passed, 1 deselected in 468.31s (0:07:48)
+1 failed, 64 passed, 1 deselected in 393.75s (0:06:33)
 EXIT 1

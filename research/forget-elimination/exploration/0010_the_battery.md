@@ -14,25 +14,26 @@ neighbouring cells, the fraction beneath it found by a five-node walking star, a
 state carried with the weight. The default (`forget = 0.999`) is unchanged bit for bit and
 is the comparison throughout.
 
-**Three versions were run; only the last is reported in the tables.** The first two are
-kept under [`v1/`](v1/) and [`v2/`](v2/) because what changed between them was found by
+**Four versions were run.** The earlier outputs are
+kept under [`v1/`](v1/), [`v2/`](v2/) and [`v3/`](v3/) because what changed between them was found by
 the battery itself:
 
 | version | change | why |
 |---|---|---|
 | v1 | as ported from the load-time patch | — |
 | v2 | the chain over an elapsed time is the exact `exp(τG)`, replacing a first-order step with a row cap | the cap made every node of the star identical over long gaps (`0012`, `gappy`) |
-| **v3** | the split ladder gets its own derived chain | with the split left as pure Bayes the drift lost a slow ramp by 9% and irregular gaps by 27% (`0012`, `0013`) |
+| v3 | the split ladder gets its own derived chain | with the split left as pure Bayes the drift lost a slow ramp by 9% and irregular gaps by 27% (`0012`, `0013`) |
+| **v4** | the hazard rungs drift at their own ceiling; the state step is separable | the fault report went stale after a long calm (`0014`–`0016`); cost |
 
 ## The shipped suite
 
 | run | result |
 |---|---|
-| default path, with the new tests | **65 passed**, 16 skipped (the kernel tests, not built here) |
-| the same suite with `forget=None` as the default | **63 passed, 1 failed** (1 deselected: it asserts the shipped default) |
+| default path, with the new tests | **66 passed**, 16 skipped (the kernel tests, not built here) |
+| the same suite with `forget=None` as the default | **64 passed, 1 failed** (1 deselected: it asserts the shipped default) |
 
 The one failure is `test_pointwise_decomposition_tracks_the_joint_row`: the ratio of
-pointwise to joint-row RMSE is 1.32 against a bound of 1.25 (default: 1.16). On that seed
+pointwise to joint-row RMSE is 1.31 against a bound of 1.25 (default: 1.16). On that seed
 the drift improves the joint row (0.0879 → 0.0817) and slightly worsens the pointwise
 stream (0.1022 → 0.1081). On four seeds of the same rig the pointwise RMSE averages 0.0907
 under the drift against 0.0921 under the default, so this is the bound of a one-seed ratio
@@ -67,8 +68,15 @@ being crossed, not a structural break. It would need re-pinning if the default c
 | **mean** | default | 1.036 | 2.455 | 1.248 | 1.108 | 1.599 | 30,450 | 14.8× |
 | **mean** | drift | **0.941** | **1.549** | 1.228 | 1.093 | 1.137 | **33,734** | **4.7×** |
 | | paired `t` (log ratio) | **−3.34** | **−3.30** | −0.16 | −0.23 | −1.23 | | |
+| **mean, v4** | drift | **0.948** | **1.549** | 1.232 | 1.096 | 1.131 | **33,731** | **4.7×** |
+| | paired `t`, v4 | **−3.02** | **−3.30** | −0.11 | −0.18 | −1.26 | | |
 
-No non-finite output on any run. Cost on the arm: 78 against 79 ms/step.
+The per-seed rows are the v3 run; v4 (the code as it stands, [`0010_output_arm.txt`](0010_output_arm.txt))
+differs from them in the last digits only — the arm has no hazard ladder, and the separable
+state step is the same arithmetic in a different order. The hero and async tables are
+identical in v3 and v4 to every printed digit.
+
+No non-finite output on any run. Cost on the arm: 78 against 85 ms/step.
 
 ## Predictions against the run
 
@@ -89,7 +97,6 @@ No non-finite output on any run. Cost on the arm: 78 against 79 ms/step.
 3. **Per seed there are losses** — PROCESS on seeds 0 and 5 (+13%, +14%), BOTH on seeds 3,
    4 and 5 (+11–18%), POTFAIL on seed 2 (+25%). They are profiled in
    [`0011`](0011_profile_worse_regimes.md).
-4. **Cost.** On the scalar rig the drift step costs 3.4× the default's: 1.09 → 3.69
-   ms/step on an idle machine. Most of it is the state step over 360 cells (15 classes × 24
-   split rungs) done densely; a separable form exists and is not implemented. No
-   measurable cost on the arm (15 cells).
+4. **Cost.** On the scalar rig the drift step costs 1.6× the default's (1.18 → 1.88
+   ms/step) with the separable state step; the first, dense form cost 3.4×. About 8% on
+   the arm.
