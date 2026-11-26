@@ -84,7 +84,7 @@ is at its ceiling rate (fraction 1.0). Every other calm block is within 2× of s
 
 3. **It is not shippable as built.** On one seed in three the state estimate spikes to
    40–70× the oracle for about a hundred steps after a burst ends, while the star sits at
-   its ceiling. A better predictive density with a worse mean is what one expects if
+   or near its ceiling. A better predictive density with a worse mean is what one expects if
    weight is being moved onto members whose *state* is poor.
 
 4. **Suspected mechanism, not tested.** The chain moves weight from a cell to its
@@ -98,11 +98,14 @@ is at its ceiling rate (fraction 1.0). Every other calm block is within 2× of s
    because the noise level in the formula is the rig's constant and not the filter's own
    scale information, which on the arm's floored process axes is far smaller.
 
-5. **A diagnostic that failed.** `0007c`'s "low start" arm was meant to test whether
-   starting the star at the ceiling is the cause. Its override was erased by the filter's
-   reset, so that arm is identical to the star and says nothing. The trace itself rules
-   the start out as the main cause anyway: the spikes are at steps 500 and 1400, with the
-   star having returned to the ceiling on its own.
+5. **The start is not the cause** (`0007c`, re-run). Started at a rate fraction of 0.0025
+   instead of the ceiling, the star gives the same two spikes (calm 6.94× against 6.84×;
+   blocks 500–600 and 1400–1500 at 0.230 and 0.334 either way), and at the first of them
+   it is at 0.54 of the ceiling, not at it. So neither the start nor being exactly at the
+   ceiling is needed; a rate of half the ceiling after a burst is enough. (The first
+   version of this diagnostic set the start on the filter object, where the filter's own
+   reset erased it, and reported the plain star twice; the numbers here are from the
+   corrected probe.)
 
 ## Limits
 

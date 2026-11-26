@@ -90,7 +90,7 @@ members, which are a separate channel the rig does not model.
 | in the shipped filter the star improves the filter's own loss on the hero, async and arm rigs | **measured** — +16.1 nats (`t` 9.5, 12 seeds), +31.3 (`t` 7.2, 5 seeds), +2,100–4,200 (3 seeds) | [`0007`](exploration/0007_the_star_in_the_filter.md) |
 | it halves the arm's SENSOR-window gap | **measured, 3 seeds** — 2.70/3.48/2.14 → 1.85/1.37/1.33 | `0007` |
 | it leaves the arm's other windows within ±10% | **FALSE** — calm 12× worse on one seed in three (transient spikes); POTFAIL +9% | `0007` F4 |
-| the spikes are caused by starting at the ceiling | **untested** (the diagnostic's override was erased by the filter's reset); the trace points elsewhere | `0007` §5 |
+| the spikes are caused by starting at the ceiling | **FALSE** — a star started at 0.0025 of the ceiling gives the same spikes (calm 6.94× against 6.84×), at a rate of 0.54 of the ceiling | `0007` §5, `0007c` |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |

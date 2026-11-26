@@ -1,25 +1,25 @@
 windows: {'calm': [(40, 250), (540, 650), (940, 1050), (1340, 1450), (1740, 1900)], 'SENSOR': [(290, 500)], 'PROCESS': [(690, 900)], 'POTFAIL': [(1090, 1300)], 'BOTH': [(1490, 1700)]}
 shipped          loglik 30299.0  calm 0.563  SENSOR 2.144  PROCESS 1.157  POTFAIL 0.941  BOTH 3.516
 star             loglik 32793.5  calm 6.841  SENSOR 1.327  PROCESS 1.198  POTFAIL 1.138  BOTH 2.782
-star, low start  loglik 32793.5  calm 6.841  SENSOR 1.327  PROCESS 1.198  POTFAIL 1.138  BOTH 2.782
+star, low start  loglik 32751.1  calm 6.939  SENSOR 1.487  PROCESS 1.197  POTFAIL 1.139  BOTH 2.782
 
 tip error (rms over 100-step blocks); the star's rate fraction at the block's end
-     0- 100  oracle 0.0170  shipped 0.0089  star 0.0097  star, low start 0.0097   rate: star 0.464, low start 0.4637
-   100- 200  oracle 0.0096  shipped 0.0047  star 0.0032  star, low start 0.0032   rate: star 0.464, low start 0.4637
-   200- 300  oracle 0.0036  shipped 0.0050  star 0.0205  star, low start 0.0205   rate: star 1.000, low start 1.0000
-   300- 400  oracle 0.0047  shipped 0.0120  star 0.0064  star, low start 0.0064   rate: star 1.000, low start 1.0000
-   400- 500  oracle 0.0046  shipped 0.0075  star 0.0061  star, low start 0.0061   rate: star 1.000, low start 1.0000
-   500- 600  oracle 0.0051  shipped 0.0064  star 0.2298  star, low start 0.2298   rate: star 1.000, low start 1.0000
-   600- 700  oracle 0.0047  shipped 0.0049  star 0.0052  star, low start 0.0052   rate: star 0.464, low start 0.4637
-   700- 800  oracle 0.0051  shipped 0.0051  star 0.0061  star, low start 0.0061   rate: star 0.215, low start 0.2151
-   800- 900  oracle 0.0060  shipped 0.0077  star 0.0073  star, low start 0.0073   rate: star 0.215, low start 0.2151
-   900-1000  oracle 0.0032  shipped 0.0049  star 0.0042  star, low start 0.0042   rate: star 0.215, low start 0.2151
-  1000-1100  oracle 0.0020  shipped 0.0019  star 0.0025  star, low start 0.0025   rate: star 0.464, low start 0.4637
-  1100-1200  oracle 0.0014  shipped 0.0014  star 0.0014  star, low start 0.0014   rate: star 0.464, low start 0.4637
-  1200-1300  oracle 0.0022  shipped 0.0021  star 0.0027  star, low start 0.0027   rate: star 0.464, low start 0.4637
-  1300-1400  oracle 0.0034  shipped 0.0037  star 0.0048  star, low start 0.0048   rate: star 1.000, low start 1.0000
-  1400-1500  oracle 0.0032  shipped 0.0469  star 0.3335  star, low start 0.3335   rate: star 1.000, low start 1.0000
-  1500-1600  oracle 0.0114  shipped 0.0632  star 0.0470  star, low start 0.0470   rate: star 0.464, low start 0.4637
-  1600-1700  oracle 0.0168  shipped 0.0178  star 0.0172  star, low start 0.0172   rate: star 0.215, low start 0.2151
-  1700-1800  oracle 0.0036  shipped 0.0043  star 0.0077  star, low start 0.0077   rate: star 0.464, low start 0.4637
-  1800-1900  oracle 0.0054  shipped 0.0044  star 0.0048  star, low start 0.0048   rate: star 0.215, low start 0.2151
+     0- 100  oracle 0.0170  shipped 0.0089  star 0.0097  star, low start 0.0103   rate: star 0.464, low start 0.0025
+   100- 200  oracle 0.0096  shipped 0.0047  star 0.0032  star, low start 0.0048   rate: star 0.464, low start 0.0025
+   200- 300  oracle 0.0036  shipped 0.0050  star 0.0205  star, low start 0.1335   rate: star 1.000, low start 0.0536
+   300- 400  oracle 0.0047  shipped 0.0120  star 0.0064  star, low start 0.0078   rate: star 1.000, low start 0.0536
+   400- 500  oracle 0.0046  shipped 0.0075  star 0.0061  star, low start 0.0061   rate: star 1.000, low start 0.1156
+   500- 600  oracle 0.0051  shipped 0.0064  star 0.2298  star, low start 0.2303   rate: star 1.000, low start 0.5374
+   600- 700  oracle 0.0047  shipped 0.0049  star 0.0052  star, low start 0.0052   rate: star 0.464, low start 0.5374
+   700- 800  oracle 0.0051  shipped 0.0051  star 0.0061  star, low start 0.0061   rate: star 0.215, low start 0.2492
+   800- 900  oracle 0.0060  shipped 0.0077  star 0.0073  star, low start 0.0073   rate: star 0.215, low start 0.2492
+   900-1000  oracle 0.0032  shipped 0.0049  star 0.0042  star, low start 0.0046   rate: star 0.215, low start 0.2492
+  1000-1100  oracle 0.0020  shipped 0.0019  star 0.0025  star, low start 0.0026   rate: star 0.464, low start 0.5374
+  1100-1200  oracle 0.0014  shipped 0.0014  star 0.0014  star, low start 0.0014   rate: star 0.464, low start 0.5374
+  1200-1300  oracle 0.0022  shipped 0.0021  star 0.0027  star, low start 0.0027   rate: star 0.464, low start 0.5374
+  1300-1400  oracle 0.0034  shipped 0.0037  star 0.0048  star, low start 0.0049   rate: star 1.000, low start 0.5374
+  1400-1500  oracle 0.0032  shipped 0.0469  star 0.3335  star, low start 0.3338   rate: star 1.000, low start 0.5374
+  1500-1600  oracle 0.0114  shipped 0.0632  star 0.0470  star, low start 0.0470   rate: star 0.464, low start 0.5374
+  1600-1700  oracle 0.0168  shipped 0.0178  star 0.0172  star, low start 0.0172   rate: star 0.215, low start 0.2492
+  1700-1800  oracle 0.0036  shipped 0.0043  star 0.0077  star, low start 0.0077   rate: star 0.464, low start 0.2492
+  1800-1900  oracle 0.0054  shipped 0.0044  star 0.0048  star, low start 0.0048   rate: star 0.215, low start 0.2492
