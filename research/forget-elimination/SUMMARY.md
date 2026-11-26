@@ -122,6 +122,7 @@ hazard rungs running as pure Bayes.
 | a split chain from the same principle (rate `2/mem`) repairs it | **measured** — ramp 1.130 → 1.034, gappy 1.070 → 1.037, stale 1.177 → 1.124 | `0012` |
 | a first-order chain step with a row cap is adequate over long gaps | **FALSE** — every node of the star becomes identical; replaced by `exp(τG)` | `0012` |
 | on the arm, per-seed losses are an onset lag of ~50 steps from having selected a narrower class in calm | **measured, 3 traces** | [`0011`](exploration/0011_profile_worse_regimes.md) |
+| the hazard rungs running as pure Bayes under the drift is harmless | **FALSE for the fault report, true for the state** — read-out crosses ½ 1.5× later after a long calm; RMSE unchanged | [`0014`](exploration/0014_the_fault_rungs.md) |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |
@@ -156,6 +157,7 @@ hazard rungs running as pure Bayes.
   [`0010`](exploration/0010_the_battery.md): the battery on the filter proper.
   [`0011`](exploration/0011_profile_worse_regimes.md): the arm's per-seed losses profiled.
   [`0012`](exploration/0012_new_stress_modes.md): nine new stress modes and the ramp profile (`0013`).
+  [`0014`](exploration/0014_the_fault_rungs.md): the hazard rungs under the drift.
   `v1/`, `v2/`: outputs of the first two versions of the in-filter drift, kept for the record.
   [`rig.py`](exploration/rig.py): the shared scalar rig; [`star_filter.py`](exploration/star_filter.py): the load-time patch.
 - `figures/` — the charts.
