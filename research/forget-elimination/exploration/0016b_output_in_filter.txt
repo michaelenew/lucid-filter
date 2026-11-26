@@ -1,0 +1,8 @@
+  calm arm          hazard before false alarms first > 1/2  held 50 RMSE +300 F at end
+   600 default           1.12e-03        0.003          60       92    0.2928    0.172    per seed first>1/2: [59, 60, 182, 54]  held: [64, 120, 284, 54]
+   600 forget = 1        7.85e-04        0.002          67      103    0.2935    0.160    per seed first>1/2: [71, 63, 207, 54]  held: [86, 120, 284, 56]
+   600 forget=None       9.52e-04        0.001          68      104    0.2922    0.178    per seed first>1/2: [76, 61, 206, 54]  held: [87, 120, 284, 54]
+  4000 default           3.29e-04        0.004          82       94    0.2728    0.265    per seed first>1/2: [107, 68, 66, 97]  held: [107, 71, 81, 210]
+  4000 forget = 1        7.07e-05        0.001         126      135    0.2742    0.259    per seed first>1/2: [142, 109, 108, 227]  held: [149, 109, 121, 227]
+  4000 forget=None       3.87e-04        0.002          92       98    0.2726    0.273    per seed first>1/2: [112, 73, 68, 207]  held: [112, 77, 84, 211]
+EXIT 0

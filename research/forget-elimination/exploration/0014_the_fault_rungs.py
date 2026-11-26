@@ -2,8 +2,8 @@
 
 AR(1) state, two sensors (no split ladder), dynamics 0.9 -> 0.3 after a calm of C steps,
 `faults=True` (the 16-rung hazard ladder).  Arms: default; forget = 1; forget=None.
-(The `forget=None` arm is the filter as it now stands, with the chain along the hazard
-rungs added in 0015; its first run, without that chain, is in `0014_output.txt`.)
+(The `forget=None` arm is the filter as it now stands, with the hazard rungs drifting at their
+own ceiling (0016); its first run, without that chain, is in `0014_output.txt`.)
 Read-outs: the reported hazard just before the switch; steps until the fault read-out
 first exceeds 1/2 and until it stays above for 50 steps; state RMSE in the 300 steps after.
 
@@ -35,7 +35,7 @@ for C in (600, 4000):
     for nm, kw in ARMS:
         hz, fa, d1, d50, rm, Fe = [], [], [], [], [], []
         for seed in SEEDS:
-            tag = "_rungchain" if kw.get("forget", 0) is None else ""        # the drift arm, re-run after 0015
+            tag = "_ownceiling" if kw.get("forget", 0) is None else ""        # the drift arm, re-run after 0015
             r = cached(f"0014_{C}_{seed}_{nm.replace(' ', '')}{tag}", lambda: run(C, seed, kw))
             f = r["fault"]; post = f[C:] > 0.5
             hz.append(float(np.exp(np.mean(np.log(r["hazard"][C - 50:C])))))

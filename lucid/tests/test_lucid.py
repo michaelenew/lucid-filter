@@ -1226,3 +1226,24 @@ def test_class_drift_streams_through_gaps_and_partial_rows():
         st = f.update(y if k % 5 else np.array([np.nan]), t=t)
         assert np.all(np.isfinite(st.mean))
     assert f._drift.v <= 1e-9
+
+
+def test_class_drift_does_not_let_the_fault_report_go_stale():
+    """A long calm must not teach the bank that faults cannot happen.  With the hazard rungs
+    left as pure Bayes the reported hazard after a calm fell far below the escape's and the
+    fault was flagged late (forget-elimination 0014); with the rungs drifting at their own
+    ceiling it stays comparable and the fault is still found (0016)."""
+    r = rng(703)
+    C, T = 1500, 1900
+    x = np.zeros(T)
+    for t in range(1, T):
+        x[t] = (0.9 if t < C else 0.3) * x[t - 1] + 0.3 * r.standard_normal()
+    Y = x[:, None] + 0.7 * r.standard_normal((T, 2))
+    kw = dict(dynamics=[[0.9]], H=[[1.0], [1.0]], process=[[0.09]], measurement=[0.49, 0.49],
+              faults=True)
+    esc = LucidFilter(**kw).filter(Y)
+    dr = LucidFilter(forget=None, **kw).filter(Y)
+    before = lambda res: float(np.exp(np.mean(np.log(res.hazard[C - 50:C]))))
+    assert before(dr) > 0.5 * before(esc)          # the belief has not collapsed toward "never"
+    assert dr.fault[150:C].mean() < esc.fault[150:C].mean() + 0.02    # nor is it crying wolf
+    assert dr.fault[-150:].mean() > 0.5            # the fault is found

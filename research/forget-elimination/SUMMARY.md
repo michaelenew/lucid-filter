@@ -49,7 +49,7 @@ showed either.
   change); it is ahead afterwards. The default never selects on the arm at all.
 - Log-likelihood is lower than the default's on three stress modes (ramp, stale,
   coloured) where RMSE is better.
-- The scalar-rig step costs 3.4× the default's as implemented (1.09 → 3.69 ms; dense state step).
+- The scalar-rig step costs 1.6× the default's (1.2 → 1.9 ms).
 
 The construction, in three statements:
 
@@ -61,8 +61,9 @@ The construction, in three statements:
 3. **The walk.** `log a` is tracked by a five-node star at the no-dead-zone spacing. A
    node's lead never falls below zero; the star recentres when the posterior mode leaves
    the centre. It starts at the ceiling.
-4. **State travels with weight** (mean and covariance; not the scale walk), and **the split
-   ladder drifts by the same rule** as the classes.
+4. **State travels with weight** (mean and covariance; not the scale walk), **the split
+   ladder drifts by the same rule** as the classes, and **the hazard rungs drift at their
+   own ceiling**.
 
 It is time-homogeneous and carries no timescale and no level of its own; the chain over a
 gap is the exact exponential of its generator. The rates are a closed-form calculation
@@ -70,7 +71,7 @@ gap is the exact exponential of its generator. The rates are a closed-form calcu
 filter's own grid rules applied to a rate
 ([`0006`](exploration/0006_the_star_from_resolution.md)). Three elements are graded
 *measured*, not derived (AUD-10): the zero-floored lead, which state is carried, and the
-hazard rungs running as pure Bayes.
+hazard rungs drifting at their own ceiling rather than a rate found for them.
 
 **How this was reached, and what was dropped on the way:**
 
@@ -123,6 +124,8 @@ hazard rungs running as pure Bayes.
 | a first-order chain step with a row cap is adequate over long gaps | **FALSE** — every node of the star becomes identical; replaced by `exp(τG)` | `0012` |
 | on the arm, per-seed losses are an onset lag of ~50 steps from having selected a narrower class in calm | **measured, 3 traces** | [`0011`](exploration/0011_profile_worse_regimes.md) |
 | the hazard rungs running as pure Bayes under the drift is harmless | **FALSE for the fault report, true for the state** — read-out crosses ½ 1.5× later after a long calm; RMSE unchanged | [`0014`](exploration/0014_the_fault_rungs.md) |
+| a chain along the rungs scaled by the class star repairs it | **half** — 1.55× → 1.33× later; the star is small in calm and freezes the rungs with it | [`0016`](exploration/0016_rungs_at_their_own_rate.md) |
+| the rungs drifting at their own ceiling repairs it | **measured, 4 seeds** — 1.12× on first crossing, 1.04× held; hazard belief within 1.2×; RMSE and false alarms no worse; 0.12e-3 nats/step of calm. In the filter | `0016` |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |
@@ -137,7 +140,6 @@ hazard rungs running as pure Bayes.
 4. **AUD-10's measured elements**: the zero-floored lead as a rule (and its calm-world
    standing cost, visible as lower log-likelihood on ramp and stale); which member state
    is carried; the hazard rungs as pure Bayes.
-5. **Cost** of the state step on banks with a split ladder (dense now; separable possible).
 6. **Wider stress modes**: all nine are scalar. Several sensors, a dynamics change and the
    offset channel are not exercised.
 7. **The small-`s` corner** (`phi` unresolvable at `s = 0.2`); bears on AUD-2.
@@ -158,6 +160,7 @@ hazard rungs running as pure Bayes.
   [`0011`](exploration/0011_profile_worse_regimes.md): the arm's per-seed losses profiled.
   [`0012`](exploration/0012_new_stress_modes.md): nine new stress modes and the ramp profile (`0013`).
   [`0014`](exploration/0014_the_fault_rungs.md): the hazard rungs under the drift.
+  [`0016`](exploration/0016_rungs_at_their_own_rate.md): fixing them (with `0015`).
   `v1/`, `v2/`: outputs of the first two versions of the in-filter drift, kept for the record.
   [`rig.py`](exploration/rig.py): the shared scalar rig; [`star_filter.py`](exploration/star_filter.py): the load-time patch.
 - `figures/` — the charts.

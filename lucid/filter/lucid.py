@@ -2753,8 +2753,10 @@ class _ClassDrift:
     one class (the split is as much a property of the noise as its spread is, and a ramp in
     one sensor's noise moves it: forget-elimination 0013).  With a hazard ladder it moves along
     that too, between neighbouring rungs -- how fault-prone the world is can change, and a
-    belief about it that cannot be unlearned reports faults late (0014).  Inside a rung the
-    dynamics hypotheses keep their own kernel, `_hazard_mix`.
+    belief about it that cannot be unlearned reports faults late (0014).  The rungs drift at
+    their own ceiling, not at the star's fraction: the star measures how fast the CLASS
+    moves, which says nothing about the hazard (0016).  Inside a rung the dynamics hypotheses
+    keep their own kernel, `_hazard_mix`.
     """
 
     def __init__(self, phi_arr, s_arr, ndw, split_arr=None, hazards=None):
@@ -2859,21 +2861,29 @@ class _ClassDrift:
         """Elapsed chain time: the fraction of the ceiling, times the elapsed nominal steps."""
         return math.exp(min(v, 0.0)) * a
 
-    def _P(self, tau):
-        """``exp(tau G)`` over the classes, the split rungs and the hazard rungs, each
-        [from, to]."""
+    def _P(self, tau, a):
+        """``exp(tau G)`` over the classes and the split rungs, ``exp(a G)`` over the hazard
+        rungs, each [from, to]."""
         Pc = np.maximum((self._V * np.exp(tau * self._lam)) @ self._V.T, 0.0)
         Ps = np.maximum((self._sV * np.exp(tau * self._slam)) @ self._sV.T, 0.0)
-        Pj = np.maximum((self._jV * np.exp(tau * self._jlam)) @ self._jV.T, 0.0)
+        # AUDIT[measured] the hazard rungs drift AT their ceiling (elapsed time `a`), not at
+        # the star's fraction of it.  How fast the class drifts and how fast the hazard does
+        # are different unknowns, and a calm record says nothing about the second: scaled by
+        # the class star the rungs froze with it and a fault after a long calm was flagged
+        # 1.33x later than under the escape; at their own ceiling, 1.12x, for 0.12e-3 nats per
+        # step of calm (forget-elimination 0015, 0016).  The principle's default -- the
+        # fastest resolvable drift until the data says slower -- with no walk of its own to
+        # say slower: open AUD-10.
+        Pj = np.maximum((self._jV * np.exp(a * self._jlam)) @ self._jV.T, 0.0)
         return Pc, Ps, Pj
 
     def _live(self, rate):
         return rate > 0.0 and self.nb and (self.nps > 1 or self._split or self._haz)
 
-    def _chain(self, logp, rate):
+    def _chain(self, logp, rate, a):
         if not self._live(rate):
             return logp
-        Pc, Ps, Pj = self._P(rate)
+        Pc, Ps, Pj = self._P(rate, a)
         W = np.exp(logp).reshape(self.J, self.ndw // self.J, self.nps, self.nb)
         W = np.einsum("jdpb,jk->kdpb", W, Pj)                  # one chain at a time
         W = np.einsum("jdpb,pq->jdqb", W, Pc)
@@ -2888,7 +2898,7 @@ class _ClassDrift:
             p = self.lw[i] - _logsumexp(self.lw[i])
             if flt._ndbase > 1:
                 p = flt._hazard_mix(p, a)
-            pri[i] = self._chain(p, self._rate(self.v + self.k[i] * _DRIFT_GAP, a))
+            pri[i] = self._chain(p, self._rate(self.v + self.k[i] * _DRIFT_GAP, a), a)
         self._pri = pri
         return pri
 
@@ -2926,14 +2936,14 @@ class _ClassDrift:
         post = np.zeros(self.lw.shape[1])
         for i in range(n):
             post += math.exp(lq[i]) * np.exp(self.lw[i] - _logsumexp(self.lw[i]))
-        self._carry(flt, post, self._rate(self.v, a))
+        self._carry(flt, post, self._rate(self.v, a), a)
         return bank_ll, post
 
     # AUDIT[measured] the state mean and covariance travel with the weight; the scale walk
     # does NOT (carrying its centres is destructive, 0009: a member's window posterior is
     # stored against its own centre and spacing).  Standard IMM interaction; which state to
     # carry is settled by measurement, not derivation -- open AUD-10.
-    def _carry(self, flt, post, rate):
+    def _carry(self, flt, post, rate, a):
         if not self._live(rate):
             return
         if self._where is None:
@@ -2942,7 +2952,7 @@ class _ClassDrift:
                 for row, gi in enumerate(np.asarray(bank.idx)):
                     self._where[int(gi)] = (bi, row)
         pm = np.bincount(flt._wm, weights=post, minlength=len(flt._members))
-        Pc, Ps, Pj = self._P(rate)
+        Pc, Ps, Pj = self._P(rate, a)
         one = np.ones((1, 1))
         # hypotheses shared by every hazard rung (the nominal, the anchors): cells only
         for d in range(flt._nb):

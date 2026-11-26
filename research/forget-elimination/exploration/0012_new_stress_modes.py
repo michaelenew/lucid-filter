@@ -15,7 +15,7 @@ HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.abspath(os.pat
 os.chdir(ROOT); sys.path.insert(0, ROOT); sys.path.insert(0, HERE)
 from lucid.filter.lucid import LucidFilter
 from rig import cached
-TAG = "v3"
+TAG = "v4"
 Q0 = 0.02
 SEEDS = list(range(int(os.environ.get("NSEEDS", 8))))        # NSEEDS=24 to resolve a close mode
 
