@@ -1,0 +1,1 @@
+star: spacing 0.768 nats, 5 nodes, recentre level 1.125 nats

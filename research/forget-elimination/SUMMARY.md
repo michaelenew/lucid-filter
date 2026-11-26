@@ -24,15 +24,16 @@ The construction, in three statements:
    `H`, one over each neighbour pair's resolution time.
 2. **The unknown.** The world drifts at a fraction `a` in `[0, 1]` of the ceiling; the bank
    is filtered under `P(a) = I + a·H`. `a = 0` is pure Bayes.
-3. **The walk.** `log a` is tracked by a star — a centre and an arm either side. An arm
-   never falls behind the centre; when it leads by the grid's own resolution criterion
-   (1.125 nats) the star recentres on it. It starts at the ceiling.
+3. **The walk.** `log a` is tracked by a five-node star at the no-dead-zone spacing. A
+   node's lead never falls below zero; the star recentres when the posterior mode leaves
+   the centre. It starts at the ceiling.
 
 It is time-homogeneous and carries no timescale and no level of its own. The rates `H`
 are a closed-form calculation from `(phi, s)` of each pair
-([`0005`](exploration/0005_the_table_from_theory.md)), not a measurement. What it still
-carries: the arm length (one or two octaves; within 8% of each other under change, not
-derived).
+([`0005`](exploration/0005_the_table_from_theory.md)), not a measurement. The star's
+spacing (0.768 nats) and size (five nodes, window weights `−1.125·k²`) are the filter's
+own no-dead-zone and window rules applied to a rate
+([`0006`](exploration/0006_the_star_from_resolution.md)); nothing in it is set by hand.
 
 Measured against `forget = 0.999`: 1.5–7× better when anything changes. In a calm world it
 is 2–5× *worse* (0.2–0.6e-3 nats/step against 0.11e-3), because an arm always keeps some
@@ -72,6 +73,9 @@ members, which are a separate channel the rig does not model.
 | the rate table has a closed form: Whittle's divergence rate in `log e²` with the fixed noise at its information-equivalent level `1/I = 2` | **measured agreement** — formula/simulation median 1.05 on the 44 neighbour pairs (range 0.69–1.90; ±40% across the grid) | [`0005`](exploration/0005_the_table_from_theory.md) |
 | the same formula with the noise at its variance (4.93) is adequate in absolute value | **FALSE** — 2–7× too small, worst at small `s`; explained by `(I_gauss/I_true)² = 0.16` | `0005` T1 |
 | the walking star needs an accurate table | **FALSE** — within 8% with rates 2–7× off; only the ranking matters (Spearman 0.98) | `0005` T3 |
+| a drift rate is a scale: regret against `v = ln(a/a*)` is `r(e^v − 1 − v)` | **supported** (`R²` 0.98–0.99 where the optimum is inside the ladder; two slow scenarios uninformative) | [`0006`](exploration/0006_the_star_from_resolution.md) §1 |
+| the star's spacing is the walk grid's no-dead-zone bound for a one-event rate likelihood: 0.768 nats at `eps0` | **derived** (the same computation reproduces `0002`'s 0.891 for a log-variance) | `0006` §2 |
+| the derived five-node star matches the hand-set stars | **measured, one rig** — within 0–3% wherever the truth changes; calm 0.41e-3 | `0006` §4 |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |
@@ -83,8 +87,8 @@ members, which are a separate channel the rig does not model.
    In the filter `I` depends on the noise shares, the sensors reporting and the state; the
    stated extension is to use the per-step scale information the walk already computes
    (`_scale_fisher`). Untested.
-2. **Derive the star's arm length** the way the filter's scale walk derives its spacing,
-   and reduce the calm-world standing cost (an arm's permanent share of the weight).
+2. **The calm-world standing cost** (0.41e-3 nats/step on the rig, 4× `forget = 0.999`):
+   the centre's neighbours hold their window-prior weight permanently.
 3. **Off-grid truths and continuous drift** on this rig.
 4. **Run it in the shipped filter** against the hero gate, the async rig and the arm, with
    jumps left to the existing hazard channel. Two structures also read `forget` (the split
@@ -101,6 +105,7 @@ members, which are a separate channel the rig does not model.
   [`0003`](exploration/0003_the_rate_below_the_ceiling.md): the ceiling as the top of a ladder.
   [`0004`](exploration/0004_the_walking_star.md): the rate on a walking star; the current candidate.
   [`0005`](exploration/0005_the_table_from_theory.md): the rate table from its definition.
+  [`0006`](exploration/0006_the_star_from_resolution.md): the star's spacing and size derived.
   [`rig.py`](exploration/rig.py): the shared scalar rig.
 - `figures/` — the charts.
 - `output/` — empty.

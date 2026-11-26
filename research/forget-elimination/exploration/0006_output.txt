@@ -1,0 +1,28 @@
+eps0 = 3.097e-04
+  log-variance, one observation (0002)   normalisation alias = eps0 at D = 1.082 nats;  score alias = eps0 at D = 0.891 nats (1.29 octaves)
+  log-rate, one event                    normalisation alias = eps0 at D = 0.927 nats;  score alias = eps0 at D = 0.768 nats (1.11 octaves)
+derived star: spacing 0.768 nats, K = 2 (5 nodes), window prior log-weights [-4.5, -1.125, -0.0, -1.125, -4.5]
+
+shape: per-rung regret against v = ln(a / a*), fitted to  floor + r (e^v - 1 - v)
+  drift a=0.14   a* = 0.2276  r = 2.21e-3/step  floor = 11.80e-3   R2 = 0.990   (symmetric bowl R2 = 0.949)
+  drift a=0.01   a* = 0.0002  r = 0.00e-3/step  floor = 2.65e-3   R2 = 0.932   (symmetric bowl R2 = 0.973)
+  nbr 1000       a* = 0.0002  r = 0.00e-3/step  floor = 4.34e-3   R2 = 0.901   (symmetric bowl R2 = 0.982)
+  nbr 100        a* = 0.2009  r = 1.84e-3/step  floor = 10.84e-3   R2 = 0.981   (symmetric bowl R2 = 0.945)
+
+regret, nats/step x 1000
+scenario                        0004 star: 3 nodes, 1 octave   0004 star: 3 nodes, 2 octaves     derived: 5 nodes, 0.77 nats        derived spacing, 3 nodes
+calm                                              0.61+-0.13                      0.20+-0.01                      0.41+-0.06                      0.46+-0.08
+nbr 10000                                         0.47+-0.04                      0.52+-0.05                      0.47+-0.04                      0.48+-0.04
+nbr 1000                                          3.55+-0.16                      3.84+-0.17                      3.56+-0.16                      3.56+-0.16
+nbr 100                                          11.31+-0.36                     11.71+-0.38                     11.34+-0.35                     11.33+-0.35
+any 10000                                         1.64+-0.11                      1.57+-0.08                      1.61+-0.11                      1.66+-0.12
+any 1000                                          7.97+-0.41                      7.90+-0.39                      7.88+-0.41                      7.92+-0.41
+any 100                                          24.65+-0.23                     24.99+-0.20                     24.66+-0.24                     24.66+-0.23
+drift a=0.01                                      2.16+-0.54                      2.32+-0.61                      2.15+-0.55                      2.15+-0.55
+drift a=0.14                                     12.30+-0.96                     12.65+-0.98                     12.31+-0.96                     12.31+-0.96
+drift a=1.0                                      26.02+-0.65                     26.54+-0.66                     26.07+-0.65                     26.06+-0.65
+calm -> ceiling (2nd half)                       26.62+-0.59                     26.69+-0.54                     26.60+-0.57                     26.63+-0.60
+ceiling -> calm (2nd half)                        0.73+-0.06                      0.38+-0.04                      0.60+-0.05                      0.63+-0.05
+
+derived star / the better of 0004's two:  calm: 2.07  nbr 10000: 1.00  nbr 1000: 1.00  nbr 100: 1.00  any 10000: 1.03  any 1000: 1.00  any 100: 1.00  drift a=0.01: 0.99  drift a=0.14: 1.00  drift a=1.0: 1.00  calm -> ceiling (2nd half): 1.00  ceiling -> calm (2nd half): 1.58
+EXIT 0
