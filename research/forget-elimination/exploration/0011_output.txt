@@ -1,0 +1,30 @@
+
+seed 5  PROCESS [690, 900):  x oracle  default 1.169   drift 1.331
+        block  oracle  default   drift  ratio | drift weight on s = 0.2/0.4/0.8/1.6/3.2 | best class err (drift)  its s | default's class | rate | mean log meas-scale: default / drift
+    690-  700  0.0032   0.0056  0.0063   1.12 | 0.00 0.17 0.68 0.12 0.03 | 0.0059 0.2 | s=0.8 (1.00) | 1.00 | +0.11 / +0.10
+    700-  750  0.0033   0.0049  0.0059   1.20 | 0.01 0.48 0.42 0.07 0.02 | 0.0057 1.6 | s=0.8 (1.00) | 1.00 | +0.01 / +0.04
+    750-  800  0.0034   0.0045  0.0053   1.18 | 0.00 0.38 0.44 0.14 0.04 | 0.0053 0.8 | s=0.8 (1.00) | 0.58 | +0.03 / +0.05
+    800-  850  0.0050   0.0048  0.0053   1.10 | 0.00 0.23 0.70 0.06 0.01 | 0.0050 1.6 | s=0.8 (1.00) | 0.24 | -0.05 / -0.02
+    850-  900  0.0037   0.0035  0.0035   1.01 | 0.00 0.24 0.70 0.06 0.00 | 0.0033 3.2 | s=0.8 (1.00) | 0.22 | -0.10 / -0.05
+/usr/local/lib/python3.13/site-packages/numpy/_core/fromnumeric.py:3862: RuntimeWarning: Mean of empty slice
+  return _methods._mean(a, axis=axis, dtype=dtype,
+  the worst 5% of steps carry 13% of the excess squared error (excess total 0.001273; drift's oracle-class regret: best single class would give nan x oracle)
+
+seed 5  BOTH [1490, 1700):  x oracle  default 1.025   drift 1.139
+        block  oracle  default   drift  ratio | drift weight on s = 0.2/0.4/0.8/1.6/3.2 | best class err (drift)  its s | default's class | rate | mean log meas-scale: default / drift
+   1490- 1500  0.0097   0.0056  0.0108   1.91 | 0.00 0.96 0.03 0.00 0.00 | 0.0108 0.4 | s=0.8 (1.00) | 1.00 | +3.33 / +3.48
+   1500- 1550  0.0128   0.0112  0.0163   1.45 | 0.02 0.94 0.04 0.00 0.00 | 0.0162 3.2 | s=0.8 (1.00) | 1.00 | +3.38 / +3.57
+   1550- 1600  0.0111   0.0144  0.0126   0.87 | 0.25 0.68 0.07 0.00 0.00 | 0.0108 0.2 | s=0.8 (1.00) | 1.00 | +3.39 / +3.51
+   1600- 1650  0.0083   0.0074  0.0067   0.90 | 0.43 0.56 0.02 0.00 0.00 | 0.0064 0.8 | s=0.8 (1.00) | 1.00 | +3.42 / +3.54
+   1650- 1700  0.0094   0.0097  0.0107   1.10 | 0.43 0.48 0.07 0.01 0.00 | 0.0100 3.2 | s=0.8 (1.00) | 0.84 | +3.54 / +3.66
+  the worst 5% of steps carry 61% of the excess squared error (excess total 0.005719; drift's oracle-class regret: best single class would give nan x oracle)
+
+seed 3  BOTH [1490, 1700):  x oracle  default 1.341   drift 1.505
+        block  oracle  default   drift  ratio | drift weight on s = 0.2/0.4/0.8/1.6/3.2 | best class err (drift)  its s | default's class | rate | mean log meas-scale: default / drift
+   1490- 1500  0.0104   0.0354  0.0362   1.02 | 0.01 0.86 0.06 0.06 0.01 | 0.0358 0.8 | s=0.8 (1.00) | 0.57 | +3.29 / +3.41
+   1500- 1550  0.0120   0.0164  0.0257   1.56 | 0.02 0.96 0.02 0.00 0.00 | 0.0255 1.6 | s=0.8 (1.00) | 0.46 | +3.47 / +3.64
+   1550- 1600  0.0098   0.0104  0.0081   0.78 | 0.04 0.92 0.04 0.00 0.00 | 0.0078 0.4 | s=0.8 (1.00) | 0.46 | +3.45 / +3.58
+   1600- 1650  0.0104   0.0115  0.0113   0.98 | 0.18 0.76 0.06 0.00 0.00 | 0.0102 0.4 | s=0.8 (1.00) | 0.46 | +3.44 / +3.54
+   1650- 1700  0.0136   0.0156  0.0123   0.79 | 0.13 0.85 0.01 0.00 0.00 | 0.0122 0.4 | s=0.8 (1.00) | 0.46 | +3.49 / +3.61
+  the worst 5% of steps carry 94% of the excess squared error (excess total 0.01304; drift's oracle-class regret: best single class would give nan x oracle)
+EXIT 0

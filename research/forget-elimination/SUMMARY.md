@@ -11,30 +11,45 @@
 
 ## Current state
 
-**`forget` is replaced by a drift rate that is bounded above by resolvability and found
-beneath that bound by a derived five-node walking star, with each member's state carried
-along with the weight the star moves. On a scalar rig it is at or near the best rule
-wherever the truth changes. In the shipped filter it improves the filter's own loss on
-every rig and, on the arm, is better than shipped in three of five windows and within 5% in
-the other two. Not yet general: the state-carrying step exists only for the arm's bank
-layout.**
-([`0006`](exploration/0006_the_star_from_resolution.md),
-[`0007`](exploration/0007_the_star_in_the_filter.md),
-[`0008`](exploration/0008_the_bad_seed.md),
-[`0009`](exploration/0009_state_moves_with_weight.md))
+**The class drift is in the filter as an opt-in, `LucidFilter(forget=None)`, with the
+default unchanged bit for bit. On its battery it is better than the default by the
+filter's own loss on every rig, never resolvably worse in state error, and better than or
+equal to the default on eight of nine new stress modes (the ninth is 4% worse). The escape remains the default
+until this is accepted.** ([`0010`](exploration/0010_the_battery.md),
+[`0011`](exploration/0011_profile_worse_regimes.md),
+[`0012`](exploration/0012_new_stress_modes.md); audit: `lucid/filter/AUDIT.md`, AUD-10)
 
-**In the shipped filter** (patched at load; `lucid/` untouched):
+| rig | default → `forget=None` | resolved? |
+|---|---|---|
+| hero, log-likelihood (24 seeds) | −1721.7 → −1704.6 | `t` = +19.9 |
+| hero, loud-window RMSE | 0.928 → 0.747 | `t` = −7.0 |
+| hero, jump / steady RMSE | 1.815 / 0.374 → 1.759 / 0.374 | no |
+| async, log-likelihood (8 seeds) | 1735.6 → 1766.0 | `t` = +11.0 |
+| async, RMSE whole / hot (× oracle) | 1.149 / 1.530 → 1.112 / 1.430 | no |
+| arm, calm (6 seeds, × oracle) | 1.036 → 0.941 | `t` = −3.3 |
+| arm, SENSOR | 2.455 → 1.549 | `t` = −3.3 |
+| arm, PROCESS / POTFAIL / BOTH | 1.248 / 1.108 / 1.599 → 1.228 / 1.093 / 1.137 | no |
+| arm, worst 100-step stretch | 14.8× → 4.7× the oracle | |
+| shipped suite, default path | 65 passed | |
+| shipped suite with the drift as default | 63 passed, 1 failed (a one-seed ratio bound) | |
+| stress: ramp, flicker 25, flicker 400, stale, manoeuvre, coloured, gappy | 3–31% better | `t` from −6 to −23 |
+| stress: outliers | 1% better | no |
+| stress: flicker 100 | 4.3% worse (24 seeds) | `t` = +2.2; log-likelihood better at `t` = +24 |
 
-- Hero rig, weights-only star: log-likelihood +16 nats (`t` = 9.5); loud-window RMSE
-  0.889 → 0.783 (`t` = −3.2). Async rig: +31 nats (`t` = 7.2), RMSE unchanged.
-- Arm, star with state carried, 3 seeds, × the oracle (shipped → star): calm 0.94 → 0.87,
-  SENSOR 2.78 → 1.70, PROCESS 1.12 → 1.17, POTFAIL 1.07 → 1.11, BOTH 2.10 → 1.23;
-  log-likelihood +11%; worst 100-step stretch lower than shipped on every seed.
-- The weights-only star failed on the arm (calm 6.84× on one seed). Cause found: the
-  shipped bank never re-selects there (all weight on `s = 0.8`, always), so members had
-  been running unobserved; once weights were free to move, the bank selected a wide member
-  with a bad state. Carrying state with weight fixes it. Carrying the scale-walk state as
-  well is destructive.
+**What the new stress modes changed.** As first run the drift *lost* three of them — a
+slow ramp (+9%), a change after a long calm (+2%) and irregular gaps (+27%). Two defects
+were behind that, both fixed with nothing added: a first-order chain step with a cap
+(replaced by the exact elapsed-time form), and the split ladder left as pure Bayes (given
+its own chain from the same principle, rate `2/mem`). None of the three original rigs
+showed either.
+
+**Known weaknesses, profiled.**
+- At the onset of a burst on the arm the drift is a class behind for ~50 steps on some
+  seeds (it selects a narrower class in calm, correctly, and must then resolve the
+  change); it is ahead afterwards. The default never selects on the arm at all.
+- Log-likelihood is lower than the default's on three stress modes (ramp, stale,
+  coloured) where RMSE is better.
+- The scalar-rig step costs 3.4× the default's as implemented (1.09 → 3.69 ms; dense state step).
 
 The construction, in three statements:
 
@@ -46,19 +61,16 @@ The construction, in three statements:
 3. **The walk.** `log a` is tracked by a five-node star at the no-dead-zone spacing. A
    node's lead never falls below zero; the star recentres when the posterior mode leaves
    the centre. It starts at the ceiling.
+4. **State travels with weight** (mean and covariance; not the scale walk), and **the split
+   ladder drifts by the same rule** as the classes.
 
-It is time-homogeneous and carries no timescale and no level of its own. The rates `H`
-are a closed-form calculation from `(phi, s)` of each pair
-([`0005`](exploration/0005_the_table_from_theory.md)), not a measurement. The star's
-spacing (0.768 nats) and size (five nodes, window weights `−1.125·k²`) are the filter's
-own no-dead-zone and window rules applied to a rate
-([`0006`](exploration/0006_the_star_from_resolution.md)); nothing in it is set by hand.
-
-Measured against `forget = 0.999`: 1.5–7× better when anything changes. In a calm world it
-is 2–5× *worse* (0.2–0.6e-3 nats/step against 0.11e-3), because an arm always keeps some
-weight; `0003`'s 14-rung ladder with capped rung weights does not have that cost (0.05e-3)
-but has a cap constant. Both lose 1.3–1.7× to a member-level clamp on rare jumps to far
-members, which are a separate channel the rig does not model.
+It is time-homogeneous and carries no timescale and no level of its own; the chain over a
+gap is the exact exponential of its generator. The rates are a closed-form calculation
+([`0005`](exploration/0005_the_table_from_theory.md)); the star's spacing and size are the
+filter's own grid rules applied to a rate
+([`0006`](exploration/0006_the_star_from_resolution.md)). Three elements are graded
+*measured*, not derived (AUD-10): the zero-floored lead, which state is carried, and the
+hazard rungs running as pure Bayes.
 
 **How this was reached, and what was dropped on the way:**
 
@@ -104,24 +116,29 @@ members, which are a separate channel the rig does not model.
 | on the arm the shipped bank does not re-select at all | **measured, seed 2** — weight 1.000 on `s = 0.8` in every block | `0008` |
 | carrying member state (mean, covariance) with moved weight removes the spikes | **measured, 3 seeds** — worst 100-step block 4.9/1.8/6.1× against shipped's 5.9/3.6/14.8× | [`0009`](exploration/0009_state_moves_with_weight.md) |
 | carrying the scale-walk centres too helps | **FALSE** — destructive alone (calm 88.7×) and combined (BOTH 13.7×) | `0009` H2 |
+| `forget=None` in the filter proper: better by code length on hero, async and arm; not resolvably worse in state error anywhere | **measured** — 24 / 8 / 6 seeds | [`0010`](exploration/0010_the_battery.md) |
+| the shipped suite passes with the drift as default | **63 of 64**; the failure is a one-seed ratio bound (1.32 against 1.25; four-seed means agree) | `0010` |
+| with the split ladder as pure Bayes the drift handles a slow ramp | **FALSE** — 9% worse than the default, 27% worse through gaps; any forgetting on the split makes it 5% better | [`0012`](exploration/0012_new_stress_modes.md), `0013` |
+| a split chain from the same principle (rate `2/mem`) repairs it | **measured** — ramp 1.130 → 1.034, gappy 1.070 → 1.037, stale 1.177 → 1.124 | `0012` |
+| a first-order chain step with a row cap is adequate over long gaps | **FALSE** — every node of the star becomes identical; replaced by `exp(τG)` | `0012` |
+| on the arm, per-seed losses are an onset lag of ~50 steps from having selected a narrower class in calm | **measured, 3 traces** | [`0011`](exploration/0011_profile_worse_regimes.md) |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |
 
 ## Open, in order
 
-1. **Generalise the state-carrying step** to banks with a split ladder and a fault class
-   (mix within a split rung and within a dynamics hypothesis), then re-run the hero and
-   async rigs with it. Until then their numbers are for the weights-only star.
-2. **Move from a load-time patch to the filter itself** and run the test suite and
-   acceptance gates. `forget` is also read by the split ladder's pruning and a
-   `mem`-derived floor; both are documented valid at `forget = 1`.
-3. **More arm seeds and schedules**; PROCESS (+5%) and POTFAIL (+4%) are slightly worse.
-4. **Why carrying the scale-walk state fails** (suspected: a member's window posterior is
-   stored relative to its own centre and spacing).
-5. **The split ladder and hazard rungs** run at `forget = 1` under the star; whether they
-   need the same treatment is untested.
-6. **The calm-world standing cost** on the scalar rig (0.41e-3 nats/step, 4× `forget = 0.999`).
+1. **The decision to make `forget=None` the default.** One suite test would need
+   re-pinning; the README's description of `forget` would change.
+2. **The onset lag** (`0011`): let a detected jump reprice the class, as the hazard channel
+   already reprices a walker.
+3. **Flicker at 100 steps** — the one stress mode lost (+4.3%, `t` = +2.2 on 24 seeds); not profiled.
+4. **AUD-10's measured elements**: the zero-floored lead as a rule (and its calm-world
+   standing cost, visible as lower log-likelihood on ramp and stale); which member state
+   is carried; the hazard rungs as pure Bayes.
+5. **Cost** of the state step on banks with a split ladder (dense now; separable possible).
+6. **Wider stress modes**: all nine are scalar. Several sensors, a dynamics change and the
+   offset channel are not exercised.
 7. **The small-`s` corner** (`phi` unresolvable at `s = 0.2`); bears on AUD-2.
 
 ## Layout
@@ -136,6 +153,10 @@ members, which are a separate channel the rig does not model.
   [`0007`](exploration/0007_the_star_in_the_filter.md): the star in the shipped filter, three rigs.
   [`0008`](exploration/0008_the_bad_seed.md): the arm failure traced.
   [`0009`](exploration/0009_state_moves_with_weight.md): state carried with weight; the current candidate.
+  [`0010`](exploration/0010_the_battery.md): the battery on the filter proper.
+  [`0011`](exploration/0011_profile_worse_regimes.md): the arm's per-seed losses profiled.
+  [`0012`](exploration/0012_new_stress_modes.md): nine new stress modes and the ramp profile (`0013`).
+  `v1/`, `v2/`: outputs of the first two versions of the in-filter drift, kept for the record.
   [`rig.py`](exploration/rig.py): the shared scalar rig; [`star_filter.py`](exploration/star_filter.py): the load-time patch.
 - `figures/` — the charts.
 - `output/` — empty.

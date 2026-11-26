@@ -17,7 +17,7 @@ from lucid.filter.lucid import LucidFilter
 from rig import cached
 TAG = "v3"
 Q0 = 0.02
-SEEDS = list(range(8))
+SEEDS = list(range(int(os.environ.get("NSEEDS", 8))))        # NSEEDS=24 to resolve a close mode
 
 def make(mode, seed):
     """-> dict(y, x, q, r, dt, mis)  (q, r: the true per-step variances; dt: elapsed nominal steps)."""
@@ -71,7 +71,7 @@ def run_filter(d, kw):
     return dict(est=est, ll=f.loglik, dt=time.perf_counter() - t0, v=None if f._drift is None else f._drift.v)
 
 MODES = ["ramp", "flicker 25", "flicker 100", "flicker 400", "outliers", "stale", "manoeuvre", "coloured", "gappy"]
-want = [m for m in MODES if not sys.argv[1:] or m.split()[0] in sys.argv[1:]]
+want = [m for m in MODES if not sys.argv[1:] or m.split()[0] in sys.argv[1:] or m.replace(" ", "") in sys.argv[1:]]
 BURN, BLK = 100, 200
 def rm(e, sl=slice(BURN, None)): return float(np.sqrt(np.mean(e[sl] ** 2)))
 print(f"{'mode':12s} {'fixed KF':>9s} {'A default':>10s} {'S None':>8s} {'S/A':>6s} {'t(S-A)':>7s}   {'worst blk A':>11s} {'worst blk S':>11s}   {'dloglik/step':>12s} {'t':>6s}   {'rate frac':>9s}  extra")

@@ -19,7 +19,7 @@ sys.path.insert(0, "research/multivariate-statfilter/scripts"); import arm5dof a
 spec = importlib.util.spec_from_file_location("p54", "research/multivariate-statfilter/exploration/0054_physical_sensors.py")
 m54 = importlib.util.module_from_spec(spec); spec.loader.exec_module(m54)
 np.seterr(all="ignore")
-TAG = "v1"
+TAG = "v3"
 jstd, pot, acc = m54.schedule(); Wn = m54.windows()
 NST = AR.NJ * AR.ORDER
 def tips(X): return m54.tip(np.asarray(X)[:, :NST])
@@ -78,4 +78,4 @@ for arg in sys.argv[1:] or ["0:PROCESS"]:
         e2a, e2s = A["err"][full] ** 2, S["err"][full] ** 2
         excess = e2s - e2a; order = np.argsort(excess)[::-1]; top = order[: max(1, len(order) // 20)]
         print(f"  the worst 5% of steps carry {excess[top].sum() / max(excess.sum(), 1e-300):.0%} of the excess squared error"
-              f" (excess total {excess.sum():.4g}; drift's oracle-class regret: best single class would give {rm(np.min(S['ce'][full], axis=1), full) / rm(eo, full):.3f} x oracle)")
+              f" (excess total {excess.sum():.4g}; drift's oracle-class regret: best single class would give {rm(np.nanmin(S['ce'][full], axis=1), full) / rm(eo, full):.3f} x oracle)")

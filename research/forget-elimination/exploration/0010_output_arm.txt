@@ -1,0 +1,18 @@
+
+ARM, seeds (0, 1, 2, 3, 4, 5).  tip RMSE over the oracle's per window; log-likelihood; worst 100-step block (x oracle)
+  seed 0 A default      calm 1.141  SENSOR 2.700  PROCESS 1.160  POTFAIL 1.114  BOTH 1.063   loglik 30574   worst block 5.9x   88 ms/step
+  seed 0 S forget=None  calm 1.130  SENSOR 1.562  PROCESS 1.312  POTFAIL 1.114  BOTH 0.858   loglik 33792   worst block 4.1x   87 ms/step
+  seed 1 A default      calm 1.102  SENSOR 3.480  PROCESS 1.027  POTFAIL 1.160  BOTH 1.723   loglik 29722   worst block 3.6x   79 ms/step
+  seed 1 S forget=None  calm 0.897  SENSOR 1.401  PROCESS 1.076  POTFAIL 1.051  BOTH 0.962   loglik 33409   worst block 1.7x   82 ms/step
+  seed 2 A default      calm 0.563  SENSOR 2.144  PROCESS 1.157  POTFAIL 0.941  BOTH 3.516   loglik 30299   worst block 14.8x   78 ms/step
+  seed 2 S forget=None  calm 0.541  SENSOR 1.910  PROCESS 1.158  POTFAIL 1.175  BOTH 1.265   loglik 33755   worst block 3.7x   78 ms/step
+  seed 3 A default      calm 1.154  SENSOR 2.008  PROCESS 1.430  POTFAIL 1.223  BOTH 1.341   loglik 30922   worst block 4.2x   78 ms/step
+  seed 3 S forget=None  calm 1.067  SENSOR 1.312  PROCESS 1.222  POTFAIL 1.056  BOTH 1.505   loglik 33955   worst block 3.9x   76 ms/step
+  seed 4 A default      calm 1.142  SENSOR 1.503  PROCESS 1.548  POTFAIL 1.105  BOTH 0.928   loglik 30160   worst block 4.9x   78 ms/step
+  seed 4 S forget=None  calm 1.021  SENSOR 1.451  PROCESS 1.269  POTFAIL 1.040  BOTH 1.091   loglik 33599   worst block 4.7x   80 ms/step
+  seed 5 A default      calm 1.113  SENSOR 2.895  PROCESS 1.169  POTFAIL 1.106  BOTH 1.025   loglik 31020   worst block 3.1x   79 ms/step
+  seed 5 S forget=None  calm 0.992  SENSOR 1.656  PROCESS 1.331  POTFAIL 1.120  BOTH 1.139   loglik 33897   worst block 1.8x   78 ms/step
+  mean   A default      calm 1.036  SENSOR 2.455  PROCESS 1.248  POTFAIL 1.108  BOTH 1.599   loglik 30450   worst block 14.8x
+  mean   S forget=None  calm 0.941  SENSOR 1.549  PROCESS 1.228  POTFAIL 1.093  BOTH 1.137   loglik 33734   worst block 4.7x
+  S/A per window, paired log-ratio:  calm -0.094+-0.028 (t=-3.34)  SENSOR -0.432+-0.131 (t=-3.30)  PROCESS -0.009+-0.057 (t=-0.16)  POTFAIL -0.012+-0.053 (t=-0.23)  BOTH -0.240+-0.195 (t=-1.23)
+EXIT 0
