@@ -89,10 +89,15 @@ def static_truth(T, R, m, seed):
     return np.full((T, R), m), np.exp(0.5 * s * z) * rng.standard_normal((T, R))
 
 def cached(name, fn):
+    """Checkpoint: return the pickled result of `fn` if it is on disk, else compute and save it.
+    Written to a temporary file and renamed, so a kill mid-write cannot leave a corrupt file.
+    Every probe wraps each independent unit of work (scenario, seed, filter arm) in this."""
     path = os.path.join(CACHE, name + ".pkl")
     if os.path.exists(path):
         return pickle.load(open(path, "rb"))
-    out = fn(); pickle.dump(out, open(path, "wb"), protocol=4)
+    out = fn(); tmp = path + ".tmp"
+    with open(tmp, "wb") as fh: pickle.dump(out, fh, protocol=4)
+    os.replace(tmp, path)
     return out
 
 def lse(a, axis=-1, keepdims=False):

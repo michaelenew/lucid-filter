@@ -22,6 +22,7 @@ import numpy as np
 SRC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "lucid", "filter", "lucid.py")
 C_RES = 1.5 ** 2 / 2
 K = 2
+V0 = 0.0          # where the star starts, in ln(rate fraction); 0 is the ceiling (the derived start)
 EPS0 = 2 * math.exp(-2 * math.pi ** 2 / 1.5 ** 2)
 
 def _spacing():
@@ -71,7 +72,7 @@ def _star_state(self):
     st = getattr(self, "_star", None)
     if st is None:
         n = 2 * K + 1
-        st = dict(lw=np.zeros((n, self._ndw * self._nc)), v=0.0, W=np.zeros(n), pri=None,
+        st = dict(lw=np.zeros((n, self._ndw * self._nc)), v=float(V0), W=np.zeros(n), pri=None,
                   HD=cell_rates(self.phi_arr, self.s_arr), moves=0, path=[])
         st["maxleave"] = max(float(-np.diag(st["HD"]).min()), 1e-12)
         self._star = st

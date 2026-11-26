@@ -36,6 +36,10 @@ were followed throughout:
   run that tests them.
 - **Negative results are results** and are kept at the same weight as positive
   ones. Several of the most useful entries here are things that did not work.
+- **Probes checkpoint to disk.** Each independent unit of work in a probe (a scenario, a
+  seed, a filter arm) is saved as it finishes and skipped on re-run, so a restarted worker
+  resumes instead of starting over. Checkpoints live in a git-ignored `_cache/` beside the
+  probe.
 - **A compute budget is not a free parameter.** Quadrature resolutions are
   budgets and are labelled as such; anything else that looks like a knob is
   either a modelling commitment or a bug.

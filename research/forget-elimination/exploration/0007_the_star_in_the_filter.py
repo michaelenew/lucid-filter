@@ -4,6 +4,8 @@ Arms:  A shipped (forget = 0.999);  B forget = 1;  S star on (phi, s), forget = 
 Rigs and windows are those of resolution-criterion/0003 (paired, same seeds).  The patch is
 `star_filter.py`; nothing under `lucid/` is modified.
 
+Every (rig, seed, arm) run is checkpointed to `_cache/` and skipped on re-run.
+
 Run from the repository root:  python research/forget-elimination/exploration/0007_the_star_in_the_filter.py
 """
 import importlib.util, math, os, sys, time
@@ -11,6 +13,7 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__)); ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 os.chdir(ROOT); sys.path.insert(0, ROOT); sys.path.insert(0, HERE)
 import star_filter as SF
+from rig import cached
 A = SF.load("shipped"); S = SF.load("star")
 ARMS = [("A shipped", A, {}), ("B forget=1", A, dict(forget=1.0)), ("S star", S, dict(forget=1.0))]
 only = set(sys.argv[1:]) or {"scalar", "async", "arm"}
@@ -29,11 +32,15 @@ if "scalar" in only:
         rng = np.random.default_rng(seed); th = np.cumsum(rng.normal(0, math.sqrt(0.02), N)); th[JA:] += JU
         y = th + rng.normal(0, np.where(np.arange(N) < NA, 1.0, 3.0))
         for nm, mod, kw in ARMS:
-            f = mod.LucidFilter(**kw); t0 = time.perf_counter()
-            m = np.asarray(f.filter(y.reshape(-1, 1)).mean).reshape(-1); tm[nm] += time.perf_counter() - t0
-            for k, sl in W: mse[nm][k].append(np.mean((m[sl] - th[sl]) ** 2))
-            ll[nm].append(f.loglik)
-            if nm.startswith("S"): frac.append((math.exp(f._star["v"]), f._star["moves"]))
+            def one(mod=mod, kw=kw, nm=nm):
+                f = mod.LucidFilter(**kw); t0 = time.perf_counter()
+                m = np.asarray(f.filter(y.reshape(-1, 1)).mean).reshape(-1); dt = time.perf_counter() - t0
+                star = (math.exp(f._star["v"]), f._star["moves"]) if nm.startswith("S") else None
+                return dict(mse={k: float(np.mean((m[sl] - th[sl]) ** 2)) for k, sl in W}, ll=f.loglik, dt=dt, star=star)
+            r = cached(f"0007_scalar_{seed}_{nm[0]}", one)
+            tm[nm] += r["dt"]; ll[nm].append(r["ll"])
+            for k, _ in W: mse[nm][k].append(r["mse"][k])
+            if r["star"]: frac.append(r["star"])
     print("\nSCALAR hero rig, 12 seeds.  RMSE per window, total log-likelihood, ms/step")
     for nm, _, _ in ARMS:
         print(f"  {nm:12s} " + "  ".join(f"{k} {math.sqrt(np.mean(mse[nm][k])):.4f}" for k, _ in W)
@@ -51,13 +58,15 @@ if "async" in only:
         stream = rig.simulate(seed); truth = np.array([s[3] for s in stream]); times = np.array([s[1] for s in stream])
         F, Q = rig.nominal_model()
         for nm, mod, kw in ARMS:
-            f = mod.LucidFilter(dynamics=F, H=rig.H, process=Q, measurement=rig.SIGMA ** 2, timestep=rig.NOMINAL, **kw)
-            est = np.empty((len(stream), 2))
-            for k, (i, t, val, _tr, _sd) in enumerate(stream): est[k] = f.observe(i, val, t=t).mean
-            err = est[:, 0] - truth[:, 0]; j, t0, t1, fac = rig.FAIL
-            hw = (times >= t0 + 1) & (times < t1); ww = (times >= 1) & (times < rig.DURATION)
-            res[nm]["whole"].append(np.sqrt(np.mean(err[ww] ** 2))); res[nm]["hot"].append(np.sqrt(np.mean(err[hw] ** 2)))
-            res[nm]["ll"].append(f.loglik)
+            def one(mod=mod, kw=kw):
+                f = mod.LucidFilter(dynamics=F, H=rig.H, process=Q, measurement=rig.SIGMA ** 2, timestep=rig.NOMINAL, **kw)
+                est = np.empty((len(stream), 2))
+                for k, (i, t, val, _tr, _sd) in enumerate(stream): est[k] = f.observe(i, val, t=t).mean
+                err = est[:, 0] - truth[:, 0]; j, t0, t1, fac = rig.FAIL
+                hw = (times >= t0 + 1) & (times < t1); ww = (times >= 1) & (times < rig.DURATION)
+                return dict(whole=float(np.sqrt(np.mean(err[ww] ** 2))), hot=float(np.sqrt(np.mean(err[hw] ** 2))), ll=f.loglik)
+            r = cached(f"0007_async_{seed}_{nm[0]}", one)
+            for key in ("whole", "hot", "ll"): res[nm][key].append(r[key])
     print("\nASYNC rig, 5 seeds.  RMSE over the oracle's (whole 0.0345, hot 0.0241), total log-likelihood")
     for nm, _, _ in ARMS:
         r = res[nm]
@@ -78,14 +87,17 @@ if "arm" in only:
     Pt = m54.tip(St); Po = m54.tip(orc); Wn = m54.windows()
     print(f"\nARM seed 0 ({m54.T} steps).  tip RMSE over the oracle's, per window; total log-likelihood")
     for nm, mod, kw in ARMS:
-        t0 = time.perf_counter()
-        f = mod.LucidFilter(dynamics=AR.F, control=AR.B, H=AR.measure, process=AR.Q0, measurement=AR.R0, **kw)
-        est = np.asarray(f.filter(Y, U).mean); dt = time.perf_counter() - t0
-        if np.all(np.isfinite(est)):
+        def one(mod=mod, kw=kw, nm=nm):
+            t0 = time.perf_counter()
+            f = mod.LucidFilter(dynamics=AR.F, control=AR.B, H=AR.measure, process=AR.Q0, measurement=AR.R0, **kw)
+            est = np.asarray(f.filter(Y, U).mean); dt = time.perf_counter() - t0
+            if not np.all(np.isfinite(est)): return None
             Pl = m54.tip(est)
-            extra = f"  star rate fraction {math.exp(f._star['v']):.4f}, {f._star['moves']} moves" if nm.startswith("S") else ""
-            print(f"  {nm:12s} ({1e3 * dt / m54.T:.0f} ms/step): " + "  ".join(
-                f"{k} {m54.rms(Pl, Pt, m54.mask(sp)) / m54.rms(Po, Pt, m54.mask(sp)):.3f}" for k, sp in Wn.items())
-                + f"   loglik {f.loglik:.1f}" + extra, flush=True)
-        else:
-            print(f"  {nm:12s}: NaN", flush=True)
+            return dict(dt=dt, ll=f.loglik, win={k: m54.rms(Pl, Pt, m54.mask(sp)) / m54.rms(Po, Pt, m54.mask(sp)) for k, sp in Wn.items()},
+                        star=(math.exp(f._star["v"]), f._star["moves"]) if nm.startswith("S") else None)
+        r = cached(f"0007_arm_0_{nm[0]}", one)
+        if r is None:
+            print(f"  {nm:12s}: NaN", flush=True); continue
+        extra = f"  star rate fraction {r['star'][0]:.4f}, {r['star'][1]} moves" if r["star"] else ""
+        print(f"  {nm:12s} ({1e3 * r['dt'] / m54.T:.0f} ms/step): " + "  ".join(f"{k} {v:.3f}" for k, v in r["win"].items())
+              + f"   loglik {r['ll']:.1f}" + extra, flush=True)
