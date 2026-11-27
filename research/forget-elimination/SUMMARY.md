@@ -152,6 +152,8 @@ only). The `(phi, s)` box presumably acts as the ladder does; unmeasured.
 | the calm-world cost is the arms holding weight | **FALSE** — an unfloored weighting changes nothing (within 6%); the cost is the walk down from the ceiling start (1.03 → 0.12e-3 over the record) | [`0017`](exploration/0017_the_measured_opens.md) B |
 | the start of the walk does not matter | **FALSE off the arm** — started at `e^{−8}` the star never climbs and the gain is lost (hero +1.4 nats against +17.1); below the ceiling's reach the walk is blind | `0017` C |
 | carrying the noise level with the weight, done consistently, is harmless | **FALSE** — every axis: calm 3× worse. Sensor axes only: SENSOR 1.62 → 1.11 and the best log-likelihood measured, PROCESS +32%, BOTH +57% | `0017` A |
+| a ladder chain with hop rate `D/g²` (small move, small evidence) is independent of the ladder's size | **measured** — ramp 1.031 / 1.033 / 1.032 at mem 250 / 1000 / 4000; the literal form (evidence ∝ move) is a partial repair, 1.080 | [`0019`](exploration/0019_grid_free_ladder.md) |
+| resolvability can fix the ladder's diffusion constant | **no** — the drift over one memory equals the blur at every `D`; the grid spacing was the tie-breaker | `0019` |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |
@@ -166,9 +168,10 @@ only). The `(phi, s)` box presumably acts as the ladder does; unmeasured.
 4. **The floor of the rate coordinate** (`0017`): below the ceiling's reach the star is
    blind, so a low start strands it and a long enough calm would too. A compact coordinate
    is the form of the fix.
-4b. **The ceiling depends on how finely a ladder is cut** (`0018`): `_LADDER_MEM`, a node
-   budget, has become a timescale — and the hazard rungs' memory outright. The ceiling
-   should be a property of the coordinate, not of the grid.
+4b. **The ladders' diffusion constant** (`0018`, `0019`). The grid-free form is verified and
+   not yet in the filter; it makes explicit a constant (`D = 9/mem₀²`, `mem₀ = 1000`) that
+   resolvability cannot fix. Three candidates in `0019`: the interval as yardstick, a star
+   per axis, or declaring `D`.
 4c. **Which member state is carried** — the one remaining *measured* entry; a trade between
    code length and state error.
 6. **Wider stress modes**: all nine are scalar. Several sensors, a dynamics change and the
@@ -194,6 +197,7 @@ only). The `(phi, s)` box presumably acts as the ladder does; unmeasured.
   [`0016`](exploration/0016_rungs_at_their_own_rate.md): fixing them (with `0015`).
   [`0017`](exploration/0017_the_measured_opens.md): the two measured opens, and the star's start.
   [`0018`](exploration/0018_which_constants_matter.md): which constants are statistically relevant.
+  [`0019`](exploration/0019_grid_free_ladder.md): the ladder made independent of its grid.
   `v1/`, `v2/`: outputs of the first two versions of the in-filter drift, kept for the record.
   [`rig.py`](exploration/rig.py): the shared scalar rig; [`star_filter.py`](exploration/star_filter.py): the load-time patch.
 - `figures/` — the charts.

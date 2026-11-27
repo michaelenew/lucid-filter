@@ -205,7 +205,11 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
   the oracle at mem 250 / 1000 / 4000, the default unchanged (1.113 / 1.118 / 1.118). The
   hazard rungs sit at that ceiling, so `1000` is in effect their memory — the escape's own
   number, reached through a constant graded *budget*. The ceiling should not depend on how
-  finely the ladder is cut;
+  finely the ladder is cut. **Grid-free form verified (0019):** hop rate `D/g²` — a small
+  move needs small evidence, `∝ g⁴` — gives 1.031 / 1.033 / 1.032 at mem 250 / 1000 / 4000
+  (was 1.031 / 1.033 / 1.107). It makes the timescale explicit, `D = 9/mem₀²` with
+  `mem₀ = 1000`, and resolvability cannot fix `D` (the drift over one memory equals the blur
+  at every `D`). Not yet in the filter: it needs `D` named;
   (e) the default: `forget=None` is opt-in until the battery in
   `research/forget-elimination/0010`–`0012` is accepted.
 

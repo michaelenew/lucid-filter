@@ -1,0 +1,5 @@
+arm                                mem 250    mem 1000    mem 4000   split rungs    spread 4000/250
+in the filter (rate ~ g^2)           1.031       1.033       1.107   [None, None, None]    1.074
+literal (rate ~ g)                   1.033       1.033       1.080   [12, 24, 47]    1.045
+exact (rate ~ 1/g^2)                 1.031       1.033       1.032   [12, 24, 47]    1.001
+EXIT 0
