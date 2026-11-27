@@ -1,0 +1,2 @@
+RAMP, 6 seeds: RMSE over the oracle's
+  _LADDER_MEM  default  as it stands  star per axis   split fraction of its ceiling: at 1000 / 3000 / end      moves (class, split)
