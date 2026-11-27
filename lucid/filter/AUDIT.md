@@ -124,7 +124,7 @@ Record: `research/forget-elimination/` (`SUMMARY.md`, probes 0001–0012).
 | `_DRIFT_LEVEL = _GAP_FACTOR²/2`, `_DRIFT_K` | derived | The window prior at spacing `_GAP_FACTOR` blur widths puts log-weight `−(c²/2)k²` on node `k`; `K = ⌈_SPAN_S/_GAP_FACTOR⌉`. The same rule `_build_window` uses, so it inherits `_SPAN_S`'s proxy. Measured: the stricter `ln(1/ε₀)` in its place is worse in 10 of 12 scenarios (0004). | AUD-1 |
 | `_DRIFT_GAP` (0.768 nats) | derived + budget | The walk grid's absolute no-dead-zone bound (`resolution-criterion/0002`) for the one-event rate likelihood, spectrum `|Γ(1+iω)|`, at the tolerance `_GAP_FACTOR` already runs at. The same expression with `|Γ(½+iω)|` returns the log-variance grid's 0.89 (0006). That a rate has a scale's likelihood shape is supported where testable (R² 0.98–0.99 on two of four scenarios; two uninformative). | — |
 | `_DRIFT_NOISE = 2`, `_class_divergence` | derived + proxy | Whittle's divergence rate in `log e²` with the fixed noise at its *information* level `1/I`, `I = ½`. Reproduces the simulated table to a median 5% on the 44 neighbour pairs of the shipped box, ±40% across it (0005). **Proxy:** exact for small differences and for a scale every observation reads directly; in a coupled filter `I` depends on the noise shares. Defended by insensitivity, not derivation: the walk absorbs a common factor (results within 8% with rates 2–7× off, 0005; unchanged over 30× on the arm, 0008). | AUD-10 |
-| node lead floored at zero; recentre on the posterior mode | measured | The repeated sequential test (Page's CUSUM) that gives the walk a finite memory with no memory length. It is what a per-pair forgetting rule collapses to (0001) and it matches a complete ladder of rates within 0–9% (0004, 0006). **Two parts (0017):** (i) the *test* — floor at zero, recentre past the window prior — is minimax-optimal for a change between two hypotheses with independent data (Lorden 1971, Moustakides 1986), applied here by analogy to correlated evidence and five moving nodes; (ii) the lead's second use, as the node's weight in the prediction, is consequence-free — an unfloored alternative gives the same path and the same regret within 6%. *Proposed regrade, not applied:* proxy for (i), convention for (ii). The calm-world cost once attributed to this rule is the walk's start (row below). | AUD-10 |
+| node lead floored at zero; recentre on the posterior mode | proxy + convention | The repeated sequential test (Page's CUSUM) that gives the walk a finite memory with no memory length. It is what a per-pair forgetting rule collapses to (0001) and it matches a complete ladder of rates within 0–9% (0004, 0006). **Two parts (0017):** (i) the *test* — floor at zero, recentre past the window prior — is minimax-optimal for a change between two hypotheses with independent data (Lorden 1971, Moustakides 1986), applied here by analogy to correlated evidence and five moving nodes; (ii) the lead's second use, as the node's weight in the prediction, is consequence-free — an unfloored alternative gives the same path and the same regret within 6%. **Graded** proxy for (i) — the sharp statement (optimality for correlated evidence and several moving alternatives) is missing — and convention for (ii). *Sensitivity (0018):* halving or doubling the level `_DRIFT_LEVEL` moves the regret by under 6% wherever the truth changes; in a calm world it sets how fast the walk comes down (0.20 / 0.41 / 0.97e-3 at 0.56 / 1.125 / 2.25). The calm-world cost once attributed to this rule is the walk's start (row below). | AUD-10 |
 | the walk starts at the ceiling | convention | **A shape assumption, and load-bearing:** the world drifts as fast as can be resolved until shown slower. *Derivation behind it:* far below the ceiling every node of the star is effectively at rate zero, the nodes predict identically and no lead accumulates — the walk is blind at the floor of `log a` (the floor problem of `resolution-criterion/0006`), so only a start where it can see is self-correcting. *Measurement (0017c):* started at `e^{−8}` the star ends at 0.0003–0.0007 of the ceiling even under a 25-step flicker, and the drift's gain is gone (hero +1.4 nats against +17.1; ramp, flicker 25 and stale fall back to the default or below). *Price:* the walk down in a calm world — 1.03e-3 nats/step in the first third of a 30,000-step record, 0.12e-3 in the last, 0.41e-3 overall against 0.04e-3 from a low start. An earlier note here said the start was measured not to matter; that was true of the arm (0007c) and false in general. **Limit:** in a long enough calm the walk reaches the blind region and cannot return. | AUD-10 |
 | the chain over an elapsed time, `exp(τG)` | derived | The exact exponential of the (symmetric) generator, like every other elapsed map here; a proper transition matrix for any gap and rate. Replaced a first-order `I + τG` with a row cap, which made the star's nodes identical over long gaps and pinned the walk at the ceiling (0012 `gappy`: 27% worse than the default; see 0014 for the re-run). | — |
 | `_DRIFT_VMIN` | budget | Numerical guard: the walk stops at `e^{−17}` of the ceiling. | — |
@@ -191,29 +191,37 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
 
 - **AUD-10** (forget-elimination): the class drift's measured and proxy elements —
   (a) the divergence table's noise level in a coupled filter (use the walk's own per-step
-  scale information in place of the constant `1/I = 2`); (b) the zero-floored lead: proposed proxy (the sequential test, by analogy) plus
-  convention (its use as a weight, shown immaterial) — not yet accepted; (b′) the floor of
+  scale information in place of the constant `1/I = 2`); (b) the zero-floored lead is a proxy: the sharp statement (the test's optimality for
+  correlated evidence and several moving alternatives) is missing; (b′) the floor of
   the rate coordinate: below the ceiling's reach the walk is blind, so a long enough calm
   strands it — a compact coordinate, as for `resolution-criterion`'s floor, is the form of
   the fix;
   (c) which member state travels: carrying the noise level is a measured trade between
   code length and state error (0017), not yet a derivation; (d) the hazard rungs drift at their ceiling by convention (a shape assumption, with its
   measurement and derivation in the ledger), and the split at the class star's fraction by
-  simplification — each axis's own rate is the consistent completion; (e) the default: `forget=None` is opt-in until the battery in
+  simplification — each axis's own rate is the consistent completion; (e′) **`_LADDER_MEM` is no longer only a budget under the drift**: the ceiling between
+  neighbouring rungs is `2/mem` and the rungs are `∝ 1/√mem` apart, so the split and hazard
+  beliefs diffuse `∝ 1/mem²`. Measured on the ramp (0018b): drift 1.031 / 1.033 / 1.107 ×
+  the oracle at mem 250 / 1000 / 4000, the default unchanged (1.113 / 1.118 / 1.118). The
+  hazard rungs sit at that ceiling, so `1000` is in effect their memory — the escape's own
+  number, reached through a constant graded *budget*. The ceiling should not depend on how
+  finely the ladder is cut;
+  (e) the default: `forget=None` is opt-in until the battery in
   `research/forget-elimination/0010`–`0012` is accepted.
 
 ## Scoreboard
 
 64 ledger entries; 56 inline markers in `lucid.py` (grep `AUDIT[`; API plumbing and the
 `forget` escape are ledger-only — the escape's marker is its own parameter doc).  By primary
-grade: **43 derived** (full bar), **3 proxy** (defensible, sharp
-statement open), **4 measured** (below the bar, opens logged),
+grade: **43 derived** (full bar), **4 proxy** (defensible, sharp
+statement open), **3 measured** (below the bar, opens logged),
 **14 budget/convention/escape** (no theoretical
 claim; consequence-freedom owed in three places, AUD-8).  12 entries carry mixed grades
 (a derived core with a proxy or measured edge — the box, the window, the offset channel,
 the class drift's spacing and divergence table).
 Every proxy and measured element references an open; no chunk is unmarked.
 
-The class drift adds 14 of those entries: 8 derived (two with a budget or proxy edge), 3
-measured, 3 budget/convention.  It is opt-in; the three measured entries are what stands
-between it and the bar.
+The class drift adds 14 of those entries: 9 derived (three with a budget or proxy edge), 1
+proxy + convention, 2 convention, 1 budget, 1 measured.  It is opt-in.  What stands between
+it and the bar: the one measured entry (which member state travels), the proxy's missing
+sharp statement, and AUD-10(e′) — a ladder budget that has become a timescale.

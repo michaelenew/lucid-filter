@@ -1,0 +1,5 @@
+_LADDER_MEM split rungs  default  forget=None  drift/default   loglik/step: default, drift (x1000, minus default at 1000)
+        250          12    1.113        1.031          0.926   -2.16284  -2.16236
+       1000          24    1.118        1.033          0.924   -2.16272  -2.16346
+       4000          24    1.118        1.107          0.990   -2.16272  -2.16596
+EXIT 0

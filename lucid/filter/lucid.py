@@ -2916,11 +2916,13 @@ class _ClassDrift:
         lp = np.array([_logsumexp(pri[i] + llw) for i in range(n)])
         bank_ll = _logsumexp(lq + lp)
         self.lw = pri + llw[None, :]
-        # AUDIT[measured] a node's lead is floored at zero -- the repeated sequential test
-        # (Page's CUSUM) that gives the walk a finite memory with no memory length.  The
-        # construction is the one a per-pair forgetting rule collapses to (0001) and is
-        # measured against a complete ladder of rates (0003, 0004); it is not derived as
-        # optimal -- open AUD-10.
+        # AUDIT[proxy+convention] a node's lead is floored at zero -- the repeated sequential
+        # test (Page's CUSUM) that gives the walk a finite memory with no memory length.
+        # PROXY: the test is minimax-optimal for a change between two hypotheses with
+        # independent data (Lorden 1971, Moustakides 1986); here the evidence is correlated
+        # and there are several moving alternatives, so it holds by analogy.  CONVENTION: the
+        # same lead is the node's weight in the prediction; an unfloored weighting gives the
+        # same path and the same regret within 6% (forget-elimination 0017).
         lead = np.maximum(self.lead + lp - lp[c], 0.0)
         lead[c] = 0.0
         sc = lead + self.node_prior

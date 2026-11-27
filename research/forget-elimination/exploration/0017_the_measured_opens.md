@@ -43,9 +43,8 @@ under 1%). The part that carries the behaviour — floor the lead at zero, recen
 exceeds the window prior — is the repeated sequential test (Page's CUSUM), which is
 minimax-optimal for detecting a change between two hypotheses at a given false-alarm rate
 (Lorden 1971; Moustakides 1986). That theorem is for independent observations and two
-fixed hypotheses; here the evidence is correlated and there are five moving ones. *Proposed
-grade: proxy for the test (a classical optimality applied by analogy), convention for the
-weights.* Not applied to the ledger without the owner's say.
+fixed hypotheses; here the evidence is correlated and there are five moving ones. *Grade: proxy for the test (a classical optimality applied by analogy), convention for the
+weights* — proposed here, accepted and applied to the ledger.
 
 ## C. The start — not a convention that washes out
 
@@ -116,5 +115,5 @@ depends on which loss is the arbiter.
 |---|---|---|---|
 | hazard rungs at their ceiling | measured | **convention** (applied) | shape assumption; derivation and measurement in the ledger |
 | the walk's start at the ceiling | convention, "does not matter" | **convention, load-bearing** (text corrected) | a low start strands the star; calm transient is its price |
-| zero-floored lead | measured | measured; *proposed* proxy (test) + convention (weights) | CUSUM optimality by analogy; weights shown immaterial |
+| zero-floored lead | measured | **proxy + convention** (accepted and applied) | CUSUM optimality by analogy; weights shown immaterial |
 | which state travels | measured | **measured** | a real trade between code length and state error |

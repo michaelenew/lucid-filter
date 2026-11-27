@@ -69,10 +69,10 @@ It is time-homogeneous and carries no timescale and no level of its own; the cha
 gap is the exact exponential of its generator. The rates are a closed-form calculation
 ([`0005`](exploration/0005_the_table_from_theory.md)); the star's spacing and size are the
 filter's own grid rules applied to a rate
-([`0006`](exploration/0006_the_star_from_resolution.md)). Two elements are graded
-*measured*, not derived (AUD-10): the zero-floored lead and which state is carried. The
-hazard rungs drifting at their own ceiling is a *convention* — a shape assumption, with its
-measurement and derivation in the ledger.
+([`0006`](exploration/0006_the_star_from_resolution.md)). One element is graded
+*measured* (which member state is carried); the zero-floored lead is *proxy + convention*;
+the start at the ceiling and the hazard rungs at their ceiling are *conventions* — shape
+assumptions with their measurement and derivation in the ledger.
 
 **How this was reached, and what was dropped on the way:**
 
@@ -84,6 +84,28 @@ measurement and derivation in the ledger.
   in a step); for neighbours a working rule, but with a standing cost in a calm world
   (5.5–12.6e-3 nats/step). `0003` removes that cost by treating the ceiling as an upper
   bound.
+
+## The audit, before and after
+
+**Before.** One entry: `forget`, graded *escape* — the filter's single declared free
+parameter, 0.999, a memory length in steps.
+
+**After (`forget=None`).** Fourteen entries in `lucid/filter/AUDIT.md`:
+
+| grade | entries |
+|---|---|
+| derived (9) | the class ceiling; the fraction beneath it; the recentring level and node count; the star's spacing (+ budget); the divergence table (+ proxy); the exact elapsed-time chain; the split ladder's ceiling; the hazard ladder's ceiling; the dynamics hypotheses (unchanged) |
+| proxy + convention (1) | the zero-floored lead: the sequential test by analogy to a classical optimality; its use as a weight shown immaterial |
+| convention (2) | the walk starts at the ceiling (load-bearing); the hazard rungs drift at their ceiling (touches the fault report only) |
+| budget (1) | the walk's lower guard |
+| measured (1) | which member state travels with weight |
+
+**Statistically relevant constants that remain** ([`0018`](exploration/0018_which_constants_matter.md)):
+`_LADDER_MEM` — graded a node budget, it now sets how fast the split and hazard beliefs can
+move (ramp: 1.03 → 1.11× the oracle when it is quadrupled; the default is unmoved), and for
+the hazard rungs it *is* their memory, at the escape's own value of 1000. The star's start
+is a second, fixed by convention at the ceiling. The recentring level is weakly felt (calm
+only). The `(phi, s)` box presumably acts as the ladder does; unmeasured.
 
 ## The confidence ledger
 
@@ -144,9 +166,11 @@ measurement and derivation in the ledger.
 4. **The floor of the rate coordinate** (`0017`): below the ceiling's reach the star is
    blind, so a low start strands it and a long enough calm would too. A compact coordinate
    is the form of the fix.
-4b. **AUD-10's remaining measured elements**: the zero-floored lead (proposed proxy +
-   convention, not yet accepted); which member state is carried (a measured trade between
-   code length and state error).
+4b. **The ceiling depends on how finely a ladder is cut** (`0018`): `_LADDER_MEM`, a node
+   budget, has become a timescale — and the hazard rungs' memory outright. The ceiling
+   should be a property of the coordinate, not of the grid.
+4c. **Which member state is carried** — the one remaining *measured* entry; a trade between
+   code length and state error.
 6. **Wider stress modes**: all nine are scalar. Several sensors, a dynamics change and the
    offset channel are not exercised.
 7. **The small-`s` corner** (`phi` unresolvable at `s = 0.2`); bears on AUD-2.
@@ -169,6 +193,7 @@ measurement and derivation in the ledger.
   [`0014`](exploration/0014_the_fault_rungs.md): the hazard rungs under the drift.
   [`0016`](exploration/0016_rungs_at_their_own_rate.md): fixing them (with `0015`).
   [`0017`](exploration/0017_the_measured_opens.md): the two measured opens, and the star's start.
+  [`0018`](exploration/0018_which_constants_matter.md): which constants are statistically relevant.
   `v1/`, `v2/`: outputs of the first two versions of the in-filter drift, kept for the record.
   [`rig.py`](exploration/rig.py): the shared scalar rig; [`star_filter.py`](exploration/star_filter.py): the load-time patch.
 - `figures/` — the charts.
