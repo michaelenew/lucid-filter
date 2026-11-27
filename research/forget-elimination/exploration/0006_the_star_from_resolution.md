@@ -91,6 +91,11 @@ Extra code length, nats per step × 1000, same likelihoods as `0004`.
 | D2 | the no-dead-zone spacing is 0.7–0.9 nats | **confirmed** — 0.768 |
 | D3 | the derived star is within 5% of the hand-set ones wherever the truth changes; calm cost between theirs | **confirmed** — within 0–3% in ten rows; calm 0.41 (between 0.20 and 0.61); ceiling → calm 0.60 (between 0.38 and 0.73) |
 
+> **Correction (`0017`).** The paragraph below attributes the calm-world cost to the
+> centre's neighbours holding their prior weight. That is wrong: an unfloored weighting
+> gives the same cost, and the cost is the walk down from the ceiling start (1.03e-3
+> nats/step in the first third of the record, 0.12e-3 in the last; 0.04e-3 from a low start).
+
 ## What is now chosen and what is not
 
 Nothing in the star is set by hand: the spacing is the no-dead-zone bound at `eps0`, the

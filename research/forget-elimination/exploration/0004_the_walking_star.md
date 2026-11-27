@@ -87,6 +87,9 @@ Extra code length, nats per step × 1000.
 5. **Far hops are unchanged** — the star, like the ladder, moves the bank between
    neighbours; jumps belong to a separate channel.
 
+> **Correction (`0017`).** Reading 3 attributes the calm cost to an arm's permanent share
+> of the weight. It is the star's walk down from its ceiling start; see `0017`.
+
 ## Limits
 
 As `0003`: one scalar rig, known level, truths on the grid, drift worlds generated from the

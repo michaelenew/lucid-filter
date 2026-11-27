@@ -1,0 +1,16 @@
+HERO, 24 seeds: RMSE per window, log-likelihood
+  default        jump 1.8148  steady 0.3740  loud 0.9277   loglik -1721.69
+  ceiling start  jump 1.7593  steady 0.3738  loud 0.7471   loglik -1704.62
+  low start      jump 1.7955  steady 0.3739  loud 0.8666   loglik -1720.25
+  low start minus default: jump dMSE -0.0695 (t=-4.04)  steady dMSE -0.0001 (t=-0.47)  loud dMSE -0.1096 (t=-3.34)   dloglik +1.44 (t=+2.17)
+  low start minus ceiling start: jump dMSE +0.1286 (t=+0.58)  steady dMSE +0.0000 (t=+0.11)  loud dMSE +0.1929 (t=+9.56)   dloglik -15.64 (t=-25.35)
+  low start: final rate fraction median 0.0007, range 0.00034-0.002
+
+STRESS, 8 seeds: RMSE over the oracle's; log-likelihood per step minus the default's (x1000)
+  mode          default  ceiling      low   low/ceiling      t   dll ceiling  dll low    rate: ceiling / low
+  calm            1.004    1.005    1.004         0.999  -0.84         -2.11    +0.04      0.0462 / 0.0003
+  ramp            1.130    1.034    1.194         1.152  +9.73         -0.77    -1.92      0.0997 / 0.0007
+  flicker 25      2.024    1.395    1.882         1.344  +7.13        +46.07    +1.57      0.4637 / 0.0007
+  flicker 100     1.289    1.391    1.299         0.938  -1.69        +23.02    +1.75      0.2151 / 0.0003
+  stale           1.177    1.124    1.185         1.054  +5.37         -0.53    -0.32      0.0462 / 0.0007
+EXIT 0

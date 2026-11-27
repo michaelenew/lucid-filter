@@ -1,0 +1,12 @@
+seed 2 state only           calm 0.539  SENSOR 1.910  PROCESS 1.158  POTFAIL 1.175  BOTH 1.265   loglik 33754   worst block 3.7x
+seed 2 state + level        calm 3.120  SENSOR 1.118  PROCESS 2.205  POTFAIL 1.099  BOTH 2.708   loglik 30862   worst block 19.6x
+seed 2 state + sensor level calm 0.538  SENSOR 1.229  PROCESS 1.319  POTFAIL 1.134  BOTH 1.955   loglik 33900   worst block 7.4x
+seed 0 state only           calm 1.116  SENSOR 1.562  PROCESS 1.312  POTFAIL 1.114  BOTH 0.858   loglik 33790   worst block 4.1x
+seed 0 state + level        calm 3.313  SENSOR 1.081  PROCESS 2.988  POTFAIL 0.928  BOTH 3.382   loglik 32661   worst block 5.8x
+seed 0 state + sensor level calm 1.510  SENSOR 1.115  PROCESS 2.190  POTFAIL 1.103  BOTH 1.130   loglik 34370   worst block 3.1x
+seed 1 state only           calm 0.897  SENSOR 1.401  PROCESS 1.076  POTFAIL 1.051  BOTH 0.962   loglik 33409   worst block 1.7x
+seed 1 state + level        calm 1.431  SENSOR 0.936  PROCESS 1.271  POTFAIL 1.281  BOTH 1.719   loglik 33714   worst block 4.7x
+seed 1 state + sensor level calm 0.989  SENSOR 0.984  PROCESS 1.168  POTFAIL 1.244  BOTH 1.751   loglik 34620   worst block 3.2x
+mean   state only           calm 0.851  SENSOR 1.624  PROCESS 1.182  POTFAIL 1.113  BOTH 1.028   loglik 33651   worst block 4.1x
+mean   state + level        calm 2.621  SENSOR 1.045  PROCESS 2.155  POTFAIL 1.103  BOTH 2.603   loglik 32412   worst block 19.6x
+mean   state + sensor level calm 1.013  SENSOR 1.109  PROCESS 1.559  POTFAIL 1.160  BOTH 1.612   loglik 34297   worst block 7.4x

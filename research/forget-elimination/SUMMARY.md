@@ -69,9 +69,10 @@ It is time-homogeneous and carries no timescale and no level of its own; the cha
 gap is the exact exponential of its generator. The rates are a closed-form calculation
 ([`0005`](exploration/0005_the_table_from_theory.md)); the star's spacing and size are the
 filter's own grid rules applied to a rate
-([`0006`](exploration/0006_the_star_from_resolution.md)). Three elements are graded
-*measured*, not derived (AUD-10): the zero-floored lead, which state is carried, and the
-hazard rungs drifting at their own ceiling rather than a rate found for them.
+([`0006`](exploration/0006_the_star_from_resolution.md)). Two elements are graded
+*measured*, not derived (AUD-10): the zero-floored lead and which state is carried. The
+hazard rungs drifting at their own ceiling is a *convention* — a shape assumption, with its
+measurement and derivation in the ledger.
 
 **How this was reached, and what was dropped on the way:**
 
@@ -126,6 +127,9 @@ hazard rungs drifting at their own ceiling rather than a rate found for them.
 | the hazard rungs running as pure Bayes under the drift is harmless | **FALSE for the fault report, true for the state** — read-out crosses ½ 1.5× later after a long calm; RMSE unchanged | [`0014`](exploration/0014_the_fault_rungs.md) |
 | a chain along the rungs scaled by the class star repairs it | **half** — 1.55× → 1.33× later; the star is small in calm and freezes the rungs with it | [`0016`](exploration/0016_rungs_at_their_own_rate.md) |
 | the rungs drifting at their own ceiling repairs it | **measured, 4 seeds** — 1.12× on first crossing, 1.04× held; hazard belief within 1.2×; RMSE and false alarms no worse; 0.12e-3 nats/step of calm. In the filter | `0016` |
+| the calm-world cost is the arms holding weight | **FALSE** — an unfloored weighting changes nothing (within 6%); the cost is the walk down from the ceiling start (1.03 → 0.12e-3 over the record) | [`0017`](exploration/0017_the_measured_opens.md) B |
+| the start of the walk does not matter | **FALSE off the arm** — started at `e^{−8}` the star never climbs and the gain is lost (hero +1.4 nats against +17.1); below the ceiling's reach the walk is blind | `0017` C |
+| carrying the noise level with the weight, done consistently, is harmless | **FALSE** — every axis: calm 3× worse. Sensor axes only: SENSOR 1.62 → 1.11 and the best log-likelihood measured, PROCESS +32%, BOTH +57% | `0017` A |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |
@@ -137,9 +141,12 @@ hazard rungs drifting at their own ceiling rather than a rate found for them.
 2. **The onset lag** (`0011`): let a detected jump reprice the class, as the hazard channel
    already reprices a walker.
 3. **Flicker at 100 steps** — the one stress mode lost (+4.3%, `t` = +2.2 on 24 seeds); not profiled.
-4. **AUD-10's measured elements**: the zero-floored lead as a rule (and its calm-world
-   standing cost, visible as lower log-likelihood on ramp and stale); which member state
-   is carried; the hazard rungs as pure Bayes.
+4. **The floor of the rate coordinate** (`0017`): below the ceiling's reach the star is
+   blind, so a low start strands it and a long enough calm would too. A compact coordinate
+   is the form of the fix.
+4b. **AUD-10's remaining measured elements**: the zero-floored lead (proposed proxy +
+   convention, not yet accepted); which member state is carried (a measured trade between
+   code length and state error).
 6. **Wider stress modes**: all nine are scalar. Several sensors, a dynamics change and the
    offset channel are not exercised.
 7. **The small-`s` corner** (`phi` unresolvable at `s = 0.2`); bears on AUD-2.
@@ -161,6 +168,7 @@ hazard rungs drifting at their own ceiling rather than a rate found for them.
   [`0012`](exploration/0012_new_stress_modes.md): nine new stress modes and the ramp profile (`0013`).
   [`0014`](exploration/0014_the_fault_rungs.md): the hazard rungs under the drift.
   [`0016`](exploration/0016_rungs_at_their_own_rate.md): fixing them (with `0015`).
+  [`0017`](exploration/0017_the_measured_opens.md): the two measured opens, and the star's start.
   `v1/`, `v2/`: outputs of the first two versions of the in-filter drift, kept for the record.
   [`rig.py`](exploration/rig.py): the shared scalar rig; [`star_filter.py`](exploration/star_filter.py): the load-time patch.
 - `figures/` — the charts.

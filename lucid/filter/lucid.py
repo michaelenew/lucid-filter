@@ -2850,9 +2850,11 @@ class _ClassDrift:
     def reset(self):
         n = self.k.size
         self.lw = np.zeros((n, self.ndw * self.nc))
-        # AUDIT[convention] the walk starts AT the ceiling -- the principle's own default
-        # (assume the fastest resolvable drift until the data says slower); measured not to
-        # matter (forget-elimination 0007c).
+        # AUDIT[convention] the walk starts AT the ceiling -- a shape assumption (the fastest
+        # resolvable drift until the data says slower), and load-bearing: far below the
+        # ceiling the star's nodes are all effectively at rate zero and the walk is blind, so
+        # a low start strands it and the drift's gain is lost; the price of starting high is
+        # the walk down in a calm world (forget-elimination 0017).
         self.v = 0.0
         self.lead = np.zeros(n)
         self._pri = None
@@ -2866,14 +2868,15 @@ class _ClassDrift:
         rungs, each [from, to]."""
         Pc = np.maximum((self._V * np.exp(tau * self._lam)) @ self._V.T, 0.0)
         Ps = np.maximum((self._sV * np.exp(tau * self._slam)) @ self._sV.T, 0.0)
-        # AUDIT[measured] the hazard rungs drift AT their ceiling (elapsed time `a`), not at
-        # the star's fraction of it.  How fast the class drifts and how fast the hazard does
-        # are different unknowns, and a calm record says nothing about the second: scaled by
-        # the class star the rungs froze with it and a fault after a long calm was flagged
-        # 1.33x later than under the escape; at their own ceiling, 1.12x, for 0.12e-3 nats per
-        # step of calm (forget-elimination 0015, 0016).  The principle's default -- the
-        # fastest resolvable drift until the data says slower -- with no walk of its own to
-        # say slower: open AUD-10.
+        # AUDIT[convention] the hazard rungs drift AT their ceiling (elapsed time `a`), not at
+        # the star's fraction of it -- a shape assumption: how fault-prone the world is may
+        # change as fast as it can be resolved.  The star measures how fast the CLASS moves,
+        # and a calm record says nothing about the hazard's own rate, so there is no fraction
+        # to find and the principle's default is what is left.  Measured: scaled by the class
+        # star the rungs froze with it and a fault after a long calm was flagged 1.33x later
+        # than under the escape; at the ceiling 1.12x, for 0.12e-3 nats per step of calm, and
+        # it touches the fault REPORT only -- the state error is unchanged
+        # (forget-elimination 0014-0016).
         Pj = np.maximum((self._jV * np.exp(a * self._jlam)) @ self._jV.T, 0.0)
         return Pc, Ps, Pj
 

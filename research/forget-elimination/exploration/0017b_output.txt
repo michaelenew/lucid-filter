@@ -1,0 +1,19 @@
+regret, nats/step x 1000;  the rate fraction each sits at;  moves per record
+scenario                            in the filter     test, then predict   ratio           rate a / b      moves a / b
+calm                                   0.41+-0.06             0.39+-0.06    0.94     0.0021 / 0.0021          8 / 8     
+nbr 10000                              0.47+-0.04             0.47+-0.04    0.99     0.0046 / 0.0046         12 / 12    
+nbr 1000                               3.56+-0.16             3.53+-0.16    0.99     0.0099 / 0.0099         24 / 24    
+nbr 100                               11.34+-0.35            11.33+-0.35    1.00     0.0997 / 0.0997         58 / 58    
+any 10000                              1.61+-0.11             1.60+-0.11    1.00     0.0046 / 0.0046         34 / 34    
+any 1000                               7.88+-0.41             7.88+-0.41    1.00     0.0462 / 0.0462         79 / 79    
+any 100                               24.66+-0.24            24.72+-0.24    1.00     0.4637 / 0.4637         99 / 99    
+drift a=0.01                           2.15+-0.55             2.13+-0.55    0.99     0.0214 / 0.0214         20 / 20    
+drift a=0.14                          12.31+-0.96            12.31+-0.96    1.00     0.0997 / 0.0997         71 / 71    
+drift a=1.0                           26.07+-0.65            26.03+-0.66    1.00     1.0000 / 1.0000         56 / 56    
+calm -> ceiling (2nd half)            26.60+-0.57            26.56+-0.57    1.00     1.0000 / 1.0000         39 / 39    
+ceiling -> calm (2nd half)             0.60+-0.05             0.57+-0.05    0.95     0.0099 / 0.0099         37 / 37    
+
+calm, regret x 1000:  whole (after 2000) | first third | middle third | last third | rate fraction in the last third
+  started at the ceiling     0.41 |   1.03 |   0.20 |   0.12 | 0.01149
+  started at e^-8 of it      0.04 |   0.06 |   0.03 |   0.03 | 0.00034
+EXIT 0

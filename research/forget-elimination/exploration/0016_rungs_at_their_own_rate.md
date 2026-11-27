@@ -70,8 +70,9 @@ not hold (its held read-out is at 210, the drift's at 207).
    this one axis; `0002` found it expensive for the class and the cost here is small
    because the ladder's ceiling is itself slow (a rung every ~500 steps). A walk of its
    own on this axis would be the consistent completion; with no evidence in calm to move
-   it, it would sit where it starts, so it has not been built. Graded *measured* in the
-   audit.
+   it, it would sit where it starts, so it has not been built. Graded *convention* in the
+   audit: a shape assumption, backed by the derivation in point 1 and the measurement
+   above, whose consequences reach only the fault report.
 
 4. **The same question now applies to the split.** It too is scaled by the class star
    (`0013`). No test has shown that to be wrong — the ramp, stale and gap modes are all
