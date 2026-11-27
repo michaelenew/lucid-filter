@@ -154,6 +154,9 @@ only). The `(phi, s)` box presumably acts as the ladder does; unmeasured.
 | carrying the noise level with the weight, done consistently, is harmless | **FALSE** — every axis: calm 3× worse. Sensor axes only: SENSOR 1.62 → 1.11 and the best log-likelihood measured, PROCESS +32%, BOTH +57% | `0017` A |
 | a ladder chain with hop rate `D/g²` (small move, small evidence) is independent of the ladder's size | **measured** — ramp 1.031 / 1.033 / 1.032 at mem 250 / 1000 / 4000; the literal form (evidence ∝ move) is a partial repair, 1.080 | [`0019`](exploration/0019_grid_free_ladder.md) |
 | resolvability can fix the ladder's diffusion constant | **no** — the drift over one memory equals the blur at every `D`; the grid spacing was the tie-breaker | `0019` |
+| the interval as yardstick with a star per axis removes the ladders' constant | **yes as a construction; no as a default** — grid-free and constant-free, but the walk down from "nothing is learned" takes thousands of steps: hero steady error +19%, calm cost 5× the filter-as-it-stands' | [`0020`](exploration/0020_a_star_per_axis.md) |
+| the hazard's rate can be found by a star | **no** — with no fault in the record every rate predicts alike; the star stays high: faults flagged 2–3× sooner, false alarms 5–20× more. A point on a trade-off, not an answer | `0020` |
+| the split's drift can be read off the class, `D = 2s²(1−phi²)` | **mixed** — constant-free and grid-free; best measured on process-side change (manoeuvre 1.08 against 1.24), worst on sensor-side bursts (outliers 2.21 against 1.14, flicker 25 2.88 against 1.40) | [`0021`](exploration/0021_the_split_the_class_implies.md) |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |
@@ -168,10 +171,15 @@ only). The `(phi, s)` box presumably acts as the ladder does; unmeasured.
 4. **The floor of the rate coordinate** (`0017`): below the ceiling's reach the star is
    blind, so a low start strands it and a long enough calm would too. A compact coordinate
    is the form of the fix.
-4b. **The ladders' diffusion constant** (`0018`, `0019`). The grid-free form is verified and
+4b. **The ladders' diffusion constant** (`0018`–`0021`). The grid-free form is verified and
    not yet in the filter; it makes explicit a constant (`D = 9/mem₀²`, `mem₀ = 1000`) that
-   resolvability cannot fix. Three candidates in `0019`: the interval as yardstick, a star
-   per axis, or declaring `D`.
+   resolvability cannot fix. Tried and measured: the interval as yardstick with a star per
+   axis (`0020`), and the split's drift read off the class (`0021`). Both are constant-free
+   and grid-free; neither beats the filter as it stands. What they show is that the
+   ladders' timescale is a preference between kinds of error (sensor-side against
+   process-side events; detection delay against false alarms), not a nuisance constant.
+   Remaining routes: declare `D`; or the two-level split (a constant long-run split plus a
+   reverting deviation), not built.
 4c. **Which member state is carried** — the one remaining *measured* entry; a trade between
    code length and state error.
 6. **Wider stress modes**: all nine are scalar. Several sensors, a dynamics change and the
@@ -198,6 +206,9 @@ only). The `(phi, s)` box presumably acts as the ladder does; unmeasured.
   [`0017`](exploration/0017_the_measured_opens.md): the two measured opens, and the star's start.
   [`0018`](exploration/0018_which_constants_matter.md): which constants are statistically relevant.
   [`0019`](exploration/0019_grid_free_ladder.md): the ladder made independent of its grid.
+  [`0020`](exploration/0020_a_star_per_axis.md): the interval as yardstick, a star per axis.
+  [`0021`](exploration/0021_the_split_the_class_implies.md): the split's drift read off the class.
+  [`drift3.py`](exploration/drift3.py): the probe-side drift variants of 0020 and 0021.
   `v1/`, `v2/`: outputs of the first two versions of the in-filter drift, kept for the record.
   [`rig.py`](exploration/rig.py): the shared scalar rig; [`star_filter.py`](exploration/star_filter.py): the load-time patch.
 - `figures/` — the charts.

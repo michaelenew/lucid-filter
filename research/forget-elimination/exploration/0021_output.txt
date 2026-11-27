@@ -1,0 +1,23 @@
+RAMP, 6 seeds: RMSE over the oracle's
+  _LADDER_MEM  default  as it stands  star per axis  class-implied
+          250    1.113         1.031            nan          1.057
+         1000    1.118         1.033          1.081          1.059
+         4000    1.118         1.107          1.081          1.060
+
+HERO, 24 seeds: RMSE per window, log-likelihood, paired t of the log-likelihood against the default
+  default        jump 1.8148  steady 0.3740  loud 0.9277   loglik -1721.69   t=+0.00
+  as it stands   jump 1.7593  steady 0.3738  loud 0.7471   loglik -1704.62   t=+19.85
+  star per axis  jump 1.4602  steady 0.4447  loud 0.9278   loglik -1717.04   t=+5.96
+  class-implied  jump 1.3145  steady 0.3890  loud 0.7878   loglik -1709.03   t=+12.47
+
+STRESS, 8 seeds: RMSE over the oracle's  |  log-lik per step minus the default's, x1000
+  mode          default  as it stands  star per axis  class-implied  |   as it stands  star per axis  class-implied   t(implied vs as-it-stands, RMSE)
+  calm            1.004         1.005          1.058          1.041  |          -2.11         -10.67          -7.66   +14.34
+  ramp            1.130         1.034              -          1.065  |          -0.77              -          -2.60   +3.70
+  stale           1.177         1.124          1.092          1.096  |          -0.53          -4.97          -5.23   -3.17
+  flicker 25      2.024         1.395          1.856          2.880  |         +46.07         +36.65          +6.11   +32.11
+  flicker 100     1.289         1.391          1.750          1.872  |         +23.02         +14.59          +8.42   +11.98
+  flicker 400     1.456         1.268              -          1.508  |         +23.00              -         +13.21   +5.53
+  manoeuvre       1.305         1.236              -          1.081  |          +3.51              -         +14.00   -30.21
+  outliers        1.150         1.137              -          2.212  |          +8.52              -         -47.01   +19.26
+EXIT 0

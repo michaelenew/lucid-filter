@@ -1,2 +1,27 @@
 RAMP, 6 seeds: RMSE over the oracle's
   _LADDER_MEM  default  as it stands  star per axis   split fraction of its ceiling: at 1000 / 3000 / end      moves (class, split)
+         1000    1.118         1.033          1.081   5.26e-02 / 9.95e-03 / 2.43e-03      [3.5 8. ]
+         4000    1.118         1.107          1.081   5.26e-02 / 9.95e-03 / 2.14e-03      [3.5 8. ]
+
+FAULTS, 4 seeds
+   calm arm            hazard before  false alarms: first 500 / rest first > 1/2  held 50 RMSE +300   hazard fraction of its ceiling at 500 / end of calm
+    600 default             1.12e-03           0.004 / 0.000                  60       92    0.2928    per seed [59, 60, 182, 54]
+    600 as it stands        9.52e-04           0.001 / 0.000                  68      104    0.2922    per seed [76, 61, 206, 54]
+    600 star per axis       4.48e-02           0.081 / 0.003                  18       48    0.2881   5.62e-01 / 3.83e-01    per seed [17, 23, 19, 7]
+   4000 default             3.29e-04           0.004 / 0.004                  82       94    0.2728    per seed [107, 68, 66, 97]
+   4000 as it stands        3.87e-04           0.001 / 0.002                  92       98    0.2726    per seed [112, 73, 68, 207]
+   4000 star per axis       5.17e-03           0.056 / 0.020                  54       72    0.2710   3.83e-01 / 2.14e-02    per seed [54, 54, 42, 86]
+
+HERO, 24 seeds: RMSE per window, log-likelihood
+  default        jump 1.8148  steady 0.3740  loud 0.9277   loglik -1721.69
+  as it stands   jump 1.7593  steady 0.3738  loud 0.7471   loglik -1704.62
+  star per axis  jump 1.4602  steady 0.4447  loud 0.9278   loglik -1717.04
+  star per axis minus default: dloglik +4.65 (t=+5.96);  fractions at the end (class, split): [1.     0.0724]
+
+STRESS, 8 seeds: RMSE over the oracle's; log-lik per step minus the default's, x1000 (whole record | first third | last third)
+  mode          default  as it stands  star per axis                 as it stands                star per axis   split fraction at the end
+  calm            1.004         1.005          1.058                        -2.11                       -10.67   1.94e-03
+  stale           1.177         1.124          1.092                        -0.53                        -4.97   4.60e-04
+  flicker 25      2.024         1.395          1.856                       +46.07                       +36.65   3.14e-03
+  flicker 100     1.289         1.391          1.750                       +23.02                       +14.59   6.77e-03
+EXIT 0

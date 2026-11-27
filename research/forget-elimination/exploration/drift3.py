@@ -143,3 +143,78 @@ def installed(start=None):
     L._ClassDrift = Drift3
     try: yield
     finally: L._ClassDrift, START = keep, keep_start
+
+
+class DriftImplied(L._ClassDrift):
+    """The split's diffusion read off each cell's own class (0021).
+
+    A split is the difference of two log-scales; class (phi, s) asserts each moves with
+    innovation variance s^2 (1 - phi^2) per step, so the split's log-odds diffuses with
+    D(phi, s) = 2 s^2 (1 - phi^2).  Hop rate D / dlo^2 between neighbouring rungs, per cell.
+    The class star and the hazard chain are the parent's, unchanged.
+    """
+    def __init__(self, phi_arr, s_arr, ndw, split_arr=None, hazards=None):
+        super().__init__(phi_arr, s_arr, ndw, split_arr, hazards)
+        nb = self.nb
+        phis = list(dict.fromkeys(np.round(np.asarray(phi_arr, float), 12).tolist()))
+        ss = list(dict.fromkeys(np.round(np.asarray(s_arr, float), 12).tolist()))
+        self.Dcell = np.array([2.0 * sv * sv * (1.0 - ph * ph) for ph in phis for sv in ss])       # (nps,)
+        Ls = np.zeros((nb, nb))
+        sp = None if split_arr is None else np.atleast_2d(np.asarray(split_arr, float))
+        if nb > 1 and sp is not None and sp.shape[0] == nb and sp.shape[1] > 0:
+            for g in range(sp.shape[1]):
+                others = np.delete(np.arange(sp.shape[1]), g)
+                on = sorted([b for b in range(nb) if np.allclose(sp[b, others], sp[0, others])], key=lambda b: sp[b, g])
+                for b0, b1 in zip(on[:-1], on[1:]):
+                    dlo = abs(sp[b1, g] - sp[b0, g])
+                    if dlo > 1e-12: Ls[b0, b1] = Ls[b1, b0] = 1.0 / dlo ** 2
+        self._split = bool(Ls.any())
+        self._ulam, self._uV = np.linalg.eigh(Ls - np.diag(Ls.sum(1))); self._ulam = np.minimum(self._ulam, 0.0)
+
+    def _Pcell(self, a):
+        """(nps, nb, nb): each class's split transition over elapsed a, [from, to]."""
+        E = np.exp(a * self.Dcell[:, None] * self._ulam[None, :])                 # (nps, nb)
+        return np.maximum(np.einsum("be,pe,ce->pbc", self._uV, E, self._uV), 0.0)
+
+    def _chain(self, logp, rate, a):
+        if not self._live(rate): return logp
+        Pc, _, Pj = self._P(rate, a)
+        W = np.exp(logp).reshape(self.J, self.ndw // self.J, self.nps, self.nb)
+        if self._split: W = np.einsum("jdpb,pbc->jdpc", W, self._Pcell(a))
+        W = np.einsum("jdpb,jk->kdpb", W, Pj); W = np.einsum("jdpb,pq->jdqb", W, Pc)
+        out = np.log(np.maximum(W, 1e-300)).ravel()
+        return out - _logsumexp(out)
+
+    def _mix(self, flt, specs, pm, Pj, Pc, Ps):
+        plan = self._group(flt, specs)
+        if plan is None: return
+        gids, parts = plan; nps, nb, S, N = self.nps, self.nb, len(specs), len(gids)
+        if not all(isinstance(b, L._EngineBank) for b, _, _ in parts):
+            return super()._mix(flt, specs, pm, Pj, Pc, Ps)
+        na = parts[0][0]._m.shape[1]
+        if any(b._m.shape[1] != na for b, _, _ in parts): return
+        m = np.empty((N, na)); Pm = np.empty((N, na, na))
+        for bank, rows, slots in parts: m[slots], Pm[slots] = bank._m[rows], bank._P[rows]
+        second = (Pm + m[:, :, None] * m[:, None, :]).reshape(S, nps, nb, na * na); m4 = m.reshape(S, nps, nb, na)
+        w = pm[gids].reshape(S, nps, nb); Pcell = self._Pcell(self._a_now) if self._split else None
+        def push(x):
+            if Pcell is not None: x = np.einsum("jpb...,pbc->jpc...", x, Pcell)
+            x = np.einsum("jpb...,jk->kpb...", x, Pj)
+            return np.einsum("jpb...,pq->jqb...", x, Pc)
+        tot = push(w); dead = tot <= 1e-300
+        if dead.all(): return
+        den = np.where(dead, 1.0, tot)[..., None]
+        mn = np.where(dead[..., None], m4, push(w[..., None] * m4) / den).reshape(N, na)
+        Pn = np.where(dead[..., None], second, push(w[..., None] * second) / den).reshape(N, na, na)
+        Pn = Pn - mn[:, :, None] * mn[:, None, :]; Pn = 0.5 * (Pn + np.swapaxes(Pn, 1, 2))
+        for bank, rows, slots in parts: bank._m[rows] = mn[slots]; bank._P[rows] = Pn[slots]
+
+    def _carry(self, flt, post, rate, a):
+        self._a_now = a
+        return super()._carry(flt, post, rate, a)
+
+@contextlib.contextmanager
+def implied():
+    keep = L._ClassDrift; L._ClassDrift = DriftImplied
+    try: yield
+    finally: L._ClassDrift = keep

@@ -209,7 +209,11 @@ Logged in the owning workstream SUMMARYs; listed here for the grep.
   move needs small evidence, `∝ g⁴` — gives 1.031 / 1.033 / 1.032 at mem 250 / 1000 / 4000
   (was 1.031 / 1.033 / 1.107). It makes the timescale explicit, `D = 9/mem₀²` with
   `mem₀ = 1000`, and resolvability cannot fix `D` (the drift over one memory equals the blur
-  at every `D`). Not yet in the filter: it needs `D` named;
+  at every `D`). Not yet in the filter: it needs `D` named. Two constant-free ways of
+  naming it were built and measured (0020: the ladder's range as yardstick with a star per
+  axis; 0021: the split's drift read off the class) — both grid-free, neither better than
+  the filter as it stands: the ladders' timescale turns out to be a preference between
+  kinds of error, which resolvability does not decide;
   (e) the default: `forget=None` is opt-in until the battery in
   `research/forget-elimination/0010`–`0012` is accepted.
 
