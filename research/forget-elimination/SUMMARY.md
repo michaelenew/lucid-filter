@@ -157,6 +157,7 @@ only). The `(phi, s)` box presumably acts as the ladder does; unmeasured.
 | the interval as yardstick with a star per axis removes the ladders' constant | **yes as a construction; no as a default** — grid-free and constant-free, but the walk down from "nothing is learned" takes thousands of steps: hero steady error +19%, calm cost 5× the filter-as-it-stands' | [`0020`](exploration/0020_a_star_per_axis.md) |
 | the hazard's rate can be found by a star | **no** — with no fault in the record every rate predicts alike; the star stays high: faults flagged 2–3× sooner, false alarms 5–20× more. A point on a trade-off, not an answer | `0020` |
 | the split's drift can be read off the class, `D = 2s²(1−phi²)` | **mixed** — constant-free and grid-free; best measured on process-side change (manoeuvre 1.08 against 1.24), worst on sensor-side bursts (outliers 2.21 against 1.14, flicker 25 2.88 against 1.40) | [`0021`](exploration/0021_the_split_the_class_implies.md) |
+| the dynamics departure can be a class with a zero corner, with no hazard, no switch and no restart | **measured, one rig, 4 seeds** — state error after the change as good or better (0.2876 against 0.2928), `F̂` nearer the truth, delay independent of the calm's length (138 / 140 steps); slower than the default to move `F̂` (1.11× / 1.52×); the `fault` read-out needs redefining | [`0022`](exploration/0022_the_departure_as_a_class.md) |
 | literal per-pair forgetting works | **FALSE** (worst rule by 100×; one realisation tested) | `0001` P3 |
 | the resolvability ceiling yields a constant-free per-pair cap | **FALSE in the form tried** (caps fall to 1.2 nats; bank flips on single draws) | `0001` P5 |
 | either rule improves the shipped filter | **untested** | — |
@@ -179,7 +180,8 @@ only). The `(phi, s)` box presumably acts as the ladder does; unmeasured.
    ladders' timescale is a preference between kinds of error (sensor-side against
    process-side events; detection delay against false alarms), not a nuisance constant.
    Remaining routes: declare `D`; or the two-level split (a constant long-run split plus a
-   reverting deviation), not built.
+   reverting deviation), not built. **For the hazard the question dissolves** if the
+   departure is a class with a zero corner (`0022`): no event rate, so no memory for one.
 4c. **Which member state is carried** — the one remaining *measured* entry; a trade between
    code length and state error.
 6. **Wider stress modes**: all nine are scalar. Several sensors, a dynamics change and the
@@ -208,7 +210,8 @@ only). The `(phi, s)` box presumably acts as the ladder does; unmeasured.
   [`0019`](exploration/0019_grid_free_ladder.md): the ladder made independent of its grid.
   [`0020`](exploration/0020_a_star_per_axis.md): the interval as yardstick, a star per axis.
   [`0021`](exploration/0021_the_split_the_class_implies.md): the split's drift read off the class.
-  [`drift3.py`](exploration/drift3.py): the probe-side drift variants of 0020 and 0021.
+  [`0022`](exploration/0022_the_departure_as_a_class.md): the dynamics departure as a class; no hazard.
+  [`drift3.py`](exploration/drift3.py): the probe-side drift variants of 0020 and 0021; [`continuum_fault.py`](exploration/continuum_fault.py): 0022's.
   `v1/`, `v2/`: outputs of the first two versions of the in-filter drift, kept for the record.
   [`rig.py`](exploration/rig.py): the shared scalar rig; [`star_filter.py`](exploration/star_filter.py): the load-time patch.
 - `figures/` — the charts.
